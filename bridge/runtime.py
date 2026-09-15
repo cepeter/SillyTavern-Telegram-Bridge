@@ -12,6 +12,7 @@ _MODULES = (
     "common.py", "database.py", "memory.py", "rag.py", "groups.py",
     "telegram.py", "help.py", "catalog.py", "media.py", "generation.py",
     "commands.py", "message_commands.py", "callbacks.py", "main.py",
+    "recovery.py",
 )
 _BASE = Path(__file__).parent
 for _filename in _MODULES:
