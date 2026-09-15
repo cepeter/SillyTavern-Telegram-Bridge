@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip
+
+      - name: Install locked runtime dependencies
+        run: python -m pip install --require-hashes -r requirements.lock
+
+      - name: Validate dependency environment
+        run: python -m pip check
+
+      - name: Compile Python sources
+        run: python -m compileall -q bridge sillytavern_telegram_bridge.py
+
+      - name: Install pip-audit
+        run: python -m pip install pip-audit
+
+      - name: Audit locked dependencies
+        run: python -m pip_audit -r requirements.lock
