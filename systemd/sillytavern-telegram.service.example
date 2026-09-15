@@ -1,0 +1,26 @@
+[Unit]
+Description=SillyTavern Telegram Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/sillytavern-telegram-bridge
+Environment=SILLYTAVERN_ENV_FILE=%h/.config/sillytavern-telegram/.env
+Environment=SILLYTAVERN_BRIDGE_HOME=%h/.local/share/sillytavern-telegram
+ExecStart=%h/.hermes/hermes-agent/venv/bin/python %h/sillytavern-telegram-bridge/sillytavern_telegram_bridge.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/sillytavern-telegram %h/.config/sillytavern-telegram %h/.local/share/SillyTavern/data/default-user/characters %h/.local/share/SillyTavern/data/default-user/worlds %h/.cache/huggingface
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TasksMax=128
+
+[Install]
+WantedBy=default.target
