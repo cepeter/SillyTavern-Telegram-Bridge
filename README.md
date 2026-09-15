@@ -60,10 +60,17 @@ The bridge can keep its own SQLite history and provider catalog separately, but 
 Install dependencies in a virtual environment:
 
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.lock
+python -m pip install -r requirements.lock
 ```
+
+Dependency files:
+
+- `requirements.txt` contains compatible version ranges for users who need resolver flexibility.
+- `requirements.lock` contains exact versions and SHA-256 hashes for reproducible Python 3.11 installs.
+- The lock file is intentionally long: one package version can have many hashes for Linux, macOS, Windows, x86_64, ARM, source archives, and binary wheels.
+- Use `requirements.lock` for production/release installs; use `requirements.txt` only when intentionally resolving a different environment.
 
 ## Configuration
 
