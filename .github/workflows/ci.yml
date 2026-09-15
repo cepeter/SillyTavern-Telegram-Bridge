@@ -33,7 +33,10 @@ jobs:
         run: python -m pip check
 
       - name: Compile Python sources
-        run: python -m compileall -q bridge sillytavern_telegram_bridge.py
+        run: python -m compileall -q bridge tests sillytavern_telegram_bridge.py
+
+      - name: Run audit regression tests
+        run: python -m unittest discover -s tests -v
 
       - name: Install pip-audit
         run: python -m pip install pip-audit
