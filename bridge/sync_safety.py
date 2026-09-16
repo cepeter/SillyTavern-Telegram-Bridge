@@ -9,6 +9,7 @@ consistent with session lifecycle.
 _ORIGINAL_SYNC_INITIALIZE_DATABASE_SCHEMA = initialize_database_schema
 _ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL = phase2_sync_now
 _ORIGINAL_PHASE3_SYNC_NOW_FOR_POLL = phase3_sync_now
+_SYNC_POLL_ATTEMPT_LIMIT = 32
 
 
 def initialize_database_schema(db: sqlite3.Connection) -> None:
@@ -38,11 +39,20 @@ def _try_sync_chat_lock(db: sqlite3.Connection, chat_id: str):
     lock = chat_job_lock(str(chat_id))
     if not lock.acquire(blocking=False):
         return None
-    pending = db.execute(
-        "SELECT 1 FROM jobs WHERE chat_id=? "
-        "AND state IN ('queued','scheduled','running') LIMIT 1",
-        (str(chat_id),),
-    ).fetchone()
+    try:
+        pending = db.execute(
+            "SELECT 1 FROM jobs WHERE chat_id=? "
+            "AND state IN ('queued','scheduled','running') LIMIT 1",
+            (str(chat_id),),
+        ).fetchone()
+    except Exception:
+        lock.release()
+        logging.warning(
+            "Could not inspect durable jobs before sync for chat %s",
+            chat_id,
+            exc_info=True,
+        )
+        return None
     if pending:
         lock.release()
         return None
@@ -55,13 +65,17 @@ def phase2_sync_poll(db: sqlite3.Connection) -> None:
     rows = db.execute(
         "SELECT chat_id,session_id,last_checked_at FROM sync_bindings "
         "WHERE auto_enabled=1 AND (last_checked_at=0 OR last_checked_at<?) "
-        "ORDER BY last_checked_at ASC,chat_id,session_id LIMIT 32",
+        "ORDER BY last_checked_at ASC,chat_id,session_id",
         (now - PHASE2_SYNC_INTERVAL_SECONDS,),
     ).fetchall()
+    attempted = 0
     for chat_id, session_id, _last_checked in rows:
+        if attempted >= _SYNC_POLL_ATTEMPT_LIMIT:
+            break
         lock = _try_sync_chat_lock(db, str(chat_id))
         if lock is None:
             continue
+        attempted += 1
         try:
             try:
                 _ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL(db, str(chat_id), str(session_id))
@@ -83,13 +97,17 @@ def phase3_sync_poll(db: sqlite3.Connection) -> None:
     rows = db.execute(
         "SELECT chat_id,session_id,realtime_failures FROM sync_bindings "
         "WHERE realtime_enabled=1 AND realtime_next_retry_at<=? "
-        "ORDER BY last_checked_at ASC,chat_id,session_id LIMIT 32",
+        "ORDER BY last_checked_at ASC,chat_id,session_id",
         (now,),
     ).fetchall()
+    attempted = 0
     for chat_id, session_id, failures in rows:
+        if attempted >= _SYNC_POLL_ATTEMPT_LIMIT:
+            break
         lock = _try_sync_chat_lock(db, str(chat_id))
         if lock is None:
             continue
+        attempted += 1
         try:
             try:
                 _ORIGINAL_PHASE3_SYNC_NOW_FOR_POLL(db, str(chat_id), str(session_id))
