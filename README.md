@@ -37,6 +37,7 @@ runs beside SillyTavern without patching or executing the SillyTavern source.
 - Multi-character groups with round-robin, contextual, manual user-turn gating, topic-only New group sessions, and bounded autonomous modes.
 - Telegram Forum Topics with topic-scoped sessions, history, queues, group state, media, and replies.
 - Inline help menu with command categories.
+- Manual JSONL transfer, opt-in automatic file sync, and opt-in near-real-time loopback API sync with explicit conflict stops.
 - Bounded background workers for STT, TTS, document indexing, and memory retention.
 - Durable SQLite jobs for normal generation, long-running commands, voice transcription, image analysis, document imports, callbacks, and native edits, with per-chat ordering and session-aware execution.
 - UTF-16-safe Telegram splitting, typed World Info editing, bounded processed-update retention, and isolated generation/utility worker pools.
@@ -47,7 +48,7 @@ runs beside SillyTavern without patching or executing the SillyTavern source.
 - Python 3.11 (canonical locked runtime)
 - A Telegram bot token
 - An OpenAI-compatible chat-completions provider
-- SillyTavern installed locally, or equivalent character/world directories
+- SillyTavern installed locally, or equivalent character/world directories; Phase 3 additionally requires the local SillyTavern server to be running
 - Optional Hindsight API for long-term memory
 - Optional OpenAI-compatible embedding endpoint for semantic RAG
 
@@ -260,7 +261,7 @@ Core commands:
 /new                          Create a new isolated session
 /reset                        Confirm active-session reset, purge all chat Hindsight memory, and restart from the character opening greeting
 /session                      Switch, create, or safely delete an inactive session
-/sync                         Open manual SillyTavern sync: export or import JSONL
+/sync                         Open manual, automatic file, and realtime API sync controls
 /providers                    Open the synchronized provider catalog
 /character                    Open character panel: select, info, delete, upload guidance
 /persona                      Choose, create, edit, or disable a user persona
@@ -373,7 +374,7 @@ Memory and RAG:
 /remember <fact>              Queue an explicit memory (free text)
 /databank                     Open RAG/list/remove/reindex panel
 /databank search <query>      Search Data Bank (free-text query)
-/sync                        Open manual bidirectional SillyTavern sync panel
+/sync                        Open Phase 1 manual, Phase 2 file, and Phase 3 API sync
 ```
 
 ## 🔄 Synchronization
@@ -434,6 +435,23 @@ SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS=10
 SILLYTAVERN_SYNC_API_HANDLE=
 SILLYTAVERN_SYNC_API_PASSWORD=
 ```
+
+Phase 3 quick start:
+
+1. Start SillyTavern on a loopback address and confirm its local web UI responds.
+2. Set `SILLYTAVERN_SYNC_API_URL` to that origin, then restart the bridge.
+3. If SillyTavern user accounts are enabled, also set the matching API handle and
+   password. Leave both empty when user accounts are disabled.
+4. Open `/sync` and tap **Refresh status**. The panel must show
+   `Phase 3 realtime API: off (configured)` before activation.
+5. Tap **Realtime API: toggle**. The bridge performs an initial reconciliation;
+   realtime becomes `on` only when that succeeds.
+
+The sync controls are scoped to the active Telegram session. **Sync now** uses
+Phase 3 while realtime is on; otherwise it runs Phase 2 file sync. **Refresh
+status** only redraws current state. A sync-ID mismatch, initial divergence, or
+two-sided edit conflict stops realtime instead of selecting a winner. Resolve
+the divergence manually, then enable realtime again.
 
 Credentials must remain environment-only and must not be printed, committed, or packaged.
 

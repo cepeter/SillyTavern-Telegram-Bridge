@@ -86,6 +86,24 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertNotIn("/import", public_commands)
         self.assertIn("/sync", public_commands)
 
+    def test_sync_help_covers_all_three_phases_and_command_menu(self):
+        summary = dict(rt.HELP_CATEGORIES["basic"])["/sync"]
+        detail = rt.command_detail("/sync", summary)
+        self.assertIn("Phase 1", summary)
+        self.assertIn("Phase 2", summary)
+        self.assertIn("Phase 3", summary)
+        self.assertIn("Sync now uses Phase 3", detail)
+        self.assertIn("Refresh status only redraws state", detail)
+        calls = []
+        original_request = rt.telegram_request
+        rt.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        try:
+            rt.set_bot_commands("token")
+        finally:
+            rt.telegram_request = original_request
+        commands = {item["command"]: item["description"] for item in calls[-1][1]["commands"]}
+        self.assertEqual(commands["sync"], "Open manual, file, and realtime API sync")
+
     def test_sync_binding_is_stable_and_panel_is_scoped(self):
         session = rt.create_session(self.db, "chat", "provider/model", session_id="sync-session")
         first = rt.ensure_sync_binding(self.db, "chat", session["session_id"])
