@@ -340,11 +340,19 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
     """Handle persona selection and disable callbacks."""
     if data.startswith("persona:"):
         value = data.split(":", 1)[1]
-        if not value.startswith("page:") and value != "cancel":
+        if not value.startswith("page:") and value not in {"cancel", "create", "edit"}:
             value = resolve_dynamic_callback_token(value, "persona", chat_id) or ""
         if value.startswith("page:"):
             answer_callback(token, str(callback.get("id", "")), "Page")
             send_persona_menu(token, chat_id, session["persona_id"], message.get("message_id"), int(value.split(":", 1)[1]))
+            return True
+        if value in {"create", "edit"}:
+            persona_id = session.get("persona_id") or ""
+            if value == "edit" and not get_persona(persona_id):
+                answer_callback(token, str(callback.get("id", "")), "Current persona not found")
+                return True
+            answer_callback(token, str(callback.get("id", "")), "Enter persona text")
+            start_persona_input(db, token, chat_id, session_id, value, persona_id, callback)
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")

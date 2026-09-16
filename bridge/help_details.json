@@ -10,7 +10,7 @@
   "/providers refresh": "Opens the provider panel, where Refresh models updates discoverable provider catalogs.",
   "/providers health": "Opens the provider panel, where Provider health checks configured endpoints without exposing credentials.",
   "/character": "Opens character selection, card information, upload guidance, and safe deletion controls.",
-  "/persona": "Opens persona selection. Persona changes apply to the active session prompt.",
+  "/persona": "Opens persona controls. Choose or disable a persona, edit the current persona, or create a new one. Changes apply to the active session prompt.",
   "/world": "Opens World Info selection. Multiple validated JSON lorebooks can be active together.",
   "/note": "Opens Author's Note controls: Off clears it, and User input consumes the next scoped text message.",
   "/systemprompt": "Opens the TXT System Prompt picker. The prompt body stays private and is applied during generation.",

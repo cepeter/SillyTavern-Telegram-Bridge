@@ -2,6 +2,12 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## Unreleased
+
+### Added
+
+- Added Telegram persona editor for creating and editing persona name/description with scoped input, backup verification, and atomic JSON writes.
+
 ## [0.2.002] - 2026-09-16
 
 ### Added

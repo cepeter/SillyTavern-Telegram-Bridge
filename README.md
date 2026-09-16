@@ -246,7 +246,7 @@ Core commands:
 /sync                         Open manual SillyTavern sync: export or import JSONL
 /providers                    Open the synchronized provider catalog
 /character                    Open character panel: select, info, delete, upload guidance
-/persona                      Choose a user persona
+/persona                      Choose, create, edit, or disable a user persona
 /world                         Open the World Info/lorebook panel
 /systemprompt                  Open the configured TXT System Prompt panel
 /language                      Choose the model reply language for this session
@@ -329,6 +329,23 @@ The response language is stored per session and added as a model instruction. It
 controls generated replies, not SillyTavern's UI language or voice transcription.
 The panel also supports `ja`, `zh`, `ko`, `es`, `fr`, `de`, `pt`, `ru`, `ar`,
 `hi`, `vi`, and `th`.
+
+Persona editing:
+
+```text
+/persona
+→ Edit current persona
+→ Send: new description
+→ Optional: display name | new description
+
+/persona
+→ Create persona
+→ Send: id | display name | persona description
+```
+
+Persona changes are validated, backed up, and written atomically to the private
+`SILLYTAVERN_PERSONA_FILE`. Input is scoped to the session and expires; `/cancel`
+leaves the existing persona unchanged.
 
 Memory and RAG:
 

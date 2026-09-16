@@ -13,7 +13,7 @@ HELP_CATEGORIES = {
         ("/providers refresh", "Open the provider panel; use Refresh models there."),
         ("/providers health", "Open the provider panel; use Provider health there."),
         ("/character", "Open the character panel for selection, info, safe deletion, and upload guidance."),
-        ("/persona", "Choose or disable the user persona."),
+        ("/persona", "Choose, create, edit, or disable the user persona."),
         ("/world", "Open the panel to choose or disable a World Info lorebook."),
         ("/note", "Open the session Author's Note panel; choose Off or User input."),
         ("/systemprompt", "Open the panel to choose a configured TXT System Prompt; text fallback is disabled."),
