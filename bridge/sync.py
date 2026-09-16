@@ -272,7 +272,7 @@ def phase2_sync_status_line(db: sqlite3.Connection, chat_id: str, session: dict[
     path = Path(str(binding.get("external_path") or ""))
     target = path.name if path.name else "not linked"
     problem = str(binding.get("conflict") or binding.get("last_error") or "clear")
-    return f"Phase 2 auto sync: {auto}\nFile: {target}\nState: {problem}"
+    return f"File auto sync: {auto}\nFile: {target}\nState: {problem}"
 
 
 def phase2_sync_poll(db: sqlite3.Connection) -> None:

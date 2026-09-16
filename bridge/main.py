@@ -194,7 +194,7 @@ def run_check() -> int:
         try:
             phase3_client().authenticate()
         except (SillyTavernApiError, ValueError) as exc:
-            raise SystemExit(f"Phase 3 check failed: {exc}") from exc
+            raise SystemExit(f"Live Sync check failed: {exc}") from exc
     me = telegram_request(token, "getMe")
     print(f"card={fields['name']}; telegram=@{me.get('username')}; model={model}; db={DB_FILE}")
     print("check=ok")

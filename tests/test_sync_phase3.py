@@ -191,7 +191,7 @@ class Phase3SyncTests(unittest.TestCase):
             rt.telegram_request = original
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("sync:realtime", callbacks)
-        self.assertIn("Phase 3 realtime API", calls[-1][1]["text"])
+        self.assertIn("Live API sync", calls[-1][1]["text"])
 
     def test_manual_sync_now_failure_disables_realtime_without_callback_error(self):
         rt.ensure_sync_binding(self.db, "chat", "phase3")

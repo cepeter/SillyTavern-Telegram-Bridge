@@ -5,7 +5,7 @@
   "/new": "Creates and activates a separate session. Existing sessions and their transcripts remain unchanged.",
   "/reset": "Opens confirmation first. Confirming clears the active session conversation, purges chat Hindsight memory, and sends the character opening greeting.",
   "/session": "Opens session controls for switching, creating, or deleting inactive sessions. Busy or active sessions cannot be deleted.",
-  "/sync": "Opens session-scoped Phase 1 manual JSONL transfer, Phase 2 automatic file sync, and optional Phase 3 near-real-time loopback API sync. Realtime API toggle performs initial reconciliation before enabling. Sync now uses Phase 3 when realtime is on, otherwise Phase 2; Refresh status only redraws state. Sync-ID mismatch, initial divergence, or two-sided edits stop synchronization instead of choosing a winner. Credentials and application-private state stay separate.",
+  "/sync": "Opens session-scoped Live Sync with automatic file sync and manual JSONL transfer as fallbacks. Realtime API toggle performs initial reconciliation before enabling. Sync now uses the API when realtime is on, otherwise file sync; Refresh status only redraws state. Sync-ID mismatch, initial divergence, or two-sided edits stop synchronization instead of choosing a winner. Credentials and application-private state stay separate.",
   "/providers": "Opens the provider/model catalog. Select an adapter-enabled model; catalog-only entries cannot run inference.",
   "/providers refresh": "Opens the provider panel, where Refresh models updates discoverable provider catalogs.",
   "/providers health": "Opens the provider panel, where Provider health checks configured endpoints without exposing credentials.",

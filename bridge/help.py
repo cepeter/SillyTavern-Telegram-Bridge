@@ -6,7 +6,7 @@ HELP_CATEGORIES = {
         ("/new", "Create and activate a new isolated session."),
         ("/reset", "Open confirmation to reset only the active session while purging all Hindsight memory for the chat, then restart from the opening greeting."),
         ("/session", "List, switch, create, or delete inactive session data; Hindsight memory is retained."),
-        ("/sync", "Open Phase 1 manual, Phase 2 file, and Phase 3 realtime API sync controls."),
+        ("/sync", "Open Live Sync with file fallback and manual transfer controls."),
     ],
     "characters": [
         ("/providers", "Open the single provider/model catalog; adapter-enabled entries can generate, catalog-only entries are view-only."),
@@ -433,7 +433,7 @@ def set_bot_commands(token: str) -> None:
                 {"command": "providers", "description": "Open provider catalog; catalog-only entries are view-only"},
                 {"command": "character", "description": "Open character management panel"},
                 {"command": "session", "description": "Manage sessions; delete inactive only"},
-                {"command": "sync", "description": "Open manual, file, and realtime API sync"},
+                {"command": "sync", "description": "Open live sync and fallback controls"},
                 {"command": "persona", "description": "Choose user persona"},
                 {"command": "world", "description": "Choose World Info lore"},
                 {"command": "status", "description": "Show model and chat status"},

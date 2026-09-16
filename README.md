@@ -37,7 +37,7 @@ runs beside SillyTavern without patching or executing the SillyTavern source.
 - Multi-character groups with round-robin, contextual, manual user-turn gating, topic-only New group sessions, and bounded autonomous modes.
 - Telegram Forum Topics with topic-scoped sessions, history, queues, group state, media, and replies.
 - Inline help menu with command categories.
-- Manual JSONL transfer, opt-in automatic file sync, and opt-in near-real-time loopback API sync with explicit conflict stops.
+- Live Sync through the loopback API with explicit conflict stops; manual JSONL and automatic file sync remain recovery fallbacks.
 - Bounded background workers for STT, TTS, document indexing, and memory retention.
 - Durable SQLite jobs for normal generation, long-running commands, voice transcription, image analysis, document imports, callbacks, and native edits, with per-chat ordering and session-aware execution.
 - UTF-16-safe Telegram splitting, typed World Info editing, bounded processed-update retention, and isolated generation/utility worker pools.
@@ -48,7 +48,7 @@ runs beside SillyTavern without patching or executing the SillyTavern source.
 - Python 3.11 (canonical locked runtime)
 - A Telegram bot token
 - An OpenAI-compatible chat-completions provider
-- SillyTavern installed locally, or equivalent character/world directories; Phase 3 additionally requires the local SillyTavern server to be running
+- SillyTavern installed locally, or equivalent character/world directories; Live Sync additionally requires the local SillyTavern server to be running
 - Optional Hindsight API for long-term memory
 - Optional OpenAI-compatible embedding endpoint for semantic RAG
 
@@ -261,7 +261,7 @@ Core commands:
 /new                          Create a new isolated session
 /reset                        Confirm active-session reset, purge all chat Hindsight memory, and restart from the character opening greeting
 /session                      Switch, create, or safely delete an inactive session
-/sync                         Open manual, automatic file, and realtime API sync controls
+/sync                         Open Live Sync with file and manual fallback controls
 /providers                    Open the synchronized provider catalog
 /character                    Open character panel: select, info, delete, upload guidance
 /persona                      Choose, create, edit, or disable a user persona
@@ -374,59 +374,27 @@ Memory and RAG:
 /remember <fact>              Queue an explicit memory (free text)
 /databank                     Open RAG/list/remove/reindex panel
 /databank search <query>      Search Data Bank (free-text query)
-/sync                        Open Phase 1 manual, Phase 2 file, and Phase 3 API sync
+/sync                        Open Live Sync with file and manual fallback controls
 ```
 
 ## 🔄 Synchronization
 
-### Phase 1 — Manual transfer
+### Live Sync — recommended
 
-Phase 1 synchronization is manual and file-based. `/sync` exports the active
-session as SillyTavern-compatible JSONL or explains how to send a JSONL document
-back. Imports are validated and create a separate session; they do not overwrite
-the active session data, and the imported session is selected afterward. The JSONL carries transcript, title, character reference,
-persona, World Info references, Author's Note, and compatible generation settings.
-
-### Phase 2 — Automatic file sync
-
-- Phase 2 is **off by default**. Open `/sync` and choose **Auto sync: toggle**
-  for one session after reviewing the target path.
-- The bridge creates a stable JSONL file below the configured SillyTavern chat
-  directory and polls it every 30 seconds by default.
-- If only SillyTavern changed, the bridge imports the complete transcript and
-  compatible metadata, including edits and deletions. If only Telegram changed,
-  the bridge writes the updated JSONL back to SillyTavern.
-- If both sides changed since the last checkpoint, synchronization stops with a
-  conflict state. It never silently chooses one side.
-- Assistant `swipes` are transferred when present in the JSONL format. Branch
-  trees, Telegram panels, bridge queues, Hindsight, RAG indexes, credentials, and
-  in-flight jobs remain application-specific.
-
-Optional Phase 2 settings are environment-only:
-
-```text
-SILLYTAVERN_SYNC_INTERVAL_SECONDS=30
-SILLYTAVERN_SYNC_MAX_FILE_BYTES=10485760
-SILLYTAVERN_SYNC_CHAT_DIR=/path/to/SillyTavern/data/default-user/chats
-SILLYTAVERN_SYNC_GROUP_DIR=/path/to/SillyTavern/data/default-user/groups
-```
-
-### Phase 3 — Near-real-time API sync
-
-- Phase 3 is **off by default**. Configure a loopback SillyTavern API origin,
+- Live Sync is **off by default**. Configure a loopback SillyTavern API origin,
   open `/sync`, and choose **Realtime API: toggle** for the active session.
 - The bridge uses SillyTavern's supported `/csrf-token`, `/api/users/login`,
   `/api/chats/get|save`, and `/api/chats/group/get|save` routes. It does not
   patch SillyTavern or install an extension.
 - A dedicated worker checks enabled bindings every two seconds by default,
   while retaining the same `sync_id`, transcript hash, swipe, and three-way
-  conflict protections used by Phase 2.
+  conflict protections used by file sync.
 - Only loopback hosts (`127.0.0.1`, `::1`, or `localhost`) are accepted.
   Credentials and CSRF/session state are never stored in chat metadata.
 - Authentication, schema, sync-ID, or conflict failures disable realtime sync
-  for that binding. Phase 2 file sync remains available as the fallback.
+  for that binding. File sync and manual JSONL transfer remain available.
 
-Optional Phase 3 settings:
+Optional Live Sync settings:
 
 ```text
 SILLYTAVERN_SYNC_API_URL=http://127.0.0.1:8000
@@ -436,22 +404,40 @@ SILLYTAVERN_SYNC_API_HANDLE=
 SILLYTAVERN_SYNC_API_PASSWORD=
 ```
 
-Phase 3 quick start:
+Quick start:
 
 1. Start SillyTavern on a loopback address and confirm its local web UI responds.
 2. Set `SILLYTAVERN_SYNC_API_URL` to that origin, then restart the bridge.
 3. If SillyTavern user accounts are enabled, also set the matching API handle and
    password. Leave both empty when user accounts are disabled.
 4. Open `/sync` and tap **Refresh status**. The panel must show
-   `Phase 3 realtime API: off (configured)` before activation.
+   `Live API sync: off (configured)` before activation.
 5. Tap **Realtime API: toggle**. The bridge performs an initial reconciliation;
    realtime becomes `on` only when that succeeds.
 
 The sync controls are scoped to the active Telegram session. **Sync now** uses
-Phase 3 while realtime is on; otherwise it runs Phase 2 file sync. **Refresh
+Live Sync while realtime is on; otherwise it runs file sync. **Refresh
 status** only redraws current state. A sync-ID mismatch, initial divergence, or
 two-sided edit conflict stops realtime instead of selecting a winner. Resolve
 the divergence manually, then enable realtime again.
+
+### Fallback and recovery
+
+**Manual JSONL transfer** exports the active session or imports a validated
+SillyTavern-compatible JSONL file into a separate session. It never overwrites
+the active session. The file carries transcript, title, character reference,
+persona, World Info references, Author's Note, and compatible generation settings.
+
+**Automatic file sync** is also off by default. Enable **Auto sync: toggle** for
+one session to exchange compatible chat-file changes every 30 seconds by default.
+Two-sided edits stop with a conflict instead of silently choosing one side.
+
+```text
+SILLYTAVERN_SYNC_INTERVAL_SECONDS=30
+SILLYTAVERN_SYNC_MAX_FILE_BYTES=10485760
+SILLYTAVERN_SYNC_CHAT_DIR=/path/to/SillyTavern/data/default-user/chats
+SILLYTAVERN_SYNC_GROUP_DIR=/path/to/SillyTavern/data/default-user/groups
+```
 
 Credentials must remain environment-only and must not be printed, committed, or packaged.
 
@@ -606,7 +592,7 @@ bridge/telegram.py              # Telegram transport and imports
 bridge/help.py                  # help categories and command registration
 bridge/help_details.py          # Help rendering, callbacks, and JSON loader
 bridge/help_details.json        # editable detailed Help descriptions
-bridge/sync.py                  # opt-in Phase 2 file sync and conflict detection
+bridge/sync.py                  # opt-in file sync and conflict detection
 bridge/catalog.py               # provider/model catalog
 bridge/media.py                 # images, voice, STT, and TTS
 bridge/generation.py            # prompts, adapters, variants, branches

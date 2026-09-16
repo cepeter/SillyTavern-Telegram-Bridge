@@ -152,9 +152,9 @@ def validate_phase3_api_url(value: str) -> str:
     raw = str(value or "").strip().rstrip("/")
     parsed = urlparse(raw)
     if parsed.scheme not in {"http", "https"} or (parsed.hostname or "").casefold() not in {"127.0.0.1", "::1", "localhost"}:
-        raise ValueError("Phase 3 requires a loopback SillyTavern API URL")
+        raise ValueError("Live Sync requires a loopback SillyTavern API URL")
     if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in {"", "/"}:
-        raise ValueError("Phase 3 API URL must be a credential-free origin")
+        raise ValueError("Live Sync API URL must be a credential-free origin")
     return raw
 
 
@@ -171,7 +171,7 @@ def phase3_api_configured() -> bool:
 def phase3_client() -> SillyTavernApiClient:
     global _PHASE3_CLIENT
     if not phase3_api_configured():
-        raise SillyTavernApiError("Phase 3 API is not configured")
+        raise SillyTavernApiError("Live Sync API is not configured")
     with _PHASE3_CLIENT_LOCK:
         if _PHASE3_CLIENT is None or (_PHASE3_CLIENT.base_url, _PHASE3_CLIENT.handle, _PHASE3_CLIENT.password) != (PHASE3_SYNC_API_URL, PHASE3_SYNC_API_HANDLE, PHASE3_SYNC_API_PASSWORD):
             _PHASE3_CLIENT = SillyTavernApiClient(PHASE3_SYNC_API_URL, PHASE3_SYNC_API_HANDLE, PHASE3_SYNC_API_PASSWORD)
@@ -290,7 +290,7 @@ def phase3_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: st
     binding = _phase2_binding(db, chat_id, session_id)
     enabled = "on" if binding.get("realtime_enabled") else "off"
     configured = "configured" if phase3_api_configured() else "not configured"
-    return f"Phase 3 realtime API: {enabled} ({configured})"
+    return f"Live API sync: {enabled} ({configured})"
 
 
 def phase3_sync_poll(db: sqlite3.Connection) -> None:
