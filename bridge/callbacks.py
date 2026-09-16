@@ -26,7 +26,7 @@ def discard_panel_binding(db: sqlite3.Connection, chat_id: str, message_id: int 
 
 
 def is_session_scoped_panel_callback(data: str) -> bool:
-    return data.startswith(("character", "persona", "session", "world", "systemprompt", "language", "note", "reset", "sync", "models", "provider", "model", "group", "groupchars", "groupmode", "enum:settings", "enum:preset", "enum:rag", "enum:stt"))
+    return data.startswith(("character", "persona", "session", "world", "systemprompt", "language", "note", "reset", "sync", "swipe:", "models", "provider", "model", "group", "groupchars", "groupmode", "enum:settings", "enum:preset", "enum:rag", "enum:stt"))
 
 
 def process_callback(db: sqlite3.Connection, token: str, callback: dict, operation_id: int | None = None) -> None:
@@ -43,7 +43,12 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
     message_id = message.get("message_id")
     bound_session_id = panel_session_for_message(db, chat_id, message_id) if message_id else None
     if message_id and is_session_scoped_panel_callback(data) and not bound_session_id:
-        answer_callback(token, str(callback.get("id", "")), "Panel expired; reopen it")
+        feedback = "Panel expired; reopen it"
+        discard_panel_binding(db, chat_id, message_id)
+        if callback.get("_queued"):
+            send_text(token, chat_id, feedback)
+        else:
+            answer_callback(token, str(callback.get("id", "")), feedback)
         return
     session = load_session(db, chat_id, bound_session_id, DEFAULT_MODEL) if bound_session_id else ensure_session(db, chat_id, DEFAULT_MODEL)
     session_id = session["session_id"]
