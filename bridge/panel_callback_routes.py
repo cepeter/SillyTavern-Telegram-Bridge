@@ -1,0 +1,483 @@
+def handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle System Prompt selection, disable, and pagination callbacks."""
+    if data.startswith("systemprompt:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            page = int(value.split(":", 1)[1])
+            answer_callback(token, str(callback.get("id", "")), "Page")
+            send_system_prompt_menu(token, chat_id, session.get("system_prompt") or "", message.get("message_id"), page)
+            return True
+        if value == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            remove_inline_keyboard(token, callback)
+        elif value == "off":
+            update_session(db, chat_id, session_id, system_prompt="")
+            answer_callback(token, str(callback.get("id", "")), "System Prompt off")
+            remove_inline_keyboard(token, callback)
+            send_text(token, chat_id, "Session System Prompt disabled.")
+        else:
+            prompt = get_system_prompt_choice(value)
+            if prompt is None:
+                answer_callback(token, str(callback.get("id", "")), "Choice not found")
+            else:
+                update_session(db, chat_id, session_id, system_prompt=prompt)
+                answer_callback(token, str(callback.get("id", "")), "System Prompt selected")
+                remove_inline_keyboard(token, callback)
+                send_text(token, chat_id, f"System Prompt selected: {value}")
+        return True
+    return False
+
+
+def handle_note_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle Author's Note cancel, disable, and input callbacks."""
+    if data.startswith("note:"):
+        action = data.split(":", 1)[1]
+        if action == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            discard_panel_binding(db, chat_id, message.get("message_id"))
+            close_panel_message(token, chat_id, callback)
+            return True
+        if action == "off":
+            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="author_note_off", author_note="")
+            answer_callback(token, str(callback.get("id", "")), "Author's Note off")
+            send_note_menu(token, chat_id, "", message.get("message_id"))
+            return True
+        if action == "input":
+            pending_note = {"session_id": session_id, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
+            set_meta(db, f"note_input:{chat_id}", json.dumps(pending_note))
+            answer_callback(token, str(callback.get("id", "")), "User input")
+            discard_panel_binding(db, chat_id, message.get("message_id"))
+            close_panel_message(token, chat_id, callback)
+            pending_note["prompt_message_ids"] = send_text(token, chat_id, "Send Author's Note text (1–2,000 characters). Send /cancel to cancel.")
+            set_meta(db, f"note_input:{chat_id}", json.dumps(pending_note))
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Unknown note action")
+        return True
+    return False
+
+
+def handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle model response language selection and pagination callbacks."""
+    if data.startswith("language:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            page = int(value.split(":", 1)[1])
+            answer_callback(token, str(callback.get("id", "")), "Page")
+            send_language_menu(token, chat_id, session.get("response_language") or "auto", message.get("message_id"), page)
+            return True
+        if value == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            remove_inline_keyboard(token, callback)
+            return True
+        try:
+            language = set_response_language(db, chat_id, session_id, value, operation_id=operation_id)
+        except ValueError:
+            answer_callback(token, str(callback.get("id", "")), "Language choice expired")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Language selected")
+        remove_inline_keyboard(token, callback)
+        send_text(token, chat_id, f"Model response language set to: {response_language_label(language)}.")
+        return True
+    return False
+
+
+def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle reset confirmation and cancellation callbacks."""
+    if data.startswith("reset:"):
+        action = data.split(":", 1)[1]
+        if action == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            remove_inline_keyboard(token, callback)
+            return True
+        if action != "confirm":
+            answer_callback(token, str(callback.get("id", "")), "Unknown reset action")
+            return True
+        try:
+            reset_fields = card_fields_from_file(session["character_file"])
+            reset_session_to_greeting(db, token, chat_id, session, reset_fields, operation_id=operation_id)
+        except Exception:
+            logging.error("Reset failed for chat %s/session %s", chat_id, session_id, exc_info=True)
+            answer_callback(token, str(callback.get("id", "")), "Reset failed; memory and session were preserved")
+            send_text(token, chat_id, "Reset cancelled because Hindsight memory purge failed. No session data was deleted.")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Reset complete")
+        remove_inline_keyboard(token, callback)
+        return True
+    return False
+
+
+def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle response variant browsing and keep/cancel callbacks."""
+    if data.startswith("swipe:"):
+        action = data.split(":", 1)[1]
+        user_row, variants = last_user_variants(db, chat_id, session_id)
+        if not variants:
+            answer_callback(token, str(callback.get("id", "")), "No variants")
+            remove_inline_keyboard(token, callback)
+            return True
+        current = int(get_meta(db, swipe_state_key(chat_id, session_id), str(variants[-1][0])))
+        indexes = [int(row[0]) for row in variants]
+        if action == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            remove_inline_keyboard(token, callback)
+            return True
+        if action in {"prev", "next"}:
+            position = indexes.index(current) if current in indexes else 0
+            position = (position - 1) % len(indexes) if action == "prev" else (position + 1) % len(indexes)
+            answer_callback(token, str(callback.get("id", "")), f"Variant {indexes[position]}")
+            edit_swipe_menu(token, db, callback, session_id, indexes[position], variants)
+            return True
+        if action == "keep":
+            if user_row:
+                delete_outgoing_messages(db, token, chat_id, session_id, int(user_row[0]))
+            selected = keep_swipe_variant(db, chat_id, session_id, current)
+            if selected is None:
+                answer_callback(token, str(callback.get("id", "")), "Variant not found")
+                return True
+            answer_callback(token, str(callback.get("id", "")), "Kept")
+            telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message.get("message_id"), "text": f"✅ Kept variant {current}\n\n{selected[:3900]}"})
+            return True
+        return True
+    return False
+
+
+def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Dispatch System Prompt, Note, language, reset, help, and swipe callbacks."""
+    if handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    if handle_note_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    if handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    if handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    if handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    if handle_sync_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    return handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
+
+
+def handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle character selection, info, upload, and deletion callbacks."""
+    if data == "character:menu":
+        send_character_menu(token, chat_id, session["character_file"], message.get("message_id"))
+        return True
+    if data == "character:info":
+        answer_callback(token, str(callback.get("id", "")), "Info")
+        send_character_info_menu(token, chat_id, message.get("message_id"))
+        return True
+    if data == "character:delete":
+        answer_callback(token, str(callback.get("id", "")), "Delete")
+        send_character_delete_menu(token, chat_id, session["character_file"], message.get("message_id"))
+        return True
+    if data == "character:upload":
+        answer_callback(token, str(callback.get("id", "")), "Upload")
+        telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message.get("message_id"), "text": "Send the character card as a Telegram Document (PNG with SillyTavern chara metadata). The upload will be validated and queued safely.", "reply_markup": {"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "character:menu"}, {"text": "❌ Close", "callback_data": "character:cancel"}]]}})
+        return True
+    if data.startswith("characterinfo:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            send_character_info_menu(token, chat_id, message.get("message_id"), int(value.split(":", 1)[1]))
+            return True
+        filename = resolve_dynamic_callback_token(value, "character", chat_id) or ""
+        if not safe_character_path(filename):
+            answer_callback(token, str(callback.get("id", "")), "Character choice expired")
+            return True
+        info = card_fields_from_file(filename)
+        answer_callback(token, str(callback.get("id", "")), "Info")
+        telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message.get("message_id"), "text": f"Character: {info['name']}\nFile: {filename}\nDescription: {len(info['description'])} chars\nPersonality: {len(info['personality'])} chars\nScenario: {len(info['scenario'])} chars\nFirst message: {len(info['first_mes'])} chars", "reply_markup": {"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "character:info"}, {"text": "❌ Close", "callback_data": "character:cancel"}]]}})
+        return True
+    if data.startswith("characterdelete:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            send_character_delete_menu(token, chat_id, session["character_file"], message.get("message_id"), int(value.split(":", 1)[1]))
+            return True
+        filename = resolve_dynamic_callback_token(value, "character", chat_id) or ""
+        if not safe_character_path(filename) or filename == session["character_file"]:
+            answer_callback(token, str(callback.get("id", "")), "Character choice invalid")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
+        send_character_delete_confirm(token, chat_id, filename, message.get("message_id"))
+        return True
+    if data.startswith("characterdeleteconfirm:"):
+        filename = resolve_dynamic_callback_token(data.split(":", 1)[1], "character", chat_id) or ""
+        path = safe_character_path(filename)
+        references = character_delete_references(db, filename) if path else []
+        is_default = filename == DEFAULT_CHARACTER_FILE or (path and path.resolve() == CARD_FILE.resolve())
+        if not path or filename == session["character_file"] or is_default or references:
+            reason = "active/default/referenced character" if path else "character not found"
+            answer_callback(token, str(callback.get("id", "")), f"Deletion refused: {reason}")
+            return True
+        try:
+            verify_character_card_backup(path, path.read_bytes())
+        except OSError:
+            answer_callback(token, str(callback.get("id", "")), "Deletion refused: backup verification failed")
+            return True
+        if operation_id is not None and not begin_operation(db, operation_id, "character_delete"):
+            answer_callback(token, str(callback.get("id", "")), "Already processed")
+            return True
+        path.unlink(missing_ok=True)
+        record_operation(db, operation_id, "character_delete")
+        db.commit()
+        answer_callback(token, str(callback.get("id", "")), "Deleted")
+        send_character_menu(token, chat_id, session["character_file"], message.get("message_id"))
+        return True
+    if data.startswith("character:"):
+        value = data.split(":", 1)[1]
+        if not value.startswith("page:") and value != "cancel":
+            value = resolve_dynamic_callback_token(value, "character", chat_id) or ""
+        if value.startswith("page:"):
+            answer_callback(token, str(callback.get("id", "")), "Page")
+            send_character_menu(token, chat_id, session["character_file"], message.get("message_id"), int(value.split(":", 1)[1]))
+            return True
+        if value == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            if group_setup_state(db, chat_id, session_id):
+                set_meta(db, f"group_setup:{chat_id}", "")
+            if get_meta(db, f"character_session_input:{chat_id}", ""):
+                set_meta(db, f"character_session_input:{chat_id}", "")
+            discard_panel_binding(db, chat_id, message.get("message_id"))
+            close_panel_message(token, chat_id, callback)
+        elif safe_character_path(value):
+            character_name = card_fields_from_file(value)["name"]
+            setup = group_setup_state(db, chat_id, session_id)
+            if setup and setup.get("stage") == "character":
+                return apply_group_setup_character(db, token, callback, answer_callback, chat_id, message, session_id, operation_id, value, character_name)
+            set_meta(db, f"character_session_input:{chat_id}", json.dumps({"character_file": Path(value).name, "character_name": character_name, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}))
+            answer_callback(token, str(callback.get("id", "")), "Choose session")
+            discard_panel_binding(db, chat_id, message.get("message_id"))
+            close_panel_message(token, chat_id, callback)
+            send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id)
+        else:
+            answer_callback(token, str(callback.get("id", "")), "Character not found")
+        return True
+    return False
+
+
+def handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle session selection, creation, and deletion callbacks."""
+    if data.startswith("sessiondeleteconfirm:"):
+        target_session_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "session", chat_id) or ""
+        target = next((item for item in list_sessions(db, chat_id) if item["session_id"] == target_session_id), None)
+        if target is None:
+            answer_callback(token, str(callback.get("id", "")), "Session choice expired")
+            return True
+        deleted, reason = delete_session_data(db, chat_id, target_session_id, session_id, operation_id=operation_id)
+        if not deleted:
+            answer_callback(token, str(callback.get("id", "")), f"Deletion refused: {reason}")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Session deleted")
+        remove_inline_keyboard(token, callback)
+        send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id)
+        return True
+    if data.startswith("sessiondelete:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            answer_callback(token, str(callback.get("id", "")), "Page")
+            send_session_delete_menu(token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"), int(value.split(":", 1)[1]))
+            return True
+        target_session_id = resolve_dynamic_callback_token(value, "session", chat_id) or ""
+        target = next((item for item in list_sessions(db, chat_id) if item["session_id"] == target_session_id), None)
+        if target is None or target_session_id == session_id:
+            answer_callback(token, str(callback.get("id", "")), "Only an inactive session can be deleted")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
+        send_session_delete_confirm(token, chat_id, target_session_id, target["title"], message.get("message_id"))
+        return True
+    if data.startswith("session:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            answer_callback(token, str(callback.get("id", "")), "Page")
+            send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"), int(value.split(":", 1)[1]))
+            return True
+        if value == "delete":
+            answer_callback(token, str(callback.get("id", "")), "Delete session")
+            send_session_delete_menu(token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"))
+            return True
+        if value == "back":
+            answer_callback(token, str(callback.get("id", "")), "Back")
+            send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"))
+            return True
+        if value == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            set_meta(db, f"character_session_input:{chat_id}", "")
+            remove_inline_keyboard(token, callback)
+        elif value == "new":
+            new_session = create_session(db, chat_id, DEFAULT_MODEL, session_id=f"job-{operation_id}" if operation_id is not None else None)
+            answer_callback(token, str(callback.get("id", "")), "New session")
+            pending_character = pending_character_for_session(db, chat_id)
+            if pending_character:
+                update_session(db, chat_id, new_session["session_id"], operation_id=operation_id, operation_kind="character_select", character_file=Path(pending_character["character_file"]).name)
+                set_meta(db, f"character_session_input:{chat_id}", "")
+            remove_inline_keyboard(token, callback)
+            if pending_character:
+                send_text(token, chat_id, f"Character selected for new session: {pending_character.get('character_name') or Path(pending_character['character_file']).stem}\nNew session started: {new_session['session_id']}")
+            else:
+                send_text(token, chat_id, f"New session started: {new_session['session_id']}")
+        else:
+            available = {item["session_id"] for item in list_sessions(db, chat_id)}
+            if value in available:
+                set_meta(db, f"active_session:{chat_id}", value)
+                answer_callback(token, str(callback.get("id", "")), "Session selected")
+                pending_character = pending_character_for_session(db, chat_id)
+                if pending_character:
+                    target_title = next((item["title"] for item in list_sessions(db, chat_id) if item["session_id"] == value), value)
+                    update_session(db, chat_id, value, operation_id=operation_id, operation_kind="character_select", character_file=Path(pending_character["character_file"]).name)
+                    set_meta(db, f"character_session_input:{chat_id}", "")
+                remove_inline_keyboard(token, callback)
+                if pending_character:
+                    send_text(token, chat_id, f"Character selected for session '{target_title}': {pending_character.get('character_name') or Path(pending_character['character_file']).stem}")
+                else:
+                    send_text(token, chat_id, f"Session selected: {value}")
+            else:
+                answer_callback(token, str(callback.get("id", "")), "Session not found")
+        return True
+    return False
+
+
+def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle persona selection and disable callbacks."""
+    if data.startswith("persona:"):
+        value = data.split(":", 1)[1]
+        if not value.startswith("page:") and value != "cancel":
+            value = resolve_dynamic_callback_token(value, "persona", chat_id) or ""
+        if value.startswith("page:"):
+            answer_callback(token, str(callback.get("id", "")), "Page")
+            send_persona_menu(token, chat_id, session["persona_id"], message.get("message_id"), int(value.split(":", 1)[1]))
+            return True
+        if value == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            remove_inline_keyboard(token, callback)
+        elif value == "off":
+            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="persona_select", persona_id="")
+            answer_callback(token, str(callback.get("id", "")), "Persona off")
+            remove_inline_keyboard(token, callback)
+            send_text(token, chat_id, "Persona disabled for this session.")
+        elif get_persona(value):
+            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="persona_select", persona_id=value)
+            answer_callback(token, str(callback.get("id", "")), "Persona selected")
+            remove_inline_keyboard(token, callback)
+            send_text(token, chat_id, f"Persona selected: {persona_name(value)}")
+        else:
+            answer_callback(token, str(callback.get("id", "")), "Persona not found")
+        return True
+    return False
+
+
+def handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle World Info selection, clearing, and pagination callbacks."""
+    if data.startswith("world:"):
+        setup = group_setup_state(db, chat_id, session_id)
+        value = data.split(":", 1)[1]
+        if not value.startswith("page:") and value not in {"cancel", "done", "off"}:
+            value = resolve_dynamic_callback_token(value, "world", chat_id) or ""
+        if value.startswith("page:"):
+            answer_callback(token, str(callback.get("id", "")), "Page")
+            send_world_menu(token, chat_id, session["world_file"], message.get("message_id"), int(value.split(":", 1)[1]))
+            return True
+        if value == "cancel":
+            answer_callback(token, str(callback.get("id", "")), "Cancelled")
+            if setup:
+                set_meta(db, f"group_setup:{chat_id}", "")
+            remove_inline_keyboard(token, callback)
+        elif value == "done":
+            answer_callback(token, str(callback.get("id", "")), "Saved")
+            if setup:
+                set_meta(db, f"group_setup:{chat_id}", "")
+            remove_inline_keyboard(token, callback)
+            if setup:
+                send_group_menu(db, token, chat_id, session)
+        elif value == "off":
+            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="world_clear", world_file="")
+            session["world_file"] = ""
+            answer_callback(token, str(callback.get("id", "")), "All World Info cleared")
+            send_world_menu(token, chat_id, "", message.get("message_id"), 0)
+        elif safe_world_path(value):
+            selected = active_world_files(session["world_file"])
+            filename = Path(value).name
+            if filename in selected:
+                selected.remove(filename)
+                status = "World Info disabled"
+            else:
+                selected.append(filename)
+                status = "World Info enabled"
+            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="world_select", world_file=encode_world_files(selected))
+            session["world_file"] = encode_world_files(selected)
+            answer_callback(token, str(callback.get("id", "")), status)
+            send_world_menu(token, chat_id, encode_world_files(selected), message.get("message_id"), 0)
+        else:
+            answer_callback(token, str(callback.get("id", "")), "World Info file not found")
+        return True
+    return False
+
+
+def handle_entity_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Dispatch character, session, persona, and World Info callbacks."""
+    if handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    if handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    if handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
+    return handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
+
+
+def handle_provider_model_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle provider, model, and catalog-only callbacks."""
+    message_id = message.get("message_id")
+    if data.startswith("models:providers:"):
+        page = int(data.rsplit(":", 1)[1])
+        answer_callback(token, str(callback.get("id", "")), "Page")
+        send_model_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, page=page)
+        return True
+    if data.startswith("models:model:"):
+        parts = data.split(":")
+        provider_id = resolve_dynamic_callback_token(parts[2], "provider", chat_id) or ""
+        page = int(parts[3])
+        answer_callback(token, str(callback.get("id", "")), "Page")
+        send_model_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, provider_id, message_id, page)
+        return True
+    if data == "models:cancel":
+        answer_callback(token, str(callback.get("id", "")), "Cancelled")
+        remove_inline_keyboard(token, callback)
+        return True
+    if data == "models:back":
+        answer_callback(token, str(callback.get("id", "")), "Back to providers")
+        send_model_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id)
+        return True
+    if data == "provider:health":
+        answer_callback(token, str(callback.get("id", "")), "Health")
+        send_provider_health_menu(token, chat_id, message_id)
+        return True
+    if data == "provider:refresh":
+        _config, refreshed, failed = refresh_model_catalog(force=True)
+        answer_callback(token, str(callback.get("id", "")), "Refreshed")
+        send_text(token, chat_id, f"Model catalog refreshed: {refreshed} providers updated; {failed} failed.")
+        send_model_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id)
+        return True
+    if data == "provider:back":
+        send_model_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id)
+        return True
+    if data.startswith("provider:"):
+        provider_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "provider", chat_id) or ""
+        answer_callback(token, str(callback.get("id", "")), "Provider selected")
+        send_model_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, provider_id, message_id=message_id)
+        return True
+    if data.startswith("unsupported:"):
+        provider_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "provider", chat_id) or ""
+        answer_callback(token, str(callback.get("id", "")), "Catalog only: adapter not enabled")
+        send_text(token, chat_id, f"Provider '{provider_id}' is visible in the bridge catalog, but its adapter is not enabled yet.")
+        return True
+    if not data.startswith("model:"):
+        return False
+    model = resolve_dynamic_callback_token(data.split(":", 1)[1], "model", chat_id) or ""
+    if not model:
+        answer_callback(token, str(callback.get("id", "")), "Model choice expired")
+        return True
+    update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="model_select", model_id=model)
+    answer_callback(token, str(callback.get("id", "")), f"Selected {model}")
+    remove_inline_keyboard(token, callback)
+    send_text(token, chat_id, f"Model changed to: {model}")
+    logging.info("Model changed by Telegram user %s to %s", str((callback.get("from") or {}).get("id", "")), model)
+    return True
