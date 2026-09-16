@@ -100,6 +100,9 @@ def _handle_note_input(db, token: str, chat_id: str, session: dict, stripped: st
     return True
 
 
+PERSONA_EDIT_LOCK = threading.RLock()
+
+
 def _persona_input_prompt(mode: str, current_name: str = "") -> str:
     """Return the user-facing prompt for creating or editing a persona."""
     if mode == "create":
@@ -159,10 +162,13 @@ def _write_personas_atomically(personas: dict[str, dict[str, object]]) -> None:
             backup.unlink(missing_ok=True)
             raise OSError("persona backup checksum verification failed")
     payload = json.dumps(personas, ensure_ascii=False, indent=2) + "\n"
-    temporary = PERSONA_FILE.with_suffix(PERSONA_FILE.suffix + ".tmp")
-    temporary.write_text(payload, encoding="utf-8")
-    os.chmod(temporary, 0o600)
-    temporary.replace(PERSONA_FILE)
+    temporary = PERSONA_FILE.with_name(f".{PERSONA_FILE.name}.{time.time_ns()}.tmp")
+    try:
+        temporary.write_text(payload, encoding="utf-8")
+        os.chmod(temporary, 0o600)
+        temporary.replace(PERSONA_FILE)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None) -> bool:
@@ -174,42 +180,43 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
         return True
     mode = str(state.get("mode") or "")
     persona_id = str(state.get("persona_id") or "")
-    try:
-        personas = _editable_personas()
-    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-        send_pending_input_message(db, token, chat_id, meta_key, state, f"Persona catalog cannot be edited: {exc}. Try /cancel.")
-        return True
-    if mode == "create":
-        parts = [part.strip() for part in stripped.split("|", 2)]
-        if len(parts) != 3 or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", parts[0]):
-            send_pending_input_message(db, token, chat_id, meta_key, state, "Use: id | display name | persona description. Try again or send /cancel.")
+    with PERSONA_EDIT_LOCK:
+        try:
+            personas = _editable_personas()
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            send_pending_input_message(db, token, chat_id, meta_key, state, f"Persona catalog cannot be edited: {exc}. Try /cancel.")
             return True
-        persona_id, name, description = parts
-        if persona_id in personas:
-            send_pending_input_message(db, token, chat_id, meta_key, state, "That persona id already exists. Choose another id or send /cancel.")
+        if mode == "create":
+            parts = [part.strip() for part in stripped.split("|", 2)]
+            if len(parts) != 3 or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", parts[0]):
+                send_pending_input_message(db, token, chat_id, meta_key, state, "Use: id | display name | persona description. Try again or send /cancel.")
+                return True
+            persona_id, name, description = parts
+            if persona_id in personas:
+                send_pending_input_message(db, token, chat_id, meta_key, state, "That persona id already exists. Choose another id or send /cancel.")
+                return True
+            if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
+                send_pending_input_message(db, token, chat_id, meta_key, state, "Display name must be 1–120 characters and description 1–4,000 characters. Try again or send /cancel.")
+                return True
+            personas[persona_id] = {"name": name, "description": description, "tags": []}
+        elif mode == "edit" and persona_id in personas:
+            current = personas[persona_id]
+            parts = [part.strip() for part in stripped.split("|", 1)]
+            name = str(current.get("name") or persona_id) if len(parts) == 1 else parts[0]
+            description = parts[0] if len(parts) == 1 else parts[1]
+            if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
+                send_pending_input_message(db, token, chat_id, meta_key, state, "Display name must be 1–120 characters and description 1–4,000 characters. Try again or send /cancel.")
+                return True
+            current["name"], current["description"] = name, description
+        else:
+            _cancel_pending(db, token, chat_id, meta_key, state)
+            send_persona_menu(token, chat_id, session.get("persona_id") or "")
             return True
-        if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
-            send_pending_input_message(db, token, chat_id, meta_key, state, "Display name must be 1–120 characters and description 1–4,000 characters. Try again or send /cancel.")
+        try:
+            _write_personas_atomically(personas)
+        except (OSError, TypeError, ValueError) as exc:
+            send_pending_input_message(db, token, chat_id, meta_key, state, f"Persona could not be saved: {exc}. Try again or send /cancel.")
             return True
-        personas[persona_id] = {"name": name, "description": description, "tags": []}
-    elif mode == "edit" and persona_id in personas:
-        current = personas[persona_id]
-        parts = [part.strip() for part in stripped.split("|", 1)]
-        name = str(current.get("name") or persona_id) if len(parts) == 1 else parts[0]
-        description = parts[0] if len(parts) == 1 else parts[1]
-        if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
-            send_pending_input_message(db, token, chat_id, meta_key, state, "Display name must be 1–120 characters and description 1–4,000 characters. Try again or send /cancel.")
-            return True
-        current["name"], current["description"] = name, description
-    else:
-        _cancel_pending(db, token, chat_id, meta_key, state)
-        send_persona_menu(token, chat_id, session.get("persona_id") or "")
-        return True
-    try:
-        _write_personas_atomically(personas)
-    except (OSError, TypeError, ValueError) as exc:
-        send_pending_input_message(db, token, chat_id, meta_key, state, f"Persona could not be saved: {exc}. Try again or send /cancel.")
-        return True
     if mode == "create":
         update_session(db, chat_id, session["session_id"], persona_id=persona_id, operation_id=operation_id, operation_kind="persona_create")
     _cancel_pending(db, token, chat_id, meta_key, state)
