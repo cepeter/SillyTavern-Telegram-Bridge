@@ -1,0 +1,249 @@
+def db_connect() -> sqlite3.Connection:
+    """Open the configured SQLite database and initialize its schema."""
+    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(DB_FILE, timeout=30)
+    db.execute("PRAGMA busy_timeout=30000")
+    db.execute("PRAGMA journal_mode=WAL")
+    initialize_database_schema(db)
+    return db
+
+
+def get_meta(db: sqlite3.Connection, key: str, default: str = "") -> str:
+    row = db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def set_meta(db: sqlite3.Connection, key: str, value: str) -> None:
+    db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)", (key, value))
+    db.commit()
+
+
+def record_failed_turn(db: sqlite3.Connection, chat_id: str, telegram_message_id: int, text: str, model: str, error: str, session_id: str = "") -> None:
+    now = time.time()
+    db.execute("INSERT INTO failed_turns(chat_id,telegram_message_id,text,model,session_id,attempts,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,telegram_message_id) DO UPDATE SET session_id=excluded.session_id,attempts=attempts+1,last_error=excluded.last_error,updated_at=excluded.updated_at", (chat_id, str(telegram_message_id), text[:12000], model[:200], session_id[:200], 1, error[:1000], now, now))
+    db.commit()
+
+
+def latest_failed_turn(db: sqlite3.Connection, chat_id: str):
+    return db.execute("SELECT telegram_message_id,text,model,attempts,last_error,session_id FROM failed_turns WHERE chat_id=? ORDER BY updated_at DESC LIMIT 1", (chat_id,)).fetchone()
+
+
+def clear_failed_turn(db: sqlite3.Connection, chat_id: str, telegram_message_id: int | str) -> None:
+    db.execute("DELETE FROM failed_turns WHERE chat_id=? AND telegram_message_id=?", (chat_id, str(telegram_message_id)))
+    db.commit()
+
+
+def committed_assistant_for_message(db: sqlite3.Connection, chat_id: str, telegram_message_id: int | str):
+    return db.execute("""SELECT assistant.rowid, assistant.content, assistant.telegram_message_ids
+        FROM messages AS user_message
+        JOIN messages AS assistant
+          ON assistant.chat_id=user_message.chat_id
+         AND assistant.session_id=user_message.session_id
+         AND assistant.role='assistant'
+         AND assistant.rowid > user_message.rowid
+        WHERE user_message.chat_id=? AND user_message.role='user' AND user_message.telegram_message_id=?
+        ORDER BY assistant.rowid LIMIT 1""", (chat_id, str(telegram_message_id))).fetchone()
+
+
+def bind_panel_session(db: sqlite3.Connection, chat_id: str, message_id: int | str, session_id: str) -> None:
+    db.execute("INSERT OR REPLACE INTO panel_sessions(chat_id,message_id,session_id,expires_at) VALUES(?,?,?,?)", (str(chat_id), str(message_id), str(session_id), time.time() + 900))
+    db.commit()
+
+
+def panel_session_for_message(db: sqlite3.Connection, chat_id: str, message_id: int | str) -> str | None:
+    row = db.execute("SELECT session_id FROM panel_sessions WHERE chat_id=? AND message_id=? AND expires_at>=?", (str(chat_id), str(message_id), time.time())).fetchone()
+    return str(row[0]) if row else None
+
+
+def operation_phase(db: sqlite3.Connection, operation_id: int | str | None) -> str:
+    if operation_id is None:
+        return ""
+    row = db.execute("SELECT state FROM operations WHERE operation_id=?", (str(operation_id),)).fetchone()
+    return str(row[0]) if row else ""
+
+
+def set_operation_phase(db: sqlite3.Connection, operation_id: int | str | None, kind: str, phase: str) -> None:
+    if operation_id is None:
+        return
+    now = time.time()
+    db.execute("UPDATE operations SET state=?, kind=?, updated_at=? WHERE operation_id=?", (phase, kind, now, str(operation_id)))
+
+
+def begin_operation(db: sqlite3.Connection, operation_id: int | str | None, kind: str) -> bool:
+    if operation_id is None:
+        return True
+    now = time.time()
+    cursor = db.execute("INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?, 'in_progress',?,?)", (str(operation_id), kind, now, now))
+    if cursor.rowcount == 1:
+        return True
+    return not operation_was_applied(db, operation_id)
+
+
+def operation_was_applied(db: sqlite3.Connection, operation_id: int | str | None) -> bool:
+    if operation_id is None:
+        return False
+    return db.execute("SELECT 1 FROM operations WHERE operation_id=? AND state='applied'", (str(operation_id),)).fetchone() is not None
+
+
+def record_operation(db: sqlite3.Connection, operation_id: int | str | None, kind: str) -> None:
+    if operation_id is None:
+        return
+    now = time.time()
+    db.execute("UPDATE operations SET state='applied',kind=?,updated_at=? WHERE operation_id=?", (kind, now, str(operation_id)))
+
+
+def enqueue_job(db: sqlite3.Connection, update_id: int, chat_id: str, session_id: str, telegram_message_id: int, kind: str, payload: dict) -> int:
+    now = time.time()
+    db.execute("""INSERT OR IGNORE INTO jobs(update_id,chat_id,session_id,telegram_message_id,kind,payload_json,state,attempts,last_error,created_at,updated_at)
+        VALUES(?,?,?,?,?,?, 'queued',0,'',?,?)""", (update_id, chat_id, session_id, str(telegram_message_id), kind, json.dumps(payload, ensure_ascii=False), now, now))
+    row = db.execute("SELECT job_id FROM jobs WHERE update_id=?", (update_id,)).fetchone()
+    if row is None:
+        raise RuntimeError("job handoff failed")
+    db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, now))
+    db.commit()
+    return int(row[0])
+
+
+def mark_job_scheduled(db: sqlite3.Connection, job_id: int) -> bool:
+    cursor = db.execute("UPDATE jobs SET state='scheduled', updated_at=? WHERE job_id=? AND state='queued'", (time.time(), job_id))
+    db.commit()
+    return cursor.rowcount == 1
+
+
+def mark_job_running(db: sqlite3.Connection, job_id: int) -> bool:
+    cursor = db.execute("UPDATE jobs SET state='running', attempts=attempts+1, updated_at=? WHERE job_id=? AND state IN ('queued','scheduled')", (time.time(), job_id))
+    db.commit()
+    return cursor.rowcount == 1
+
+
+def finish_job(db: sqlite3.Connection, job_id: int, state: str, error: str = "") -> None:
+    db.execute("UPDATE jobs SET state=?, last_error=?, updated_at=? WHERE job_id=?", (state, error[:1000], time.time(), job_id))
+    db.commit()
+
+
+def recover_jobs(db: sqlite3.Connection, recover_running: bool = True) -> list[tuple]:
+    if recover_running:
+        db.execute("UPDATE jobs SET state='queued', updated_at=? WHERE state IN ('running','scheduled')", (time.time(),))
+    limit_clause = "" if recover_running else " LIMIT 128"
+    rows = db.execute("SELECT job_id,chat_id,session_id,telegram_message_id,kind,payload_json FROM jobs WHERE state='queued' ORDER BY created_at" + limit_clause).fetchall()
+    db.commit()
+    return rows
+
+
+
+def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
+    db.execute("INSERT OR IGNORE INTO generation_settings(chat_id,session_id,temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences) VALUES(?,?,?,?,?,?,?, ?,?)", (chat_id, session_id, GENERATION_DEFAULTS["temperature"], GENERATION_DEFAULTS["max_tokens"], GENERATION_DEFAULTS["top_p"], GENERATION_DEFAULTS["frequency_penalty"], GENERATION_DEFAULTS["presence_penalty"], GENERATION_DEFAULTS["reasoning_budget"], GENERATION_DEFAULTS["stop_sequences"]))
+    row = db.execute("SELECT temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences FROM generation_settings WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
+    db.commit()
+    return dict(zip(("temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty", "reasoning_budget", "stop_sequences"), row))
+
+
+def update_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str, **values: object) -> dict[str, object]:
+    current = get_generation_settings(db, chat_id, session_id)
+    allowed = set(GENERATION_DEFAULTS)
+    values = {key: value for key, value in values.items() if key in allowed}
+    if values:
+        assignments = ", ".join(f"{key}=?" for key in values)
+        db.execute(f"UPDATE generation_settings SET {assignments} WHERE chat_id=? AND session_id=?", (*values.values(), chat_id, session_id))
+        db.commit()
+    current.update(values)
+    return current
+
+
+def preset_names(db: sqlite3.Connection, chat_id: str) -> list[str]:
+    rows = db.execute("SELECT preset_name FROM generation_presets WHERE chat_id=? ORDER BY preset_name", (chat_id,)).fetchall()
+    return [str(row[0]) for row in rows]
+
+
+def save_generation_preset(db: sqlite3.Connection, chat_id: str, name: str, settings: dict[str, object]) -> None:
+    db.execute("INSERT OR REPLACE INTO generation_presets(chat_id,preset_name,settings_json,created_at) VALUES(?,?,?,?)", (chat_id, name, json.dumps(settings, ensure_ascii=False), time.time()))
+    db.commit()
+
+
+def load_generation_preset(db: sqlite3.Connection, chat_id: str, name: str) -> dict[str, object] | None:
+    row = db.execute("SELECT settings_json FROM generation_presets WHERE chat_id=? AND preset_name=?", (chat_id, name)).fetchone()
+    if not row:
+        return None
+    try:
+        value = json.loads(row[0])
+    except (TypeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def delete_generation_preset(db: sqlite3.Connection, chat_id: str, name: str) -> bool:
+    cursor = db.execute("DELETE FROM generation_presets WHERE chat_id=? AND preset_name=?", (chat_id, name))
+    db.commit()
+    return cursor.rowcount > 0
+
+
+
+def format_generation_settings(settings: dict[str, object]) -> str:
+    stop = str(settings.get("stop_sequences") or "") or "off"
+    reasoning_budget = int(settings.get("reasoning_budget") or 0)
+    reasoning_level = next((name for name, value in REASONING_LEVELS.items() if value == reasoning_budget), "custom")
+    return (f"temperature={settings['temperature']}\nmax_tokens={settings['max_tokens']}\n"
+            f"top_p={settings['top_p']}\nfrequency_penalty={settings['frequency_penalty']}\n"
+            f"presence_penalty={settings['presence_penalty']}\nreasoning={reasoning_level} ({reasoning_budget})\n"
+            f"stop={stop}")
+
+
+def parse_generation_setting(key: str, raw_value: str) -> tuple[str, object]:
+    aliases = {"temp": "temperature", "max": "max_tokens", "top-p": "top_p", "frequency": "frequency_penalty", "presence": "presence_penalty", "reasoning": "reasoning_budget", "stop": "stop_sequences"}
+    key = aliases.get(key.casefold(), key.casefold())
+    if key not in GENERATION_DEFAULTS:
+        raise ValueError("unknown setting")
+    if key == "stop_sequences":
+        if raw_value.casefold() in {"off", "none", "clear"}:
+            return key, ""
+        values = [item.strip() for item in raw_value.replace("\\n", "\n").split(",") if item.strip()]
+        if len(values) > 4 or any(len(item) > 100 for item in values):
+            raise ValueError("stop supports up to 4 sequences of 100 characters")
+        return key, "\n".join(values)
+    if key == "reasoning_budget" and raw_value.casefold() in REASONING_LEVELS:
+        return key, REASONING_LEVELS[raw_value.casefold()]
+    try:
+        if key in {"max_tokens", "reasoning_budget"}:
+            value = int(raw_value)
+            limits = {"max_tokens": (1, 16000), "reasoning_budget": (0, 32000)}
+        else:
+            value = float(raw_value)
+            limits = {"temperature": (0.0, 2.0), "top_p": (0.0, 1.0), "frequency_penalty": (-2.0, 2.0), "presence_penalty": (-2.0, 2.0)}
+        low, high = limits[key]
+        if not low <= value <= high:
+            raise ValueError(f"value must be between {low} and {high}")
+        return key, value
+    except ValueError as exc:
+        if "between" in str(exc) or "supports" in str(exc):
+            raise
+        raise ValueError("value has the wrong format") from exc
+
+
+def sync_transcript_hash(rows: list[tuple[str, str]]) -> str:
+    """Create a stable hash for an ordered user/assistant transcript."""
+    payload = json.dumps([[str(role), str(content)] for role, content in rows], ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def ensure_sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str, requested_sync_id: str = "") -> dict[str, object]:
+    """Return or create the stable external-sync identity for a session."""
+    row = db.execute("SELECT sync_id,last_hash,last_direction,last_synced_at FROM sync_bindings WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
+    if row is None:
+        candidate = str(requested_sync_id or "")
+        if not re.fullmatch(r"stb-[a-f0-9]{32}", candidate):
+            candidate = ""
+        sync_id = candidate or "stb-" + hashlib.sha256(f"{chat_id}:{session_id}:{time.time_ns()}".encode("utf-8")).hexdigest()[:32]
+        try:
+            db.execute("INSERT INTO sync_bindings(chat_id,session_id,sync_id) VALUES(?,?,?)", (chat_id, session_id, sync_id))
+        except sqlite3.IntegrityError:
+            sync_id = "stb-" + hashlib.sha256(f"{chat_id}:{session_id}:{time.time_ns()}".encode("utf-8")).hexdigest()[:32]
+            db.execute("INSERT INTO sync_bindings(chat_id,session_id,sync_id) VALUES(?,?,?)", (chat_id, session_id, sync_id))
+        db.commit()
+        return {"sync_id": sync_id, "last_hash": "", "last_direction": "", "last_synced_at": 0.0}
+    return {"sync_id": str(row[0]), "last_hash": str(row[1] or ""), "last_direction": str(row[2] or ""), "last_synced_at": float(row[3] or 0)}
+
+
+def record_sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str, transcript_hash: str, direction: str) -> None:
+    """Record the last successful manual export or import checkpoint."""
+    db.execute("UPDATE sync_bindings SET last_hash=?,last_direction=?,last_synced_at=? WHERE chat_id=? AND session_id=?", (transcript_hash, direction, time.time(), chat_id, session_id))
+    db.commit()

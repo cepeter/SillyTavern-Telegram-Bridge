@@ -1,0 +1,32 @@
+# Standalone provider catalog example.
+# Replace the example endpoints, models, and API key names for your providers.
+# The bridge supports OpenAI-compatible Chat Completions by default.
+providers:
+  provider-one:
+    name: Provider One
+    api_endpoint: https://provider-one.example/v1
+    api_key_env: PROVIDER_ONE_API_KEY
+    adapter: chat_completions
+    # streaming: true  # enable for providers that return SSE chunks
+    models:
+      - provider-one/model-a
+
+  provider-two:
+    name: Provider Two
+    api_endpoint: https://provider-two.example/v1
+    api_key_env: PROVIDER_TWO_API_KEY
+    adapter: chat_completions
+    # streaming: true  # enable for providers that return SSE chunks
+    models:
+      - provider-two/model-a
+
+# Optional Anthropic Messages provider.
+# Uncomment and configure ANTHROPIC_API_KEY to enable it.
+#  provider-anthropic:
+#    name: Anthropic Messages Example
+#    api_endpoint: https://api.anthropic.com/v1
+#    api_key_env: ANTHROPIC_API_KEY
+#    transport: anthropic_messages
+#    anthropic_version: "2023-06-01"
+#    models:
+#      - claude-sonnet
