@@ -12,10 +12,13 @@ def is_long_running_command(text: str) -> bool:
 def validate_startup_credential(model: str) -> None:
     provider_id, _ = resolve_provider_model(model)
     spec = get_provider_spec(provider_id)
+    transport = str(spec.get("transport") or "")
+    if transport == "opencode_muse":
+        return
     configured_key_env = spec.get("api_key_env")
     if configured_key_env:
         key_envs = [str(configured_key_env)]
-    elif str(spec.get("transport") or "") == "anthropic_messages":
+    elif transport == "anthropic_messages":
         key_envs = ["ANTHROPIC_API_KEY", "LLM_API_KEY"]
     else:
         key_envs = ["LLM_API_KEY"]
