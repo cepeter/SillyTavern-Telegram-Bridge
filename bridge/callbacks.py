@@ -49,6 +49,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
             send_text(token, chat_id, feedback)
         else:
             answer_callback(token, str(callback.get("id", "")), feedback)
+        close_panel_message(token, chat_id, callback)
         return
     session = load_session(db, chat_id, bound_session_id, DEFAULT_MODEL) if bound_session_id else ensure_session(db, chat_id, DEFAULT_MODEL)
     session_id = session["session_id"]
