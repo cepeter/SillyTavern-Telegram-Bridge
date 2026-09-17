@@ -409,6 +409,27 @@ continuation/recovery. A streaming response with no visible content is retried
 with larger budgets up to the configured recovery ceiling. `/continue` remains
 available when another segment is still needed.
 
+### Response formatting and automatic voice
+
+Use the following convention in model replies:
+
+```text
+**She steps back and watches the doorway.**  Narrative/action; stays as text
+"I heard something outside."                   Dialogue; eligible for auto-TTS
+The door opens slowly.                          Unquoted text; stays as text
+```
+
+When `/voice on` is enabled, the bridge extracts only complete dialogue spans in
+straight double quotes (`"..."`) for TTS. Narrative/action—including `**bold
+narrative**`—and other unquoted text are never synthesized. The original model
+reply remains unchanged in Telegram and SQLite. Smart/curly quotes are not the
+TTS delimiter.
+
+For incoming user messages, the prompt formatter recognizes single-star action
+spans (`*waves*`) and labels them as `User action`; `**text**` is preserved
+literally and is not treated as an action marker. This formatting changes only
+the prompt representation, not the stored transcript.
+
 ## Characters, Personas, prompts, and World Info
 
 ### Character cards
