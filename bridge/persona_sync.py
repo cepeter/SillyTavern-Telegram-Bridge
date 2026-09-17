@@ -166,23 +166,6 @@ def _backup_native_settings(expected: dict) -> Path:
     return backup
 
 
-def _choose_native_avatar(persona_id: str, persona: dict, settings: dict, native_names: dict) -> str:
-    mapped = _valid_native_avatar(persona.get("sillytavern_avatar"))
-    if mapped:
-        return mapped
-    matches = [avatar for avatar, name in native_names.items() if str(name).casefold() == str(persona["name"]).casefold() and _valid_native_avatar(avatar)]
-    if len(matches) == 1:
-        return matches[0]
-    base = f"bridge-{persona_id}"
-    candidate = f"{base}.png"
-    for attempt in range(257):
-        if candidate not in native_names and not (NATIVE_PERSONA_AVATAR_DIR / candidate).exists():
-            return candidate
-        suffix = hashlib.sha256(f"{persona_id}:{attempt}".encode("utf-8")).hexdigest()[:8]
-        candidate = f"{base[:54]}-{suffix}.png"
-    raise ValueError("Could not allocate a unique native persona avatar")
-
-
 def _ensure_native_avatar(avatar: str, settings: dict) -> bool:
     target = NATIVE_PERSONA_AVATAR_DIR / avatar
     if target.is_file():
