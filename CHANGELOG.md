@@ -295,15 +295,15 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 - Removed the legacy Hindsight endpoint compatibility alias from the bridge script.
 - Set the only supported Hindsight endpoint variable to `HINDSIGHT_API_URL`.
-- Corrected the default local Hindsight endpoint to port `8890`.
+- Corrected the default local Hindsight endpoint configuration.
 - Audited live bridge environment/configuration without exposing credential values.
 
 ## [0.1.83] - 2026-09-16
 
 ### Fixed
 
-- Configured live Hindsight to use `HINDSIGHT_API_URL=http://127.0.0.1:8890`.
-- Documented the canonical Hindsight API URL and verified live retain/recall/delete behavior.
+- Configured the bridge to use the supported Hindsight API endpoint.
+- Verified Hindsight retain, recall, and delete behavior without exposing deployment details.
 - Updated README and `.env.example` to use the actual Hindsight API URL setting.
 
 ## [0.1.82] - 2026-09-15

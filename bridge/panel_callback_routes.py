@@ -141,8 +141,38 @@ def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, m
     return False
 
 
+def handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle manual, automatic, and disabled expression modes."""
+    if not data.startswith("expression:"):
+        return False
+    value = data.split(":", 1)[1]
+    if value.startswith("page:"):
+        try:
+            page = max(0, int(value.split(":", 1)[1]))
+        except ValueError:
+            page = 0
+        answer_callback(token, str(callback.get("id", "")), "Page updated")
+        send_expression_menu(token, chat_id, session, db, message.get("message_id"), page)
+        return True
+    if value == "cancel":
+        answer_callback(token, str(callback.get("id", "")), "Cancelled")
+        remove_inline_keyboard(token, callback)
+        return True
+    if value not in {"auto", "off"} and value not in discover_expression_assets(session["character_file"]):
+        answer_callback(token, str(callback.get("id", "")), "Expression unavailable")
+        return True
+    set_meta(db, expression_mode_key(chat_id, session_id), value)
+    set_meta(db, expression_last_key(chat_id, session_id), "")
+    db.commit()
+    answer_callback(token, str(callback.get("id", "")), "Expression updated")
+    send_expression_menu(token, chat_id, session, db, message.get("message_id"))
+    return True
+
+
 def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
-    """Dispatch System Prompt, Note, language, reset, help, and swipe callbacks."""
+    """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
+    if handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+        return True
     if handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
     if handle_note_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):

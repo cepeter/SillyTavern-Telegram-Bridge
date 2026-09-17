@@ -107,6 +107,8 @@ def delete_outgoing_message_row(db: sqlite3.Connection, token: str, chat_id: str
 
 
 def send_reply(token: str, chat_id: str, text: str, db: sqlite3.Connection | None = None, session_id: str | None = None, assistant_rowid: int | None = None) -> None:
+    if db is not None and session_id:
+        deliver_expression(token, chat_id, text, db, session_id)
     message_ids = send_text(token, chat_id, text)
     if db is not None and assistant_rowid is not None:
         db.execute("UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid))

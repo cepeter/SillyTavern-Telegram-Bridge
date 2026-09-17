@@ -18,6 +18,7 @@ HELP_CATEGORIES = {
         ("/note", "Open the session Author's Note panel; choose Off or User input."),
         ("/systemprompt", "Open the panel to choose a configured TXT System Prompt; text fallback is disabled."),
         ("/language", "Choose the language used for generated model replies in this session."),
+        ("/expression", "Choose manual or automatic character expressions; native sprites are discovered from the active card."),
     ],
     "generation": [
         ("/settings", "Open this session's generation panel; choose reasoning or set validated numeric fields."),

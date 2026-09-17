@@ -111,7 +111,7 @@ def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id:
         db.execute("DELETE FROM panel_sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
         db.execute("DELETE FROM jobs WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
         db.execute("DELETE FROM hindsight_documents WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-        db.execute("DELETE FROM meta WHERE key IN (?, ?)", (swipe_state_key(chat_id, target_session_id), f"swipe_message:{chat_id}:{target_session_id}"))
+        db.execute("DELETE FROM meta WHERE key IN (?, ?, ?, ?)", (swipe_state_key(chat_id, target_session_id), f"swipe_message:{chat_id}:{target_session_id}", expression_mode_key(chat_id, target_session_id), expression_last_key(chat_id, target_session_id)))
         db.execute("DELETE FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
         if operation_id is not None:
             record_operation(db, operation_id, "session_delete")
