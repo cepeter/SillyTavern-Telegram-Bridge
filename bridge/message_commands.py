@@ -2,7 +2,7 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     method = "editMessageText" if message_id else "sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n• Preserve Hindsight memories from other sessions.\n• Leave the session empty; no character opening greeting will be sent.\n\nThis cannot be undone.",
+        "text": "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n\nThis cannot be undone.",
         "reply_markup": {"inline_keyboard": [
             [{"text": "✅ Confirm active-session reset", "callback_data": "reset:confirm"}],
             [{"text": "❌ Cancel", "callback_data": "reset:cancel"}],

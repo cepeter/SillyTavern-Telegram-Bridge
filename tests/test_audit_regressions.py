@@ -421,11 +421,8 @@ class AuditRegressionTests(unittest.TestCase):
         finally:
             rt.telegram_request = original_request
         self.assertEqual(len(calls), 1)
-        self.assertIn("Reset active session and purge its memory?", calls[0][1]["text"])
-        self.assertIn("active session only", calls[0][1]["text"])
-        self.assertIn("Preserve Hindsight memories from other sessions", calls[0][1]["text"])
-        self.assertIn("no character opening greeting will be sent", calls[0][1]["text"])
-        self.assertNotIn("Send the character opening greeting", calls[0][1]["text"])
+        expected = "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n\nThis cannot be undone."
+        self.assertEqual(calls[0][1]["text"], expected)
         markup = calls[0][1]["reply_markup"]["inline_keyboard"]
         callbacks = {button["callback_data"] for row in markup for button in row}
         self.assertEqual(callbacks, {"reset:confirm", "reset:cancel"})
