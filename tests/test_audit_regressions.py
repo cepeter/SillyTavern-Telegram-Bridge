@@ -396,7 +396,7 @@ class AuditRegressionTests(unittest.TestCase):
             rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, fields, "chat", "/reset")
             self.assertEqual(panel, [True])
             self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
-            rt.reset_session_to_greeting(self.db, "token", "chat", session, fields, operation_id=902)
+            rt.reset_session(self.db, "token", "chat", session, fields, operation_id=902)
         finally:
             rt.card_fields_from_file = original_card
             rt.send_reset_confirmation_menu = original_panel
@@ -408,8 +408,8 @@ class AuditRegressionTests(unittest.TestCase):
             "SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY rowid",
             ("chat", session["session_id"]),
         ).fetchall()
-        self.assertEqual(rows, [("assistant", "Hello, Punto!")])
-        self.assertEqual(sent, ["Hello, Punto!"])
+        self.assertEqual(rows, [])
+        self.assertEqual(sent, [])
         self.assertEqual(rt.operation_phase(self.db, 902), "applied")
 
     def test_reset_confirmation_panel_has_destructive_confirm_and_cancel(self):
@@ -424,7 +424,8 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertIn("Reset active session and purge its memory?", calls[0][1]["text"])
         self.assertIn("active session only", calls[0][1]["text"])
         self.assertIn("Preserve Hindsight memories from other sessions", calls[0][1]["text"])
-        self.assertNotIn("Recreate the Hindsight bank", calls[0][1]["text"])
+        self.assertIn("no character opening greeting will be sent", calls[0][1]["text"])
+        self.assertNotIn("Send the character opening greeting", calls[0][1]["text"])
         markup = calls[0][1]["reply_markup"]["inline_keyboard"]
         callbacks = {button["callback_data"] for row in markup for button in row}
         self.assertEqual(callbacks, {"reset:confirm", "reset:cancel"})
@@ -438,7 +439,7 @@ class AuditRegressionTests(unittest.TestCase):
         rt.purge_hindsight_session = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
         rt.send_text = lambda *_args, **_kwargs: None
         try:
-            rt.reset_session_to_greeting(self.db, "token", "chat", session, fields)
+            rt.reset_session(self.db, "token", "chat", session, fields)
         finally:
             rt.purge_hindsight_session = original_purge
             rt.send_text = original_reply

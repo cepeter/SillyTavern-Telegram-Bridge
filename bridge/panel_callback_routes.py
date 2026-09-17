@@ -93,8 +93,7 @@ def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, m
             answer_callback(token, str(callback.get("id", "")), "Unknown reset action")
             return True
         try:
-            reset_fields = card_fields_from_file(session["character_file"])
-            reset_session_to_greeting(db, token, chat_id, session, reset_fields, operation_id=operation_id)
+            reset_session(db, token, chat_id, session, operation_id=operation_id)
         except Exception:
             logging.error("Reset failed for chat %s/session %s", chat_id, session_id, exc_info=True)
             answer_callback(token, str(callback.get("id", "")), "Reset failed; memory and session were preserved")

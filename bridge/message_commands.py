@@ -2,7 +2,7 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     method = "editMessageText" if message_id else "sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n• Preserve Hindsight memories from other sessions.\n• Send the character opening greeting.\n\nThis cannot be undone.",
+        "text": "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n• Preserve Hindsight memories from other sessions.\n• Leave the session empty; no character opening greeting will be sent.\n\nThis cannot be undone.",
         "reply_markup": {"inline_keyboard": [
             [{"text": "✅ Confirm active-session reset", "callback_data": "reset:confirm"}],
             [{"text": "❌ Cancel", "callback_data": "reset:cancel"}],
@@ -13,15 +13,13 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     telegram_request(token, method, payload)
 
 
-def reset_session_to_greeting(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict, operation_id: int | str | None = None) -> None:
+def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict, operation_id: int | str | None = None) -> None:
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "reset"):
             return
     phase = operation_phase(db, operation_id) if operation_id is not None else ""
     if phase == "local_committed":
-        committed = db.execute("SELECT rowid,content FROM messages WHERE chat_id=? AND session_id=? AND role='assistant' ORDER BY rowid DESC LIMIT 1", (chat_id, session["session_id"])).fetchone()
-        if committed:
-            send_reply(token, chat_id, str(committed[1]), db, session["session_id"], int(committed[0]))
+        if operation_id is not None:
             record_operation(db, operation_id, "reset")
             db.commit()
         return
@@ -35,18 +33,9 @@ def reset_session_to_greeting(db: sqlite3.Connection, token: str, chat_id: str, 
     db.execute("DELETE FROM failed_turns WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"]))
     clear_session_summary(db, chat_id, session["session_id"])
     db.execute("DELETE FROM meta WHERE key IN (?, ?)", (swipe_state_key(chat_id, session["session_id"]), f"swipe_message:{chat_id}:{session['session_id']}"))
-    greeting = replace_macros(fields.get("first_mes") or "", fields, persona_name(session["persona_id"]) if session["persona_id"] else "Punto").strip()
-    assistant_rowid = None
-    if greeting:
-        cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session["session_id"], "assistant", greeting, "[]", time.time()))
-        assistant_rowid = int(cursor.lastrowid)
     if operation_id is not None:
         set_operation_phase(db, operation_id, "reset", "local_committed")
     db.commit()
-    if greeting:
-        send_reply(token, chat_id, greeting, db, session["session_id"], assistant_rowid)
-    else:
-        send_text(token, chat_id, "Session reset; this character has no opening greeting.")
     if operation_id is not None:
         record_operation(db, operation_id, "reset")
         db.commit()
