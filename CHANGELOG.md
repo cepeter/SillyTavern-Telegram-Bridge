@@ -2,6 +2,13 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.005] - 2026-09-17
+
+### Changed
+
+- Made Persona storage fully native to SillyTavern: settings and avatars are the source of truth, SQLite stores only native avatar references, and the bridge catalog is archived.
+- Removed Persona import/export controls and obsolete bridge catalog scope; native Persona create/edit now writes directly to SillyTavern storage with verified backups and readback.
+
 ## [0.2.004] - 2026-09-17
 
 ### Added
@@ -27,6 +34,9 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 - Enforced fixed response-language selections with a final bounded render pass across normal, image, edit, regenerate, and continue paths; Auto mode remains single-pass and fixed-language streaming previews are suppressed.
 - Explicitly disabled hidden reasoning on OpenRouter when the configured reasoning budget is zero, and automatically requested one bounded continuation when a non-stream response stopped at its output-token limit.
 - Changed `/reset` to clear only the active session's SQLite conversation and session-scoped Hindsight documents; other sessions and the shared per-chat Hindsight bank are preserved.
+- Enforced Hindsight recall as active-session-only, ignored legacy broader scope metadata, and removed user/character scope choices from the memory panel.
+- Removed the obsolete Hindsight scope panel; `/memory search <query>` and `/remember <fact>` remain text-input commands, while bridge recall is verified against the live Hindsight API.
+- Moved Persona metadata to native SillyTavern settings and native User Avatars; bridge SQLite now stores only the native avatar reference, and the bridge JSON catalog is archived.
 - Kept session and group setup callback state scoped to the correct chat, topic, and session.
 
 ## [0.2.003] - 2026-09-16

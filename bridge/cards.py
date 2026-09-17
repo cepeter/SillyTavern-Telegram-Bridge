@@ -180,9 +180,9 @@ def build_world_info(world_names: str | list[str], context: str, fields: dict[st
 
 def load_personas() -> dict[str, dict[str, str]]:
     try:
-        data = json.loads(PERSONA_FILE.read_text(encoding="utf-8"))
-        return {str(k): dict(v) for k, v in data.items() if isinstance(v, dict)}
+        return load_native_personas()
     except Exception:
+        logging.warning("Could not load native SillyTavern personas", exc_info=True)
         return {}
 
 
@@ -334,10 +334,6 @@ def panel_navigation(prefix: str, page: int, total_pages: int) -> list[dict[str,
 
 
 def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0) -> None:
-    try:
-        refresh_native_persona_cache()
-    except Exception:
-        logging.warning("Could not refresh native SillyTavern persona cache", exc_info=True)
     personas = load_personas()
     options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in list(personas.items())[:CATALOG_MAX_ITEMS]]
     page_options, current_page, total_pages = panel_page(options, page)
@@ -351,8 +347,6 @@ def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id
     rows.append([{"text": "🚫 Persona off", "callback_data": "persona:off"}])
     if current_persona and current_persona in personas:
         rows.append([{"text": "✏️ Edit current persona", "callback_data": "persona:edit"}])
-        rows.append([{"text": "⬆️ Export current → SillyTavern", "callback_data": "persona:native_export"}])
-    rows.append([{"text": "⬇️ Import from SillyTavern", "callback_data": "persona:native_import"}])
     rows.append([{"text": "➕ Create persona", "callback_data": "persona:create"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""

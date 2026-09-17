@@ -15,12 +15,25 @@ class CatalogLimitTests(unittest.TestCase):
         self.old_prompts = rt.SYSTEM_PROMPTS_DIR
         self.old_prompt_file = rt.SYSTEM_PROMPTS_FILE
         self.old_persona = rt.PERSONA_FILE
+        self.old_native_settings = rt.NATIVE_PERSONA_SETTINGS_FILE
+        self.old_native_avatars = rt.NATIVE_PERSONA_AVATAR_DIR
+        self.old_native_cache = rt._NATIVE_PERSONA_CACHE
+        self.old_native_cache_time = rt._NATIVE_PERSONA_CACHE_LAST_REFRESH
+        self.old_phase3 = rt.phase3_api_configured
         self.old_db = rt.DB_FILE
         rt.CHARACTER_DIR = root / "characters"
         rt.WORLD_DIR = root / "worlds"
         rt.SYSTEM_PROMPTS_DIR = root / "prompts"
         rt.SYSTEM_PROMPTS_FILE = ""
         rt.PERSONA_FILE = root / "personas.json"
+        rt.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
+        rt.NATIVE_PERSONA_AVATAR_DIR = root / "avatars"
+        rt.NATIVE_PERSONA_AVATAR_DIR.mkdir()
+        (rt.NATIVE_PERSONA_AVATAR_DIR / "user-default.png").write_bytes(b"avatar")
+        rt.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps({"power_user": {"personas": {}, "persona_descriptions": {}}}), encoding="utf-8")
+        rt._NATIVE_PERSONA_CACHE = {}
+        rt._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
+        rt.phase3_api_configured = lambda: False
         rt.DB_FILE = root / "bridge.sqlite3"
         for directory in (rt.CHARACTER_DIR, rt.WORLD_DIR, rt.SYSTEM_PROMPTS_DIR):
             directory.mkdir()
@@ -36,6 +49,11 @@ class CatalogLimitTests(unittest.TestCase):
         rt.SYSTEM_PROMPTS_DIR = self.old_prompts
         rt.SYSTEM_PROMPTS_FILE = self.old_prompt_file
         rt.PERSONA_FILE = self.old_persona
+        rt.NATIVE_PERSONA_SETTINGS_FILE = self.old_native_settings
+        rt.NATIVE_PERSONA_AVATAR_DIR = self.old_native_avatars
+        rt._NATIVE_PERSONA_CACHE = self.old_native_cache
+        rt._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_native_cache_time
+        rt.phase3_api_configured = self.old_phase3
         rt.DB_FILE = self.old_db
         with rt._DB_SCHEMA_LOCK:
             rt._DB_SCHEMA_READY = False
@@ -52,8 +70,9 @@ class CatalogLimitTests(unittest.TestCase):
         self.assertEqual(rt.character_card_paths()[-1].name, "39.png")
 
     def test_persona_panel_shows_at_most_40(self):
-        personas = {f"p{index:02}": {"name": f"Persona {index}", "description": "d", "tags": []} for index in range(41)}
-        rt.PERSONA_FILE.write_text(json.dumps(personas), encoding="utf-8")
+        personas = {f"p{index:02}.png": f"Persona {index}" for index in range(41)}
+        settings = {"power_user": {"personas": personas, "persona_descriptions": {key: {"description": "d"} for key in personas}}}
+        rt.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(settings), encoding="utf-8")
         calls = []
         original = rt.telegram_request
         rt.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
@@ -66,8 +85,8 @@ class CatalogLimitTests(unittest.TestCase):
         self.assertIn("page 1/5", calls[-1][1]["text"])
 
     def test_persona_create_rejects_item_41(self):
-        personas = {f"p{index:02}": {"name": f"Persona {index}", "description": "d", "tags": []} for index in range(40)}
-        rt.PERSONA_FILE.write_text(json.dumps(personas), encoding="utf-8")
+        personas = {f"p{index:02}.png": f"Persona {index}" for index in range(40)}
+        rt.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps({"power_user": {"personas": personas, "persona_descriptions": {key: {"description": "d"} for key in personas}}}), encoding="utf-8")
         sent = []
         original = rt.send_text
         rt.send_text = lambda _token, _chat, text: sent.append(text) or []
@@ -76,20 +95,7 @@ class CatalogLimitTests(unittest.TestCase):
             self.assertTrue(rt._handle_persona_input(self.db, "token", "chat", self.session, "p40 | Persona 40 | description", state, None))
         finally:
             rt.send_text = original
-        self.assertEqual(len(json.loads(rt.PERSONA_FILE.read_text(encoding="utf-8"))), 40)
         self.assertTrue(any("40 maximum" in text for text in sent))
-
-    def test_native_import_skips_new_item_when_bridge_catalog_full(self):
-        personas = {f"p{index:02}": {"name": f"Persona {index}", "description": "d", "tags": []} for index in range(40)}
-        rt.PERSONA_FILE.write_text(json.dumps(personas), encoding="utf-8")
-
-        class Client:
-            def get_settings(self):
-                return {"power_user": {"personas": {"native.png": "Native"}, "persona_descriptions": {"native.png": {"description": "desc"}}}}
-
-        result = rt.import_native_personas(Client())
-        self.assertIn("1 skipped", result)
-        self.assertEqual(len(json.loads(rt.PERSONA_FILE.read_text(encoding="utf-8"))), 40)
 
     def test_character_upload_rejects_item_41_without_deleting_existing(self):
         for index in range(40):

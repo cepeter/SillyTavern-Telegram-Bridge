@@ -438,6 +438,52 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertIn("MUST write all visible response text in English", messages[-2]["content"])
         self.assertEqual(messages[-1]["role"], "user")
 
+    def test_hindsight_recall_is_hard_session_scoped(self):
+        session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
+        rt.set_meta(self.db, "memory_scope:chat", "user")
+        calls = []
+
+        class FakeClient:
+            def recall(self, **kwargs):
+                calls.append(kwargs)
+                return type("Result", (), {"results": []})()
+
+        original_client = rt.hindsight_client
+        rt.hindsight_client = FakeClient
+        try:
+            self.assertEqual(rt.memory_scope(self.db, "chat"), "session")
+            self.assertEqual(rt.recall_memory_results(self.db, "chat", session, "old fact", "Test"), [])
+        finally:
+            rt.hindsight_client = original_client
+        self.assertEqual(calls[0]["tags"], [f"session:{session['session_id']}"])
+        self.assertEqual(calls[0]["tags_match"], "any_strict")
+
+    def test_memory_scope_panel_is_removed_and_search_keeps_text_input(self):
+        calls = []
+        original_request = rt.telegram_request
+        rt.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        try:
+            rt.send_memory_menu("token", "chat", self.db)
+        finally:
+            rt.telegram_request = original_request
+        payload = calls[0][1]
+        callbacks = {button["callback_data"] for row in payload["reply_markup"]["inline_keyboard"] for button in row}
+        self.assertNotIn("enum:memory:scope", callbacks)
+        self.assertIn("active session only (fixed)", payload["text"])
+
+        session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
+        sent = []
+        original_send = rt.send_text
+        original_recall = rt.recall_memory_results
+        rt.send_text = lambda _token, _chat_id, text: sent.append(text)
+        rt.recall_memory_results = lambda *_args, **_kwargs: [type("Result", (), {"text": "session fact"})()]
+        try:
+            rt.handle_memory_command(self.db, "token", "chat", session, {"name": "Test"}, "/memory search session fact")
+        finally:
+            rt.send_text = original_send
+            rt.recall_memory_results = original_recall
+        self.assertEqual(sent, ["Recalled memories:\n- session fact"])
+
     def test_response_language_validation_and_pagination(self):
         self.assertEqual(rt.normalize_response_language("bahasa indonesia"), "id")
         with self.assertRaises(ValueError):

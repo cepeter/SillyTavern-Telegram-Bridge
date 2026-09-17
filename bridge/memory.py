@@ -135,17 +135,12 @@ def memory_mode(db: sqlite3.Connection, chat_id: str) -> str:
 
 
 def memory_scope(db: sqlite3.Connection, chat_id: str) -> str:
-    return get_meta(db, f"memory_scope:{chat_id}", "user")
+    return "session"
 
 
 def memory_recall_filter(db: sqlite3.Connection, chat_id: str, session: dict[str, str], character_name: str) -> list[str]:
     tags = hindsight_tags(chat_id, session["session_id"], character_name)
-    scope = memory_scope(db, chat_id)
-    if scope == "session":
-        return [tags[1]]
-    if scope == "character":
-        return [tags[0], tags[2]]
-    return [tags[0]]
+    return [tags[1]]
 
 
 def recall_memory_results(db: sqlite3.Connection, chat_id: str, session: dict[str, str], query: str, character_name: str = "", max_tokens: int = HINDSIGHT_RECALL_MAX_TOKENS):
@@ -159,7 +154,7 @@ def recall_memory_results(db: sqlite3.Connection, chat_id: str, session: dict[st
             max_tokens=max_tokens,
             budget="low",
             tags=memory_recall_filter(db, chat_id, session, character_name or session.get("character_file", "unknown")),
-            tags_match="all_strict" if memory_scope(db, chat_id) == "character" else "any_strict",
+            tags_match="any_strict",
         )
         return list(getattr(results, "results", []) or [])
     except Exception:
@@ -249,17 +244,16 @@ def handle_memory_command(db: sqlite3.Connection, token: str, chat_id: str, sess
     argument = parts[1].casefold() if len(parts) > 1 else "status"
     if argument == "scope":
         requested_scope = parts[2].casefold() if len(parts) > 2 else ""
-        if requested_scope not in {"user", "character", "session"}:
-            send_text(token, chat_id, "Use /memory scope user, /memory scope character, or /memory scope session.")
+        if requested_scope != "session":
+            send_text(token, chat_id, "Hindsight recall is fixed to the active session; broader scopes are disabled.")
             return
-        set_meta(db, f"memory_scope:{chat_id}", requested_scope)
-        send_text(token, chat_id, f"Hindsight memory scope set to {requested_scope}.")
+        send_text(token, chat_id, "Hindsight memory scope is already fixed to session.")
         return
     if argument in {"status", "on", "off"}:
         if argument in {"on", "off"}:
             set_meta(db, f"memory_mode:{chat_id}", argument)
         status = memory_mode(db, chat_id)
-        send_text(token, chat_id, f"Hindsight memory: {status}\nScope: {memory_scope(db, chat_id)}\nBank: {hindsight_bank_id(chat_id)}\nRecall is filtered by scope; session and character tags are retained for provenance.")
+        send_text(token, chat_id, f"Hindsight memory: {status}\nScope: {memory_scope(db, chat_id)}\nBank: {hindsight_bank_id(chat_id)}\nRecall is hard-filtered to the active session; character tags are provenance only.")
         return
     if argument == "search":
         query = parts[2].strip() if len(parts) > 2 else ""

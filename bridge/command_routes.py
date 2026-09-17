@@ -95,11 +95,8 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
 
 def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session, fields, operation_id):
     """Handle memory, RAG, group, export, import, and TTS commands."""
-    if command == "/memory" or command in {"/memory on", "/memory off", "/memory status"}:
+    if command == "/memory" or command in {"/memory on", "/memory off", "/memory status", "/memory scope"}:
         send_memory_menu(token, chat_id, db)
-        return True
-    if command == "/memory scope":
-        send_memory_scope_menu(token, chat_id, db)
         return True
     if command.startswith("/memory search"):
         handle_memory_command(db, token, chat_id, session, fields, stripped)

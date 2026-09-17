@@ -21,6 +21,7 @@ NATIVE_PERSONA_AVATAR_DIR = Path(os.environ.get(
 NATIVE_PERSONA_BACKUP_DIR = BRIDGE_HOME / "backups" / "sillytavern" / "personas"
 _NATIVE_PERSONA_CACHE_LAST_REFRESH = 0.0
 _NATIVE_PERSONA_CACHE_SECONDS = 15.0
+_NATIVE_PERSONA_CACHE: dict[str, dict[str, object]] = {}
 _NATIVE_AVATAR_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 _PERSONA_CATALOG_WARNING = ""
 
@@ -58,19 +59,12 @@ def _read_persona_catalog() -> tuple[dict[str, dict[str, object]], int]:
 
 
 def load_personas() -> dict[str, dict[str, object]]:
-    """Load usable personas and retain a warning for the Persona panel."""
-    global _PERSONA_CATALOG_WARNING
+    """Load native Persona metadata; the bridge JSON catalog is not used."""
     try:
-        personas, repaired = _read_persona_catalog()
-    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-        _PERSONA_CATALOG_WARNING = "Persona catalog cannot be read; restore or repair its JSON file."
-        logging.warning("Could not load persona catalog: %s", exc, exc_info=True)
+        return load_native_personas()
+    except Exception:
+        logging.warning("Could not load native Persona metadata", exc_info=True)
         return {}
-    _PERSONA_CATALOG_WARNING = (
-        f"Normalized or skipped {repaired} invalid persona field(s). A verified backup is kept when you edit."
-        if repaired else ""
-    )
-    return personas
 
 
 def _editable_personas() -> dict[str, dict[str, object]]:
@@ -121,6 +115,15 @@ def _native_persona_maps(settings: dict, create: bool = False) -> tuple[dict, di
 
 
 def _native_settings(client=None) -> dict:
+    if client is None and not phase3_api_configured():
+        path = NATIVE_PERSONA_SETTINGS_FILE
+        try:
+            settings = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise SillyTavernApiError("Native SillyTavern settings cannot be read") from exc
+        if not isinstance(settings, dict):
+            raise SillyTavernApiError("Native SillyTavern settings have an invalid shape")
+        return settings
     api = client or phase3_client()
     if hasattr(api, "get_settings"):
         settings = api.get_settings()
@@ -136,7 +139,43 @@ def _native_settings(client=None) -> dict:
     return settings
 
 
+def load_native_personas(force: bool = False) -> dict[str, dict[str, object]]:
+    """Load Persona metadata directly from native SillyTavern settings."""
+    global _NATIVE_PERSONA_CACHE_LAST_REFRESH, _NATIVE_PERSONA_CACHE
+    now = time.time()
+    if not force and _NATIVE_PERSONA_CACHE and now - _NATIVE_PERSONA_CACHE_LAST_REFRESH < _NATIVE_PERSONA_CACHE_SECONDS:
+        return copy.deepcopy(_NATIVE_PERSONA_CACHE)
+    settings = _native_settings()
+    _power, native_names, native_descriptions = _native_persona_maps(settings)
+    personas = {}
+    for raw_avatar, raw_name in native_names.items():
+        avatar = _valid_native_avatar(raw_avatar)
+        name = str(raw_name or "").strip()
+        descriptor = native_descriptions.get(raw_avatar, {})
+        description = str(descriptor.get("description") or "").strip() if isinstance(descriptor, dict) else ""
+        if avatar and 1 <= len(name) <= 120:
+            personas[avatar] = {
+                "name": name,
+                "description": description[:4000],
+                "sillytavern_avatar": avatar,
+            }
+    _NATIVE_PERSONA_CACHE = personas
+    _NATIVE_PERSONA_CACHE_LAST_REFRESH = now
+    return copy.deepcopy(personas)
+
+
 def _save_native_settings(client, settings: dict) -> None:
+    if client is None and not phase3_api_configured():
+        path = NATIVE_PERSONA_SETTINGS_FILE
+        temporary = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
+        try:
+            temporary.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            os.chmod(temporary, 0o600)
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return
+    client = client or phase3_client()
     if hasattr(client, "save_settings"):
         client.save_settings(settings)
         return
@@ -218,6 +257,55 @@ def _ensure_native_avatar(avatar: str, settings: dict) -> bool:
     finally:
         temporary.unlink(missing_ok=True)
     return True
+
+
+def upsert_native_persona(identifier: str, name: str, description: str, client=None) -> str:
+    """Create or update one Persona directly in native SillyTavern settings."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(identifier or "")) and not _valid_native_avatar(str(identifier or "")):
+        raise ValueError("Persona ID must contain only letters, numbers, hyphens, or underscores")
+    if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
+        raise ValueError("Persona name must be 1–120 characters and description 1–4,000 characters")
+    api = client or (phase3_client() if phase3_api_configured() else None)
+    original = _native_settings(api)
+    updated = copy.deepcopy(original)
+    _power, native_names, native_descriptions = _native_persona_maps(updated, create=True)
+    existing = identifier if _valid_native_avatar(identifier) and identifier in native_names else ""
+    avatar = existing or _choose_native_avatar(identifier, {"name": name}, updated, native_names)
+    if avatar not in native_names and len(native_names) >= CATALOG_MAX_ITEMS:
+        raise ValueError(f"Native persona catalog is full ({CATALOG_MAX_ITEMS} maximum)")
+    descriptor = native_descriptions.get(avatar)
+    descriptor = dict(descriptor) if isinstance(descriptor, dict) else {}
+    descriptor["description"] = description
+    descriptor.setdefault("position", 0)
+    descriptor.setdefault("depth", 2)
+    descriptor.setdefault("role", 0)
+    descriptor.setdefault("lorebook", "")
+    descriptor.setdefault("title", "")
+    native_names[avatar] = name
+    native_descriptions[avatar] = descriptor
+    if _settings_hash(_native_settings(api)) != _settings_hash(original):
+        raise ValueError("SillyTavern settings changed during Persona update; retry")
+    _backup_native_settings(original)
+    created_avatar = _ensure_native_avatar(avatar, updated)
+    save_error = None
+    try:
+        _save_native_settings(api, updated)
+    except Exception as exc:
+        save_error = exc
+    try:
+        verified = _native_settings(api)
+        _power, verified_names, verified_descriptions = _native_persona_maps(verified)
+    except Exception:
+        if created_avatar:
+            (NATIVE_PERSONA_AVATAR_DIR / avatar).unlink(missing_ok=True)
+        raise save_error or RuntimeError("SillyTavern Persona readback failed")
+    target = verified_descriptions.get(avatar, {})
+    if verified_names.get(avatar) != name or not isinstance(target, dict) or target.get("description") != description:
+        if created_avatar and avatar not in verified_names:
+            (NATIVE_PERSONA_AVATAR_DIR / avatar).unlink(missing_ok=True)
+        raise save_error or SillyTavernApiError("SillyTavern Persona readback did not match")
+    _NATIVE_PERSONA_CACHE.clear()
+    return avatar
 
 
 def import_native_personas(client=None) -> str:

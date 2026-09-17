@@ -30,7 +30,7 @@ runs beside SillyTavern without patching or executing the SillyTavern source.
 - `/regen`, `/swipe`, `/branch`, `/continue`, and native Telegram edit handling.
 - Image input and local Faster-Whisper voice transcription.
 - Text-to-speech responses through Edge TTS.
-- Hindsight long-term memory with user, character, and session scopes.
+- Hindsight long-term memory with hard active-session-only recall.
 - Auto-summary and bounded context compression.
 - Data Bank RAG for PDF, DOCX, TXT, Markdown, JSON, YAML, CSV, HTML, and XML.
 - FTS5 plus optional OpenAI-compatible embeddings with lexical fallback.
@@ -209,7 +209,6 @@ Optional settings:
 SILLYTAVERN_CHARACTER_DIR=/path/to/SillyTavern/data/default-user/characters
 SILLYTAVERN_CHARACTER_BACKUP_DIR=/path/to/private-character-backups
 SILLYTAVERN_WORLD_DIR=/path/to/SillyTavern/data/default-user/worlds
-SILLYTAVERN_PERSONA_FILE=/path/to/sillytavern_personas.json
 HINDSIGHT_API_URL=http://127.0.0.1:8890
 HINDSIGHT_API_KEY=replace-me
 SILLYTAVERN_RAG_EMBEDDING_URL=http://127.0.0.1:8891/v1/embeddings
@@ -254,8 +253,9 @@ Open the interactive command guide:
 Categories use plain-language labels such as **Start & Sessions**, **Replies & Settings**, and **Memory & Files**. Each category renders one button per command, with up to eight command buttons per page. Use Next/Previous for larger categories, then select a command to replace the page with a clear **What it does** explanation and a Back button.
 
 Persona, Character, System Prompt, and World Info catalogs accept a maximum of
-**40 items each**. New persona creation, native persona export/import, and
-character uploads stop safely at the limit; existing files are never deleted.
+**40 items each**. Persona metadata is read and written directly through
+SillyTavern's native settings and User Avatars paths; character uploads stop
+safely at the limit and existing files are never deleted.
 
 Core commands:
 
@@ -380,32 +380,23 @@ Persona editing:
 ```text
 /persona
 → Edit current persona
-→ Review ID, name, description, and tags
+→ Review native avatar ID, name, and description
 → Edit name, Edit description, or Edit name + description
 → Send only the field(s) you want to change
 
 /persona
 → Create persona
 → Send: id | display name | persona description
-
-/persona
-→ Import from SillyTavern     Read native persona names/descriptions into the bridge
-→ Export current → SillyTavern
-                              Add or update only the selected bridge persona natively
 ```
 
-Persona changes are validated, backed up, and written atomically to the private
-`SILLYTAVERN_PERSONA_FILE`. Input is scoped to the session and expires; `/cancel`
-leaves the existing persona unchanged.
+Persona changes are validated, backed up, and written atomically to native
+SillyTavern `settings.json`. Input is scoped to the session and expires;
+`/cancel` leaves the existing Persona unchanged.
 
-Native persona interoperability uses SillyTavern's supported storage instead of
-the repository-level `personas/` directory. Avatar files are created atomically
-under `data/default-user/User Avatars/`; persona names and descriptions are read
-and saved through the authenticated loopback `/api/settings/get|save` routes.
-Export takes a verified private backup first, performs a best-effort pre-save
-concurrency check plus full-document readback verification, preserves unrelated
-settings and native persona fields, and never deletes another native persona.
-Import is read-only on the SillyTavern side.
+Persona storage is fully native: avatar files are created atomically under
+`data/default-user/User Avatars/`, while names and descriptions live in
+`data/default-user/settings.json`. The bridge stores only the native avatar
+filename in SQLite and does not use a bridge Persona catalog.
 
 The default native paths derive from `SILLYTAVERN_DIR`. Override them only for a
 non-default SillyTavern data layout:
@@ -418,7 +409,7 @@ SILLYTAVERN_NATIVE_AVATAR_DIR=/path/to/SillyTavern/data/default-user/User Avatar
 Memory and RAG:
 
 ```text
-/memory                       Open memory mode/scope panel
+/memory                       Open Hindsight memory mode controls (session-only recall)
 /memory search <query>        Search Hindsight (free-text query)
 /remember <fact>              Queue an explicit memory (free text)
 /databank                     Open RAG/list/remove/reindex panel

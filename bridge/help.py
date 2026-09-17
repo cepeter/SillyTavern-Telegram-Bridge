@@ -34,7 +34,7 @@ HELP_CATEGORIES = {
         ("/prompt", "Inspect prompt sections without showing the full prompt."),
     ],
     "memory_rag": [
-        ("/memory", "Open memory mode/scope panel; search remains a free-text query."),
+        ("/memory", "Open Hindsight memory mode controls; recall is always active-session-only."),
         ("/remember <fact>", "Queue an explicit long-term memory."),
         ("/summarize", "Force-refresh the active session summary."),
         ("/databank", "Open RAG mode/list/remove/reindex panel; search remains a free-text query."),
@@ -184,21 +184,9 @@ def send_stt_model_menu(token: str, chat_id: str, db: sqlite3.Connection, messag
 
 def send_memory_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
     mode = memory_mode(db, chat_id)
-    scope = memory_scope(db, chat_id)
-    rows = [[{"text": ("✅ " if mode == "on" else "") + "Memory on", "callback_data": "enum:memory:on"}, {"text": ("✅ " if mode == "off" else "") + "Memory off", "callback_data": "enum:memory:off"}], [{"text": f"Scope: {scope}", "callback_data": "enum:memory:scope"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
+    rows = [[{"text": ("✅ " if mode == "on" else "") + "Memory on", "callback_data": "enum:memory:on"}, {"text": ("✅ " if mode == "off" else "") + "Memory off", "callback_data": "enum:memory:off"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
     method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Hindsight memory: {mode}\nScope: {scope}", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
-
-
-def send_memory_scope_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
-    current = memory_scope(db, chat_id)
-    rows = [[{"text": ("✅ " if scope == current else "") + scope.title(), "callback_data": "enum:memoryscope:" + scope}] for scope in ("user", "character", "session")]
-    rows.append([{"text": "⬅️ Back", "callback_data": "enum:memory:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": "Choose memory scope:", "reply_markup": {"inline_keyboard": rows}}
+    payload = {"chat_id": chat_id, "text": f"Hindsight memory: {mode}\nScope: active session only (fixed)", "reply_markup": {"inline_keyboard": rows}}
     if message_id:
         payload["message_id"] = message_id
     telegram_request(token, method, payload)
@@ -349,7 +337,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
             set_meta(db, f"stt_model:{chat_id}", value)
         send_voice_input_menu(token, chat_id, db, message_id)
     elif data == "enum:memory:scope":
-        send_memory_scope_menu(token, chat_id, db, message_id)
+        send_memory_menu(token, chat_id, db, message_id)
     elif data == "enum:memory:back":
         send_memory_menu(token, chat_id, db, message_id)
     elif data.startswith("enum:memory:"):
@@ -358,9 +346,8 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
             set_meta(db, f"memory_mode:{chat_id}", value)
         send_memory_menu(token, chat_id, db, message_id)
     elif data.startswith("enum:memoryscope:"):
-        value = parts[2]
-        if value in {"user", "character", "session"}:
-            set_meta(db, f"memory_scope:{chat_id}", value)
+        if parts[2] == "session":
+            set_meta(db, f"memory_scope:{chat_id}", "session")
         send_memory_menu(token, chat_id, db, message_id)
     elif data == "enum:preset:save":
         pending_preset = {"session_id": session["session_id"], "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
