@@ -2,6 +2,24 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.006] - 2026-09-17
+
+### Added
+
+- Added a dedicated keyless OpenCode Muse Free transport using the `/responses` endpoint, canonical OpenCode session/request headers, low reasoning effort, and a bounded output-token floor.
+- Added panel-first input flows for `/edit`, `/remember`, `/macro`, and `/tts`, with session binding, expiry cleanup, validation, and `/cancel` support.
+- Added Memory search, Data Bank search, and a safe `/stscript` Reset action panel.
+- Added native Persona deletion with confirmation, reference cleanup, and avatar preservation.
+
+### Changed
+
+- `/note` is now the sole Author's Note interface; the duplicate STscript Note action was removed.
+- `/status` now shows the custom session title followed by the technical session ID.
+
+### Fixed
+
+- OpenCode Muse Contributor Free generation now succeeds through the bridge adapter instead of returning HTTP 403.
+
 ## [0.2.005] - 2026-09-17
 
 ### Changed
