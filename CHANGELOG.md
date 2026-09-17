@@ -26,6 +26,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 - Normalized isolated invalid Persona entries without blocking the catalog, surfaced malformed-catalog warnings in the panel, and preserved newer concurrent edits when native export rollback was needed.
 - Enforced fixed response-language selections with a final bounded render pass across normal, image, edit, regenerate, and continue paths; Auto mode remains single-pass and fixed-language streaming previews are suppressed.
 - Explicitly disabled hidden reasoning on OpenRouter when the configured reasoning budget is zero, and automatically requested one bounded continuation when a non-stream response stopped at its output-token limit.
+- Changed `/reset` to clear only the active session's SQLite conversation and session-scoped Hindsight documents; other sessions and the shared per-chat Hindsight bank are preserved.
 - Kept session and group setup callback state scoped to the correct chat, topic, and session.
 
 ## [0.2.003] - 2026-09-16

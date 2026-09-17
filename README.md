@@ -263,7 +263,7 @@ Core commands:
 /start                         Send the character card first message only
 /status                       Show active runtime state
 /new                          Name, create, and activate a new isolated session
-/reset                        Confirm active-session reset, purge all chat Hindsight memory, and restart from the character opening greeting
+/reset                        Confirm active-session reset, purge only its Hindsight memory, and restart from the character opening greeting
 /session                      Switch, create, or safely delete an inactive session
 /sync                         Open Live API Sync controls
 /providers                    Open the synchronized provider catalog
@@ -303,7 +303,7 @@ are protected. Deleting a session removes its transcript, variants, summary,
 generation settings, group state, failed turns, session record, and every
 Hindsight document tagged or prefixed for that session. Memories from other
 sessions remain in the shared per-chat bank. Deletion fails closed when
-Hindsight is unavailable; `/reset` still purges the entire chat bank.
+Hindsight is unavailable; `/reset` fails closed before changing local session state.
 
 New sessions use a scoped naming prompt:
 

@@ -2,9 +2,9 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     method = "editMessageText" if message_id else "sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": "Reset active session and purge chat memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete all Hindsight memories for this Telegram chat, including other sessions.\n• Recreate the Hindsight bank empty.\n• Send the character opening greeting.\n\nThis cannot be undone.",
+        "text": "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n• Preserve Hindsight memories from other sessions.\n• Send the character opening greeting.\n\nThis cannot be undone.",
         "reply_markup": {"inline_keyboard": [
-            [{"text": "✅ Confirm reset + purge memory", "callback_data": "reset:confirm"}],
+            [{"text": "✅ Confirm active-session reset", "callback_data": "reset:confirm"}],
             [{"text": "❌ Cancel", "callback_data": "reset:cancel"}],
         ]},
     }
@@ -26,7 +26,7 @@ def reset_session_to_greeting(db: sqlite3.Connection, token: str, chat_id: str, 
             db.commit()
         return
     if phase != "memory_purged":
-        purge_hindsight_bank(chat_id)
+        purge_hindsight_session(db, chat_id, session["session_id"])
         if operation_id is not None:
             set_operation_phase(db, operation_id, "reset", "memory_purged")
         db.commit()

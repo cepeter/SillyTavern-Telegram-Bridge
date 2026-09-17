@@ -348,13 +348,13 @@ class AuditRegressionTests(unittest.TestCase):
         sent = []
         original_card = rt.card_fields_from_file
         original_panel = rt.send_reset_confirmation_menu
-        original_purge = rt.purge_hindsight_bank
+        original_purge = rt.purge_hindsight_session
         original_reply = rt.send_reply
         original_generate = rt.generate_text
         panel = []
         rt.card_fields_from_file = lambda _filename: fields
         rt.send_reset_confirmation_menu = lambda *_args, **_kwargs: panel.append(True)
-        rt.purge_hindsight_bank = lambda _chat_id: None
+        rt.purge_hindsight_session = lambda _db, _chat_id, _session_id: None
         rt.send_reply = lambda _token, _chat_id, text, *_args: sent.append(text)
         rt.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate"))
         try:
@@ -365,7 +365,7 @@ class AuditRegressionTests(unittest.TestCase):
         finally:
             rt.card_fields_from_file = original_card
             rt.send_reset_confirmation_menu = original_panel
-            rt.purge_hindsight_bank = original_purge
+            rt.purge_hindsight_session = original_purge
             rt.send_reply = original_reply
             rt.generate_text = original_generate
 
@@ -386,30 +386,28 @@ class AuditRegressionTests(unittest.TestCase):
         finally:
             rt.telegram_request = original_request
         self.assertEqual(len(calls), 1)
-        self.assertIn("Reset active session and purge chat memory?", calls[0][1]["text"])
-        self.assertIn("including other sessions", calls[0][1]["text"])
+        self.assertIn("Reset active session and purge its memory?", calls[0][1]["text"])
+        self.assertIn("active session only", calls[0][1]["text"])
+        self.assertIn("Preserve Hindsight memories from other sessions", calls[0][1]["text"])
+        self.assertNotIn("Recreate the Hindsight bank", calls[0][1]["text"])
         markup = calls[0][1]["reply_markup"]["inline_keyboard"]
         callbacks = {button["callback_data"] for row in markup for button in row}
         self.assertEqual(callbacks, {"reset:confirm", "reset:cancel"})
 
-    def test_reset_purge_deletes_and_recreates_chat_bank(self):
+    def test_reset_uses_session_scoped_purge_not_whole_bank(self):
+        session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
+        fields = {"name": "Test", "first_mes": ""}
         calls = []
-
-        class FakeClient:
-            def delete_bank(self, **kwargs):
-                calls.append(("delete", kwargs))
-
-            def create_bank(self, **kwargs):
-                calls.append(("create", kwargs))
-
-        original_client = rt.hindsight_client
-        rt.hindsight_client = FakeClient
+        original_purge = rt.purge_hindsight_session
+        original_reply = rt.send_text
+        rt.purge_hindsight_session = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
+        rt.send_text = lambda *_args, **_kwargs: None
         try:
-            rt.purge_hindsight_bank("chat")
+            rt.reset_session_to_greeting(self.db, "token", "chat", session, fields)
         finally:
-            rt.hindsight_client = original_client
-        self.assertEqual([name for name, _kwargs in calls], ["delete", "create"])
-        self.assertEqual(calls[0][1]["bank_id"], calls[1][1]["bank_id"])
+            rt.purge_hindsight_session = original_purge
+            rt.send_text = original_reply
+        self.assertEqual(calls, [("chat", session["session_id"])])
 
 
     def test_response_language_is_added_to_prompt(self):

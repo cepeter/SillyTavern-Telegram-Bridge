@@ -130,22 +130,6 @@ def purge_hindsight_session(db: sqlite3.Connection, chat_id: str, session_id: st
             raise RuntimeError("Hindsight session memory cleanup failed") from exc
 
 
-def purge_hindsight_bank(chat_id: str) -> None:
-    """Delete and recreate the entire per-chat Hindsight bank."""
-    client = hindsight_client()
-    bank_id = hindsight_bank_id(chat_id)
-    try:
-        client.delete_bank(bank_id=bank_id)
-    except Exception as exc:
-        logging.error("Hindsight purge failed for chat %s", chat_id, exc_info=True)
-        raise RuntimeError("Hindsight memory purge failed") from exc
-    try:
-        client.create_bank(bank_id=bank_id, name="SillyTavern bridge memory")
-    except Exception as exc:
-        logging.error("Hindsight bank recreation failed for chat %s", chat_id, exc_info=True)
-        raise RuntimeError("Hindsight memory bank recreation failed") from exc
-
-
 def memory_mode(db: sqlite3.Connection, chat_id: str) -> str:
     return get_meta(db, f"memory_mode:{chat_id}", "on")
 

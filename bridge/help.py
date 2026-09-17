@@ -4,7 +4,7 @@ HELP_CATEGORIES = {
         ("/help", "Open this help menu; use /help <command> for one command."),
         ("/status", "Show active card, session, model, memory, RAG, group, and generation state."),
         ("/new", "Name, create, and activate a new isolated session."),
-        ("/reset", "Open confirmation to reset only the active session while purging all Hindsight memory for the chat, then restart from the opening greeting."),
+        ("/reset", "Open confirmation to reset only the active session and its Hindsight memory, preserving other sessions."),
         ("/session", "List, switch, create, or delete inactive session data and its session-scoped Hindsight documents."),
         ("/sync", "Open session-scoped Live API Sync controls."),
     ],

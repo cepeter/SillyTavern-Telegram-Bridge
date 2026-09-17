@@ -3,7 +3,7 @@
   "/help": "Opens this guide. Choose a category, then choose a command to view its behavior and available input form.",
   "/status": "Shows the active character, session, model, response language, persona, World Info, memory, RAG, group, and generation state.",
   "/new": "Asks for a 1–80 character name, then creates and activates a separate session. /cancel leaves no empty session behind.",
-  "/reset": "Opens confirmation first. Confirming clears the active session conversation, purges chat Hindsight memory, and sends the character opening greeting.",
+  "/reset": "Opens confirmation first. Confirming clears the active session conversation, deletes only that session's Hindsight documents, preserves other sessions, and sends the character opening greeting.",
   "/session": "Opens session controls for switching, creating, or deleting inactive sessions. Deletion removes that session's SQLite state and session-scoped Hindsight documents while preserving memories from other sessions; it fails closed when Hindsight is unavailable. New session asks for a validated name first; busy or active sessions cannot be deleted.",
   "/sync": "Opens session-scoped Live Sync through the local SillyTavern API. Realtime API toggle performs initial reconciliation before enabling; Sync now runs a one-shot API reconciliation even when background realtime is off; Refresh status only redraws state. Sync-ID mismatch, initial divergence, or two-sided edits stop synchronization instead of choosing a winner. Credentials and application-private state stay separate.",
   "/providers": "Opens the provider/model catalog. Select an adapter-enabled model; catalog-only entries cannot run inference.",
