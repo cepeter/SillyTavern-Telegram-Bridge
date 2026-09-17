@@ -337,14 +337,13 @@ Generation and branches:
 /settings                     Open session generation panel; choose reasoning
 /stream                       Open streaming on/off panel
 /preset                       Open preset use/save/delete panel
-/macro {{char}}               Preview a supported macro
-/stscript note <text>         Apply a safe session note command
-/stscript reset               Open the reset confirmation panel
+/macro                         Open a panel, then preview a supported macro
+/stscript                      Open the safe Reset action panel
 /regen                        Generate a new response variant
 /swipe                        Browse variants with buttons
 /branch                       Open the active branch selector
 /continue                     Continue the latest assistant response
-/edit <text>                  Edit the latest user turn and regenerate
+/edit                         Open a panel, then edit the latest user turn
 /retry                        Retry the latest failed response
 /prompt                       Inspect prompt composition
 /summarize                    Force a session summary
@@ -411,11 +410,9 @@ SILLYTAVERN_NATIVE_AVATAR_DIR=/path/to/SillyTavern/data/default-user/User Avatar
 Memory and RAG:
 
 ```text
-/memory                       Open Hindsight memory mode controls (session-only recall)
-/memory search <query>        Search Hindsight (free-text query)
-/remember <fact>              Queue an explicit memory (free text)
-/databank                     Open RAG/list/remove/reindex panel
-/databank search <query>      Search Data Bank (free-text query)
+/memory                       Open Hindsight mode and search panel (session-only recall)
+/remember                     Open a panel, then queue an explicit memory
+/databank                     Open RAG/list/search/remove/reindex panel
 /sync                        Open Live API Sync controls
 ```
 

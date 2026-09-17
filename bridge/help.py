@@ -23,24 +23,24 @@ HELP_CATEGORIES = {
         ("/settings", "Open this session's generation panel; choose reasoning or set validated numeric fields."),
         ("/stream on|off", "Open the streaming on/off panel."),
         ("/preset", "Open the preset use/save/delete panel; all actions stay in the panel."),
-        ("/macro <text>", "Preview supported SillyTavern macros safely."),
-        ("/stscript note|reset", "Run the safe Telegram STscript subset; reset opens the reset confirmation panel."),
+        ("/macro", "Open a panel, then preview a supported macro"),
+        ("/stscript", "Open the safe STscript panel for Note or Reset."),
         ("/regen", "Regenerate the latest response as a new variant."),
         ("/swipe", "Browse and keep response variants."),
         ("/branch", "Open the response branch selector."),
         ("/continue", "Continue the latest assistant response."),
-        ("/edit <text>", "Replace the latest user turn and regenerate."),
+        ("/edit", "Open a panel, then edit the latest user turn"),
         ("/retry", "Retry the latest failed character response."),
         ("/prompt", "Inspect prompt sections without showing the full prompt."),
     ],
     "memory_rag": [
         ("/memory", "Open Hindsight memory mode controls; recall is always active-session-only."),
-        ("/remember <fact>", "Queue an explicit long-term memory."),
+        ("/remember", "Open a panel, then queue an explicit long-term memory."),
         ("/summarize", "Force-refresh the active session summary."),
-        ("/databank", "Open RAG mode/list/remove/reindex panel; search remains a free-text query."),
+        ("/databank", "Open RAG mode/list/search/remove/reindex panel."),
     ],
     "voice_group": [
-        ("/tts <text>", "Send one text-to-speech voice message."),
+        ("/tts", "Open a panel, then send one text-to-speech voice message."),
         ("/voice on|off", "Open automatic voice reply panel."),
         ("/voice_input on|off", "Open transcription/model/language panel; choose Auto or User input for language."),
         ("/voice_input language", "Open the voice input language panel; choose Auto, a fixed code, or User input."),
@@ -184,7 +184,7 @@ def send_stt_model_menu(token: str, chat_id: str, db: sqlite3.Connection, messag
 
 def send_memory_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
     mode = memory_mode(db, chat_id)
-    rows = [[{"text": ("✅ " if mode == "on" else "") + "Memory on", "callback_data": "enum:memory:on"}, {"text": ("✅ " if mode == "off" else "") + "Memory off", "callback_data": "enum:memory:off"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
+    rows = [[{"text": ("✅ " if mode == "on" else "") + "Memory on", "callback_data": "enum:memory:on"}, {"text": ("✅ " if mode == "off" else "") + "Memory off", "callback_data": "enum:memory:off"}], [{"text": "🔎 Search memories", "callback_data": "enum:memory:search"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
     method = "editMessageText" if message_id else "sendMessage"
     payload = {"chat_id": chat_id, "text": f"Hindsight memory: {mode}\nScope: active session only (fixed)", "reply_markup": {"inline_keyboard": rows}}
     if message_id:
@@ -236,7 +236,7 @@ def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message
     mode = rag_mode(db, chat_id)
     docs = data_bank_documents(db, chat_id)
     total_chunks, indexed_chunks = rag_embedding_coverage(db, chat_id)
-    rows = [[{"text": ("✅ " if mode == "on" else "") + "RAG on", "callback_data": "enum:rag:on"}, {"text": ("✅ " if mode == "off" else "") + "RAG off", "callback_data": "enum:rag:off"}], [{"text": "List documents", "callback_data": "enum:rag:list"}, {"text": "Remove document", "callback_data": "enum:rag:remove"}], [{"text": "Reindex embeddings", "callback_data": "enum:rag:reindex"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
+    rows = [[{"text": ("✅ " if mode == "on" else "") + "RAG on", "callback_data": "enum:rag:on"}, {"text": ("✅ " if mode == "off" else "") + "RAG off", "callback_data": "enum:rag:off"}], [{"text": "List documents", "callback_data": "enum:rag:list"}, {"text": "🔎 Search", "callback_data": "enum:rag:search"}], [{"text": "Remove document", "callback_data": "enum:rag:remove"}], [{"text": "Reindex embeddings", "callback_data": "enum:rag:reindex"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
     method = "editMessageText" if message_id else "sendMessage"
     payload = {"chat_id": chat_id, "text": f"Data Bank RAG: {mode}\nDocuments: {len(docs)}\nEmbedding coverage: {indexed_chunks}/{total_chunks} chunks", "reply_markup": {"inline_keyboard": rows}}
     if message_id:
@@ -269,6 +269,15 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
     if data == "enum:close":
         discard_panel_binding(db, chat_id, message_id)
         close_panel_message(token, chat_id, {"message": message})
+        return
+    if data == "enum:stscript:cancel":
+        discard_panel_binding(db, chat_id, message_id)
+        close_panel_message(token, chat_id, {"message": message})
+        return
+    if data == "enum:stscript:reset":
+        discard_panel_binding(db, chat_id, message_id)
+        close_panel_message(token, chat_id, {"message": message})
+        send_reset_confirmation_menu(token, chat_id)
         return
     parts = data.split(":", 2)
     if data.startswith("enum:settings:input:"):
@@ -336,6 +345,8 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         if value in {"tiny", "base", "small"}:
             set_meta(db, f"stt_model:{chat_id}", value)
         send_voice_input_menu(token, chat_id, db, message_id)
+    elif data == "enum:memory:search":
+        start_text_action_input(db, token, chat_id, session["session_id"], "memory_search", "Send a query to search Hindsight memory for the active session.", {"message": message})
     elif data == "enum:memory:scope":
         send_memory_menu(token, chat_id, db, message_id)
     elif data == "enum:memory:back":
@@ -370,6 +381,8 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
     elif data.startswith("enum:presetdel:"):
         apply_preset_action(db, token, chat_id, session["session_id"], "delete", resolve_dynamic_callback_token(parts[2], "preset", chat_id) or "")
         send_preset_delete_menu(token, chat_id, db, message_id)
+    elif data == "enum:rag:search":
+        start_text_action_input(db, token, chat_id, session["session_id"], "databank_search", "Send a query to search the active Data Bank.", {"message": message})
     elif data == "enum:rag:remove":
         send_databank_remove_menu(token, chat_id, db, message_id)
     elif data == "enum:rag:back":

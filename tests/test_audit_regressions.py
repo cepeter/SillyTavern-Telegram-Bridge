@@ -212,14 +212,14 @@ class AuditRegressionTests(unittest.TestCase):
         }
         opened = []
         original_card = rt.card_fields_from_file
-        original_panel = rt.send_reset_confirmation_menu
+        original_panel = rt.send_stscript_menu
         rt.card_fields_from_file = lambda _filename: fields
-        rt.send_reset_confirmation_menu = lambda *_args, **_kwargs: opened.append(True)
+        rt.send_stscript_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
-            rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, fields, "chat", "/stscript reset")
+            rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, fields, "chat", "/stscript")
         finally:
             rt.card_fields_from_file = original_card
-            rt.send_reset_confirmation_menu = original_panel
+            rt.send_stscript_menu = original_panel
         self.assertEqual(opened, [True])
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
 
@@ -234,6 +234,41 @@ class AuditRegressionTests(unittest.TestCase):
         callbacks = {button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("enum:sttlanguage:auto", callbacks)
         self.assertIn("enum:stt:language_input", callbacks)
+
+    def test_text_commands_open_scoped_input_and_cancel_clears_it(self):
+        session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
+        original_send = rt.send_text
+        sent = []
+        rt.send_text = lambda _token, _chat, text: sent.append(text) or [101]
+        try:
+            rt.start_text_action_input(self.db, "token", "chat", session["session_id"], "edit", "Send replacement")
+            self.assertIn("edit", rt.get_meta(self.db, "text_action_input:chat", ""))
+            self.assertTrue(rt.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}))
+        finally:
+            rt.send_text = original_send
+        self.assertEqual(rt.get_meta(self.db, "text_action_input:chat", ""), "")
+        self.assertIn("Cancelled.", sent)
+
+    def test_memory_databank_and_stscript_panels_expose_new_actions(self):
+        calls = []
+        original_request = rt.telegram_request
+        rt.telegram_request = lambda _token, _method, payload: calls.append(payload) or {}
+        try:
+            rt.send_memory_menu("token", "chat", self.db)
+            rt.send_databank_menu("token", "chat", self.db)
+            rt.send_stscript_menu("token", "chat")
+        finally:
+            rt.telegram_request = original_request
+        callbacks = {
+            button["callback_data"]
+            for payload in calls
+            for row in payload["reply_markup"]["inline_keyboard"]
+            for button in row
+        }
+        self.assertIn("enum:memory:search", callbacks)
+        self.assertIn("enum:rag:search", callbacks)
+        self.assertIn("enum:stscript:reset", callbacks)
+        self.assertNotIn("enum:stscript:note", callbacks)
 
     def test_stt_language_user_input_is_session_scoped(self):
         session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)

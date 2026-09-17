@@ -75,8 +75,11 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
     if command == "/stream" or command.startswith("/stream "):
         send_stream_menu(token, chat_id, db)
         return True
-    if command == "/macro" or command.startswith("/macro ") or command == "/stscript" or command.startswith("/stscript "):
-        handle_macro_command(db, token, chat_id, session, fields, stripped)
+    if command == "/macro" or command.startswith("/macro "):
+        start_text_action_input(db, token, chat_id, session_id, "macro", "Send text to preview with supported SillyTavern macros.")
+        return True
+    if command == "/stscript" or command.startswith("/stscript "):
+        send_stscript_menu(token, chat_id)
         return True
     if command == "/preset" or command in {"/preset list", "/preset use", "/preset delete"} or command.startswith("/preset "):
         send_preset_menu(token, chat_id, db)
@@ -99,22 +102,13 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
         send_memory_menu(token, chat_id, db)
         return True
     if command.startswith("/memory search"):
-        handle_memory_command(db, token, chat_id, session, fields, stripped)
+        send_memory_menu(token, chat_id, db)
         return True
     if command.startswith("/memory "):
         send_memory_menu(token, chat_id, db)
         return True
-    if command == "/remember":
-        send_text(token, chat_id, "Use /remember <fact> to store an explicit long-term memory.")
-        return True
-    if command.startswith("/remember "):
-        fact = stripped.split(None, 1)[1].strip()
-        if len(fact) > 4000:
-            send_text(token, chat_id, "Explicit memory is limited to 4,000 characters.")
-        elif remember_fact(db, chat_id, session, fields, fact):
-            send_text(token, chat_id, "Memory queued for Hindsight.")
-        else:
-            send_text(token, chat_id, "Hindsight memory is unavailable.")
+    if command == "/remember" or command.startswith("/remember "):
+        start_text_action_input(db, token, chat_id, session["session_id"], "remember", "Send the explicit memory fact to store in the active session.")
         return True
     if command == "/summarize":
         handle_summary_command(db, token, chat_id, session)
@@ -138,17 +132,8 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
             send_group_menu(db, token, chat_id, session)
         return True
 
-    if command == "/tts":
-        send_text(token, chat_id, "Gunakan /tts <teks> untuk mengubah teks menjadi voice message.")
-        return True
-    if command.startswith("/tts "):
-        tts_text = stripped.split(None, 1)[1].strip()
-        if not tts_text:
-            send_text(token, chat_id, "Teks TTS tidak boleh kosong.")
-        elif len(tts_text) > TTS_MAX_CHARS:
-            send_text(token, chat_id, f"Teks TTS dibatasi {TTS_MAX_CHARS} karakter.")
-        elif not send_tts(token, chat_id, tts_text, operation_id=operation_id):
-            send_text(token, chat_id, "TTS gagal dibuat. Periksa koneksi atau konfigurasi edge-tts.")
+    if command == "/tts" or command.startswith("/tts "):
+        start_text_action_input(db, token, chat_id, session["session_id"], "tts", "Send the text to convert into a voice message.")
         return True
     return False
 
@@ -216,17 +201,8 @@ def _handle_entities(db, token, model, fields, chat_id, command, session, sessio
 
 def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, session, operation_id):
     """Handle edit, continuation, swipe, branch, and regeneration commands."""
-    if command == "/edit":
-        send_text(token, chat_id, "Gunakan /edit <teks baru> untuk mengedit pesan user terakhir.")
-        return True
-    if command.startswith("/edit "):
-        new_text = stripped.split(None, 1)[1].strip()
-        if not new_text:
-            send_text(token, chat_id, "Teks edit tidak boleh kosong.")
-        elif len(new_text) > 12000:
-            send_text(token, chat_id, "Teks edit dibatasi 12.000 karakter.")
-        else:
-            edit_last_user(db, token, api_key, session, fields, chat_id, new_text, operation_id=operation_id)
+    if command == "/edit" or command.startswith("/edit "):
+        start_text_action_input(db, token, chat_id, session["session_id"], "edit", "Send the replacement text for the latest user message.")
         return True
     if command == "/continue":
         continue_last(db, token, api_key, session, fields, chat_id, operation_id=operation_id)

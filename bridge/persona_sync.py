@@ -252,3 +252,26 @@ def upsert_native_persona(identifier: str, name: str, description: str, client=N
         raise save_error or SillyTavernApiError("SillyTavern Persona readback did not match")
     _NATIVE_PERSONA_CACHE.clear()
     return avatar
+
+
+def delete_native_persona(identifier: str, client=None) -> bool:
+    """Remove one native Persona metadata entry while preserving its avatar file."""
+    api = client or (phase3_client() if phase3_api_configured() else None)
+    original = _native_settings(api)
+    updated = copy.deepcopy(original)
+    _power, native_names, native_descriptions = _native_persona_maps(updated)
+    avatar = _valid_native_avatar(identifier)
+    if not avatar or avatar not in native_names:
+        return False
+    del native_names[avatar]
+    native_descriptions.pop(avatar, None)
+    if _settings_hash(_native_settings(api)) != _settings_hash(original):
+        raise ValueError("SillyTavern settings changed during Persona deletion; retry")
+    _backup_native_settings(original)
+    _save_native_settings(api, updated)
+    verified = _native_settings(api)
+    _power, verified_names, _verified_descriptions = _native_persona_maps(verified)
+    if avatar in verified_names:
+        raise SillyTavernApiError("SillyTavern Persona deletion readback did not match")
+    _NATIVE_PERSONA_CACHE.clear()
+    return True

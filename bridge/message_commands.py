@@ -142,7 +142,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
             record_operation(db, operation_id, "recovery_delivery")
             db.commit()
             return
-    if handle_pending_input(db, token, chat_id, session, stripped, operation_id=operation_id):
+    if handle_pending_input(db, token, chat_id, session, stripped, api_key=api_key, fields=fields, operation_id=operation_id):
         return
     if command == "/reset":
         send_reset_confirmation_menu(token, chat_id)

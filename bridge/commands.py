@@ -106,6 +106,15 @@ def coerce_world_value(field: str, value: str):
     return value
 
 
+def send_stscript_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
+    """Show the allowlisted STscript actions without accepting arbitrary scripts."""
+    payload = {"chat_id": chat_id, "text": "Safe STscript actions:\n\nReset clears only the active session after confirmation.", "reply_markup": {"inline_keyboard": [[{"text": "♻️ Reset", "callback_data": "enum:stscript:reset"}], [{"text": "❌ Close", "callback_data": "enum:stscript:cancel"}]]}}
+    method = "editMessageText" if message_id else "sendMessage"
+    if message_id:
+        payload["message_id"] = message_id
+    telegram_request(token, method, payload)
+
+
 def send_note_menu(token: str, chat_id: str, current_note: str, message_id: int | None = None) -> None:
     state = "on" if str(current_note or "").strip() else "off"
     text = f"Author's Note — {state}\nCurrent length: {len(str(current_note or '').strip())} characters\nChoose an action:"
@@ -127,13 +136,10 @@ def handle_macro_command(db: sqlite3.Connection, token: str, chat_id: str, sessi
         return
     script = parts[1].strip() if len(parts) > 1 else ""
     action, _, argument = script.partition(" ")
-    if action.casefold() == "note" and argument.strip():
-        update_session(db, chat_id, session["session_id"], author_note=argument.strip()[:2000])
-        send_text(token, chat_id, "STscript note applied to this session.")
-    elif action.casefold() == "reset":
+    if action.casefold() == "reset":
         send_reset_confirmation_menu(token, chat_id)
     else:
-        send_text(token, chat_id, "Safe STscript commands: /stscript note <text> or /stscript reset")
+        send_text(token, chat_id, "Use /stscript to open the safe Reset action panel.")
 
 
 def apply_preset_action(db: sqlite3.Connection, token: str, chat_id: str, session_id: str, action: str, name: str) -> None:

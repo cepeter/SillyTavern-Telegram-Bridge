@@ -16,6 +16,56 @@ def _cancel_pending(db, token: str, chat_id: str, meta_key: str, state: dict) ->
     set_meta(db, meta_key, "")
 
 
+def start_text_action_input(db, token: str, chat_id: str, session_id: str, action: str, prompt: str, callback: dict | None = None) -> None:
+    """Open one scoped free-form input action and close its originating panel."""
+    state = {"session_id": session_id, "action": action, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
+    meta_key = f"text_action_input:{chat_id}"
+    if callback:
+        message_id = (callback.get("message") or {}).get("message_id")
+        discard_panel_binding(db, chat_id, message_id)
+        close_panel_message(token, chat_id, callback)
+    state["prompt_message_ids"] = send_text(token, chat_id, prompt + "\n\nSend /cancel to cancel.")
+    set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
+
+
+def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, stripped: str, state: dict, operation_id: int | None) -> bool:
+    meta_key = f"text_action_input:{chat_id}"
+    if stripped.casefold() in {"/cancel", "cancel"}:
+        _cancel_pending(db, token, chat_id, meta_key, state)
+        send_text(token, chat_id, "Cancelled.")
+        return True
+    action = str(state.get("action") or "")
+    value = stripped.strip()
+    if not value:
+        send_pending_input_message(db, token, chat_id, meta_key, state, "Input cannot be empty. Try again or send /cancel.")
+        return True
+    try:
+        if action == "edit":
+            edit_last_user(db, token, api_key, session, fields, chat_id, value[:12000], operation_id=operation_id)
+        elif action == "remember":
+            if len(value) > 4000 or not remember_fact(db, chat_id, session, fields, value):
+                raise ValueError("Hindsight memory is unavailable or exceeds 4,000 characters")
+            send_text(token, chat_id, "Memory queued for Hindsight.")
+        elif action == "macro":
+            handle_macro_command(db, token, chat_id, session, fields, "/macro " + value)
+        elif action == "tts":
+            if len(value) > TTS_MAX_CHARS or not send_tts(token, chat_id, value, operation_id=operation_id):
+                raise ValueError(f"TTS input is invalid or exceeds {TTS_MAX_CHARS} characters")
+        elif action == "memory_search":
+            handle_memory_command(db, token, chat_id, session, fields, "/memory search " + value)
+            send_memory_menu(token, chat_id, db)
+        elif action == "databank_search":
+            handle_data_bank_command(db, token, chat_id, "/databank search " + value)
+            send_databank_menu(token, chat_id, db)
+        else:
+            raise ValueError("Unknown text action")
+    except ValueError as exc:
+        send_pending_input_message(db, token, chat_id, meta_key, state, f"{exc}. Try again or send /cancel.")
+        return True
+    _cancel_pending(db, token, chat_id, meta_key, state)
+    return True
+
+
 def pending_character_for_session(db, chat_id: str) -> dict | None:
     """Load and validate a character waiting for session assignment."""
     meta_key = f"character_session_input:{chat_id}"
@@ -215,9 +265,13 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
     return True
 
 
-def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, operation_id: int | None = None) -> bool:
+def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
+    text_action = _pending_state(db, f"text_action_input:{chat_id}", session_id, token, chat_id)
+    if text_action:
+        action_fields = fields if fields is not None else card_fields_from_file(session["character_file"])
+        return _handle_text_action_input(db, token, api_key, chat_id, session, action_fields, stripped, text_action, operation_id)
     session_name = _pending_state(db, f"session_name_input:{chat_id}", session_id, token, chat_id)
     if session_name:
         return handle_session_name_input(db, token, chat_id, session, stripped, session_name, operation_id)
@@ -239,13 +293,41 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
     return False
 
 
+def send_persona_delete_confirm(token: str, chat_id: str, persona_id: str, message_id: int | None = None) -> None:
+    token_value = dynamic_callback_token("persona", persona_id, chat_id)
+    payload = {"chat_id": chat_id, "text": f"Delete Persona '{persona_name(persona_id)}'? Native Persona metadata will be removed; the avatar file will be preserved. This cannot be undone from the bridge.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "personadeleteconfirm:" + token_value}], [{"text": "❌ Cancel", "callback_data": "persona:menu"}]]}}
+    method = "editMessageText" if message_id else "sendMessage"
+    if message_id:
+        payload["message_id"] = message_id
+    telegram_request(token, method, payload)
+
+
 def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
-    """Handle persona selection, review, field editing, and disable callbacks."""
+    """Handle persona selection, review, field editing, disable, and deletion callbacks."""
+    message_id = message.get("message_id")
+    if data.startswith("personadeleteconfirm:"):
+        persona_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "persona", chat_id) or ""
+        if not persona_id:
+            answer_callback(token, str(callback.get("id", "")), "Persona not found")
+            return True
+        references = db.execute("SELECT COUNT(*) FROM sessions WHERE chat_id=? AND persona_id=?", (chat_id, persona_id)).fetchone()[0]
+        try:
+            deleted = delete_native_persona(persona_id)
+            if deleted and references:
+                db.execute("UPDATE sessions SET persona_id='' WHERE chat_id=? AND persona_id=?", (chat_id, persona_id))
+                db.commit()
+        except Exception:
+            logging.warning("Native Persona deletion failed", exc_info=True)
+            answer_callback(token, str(callback.get("id", "")), "Persona deletion failed")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Deleted" if deleted else "Persona not found")
+        send_persona_menu(token, chat_id, session.get("persona_id") or "", message_id)
+        return True
     if not data.startswith("persona:"):
         return False
     value = data.split(":", 1)[1]
     message_id = message.get("message_id")
-    field_actions = {"create", "edit", "edit_name", "edit_description", "edit_all"}
+    field_actions = {"create", "edit", "edit_name", "edit_description", "edit_all", "delete"}
     if not value.startswith("page:") and value not in {"cancel", "off", "menu", *field_actions}:
         value = resolve_dynamic_callback_token(value, "persona", chat_id) or ""
     if value.startswith("page:"):
@@ -271,6 +353,14 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             return True
         answer_callback(token, str(callback.get("id", "")), "Enter persona text")
         start_persona_input(db, token, chat_id, session_id, value, persona_id, callback)
+        return True
+    if value == "delete":
+        persona_id = session.get("persona_id") or ""
+        if not get_persona(persona_id):
+            answer_callback(token, str(callback.get("id", "")), "Current Persona not found")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
+        send_persona_delete_confirm(token, chat_id, persona_id, message_id)
         return True
     if value == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
