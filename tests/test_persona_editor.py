@@ -100,6 +100,30 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertEqual(answers, ["Review persona"])
         self.assertIn("Original description", self.calls[-1][1]["text"])
 
+    def test_delete_refuses_persona_referenced_by_another_chat(self):
+        target = rt.upsert_native_persona("shared", "Shared", "Shared description")
+        other = rt.create_session(self.db, "other-chat", "provider/model", session_id="other-session")
+        rt.update_session(self.db, "other-chat", other["session_id"], persona_id=target)
+        token_value = rt.dynamic_callback_token("persona", target, "chat")
+        answers = []
+
+        handled = rt.handle_persona_callback(
+            self.db,
+            "token",
+            {"id": "cb"},
+            lambda _token, _callback_id, text: answers.append(text),
+            f"personadeleteconfirm:{token_value}",
+            "chat",
+            {"message_id": 77},
+            self.session,
+            self.session["session_id"],
+            None,
+        )
+
+        self.assertTrue(handled)
+        self.assertEqual(answers, ["Deletion refused: Persona is used by another session"])
+        self.assertIsNotNone(rt.get_persona(target))
+
     def test_invalid_create_keeps_pending_state_and_native_file(self):
         state = self._start("create")
         self.assertTrue(rt.handle_pending_input(self.db, "token", "chat", self.session, "bad input"))

@@ -323,15 +323,12 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         if persona_id == session.get("persona_id"):
             answer_callback(token, str(callback.get("id", "")), "Disable or switch the current Persona first")
             return True
-        references = db.execute("SELECT COUNT(*) FROM sessions WHERE chat_id=? AND persona_id=?", (chat_id, persona_id)).fetchone()[0]
+        references = db.execute("SELECT COUNT(*) FROM sessions WHERE persona_id=?", (persona_id,)).fetchone()[0]
         if references:
             answer_callback(token, str(callback.get("id", "")), "Deletion refused: Persona is used by another session")
             return True
         try:
             deleted = delete_native_persona(persona_id)
-            if deleted and references:
-                db.execute("UPDATE sessions SET persona_id='' WHERE chat_id=? AND persona_id=?", (chat_id, persona_id))
-                db.commit()
         except Exception:
             logging.warning("Native Persona deletion failed", exc_info=True)
             answer_callback(token, str(callback.get("id", "")), "Persona deletion failed")

@@ -7,6 +7,7 @@ state or a session-memory purge.
 """
 
 _ORIGINAL_UPSERT_NATIVE_PERSONA = upsert_native_persona
+_ORIGINAL_DELETE_NATIVE_PERSONA = delete_native_persona
 _ORIGINAL_APPLY_SYNC_SNAPSHOT = apply_sync_snapshot
 _ORIGINAL_RETAIN_SESSION_MEMORY_WORKER = _retain_session_memory
 _ORIGINAL_PURGE_HINDSIGHT_SESSION = purge_hindsight_session
@@ -52,6 +53,12 @@ def upsert_native_persona(identifier: str, name: str, description: str, client=N
         if _native_persona_id_is_taken(identifier):
             raise ValueError("Persona ID already exists")
         return _ORIGINAL_UPSERT_NATIVE_PERSONA(identifier, name, description, client=client)
+
+
+def delete_native_persona(identifier: str, client=None) -> bool:
+    """Serialize native settings deletion with create/edit operations."""
+    with PERSONA_EDIT_LOCK:
+        return _ORIGINAL_DELETE_NATIVE_PERSONA(identifier, client=client)
 
 
 def _hindsight_epoch_key(chat_id: str, session_id: str) -> str:
