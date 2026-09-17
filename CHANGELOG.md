@@ -2,6 +2,14 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.010] - 2026-09-17
+
+### Fixed
+
+- Improved incomplete response recovery for streaming chat providers and accepted both standard SSE `data:` framing variants plus text content blocks.
+- Made `/update` a true no-op when the installed release already matches the latest release; it no longer syncs or restarts in that case.
+- Renamed the Persona panel action to `Delete inactive` to match its protected-target picker behavior.
+
 ## [0.2.009] - 2026-09-17
 
 ### Fixed
