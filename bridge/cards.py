@@ -282,6 +282,17 @@ def get_system_prompt_choice(name: str) -> str | None:
     return item["prompt"] if item else None
 
 
+def system_prompt_label(prompt: str | None) -> str:
+    """Return only the selected native prompt label, never its body."""
+    value = str(prompt or "").strip()
+    if not value:
+        return "off"
+    for item in load_system_prompts().values():
+        if str(item.get("prompt") or "") == value:
+            return panel_label(str(item.get("name") or "custom"), 64)
+    return "custom"
+
+
 def system_prompt_callback_token(key: str) -> str:
     candidate = "systemprompt:" + str(key)
     if len(candidate.encode("utf-8")) <= 64:

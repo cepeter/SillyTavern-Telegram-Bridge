@@ -48,6 +48,7 @@ class SessionNamingTests(unittest.TestCase):
         finally:
             rt.card_fields_from_file = original_card
         self.assertIn("Session: Evening Story (default)", self.sent[-1])
+        self.assertIn("System Prompt: off", self.sent[-1])
 
     def test_invalid_name_reprompts_without_creating_session(self):
         rt.start_session_name_input(self.db, "token", "chat", self.session)
