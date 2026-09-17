@@ -73,6 +73,9 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
 
 def _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id):
     """Handle generation, preset, settings, and response-language panels."""
+    if command == "/update":
+        send_update_menu(token, chat_id)
+        return True
     if command == "/imagine":
         start_text_action_input(db, token, chat_id, session_id, "imagine", "Send an image prompt (1–4,000 characters).")
         return True

@@ -267,7 +267,9 @@ Categories use plain-language labels such as **Start & Sessions**, **Replies & S
 Persona, Character, System Prompt, and World Info catalogs accept a maximum of
 **40 items each**. Persona metadata is read and written directly through
 SillyTavern's native settings and User Avatars paths; character uploads stop
-safely at the limit and existing files are never deleted.
+safely at the limit and existing files are never deleted. Persona deletion
+opens a picker for inactive Personas only; the active Persona and Personas
+referenced by another session cannot be deleted.
 
 Core commands:
 
@@ -278,6 +280,7 @@ Core commands:
 /reset                        Confirm active-session reset, purge only its Hindsight memory, and restart from the character opening greeting
 /session                      Switch, create, or safely delete an inactive session
 /sync                         Open Live API Sync controls
+/update                       Check the latest version and open a confirmed update panel
 /providers                    Open the synchronized provider catalog
 /character                    Open character panel: select, info, delete, upload guidance
 /persona                      Choose, create, edit, or disable a user persona

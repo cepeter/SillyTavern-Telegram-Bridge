@@ -2,6 +2,13 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.009] - 2026-09-17
+
+### Fixed
+
+- Persona deletion now mirrors Character deletion safety: the active Persona is excluded from the delete picker, and Personas referenced by another session are protected.
+- Updated README and Help with the inactive/unreferenced Persona deletion rules.
+
 ## [0.2.008] - 2026-09-17
 
 ### Changed

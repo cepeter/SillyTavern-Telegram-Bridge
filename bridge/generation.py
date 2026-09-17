@@ -237,32 +237,40 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
             if finish_reason != "length":
                 return content
 
-            continuation_body = dict(body)
-            continuation_body["messages"] = list(body["messages"]) + [
-                {"role": "assistant", "content": content},
-                {
-                    "role": "user",
-                    "content": "Continue from the exact ending without repeating existing text. Preserve the response language exactly. Output only the continuation.",
-                },
-            ]
-            continuation_request = urllib.request.Request(
-                endpoint,
-                data=json.dumps(continuation_body).encode("utf-8"),
-                headers=headers,
-                method="POST",
-            )
-            try:
-                with strict_urlopen(continuation_request, timeout=180) as continuation_response:
-                    continuation_result = json.loads(continuation_response.read().decode("utf-8"))
-                continuation_choices = continuation_result.get("choices") or []
-                continuation = continuation_choices[0].get("message", {}).get("content") if continuation_choices else None
-            except Exception:
-                logging.warning("Automatic continuation failed; returning the first generated segment", exc_info=True)
-                return content
-            if not continuation:
-                logging.warning("Automatic continuation returned no assistant content; returning the first generated segment")
-                return content
-            return content.rstrip() + " " + str(continuation).lstrip()
+            segments = [content]
+            continuation_messages = list(body["messages"])
+            for _attempt in range(3):
+                continuation_messages.extend([
+                    {"role": "assistant", "content": segments[-1]},
+                    {
+                        "role": "user",
+                        "content": "Continue from the exact ending without repeating existing text. Preserve the response language exactly. Output only the continuation.",
+                    },
+                ])
+                continuation_body = dict(body)
+                continuation_body["messages"] = continuation_messages
+                continuation_request = urllib.request.Request(
+                    endpoint,
+                    data=json.dumps(continuation_body).encode("utf-8"),
+                    headers=headers,
+                    method="POST",
+                )
+                try:
+                    with strict_urlopen(continuation_request, timeout=180) as continuation_response:
+                        continuation_result = json.loads(continuation_response.read().decode("utf-8"))
+                    continuation_choices = continuation_result.get("choices") or []
+                    continuation = continuation_choices[0].get("message", {}).get("content") if continuation_choices else None
+                    continuation_reason = continuation_choices[0].get("finish_reason") if continuation_choices else None
+                except Exception:
+                    logging.warning("Automatic continuation failed after %s segment(s)", len(segments), exc_info=True)
+                    break
+                if not continuation:
+                    logging.warning("Automatic continuation returned no content after %s segment(s)", len(segments))
+                    break
+                segments.append(str(continuation).strip())
+                if continuation_reason != "length":
+                    break
+            return " ".join(segment for segment in segments if segment)
 
         parts = []
         finish_reason = None

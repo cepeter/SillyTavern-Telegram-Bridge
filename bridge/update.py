@@ -1,0 +1,66 @@
+"""Confirmed, fast-forward-only bridge self-update workflow."""
+
+UPDATE_REPO = "cepeter/SillyTavern-Telegram-Bridge"
+UPDATE_REPO_DIR = Path(__file__).resolve().parents[1]
+UPDATE_LIVE_DIR = Path(os.environ.get("SILLYTAVERN_LIVE_BRIDGE_DIR", str(Path.home() / ".hermes/scripts")))
+
+
+def installed_bridge_version() -> str:
+    match = re.search(r"^## \[([^]]+)\]", (UPDATE_REPO_DIR / "CHANGELOG.md").read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(1) if match else "unknown"
+
+
+def latest_bridge_release() -> tuple[str, str]:
+    request = urllib.request.Request(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest", headers={"Accept": "application/vnd.github+json", "User-Agent": "SillyTavernTelegramBridge"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    tag = str(payload.get("tag_name") or "unknown")
+    return tag.removeprefix("v"), str(payload.get("body") or "No release notes.")[:2000]
+
+
+def update_menu_text(current: str, latest: str, notes: str) -> str:
+    return f"Bridge update\nInstalled: v{current}\nLatest: v{latest}\n\nRelease notes:\n{notes}\n\nChoose Confirm update only after reviewing the changes."
+
+
+def send_update_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
+    current = installed_bridge_version()
+    try:
+        latest, notes = latest_bridge_release()
+    except Exception as exc:
+        latest, notes = "unavailable", f"Could not check GitHub: {exc}"
+    rows = [[{"text": "✅ Confirm update", "callback_data": "update:confirm"}, {"text": "❌ Cancel", "callback_data": "update:cancel"}]]
+    payload = {"chat_id": chat_id, "text": update_menu_text(current, latest, notes), "reply_markup": {"inline_keyboard": rows}}
+    method = "editMessageText" if message_id else "sendMessage"
+    if message_id:
+        payload["message_id"] = message_id
+    telegram_request(token, method, payload)
+
+
+def _run_update() -> str:
+    if subprocess.run(["git", "status", "--porcelain"], cwd=UPDATE_REPO_DIR, capture_output=True, text=True, timeout=20).stdout.strip():
+        return "Update refused: local repository has uncommitted changes."
+    subprocess.run(["git", "fetch", "origin", "main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    subprocess.run(["git", "merge", "--ff-only", "origin/main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    UPDATE_LIVE_DIR.joinpath("bridge").mkdir(parents=True, exist_ok=True)
+    subprocess.run(["rsync", "-a", "--delete", f"{UPDATE_REPO_DIR}/bridge/", f"{UPDATE_LIVE_DIR}/bridge/"], check=True, timeout=120)
+    subprocess.run(["cp", str(UPDATE_REPO_DIR / "sillytavern_telegram_bridge.py"), str(UPDATE_LIVE_DIR / "sillytavern_telegram_bridge.py")], check=True, timeout=20)
+    subprocess.run(["systemctl", "--user", "restart", "sillytavern-telegram.service"], check=True, timeout=120)
+    return f"Bridge updated to v{installed_bridge_version()} and restarted."
+
+
+def handle_update_callback(token: str, callback: dict, data: str, chat_id: str) -> bool:
+    if not data.startswith("update:"):
+        return False
+    answer_callback(token, str(callback.get("id", "")), "Update")
+    if data == "update:cancel":
+        remove_inline_keyboard(token, callback)
+        return True
+    if data == "update:confirm":
+        try:
+            result = _run_update()
+        except Exception as exc:
+            result = f"Update failed safely: {exc}"
+        send_text(token, chat_id, result)
+        remove_inline_keyboard(token, callback)
+        return True
+    return True

@@ -171,6 +171,8 @@ def handle_expression_callback(db, token, callback, answer_callback, data, chat_
 
 def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
+    if data.startswith("update:"):
+        return handle_update_callback(token, callback, data, chat_id)
     if handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
     if handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):

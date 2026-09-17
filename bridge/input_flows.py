@@ -304,12 +304,29 @@ def send_persona_delete_confirm(token: str, chat_id: str, persona_id: str, messa
 def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     """Handle persona selection, review, field editing, disable, and deletion callbacks."""
     message_id = message.get("message_id")
+    if data.startswith("persona:delete_page:"):
+        page = max(0, int(data.rsplit(":", 1)[1]))
+        send_persona_delete_menu(token, chat_id, session.get("persona_id") or "", message_id, page)
+        return True
+    if data.startswith("persona:delete:"):
+        target = resolve_dynamic_callback_token(data.split(":", 2)[2], "persona", chat_id) or ""
+        if not target or target == session.get("persona_id"):
+            answer_callback(token, str(callback.get("id", "")), "Cannot delete the current Persona")
+            return True
+        send_persona_delete_confirm(token, chat_id, target, message_id)
+        return True
     if data.startswith("personadeleteconfirm:"):
         persona_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "persona", chat_id) or ""
         if not persona_id:
             answer_callback(token, str(callback.get("id", "")), "Persona not found")
             return True
+        if persona_id == session.get("persona_id"):
+            answer_callback(token, str(callback.get("id", "")), "Disable or switch the current Persona first")
+            return True
         references = db.execute("SELECT COUNT(*) FROM sessions WHERE chat_id=? AND persona_id=?", (chat_id, persona_id)).fetchone()[0]
+        if references:
+            answer_callback(token, str(callback.get("id", "")), "Deletion refused: Persona is used by another session")
+            return True
         try:
             deleted = delete_native_persona(persona_id)
             if deleted and references:
@@ -354,12 +371,8 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         start_persona_input(db, token, chat_id, session_id, value, persona_id, callback)
         return True
     if value == "delete":
-        persona_id = session.get("persona_id") or ""
-        if not get_persona(persona_id):
-            answer_callback(token, str(callback.get("id", "")), "Current Persona not found")
-            return True
-        answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
-        send_persona_delete_confirm(token, chat_id, persona_id, message_id)
+        answer_callback(token, str(callback.get("id", "")), "Choose an inactive Persona")
+        send_persona_delete_menu(token, chat_id, session.get("persona_id") or "", message_id)
         return True
     if value == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
