@@ -4,101 +4,61 @@
 [![Latest release](https://img.shields.io/github/v/release/cepeter/SillyTavern-Telegram-Bridge?display_name=tag)](https://github.com/cepeter/SillyTavern-Telegram-Bridge/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> A lightweight Telegram sidecar for SillyTavern-style character chat.
+> Current release: **v0.2.011**
 
-The bridge keeps chat state in SQLite, reads compatible character data from
-SillyTavern, and routes generation through an OpenAI-compatible provider. It
-runs beside SillyTavern without patching or executing the SillyTavern source.
+A local Telegram sidecar for SillyTavern-style character chat. The bridge reads
+native character/world data, stores private session state in SQLite, and routes
+replies through a private provider catalog. It does not patch, launch, or
+execute the SillyTavern source tree.
 
-## Contents
+## Current features
 
-- [✨ Features](#-features)
-- [🧩 Requirements](#-requirements)
-- [🔗 SillyTavern prerequisite](#-sillytavern-prerequisite)
-- [⚙️ Configuration](#️-configuration)
-- [🧭 Command guide](#-command-guide)
-- [🔄 Synchronization](#-synchronization)
-- [🔐 Security and privacy](#-security-and-privacy)
-- [🏗️ Architecture](#️-architecture)
+- Native SillyTavern PNG character-card discovery, selection, upload guidance, metadata, and safe deletion.
+- Native Persona names, descriptions, and avatars with active/reference protection.
+- Isolated sessions with custom names, per-session model, generation settings, language, Persona, World Info, and summaries.
+- Provider/model panel with paginated choices, health checks, model refresh, and adapter validation.
+- OpenAI-compatible Chat Completions and optional Anthropic Messages adapters.
+- Streaming preview separated from final delivery; complete replies are sent through the Telegram splitter.
+- Recovery for output-token stops, including reasoning-only streaming stops, with bounded larger-budget retries.
+- UTF-16-safe semantic Telegram splitting at paragraph, newline, sentence, and whitespace boundaries.
+- `/regen`, `/swipe`, `/branch`, `/continue`, `/edit`, `/retry`, and prompt diagnostics.
+- Quote-driven automatic Edge TTS and local Faster-Whisper voice input.
+- Native expression-sprite discovery with manual, automatic, and off modes; sprites are sent only when the effective expression changes.
+- Optional OpenAI-compatible image generation through `/imagine`.
+- Hindsight memory with active-session-only recall and automatic summaries.
+- Data Bank RAG for PDF, DOCX, TXT, Markdown, JSON, YAML, CSV, HTML, and XML, with FTS5 and optional embeddings.
+- Loopback SillyTavern Live Sync with initial reconciliation and conflict-stop behavior.
+- Forum Topic group chats with round-robin, contextual, manual, and bounded autonomous modes.
+- Durable SQLite jobs, per-chat ordering, restart recovery, and retryable failed turns.
+- Safe `/update`: no-op when already latest; otherwise clean-checkout, fast-forward-only update with confirmation.
 
-## ✨ Features
+## Requirements
 
-- Character-card discovery from PNG `chara` metadata.
-- Character selection, upload, info, and safe deletion.
-- Per-session chat history, personas, multiple active World Info/lorebooks, Author's Note, and generation settings.
-- Provider/model selection from a configurable catalog.
-- `/regen`, `/swipe`, `/branch`, `/continue`, and native Telegram edit handling.
-- Image input and local Faster-Whisper voice transcription.
-- Automatic Edge TTS for model dialogue enclosed in straight double quotes.
-- Native SillyTavern expression sprite discovery with manual/automatic selection and changed-expression-only Telegram delivery.
-- Optional `/imagine` image generation through an explicitly enabled OpenAI-compatible Images provider.
-- Hindsight long-term memory with hard active-session-only recall.
-- Auto-summary and bounded context compression.
-- Data Bank RAG for PDF, DOCX, TXT, Markdown, JSON, YAML, CSV, HTML, and XML.
-- FTS5 plus optional OpenAI-compatible embeddings with lexical fallback.
-- Multi-character groups with round-robin, contextual, manual user-turn gating, topic-only New group sessions, and bounded autonomous modes.
-- Telegram Forum Topics with topic-scoped sessions, history, queues, group state, media, and replies.
-- Inline help menu with command categories.
-- Live Sync through the loopback API with explicit conflict stops.
-- Bounded background workers for STT, TTS, document indexing, and memory retention.
-- Durable SQLite jobs for normal generation, long-running commands, voice transcription, image analysis, document imports, callbacks, and native edits, with per-chat ordering and session-aware execution.
-- UTF-16-safe Telegram splitting, typed World Info editing, bounded processed-update retention, and isolated generation/utility worker pools.
-- Semantic Telegram splitting prefers paragraphs, newlines, sentence boundaries, and whitespace before hard-splitting; message content and message IDs remain recoverable.
-- All dynamic inline panels paginate at 8 options per page with Previous/Next navigation.
+- Python 3.11.
+- A Telegram bot token and an allowlisted Telegram user ID.
+- A local SillyTavern installation with at least one PNG character card.
+- An OpenAI-compatible chat provider, or an explicitly configured Anthropic Messages provider.
+- Optional: Hindsight, embedding, image, STT, and TTS services.
 
-## 🧩 Requirements
-
-- Python 3.11 (canonical locked runtime)
-- A Telegram bot token
-- An OpenAI-compatible chat-completions provider
-- SillyTavern installed locally, or equivalent character/world directories; Live Sync additionally requires the local SillyTavern server to be running
-- Optional Hindsight API for long-term memory
-- Optional OpenAI-compatible embedding endpoint for semantic RAG
-
-## 🔗 SillyTavern prerequisite
-
-This bridge **requires a SillyTavern character-card/data installation by default**. It does not launch SillyTavern, automate its browser UI, or patch its source tree. It reads the following data locally:
-
-```text
-<SILLYTAVERN_DIR>/data/default-user/characters/*.png
-<SILLYTAVERN_DIR>/data/default-user/worlds/*.json
-```
-
-At least one valid PNG character card with embedded `chara` metadata is required. World Info, multiple active lorebooks, multiple character cards, and card upload management use the same directories.
-
-Configure a non-default installation with:
-
-```dotenv
-SILLYTAVERN_DIR=/path/to/SillyTavern
-SILLYTAVERN_CHARACTER_DIR=/path/to/SillyTavern/data/default-user/characters
-SILLYTAVERN_CHARACTER_BACKUP_DIR=/path/to/private-character-backups
-SILLYTAVERN_WORLD_DIR=/path/to/SillyTavern/data/default-user/worlds
-SILLYTAVERN_DEFAULT_CHARACTER=example-character.png
-```
-
-The bridge can keep its own SQLite history and provider catalog separately, but it cannot load a character or World Info file that is not present in the configured directories.
-
-Install dependencies in a virtual environment:
+## Install
 
 ```bash
 python3.11 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.lock
 python -m pip install -r requirements-dev.txt
-python -m pytest -q
 ```
 
-Dependency files:
+Run the private test gate from the repository root:
 
-- `requirements.txt` contains compatible version ranges for users who need resolver flexibility.
-- `requirements.lock` contains exact versions and SHA-256 hashes for reproducible Python 3.11 installs.
-- `requirements-dev.txt` pins the pytest test runner; install it only in a development/quality environment.
-- The lock file is intentionally long: one package version can have many hashes for Linux, macOS, Windows, x86_64, ARM, source archives, and binary wheels.
-- Use `requirements.lock` for production/release installs; use `requirements.txt` only when intentionally resolving a different environment.
+```bash
+python3 -m unittest discover -s tests -q
+python3 -m compileall -q bridge tests
+```
 
-## ⚙️ Configuration
+## Configuration
 
-Copy the example environment file and edit it outside Git:
+Keep the real environment file outside Git:
 
 ```bash
 mkdir -p ~/.local/share/sillytavern-telegram
@@ -106,16 +66,7 @@ cp .env.example ~/.local/share/sillytavern-telegram/.env
 chmod 600 ~/.local/share/sillytavern-telegram/.env
 ```
 
-`SILLYTAVERN_ENV_FILE` is optional. When it is not set, the launcher uses
-`~/.local/share/sillytavern-telegram/.env`. For an explicit environment file,
-set this variable in the service unit:
-
-```ini
-Environment=SILLYTAVERN_ENV_FILE=%h/.local/share/sillytavern-telegram/.env
-```
-
-The bridge reads that file before processing credentials. Keep it outside Git.
-Required variables:
+Required values in `.env`:
 
 ```dotenv
 SILLYTAVERN_TELEGRAM_BOT_TOKEN=replace-me
@@ -125,370 +76,156 @@ SILLYTAVERN_DEFAULT_CHARACTER=example-character.png
 SILLYTAVERN_MODEL=provider-one::provider-one/model-a
 ```
 
-The selected provider's configured `api_key_env` must be present. `LLM_API_KEY` is optional and is used only for providers that intentionally use the generic fallback; provider-specific credentials are preferred and explicit provider keys fail closed.
-
-The bridge also reads provider-specific credentials from the environment referenced by the provider catalog. Never commit credentials. External provider endpoints must use HTTPS; use `SILLYTAVERN_PROVIDER_ALLOWED_HOSTS` when you need an explicit hostname allowlist.
-
-## 🧠 Provider catalog
-
-The bridge has its **own provider catalog**. It does not read another application's provider configuration.
-
-Default path is controlled by the bridge data directory. Set an explicit path for portable deployments:
+Optional path and runtime values:
 
 ```dotenv
+SILLYTAVERN_ENV_FILE=/path/to/private/.env
 SILLYTAVERN_BRIDGE_HOME=/path/to/private-bridge-data
-SILLYTAVERN_PROVIDER_CONFIG=/path/to/sillytavern_telegram_providers.yaml
+SILLYTAVERN_PROVIDER_CONFIG=/path/to/private/providers.yaml
+SILLYTAVERN_BRIDGE_SOURCE_DIR=/path/to/sillytavern-telegram-bridge
+SILLYTAVERN_CHARACTER_DIR=/path/to/SillyTavern/data/default-user/characters
+SILLYTAVERN_WORLD_DIR=/path/to/SillyTavern/data/default-user/worlds
+SILLYTAVERN_SYSTEM_PROMPTS_DIR=/path/to/private/system-prompts
 ```
 
-Start from the included example:
+Provider-specific credentials are named by each private provider catalog entry's
+`api_key_env`. Never put real credentials in Git, README files, release assets,
+or Telegram messages.
+
+## Provider catalog
+
+The bridge has its own private provider catalog; it does not read another
+application's provider settings. Start from the generic example:
 
 ```bash
-mkdir -p ~/.config/sillytavern-telegram
-cp config/providers.example.yaml ~/.config/sillytavern-telegram/providers.yaml
-export SILLYTAVERN_PROVIDER_CONFIG="$HOME/.config/sillytavern-telegram/providers.yaml"
+cp config/providers.example.yaml /path/to/private/providers.yaml
 ```
 
-The catalog contains provider names, `api_endpoint` URLs, model lists, and `api_key_env` names. The actual API keys remain only in `.env`. The included basic example has two generic Chat Completions providers and uses `PROVIDER_ONE_API_KEY` and `PROVIDER_TWO_API_KEY`.
-
-The bridge supports OpenAI-compatible Chat Completions. Set `streaming: true` in a provider entry when that endpoint returns SSE chunks; omit it for normal JSON responses. The optional `transport: anthropic_messages` adapter is also supported when explicitly configured; it is not enabled in the basic two-provider example. `discover_models`, `health_check`, and `extra_headers` are optional provider-specific fields; the basic example does not need them. For providers that do not expose `GET /models`, set `discover_models: false` and `health_check: chat_completion` so Provider health uses a bounded streaming chat probe instead of a model-catalog request.
-
-Image generation uses separate catalog fields: `image_enabled`, `image_models`, optional `image_endpoint`, and `image_default_size`. It is disabled unless explicitly enabled and never uses chat-only models. See the commented `openai-images` entry in `config/providers.example.yaml`; put its `OPENAI_API_KEY` value only in the private `.env` file.
-
-A provider is selectable for inference when its `adapter` or `transport` is one of `chat_completions`, `openai`, `openai_compatible`, or `anthropic_messages`. Providers with a missing or unsupported adapter remain visible as **catalog-only** and cannot generate replies. The `/providers` panel shows 8 provider/model options per page with Previous/Next navigation.
-
-### Optional Anthropic Messages provider
-
-Anthropic Messages is supported by the bridge adapter, but it is kept out of the basic two-provider example. Add this provider to your standalone catalog when needed:
+A provider entry may contain:
 
 ```yaml
 providers:
-  provider-anthropic:
-    name: Anthropic Messages Example
-    api_endpoint: https://api.anthropic.com/v1
-    api_key_env: ANTHROPIC_API_KEY
-    transport: anthropic_messages
-    anthropic_version: "2023-06-01"
+  provider-one:
+    name: Provider One
+    api_endpoint: https://provider.example/v1
+    api_key_env: PROVIDER_ONE_API_KEY
+    transport: chat_completions
+    streaming: true
     models:
-      - claude-sonnet
+      - provider-one/model-a
 ```
 
-Then set `ANTHROPIC_API_KEY` in the bridge environment file. The adapter converts the bridge prompt to `/messages`, sends `x-api-key` and `anthropic-version`, translates image blocks, and parses Anthropic text streaming events.
+Use `streaming: true` only when the endpoint returns SSE chunks. Use
+`discover_models: false` for endpoints without `GET /models`. Such endpoints
+can set `health_check: chat_completion`; `/providers health` then sends a
+bounded streaming `POST /chat/completions` probe instead of reporting a false
+model-discovery failure. Provider health never displays credentials.
 
-The `/providers` panel is the single provider/model entry point and reads this bridge catalog:
+Use `/providers` as the canonical model selector:
 
 ```text
-/providers
-→ provider panel
-→ provider list
-→ Health / Refresh models actions
-→ model list
-→ select model
-
-/providers health
-→ opens the same provider panel
-
-/providers refresh
-→ opens the same provider panel
+/providers          Open provider and model panel
+/providers health   Check configured provider endpoints
+/providers refresh  Refresh discoverable model catalogs
 ```
 
-The old `/model` command is removed, and `/model ...` is handled as an unknown
-command rather than a model-selection alias. Unknown slash commands are rejected
-before normal model generation. Unknown `/providers <action>` values are also
-rejected; use `/providers`, `/providers health`, or `/providers refresh`.
+The old `/model` command is not a model-selection alias. Unknown slash commands
+are rejected before normal generation.
 
-The bridge checks `discover_models: true` providers when the catalog is opened. It calls the provider's OpenAI-compatible `/models` endpoint, keeps the result in a separate JSON cache, and falls back to static YAML models if discovery fails.
+## Commands
 
-Default refresh interval:
+### Sessions and content
+
+```text
+/start              Send the character card opening message
+/status             Show active character, session, model, and runtime state
+/new                Create and activate a named isolated session
+/reset              Confirm an active-session reset
+/session            Switch, create, or delete an inactive session
+/character          Open character management
+/persona            Open native Persona controls
+/world              Open World Info/lorebook controls
+/systemprompt       Choose a private TXT System Prompt
+/note               Open Author's Note controls
+```
+
+### Replies and settings
+
+```text
+/settings           Configure generation values
+/stream             Toggle streaming preview
+/preset             Use, save, or delete a generation preset
+/regen              Generate another response variant
+/swipe              Browse stored response variants
+/branch             Choose the active response branch
+/continue           Continue the latest assistant response
+/edit               Edit the latest user turn and regenerate
+/retry              Retry the latest failed response
+/prompt             Show safe prompt diagnostics
+/language           Choose the model reply language
+/expression         Choose manual, automatic, or off expressions
+```
+
+### Voice, files, memory, and groups
+
+```text
+/voice              Toggle quote-driven automatic TTS
+/voice_input        Configure local transcription
+/imagine            Generate an image through an enabled image provider
+/memory             Open Hindsight memory and search controls
+/remember           Store one explicit long-term fact
+/summarize          Regenerate the active-session summary
+/databank           Open Data Bank RAG controls
+/sync               Open Live API Sync controls
+/group              Open Forum Topic group controls
+/help               Open the interactive command guide
+/update             Check and, after confirmation, update the bridge
+```
+
+`/tts` is disabled. Voice replies are automatic when `/voice` is enabled and
+model dialogue is enclosed in straight double quotes. Narration and unquoted
+text are not synthesized.
+
+## Reply delivery
+
+Streaming edits one temporary preview message. The preview is hidden or deleted
+before the final response is sent. The final response is split into multiple
+Telegram messages when needed, preserving the original text exactly.
+
+Splitting uses Telegram's UTF-16 limit and prefers, in order:
+
+1. Paragraph boundaries.
+2. Newlines.
+3. Sentence boundaries.
+4. Whitespace.
+5. A hard UTF-16-safe boundary.
+
+When a provider reports `finish_reason: length`, the bridge performs bounded
+continuation/recovery. A streaming response with no visible content is retried
+with larger budgets up to the configured recovery ceiling. `/continue` remains
+available when another segment is still needed.
+
+## Character expressions
+
+```text
+/expression
+→ Automatic   Local response classification; send sprite only on change
+→ Manual      Choose a discovered native sprite
+→ Off         Disable expression delivery
+```
+
+Sprites are discovered from the active character's native SillyTavern
+expression assets. If no match exists, the bridge falls back to a neutral sprite,
+then the fixed character avatar, then text-only delivery. The model reply text
+is unchanged.
+
+## Live Sync
+
+Live Sync is off by default and uses SillyTavern's supported loopback API. It
+performs an initial reconciliation before enabling realtime updates and stops on
+authentication, schema, sync-ID, or two-sided conflict errors.
 
 ```dotenv
-SILLYTAVERN_MODEL_REFRESH_SECONDS=3600
-```
-
-Open `/providers` and tap **Refresh models** for an immediate refresh.
-
-The cache is runtime state and must not be committed.
-
-The bridge keeps its active SillyTavern model independent from any other agent runtime's active model. Providers without a bridge adapter are marked **catalog-only** and cannot be selected for inference. The selected model is stored per SillyTavern session.
-
-Optional settings:
-
-```dotenv
-# Override the native character/world directories when needed.
-SILLYTAVERN_CHARACTER_DIR=/path/to/SillyTavern/data/default-user/characters
-SILLYTAVERN_CHARACTER_BACKUP_DIR=/path/to/private-character-backups
-SILLYTAVERN_WORLD_DIR=/path/to/SillyTavern/data/default-user/worlds
-# Hindsight memory service and optional credential.
-HINDSIGHT_API_URL=http://127.0.0.1:8890
-HINDSIGHT_API_KEY=replace-me
-# Optional embedding service used by Data Bank RAG.
-SILLYTAVERN_RAG_EMBEDDING_URL=http://127.0.0.1:8891/v1/embeddings
-SILLYTAVERN_RAG_EMBEDDING_MODEL=text-embedding-3-small
-SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS=1536
-# Local speech-to-text and Edge TTS settings.
-SILLYTAVERN_STT_MODEL=base
-SILLYTAVERN_TTS_BIN=/path/to/edge-tts
-SILLYTAVERN_TTS_VOICE=id-ID-GadisNeural
-```
-
-## ▶️ Run
-
-```bash
-python sillytavern_telegram_bridge.py
-```
-
-Check prerequisites and Telegram identity:
-
-```bash
-python sillytavern_telegram_bridge.py --check
-```
-
-Normal text and image generation run in bounded background workers, so one slow provider does not block Telegram polling. Failed generation is retained and can be retried with `/retry`. Normal generation and long-running commands are handed off to a durable SQLite job before Telegram marks the update complete. Jobs capture the active session ID, run in per-chat order, and unfinished jobs are requeued after restart.
-
-A systemd template is available at:
-
-```text
-systemd/sillytavern-telegram.service.example
-```
-
-## 🧭 Command guide
-
-Open the interactive command guide:
-
-```text
-/help
-→ Choose a topic
-→ Choose a command
-→ Read “What it does”
-→ Back or Close
-```
-
-Categories use plain-language labels such as **Start & Sessions**, **Replies & Settings**, and **Memory & Files**. Each category renders one button per command, with up to eight command buttons per page. Use Next/Previous for larger categories, then select a command to replace the page with a clear **What it does** explanation and a Back button.
-
-Persona, Character, System Prompt, and World Info catalogs accept a maximum of
-**40 items each**. Persona metadata is read and written directly through
-SillyTavern's native settings and User Avatars paths; character uploads stop
-safely at the limit and existing files are never deleted. Persona deletion
-opens a picker for inactive Personas only; the active Persona and Personas
-referenced by another session cannot be deleted.
-
-Core commands:
-
-```text
-/start                         Send the character card first message only
-/status                       Show active runtime state
-/new                          Name, create, and activate a new isolated session
-/reset                        Confirm active-session reset, purge only its Hindsight memory, and restart from the character opening greeting
-/session                      Switch, create, or safely delete an inactive session
-/sync                         Open Live API Sync controls
-/update                       Check the latest version; confirm only when an update is available
-/providers                    Open the synchronized provider catalog
-/character                    Open character panel: select, info, delete, upload guidance
-/persona                      Choose, create, edit, or disable a user persona
-/world                         Open the World Info/lorebook panel
-/systemprompt                  Open the configured TXT System Prompt panel
-/language                      Choose the model reply language for this session
-/expression                    Choose manual, automatic, or off character expressions
-/imagine                       Enter a prompt for an enabled image-generation provider
-/note                          Open Author's Note panel: Off or User input
-```
-
-Expression sprites:
-
-```text
-/expression                    Open the expression panel
-→ ✨ Automatic                 Classify the model reply locally
-→ Choose an expression        Send its native sprite only when it changes
-→ 🚫 Off                      Disable expression image delivery
-```
-
-Native sprites are discovered from the active character's SillyTavern expression
-folder and fall back to a neutral sprite or the fixed character avatar. The
-original model text is unchanged. Automatic classification is local and does not
-send chat content to a third-party classifier.
-
-Image generation:
-
-```text
-/imagine                      Open scoped prompt input
-/imagine <prompt>             Generate directly
-→ Send a prompt (1–4,000 characters)
-→ Telegram receives one generated image
-→ /cancel aborts pending input
-```
-
-`/imagine` is disabled until a provider with `image_enabled: true`, an
-`image_endpoint`, and an allowlisted `image_models` entry is configured. Muse
-text models and providers without a verified Images API remain unavailable.
-
-User dialogue and actions:
-
-```text
-I am coming *walking toward the door*
-```
-
-The bridge stores and displays the original message, while the model prompt is
-rendered as separate `User dialogue` and `User action` sections. Both remain in
-the same `user` role; no narrator role is created.
-
-Author's Note panel:
-
-```text
-/note                         Open the panel
-→ 🚫 Off                      Clear the session Author's Note
-→ ✏️ User input               Close the panel and enter note text in the next message
-→ /cancel                     Cancel pending input without changing the note
-```
-
-The note is session-scoped, validated to 2,000 characters, and never treated as
-a normal chat message while the input prompt is pending. User input closes the
-old panel before waiting; `/cancel` opens one fresh panel without duplicates. Use
-`/note` as the canonical command; the legacy `/authornote` alias has been removed.
-
-Session deletion:
-
-```text
-/session                      Open the session panel
-→ 🗑️ Delete session           List inactive sessions only
-→ Select a session            Open a separate confirmation
-→ ✅ Confirm delete            Remove SQLite data and session-scoped Hindsight documents
-```
-
-The active session cannot be deleted, and sessions with queued or running jobs
-are protected. Deleting a session removes its transcript, variants, summary,
-generation settings, group state, failed turns, session record, and every
-Hindsight document tagged or prefixed for that session. Memories from other
-sessions remain in the shared per-chat bank. Deletion fails closed when
-Hindsight is unavailable; `/reset` fails closed before changing local session state.
-
-New sessions use a scoped naming prompt:
-
-```text
-/new or Session → New session
-→ Send a name (1–80 characters)
-→ Session is created only after validation
-→ /cancel leaves no empty session behind
-```
-
-The Character → Session and topic-only New group session wizards use the same
-name-first flow. Renaming a character in native SillyTavern is reconciled by a
-unique PNG image fingerprint or unique embedded card name; ambiguous matches are
-never rebound automatically. Use **Refresh** in `/character` to redraw labels.
-
-World Info/lorebook panel:
-
-```text
-/world                         Open the panel
-Tap a lorebook                 Toggle it on/off
-Next / Previous                Browse 8 lorebooks per page
-✅ Close                       Exit the panel; toggles apply immediately
-🚫 Clear all World Info        Disable every active lorebook
-```
-
-Generation and branches:
-
-```text
-/settings                     Open session generation panel; choose reasoning
-/stream                       Open streaming on/off panel
-/preset                       Open preset use/save/delete panel
-/macro                         Open a panel, then preview a supported macro
-/stscript                      Open the safe Reset action panel
-/regen                        Generate a new response variant
-/swipe                        Browse variants with buttons
-/branch                       Open the active branch selector
-/continue                     Continue the latest assistant response
-/edit                         Open a panel, then edit the latest user turn
-/retry                        Retry the latest failed response
-/prompt                       Inspect prompt composition
-/summarize                    Force a session summary
-```
-
-When a non-stream provider stops at its output-token limit, the bridge requests
-one bounded continuation automatically and stores/sends the combined response.
-Use `/continue` only when another segment is still needed or an automatic
-follow-up could not be completed.
-
-`/settings` re-renders with a `Current values` line after every valid change, showing
-temperature, max tokens, top P, penalties, and stop sequences. Invalid values are
-rejected without changing the previous value; their feedback and input prompt are
-removed together when `/cancel` or Close is used.
-
-Response language:
-
-```text
-/language                     Open the response language panel
-/language auto                Match the language of the user's latest message
-/language id                  Reply in Bahasa Indonesia
-/language en                  Reply in English
-```
-
-The response language is stored per session and added as a model instruction. It
-controls generated replies, not SillyTavern's UI language or voice transcription.
-Auto mode adds no extra provider request. A fixed language applies one final
-language-render pass to normal, image, edit, regenerate, and continue responses;
-streaming preview is disabled so only the target-language result is displayed.
-The panel also supports `ja`, `zh`, `ko`, `es`, `fr`, `de`, `pt`, `ru`, `ar`,
-`hi`, `vi`, and `th`.
-
-Persona editing:
-
-```text
-/persona
-→ Edit current persona
-→ Review native avatar ID, name, and description
-→ Edit name, Edit description, or Edit name + description
-→ Send only the field(s) you want to change
-
-/persona
-→ Create persona
-→ Send: id | display name | persona description
-```
-
-Persona changes are validated, backed up, and written atomically to native
-SillyTavern `settings.json`. Input is scoped to the session and expires;
-`/cancel` leaves the existing Persona unchanged.
-
-Persona storage is fully native: avatar files are created atomically under
-`data/default-user/User Avatars/`, while names and descriptions live in
-`data/default-user/settings.json`. The bridge stores only the native avatar
-filename in SQLite and does not use a bridge Persona catalog.
-
-The default native paths derive from `SILLYTAVERN_DIR`. Override them only for a
-non-default SillyTavern data layout:
-
-```dotenv
-SILLYTAVERN_NATIVE_SETTINGS_FILE=/path/to/SillyTavern/data/default-user/settings.json
-SILLYTAVERN_NATIVE_AVATAR_DIR=/path/to/SillyTavern/data/default-user/User Avatars
-```
-
-Memory and RAG:
-
-```text
-/memory                       Open Hindsight mode and search panel (session-only recall)
-/remember                     Open a panel, then queue an explicit memory
-/databank                     Open RAG/list/search/remove/reindex panel
-/sync                        Open Live API Sync controls
-```
-
-## 🔄 Synchronization
-
-### Live Sync — recommended
-
-- Live Sync is **off by default**. Configure a loopback SillyTavern API origin,
-  open `/sync`, and choose **Realtime API: toggle** for the active session.
-- The bridge uses SillyTavern's supported `/csrf-token`, `/api/users/login`,
-  `/api/chats/get|save`, and `/api/chats/group/get|save` routes. It does not
-  patch SillyTavern or install an extension.
-- A dedicated worker checks enabled bindings every two seconds by default,
-  while retaining stable `sync_id`, transcript-hash, swipe, and three-way
-  conflict protection.
-- Only loopback hosts (`127.0.0.1`, `::1`, or `localhost`) are accepted.
-  Credentials and CSRF/session state are never stored in chat metadata.
-- Authentication, schema, sync-ID, or conflict failures disable realtime sync
-  for that binding.
-
-Optional Live Sync settings:
-
-```text
 SILLYTAVERN_SYNC_API_URL=http://127.0.0.1:8000
 SILLYTAVERN_SYNC_API_INTERVAL_SECONDS=2
 SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS=10
@@ -496,200 +233,51 @@ SILLYTAVERN_SYNC_API_HANDLE=
 SILLYTAVERN_SYNC_API_PASSWORD=
 ```
 
-Quick start:
+The bridge does not patch SillyTavern, install an extension, or synchronize chat
+files. External Live Sync credentials remain environment-only.
 
-1. Start SillyTavern on a loopback address and confirm its local web UI responds.
-2. Set `SILLYTAVERN_SYNC_API_URL` to that origin, then restart the bridge.
-3. If SillyTavern user accounts are enabled, also set the matching API handle and
-   password. Leave both empty when user accounts are disabled.
-4. Open `/sync` and tap **Refresh status**. The panel must show
-   `Live API sync: off (configured)` before activation.
-5. Tap **Realtime API: toggle**. The bridge performs an initial reconciliation;
-   realtime becomes `on` only when that succeeds.
+## Security and privacy
 
-The sync controls are scoped to the active Telegram session. **Sync now** runs
-one Live API reconciliation even when the background realtime toggle is off.
-**Refresh status** only redraws current state. A sync-ID mismatch, initial divergence, or
-two-sided edit conflict stops realtime instead of selecting a winner. Resolve
-the divergence manually, then enable realtime again.
+- Keep `.env`, provider YAML, SQLite, logs, cards, Personas, and private prompts outside Git.
+- Restrict Telegram access with `SILLYTAVERN_TELEGRAM_ALLOWED_USERS`.
+- Require HTTPS for external provider, image, and embedding endpoints; loopback is allowed for local services.
+- Validate provider hosts before attaching credentials.
+- Bound uploaded file size, DOCX expansion, PDF pages, extracted text, and embedding work.
+- Keep Hindsight recall limited to the active session.
+- Treat uploaded documents, model responses, and recalled text as private data.
+- Use the systemd hardening template for production deployments.
 
-Credentials must remain environment-only and must not be printed, committed, or packaged.
+## Run
 
-## 🎙️ Voice, media, and groups
+```bash
+python sillytavern_telegram_bridge.py --check
+python sillytavern_telegram_bridge.py
+```
+
+A systemd template is available at
+`systemd/sillytavern-telegram.service.example`. Set the private
+`SILLYTAVERN_BRIDGE_SOURCE_DIR` when `/update` runs from the live launcher copy.
+
+## Architecture
 
 ```text
-/voice                        Open automatic TTS panel
-/voice_input                  Open transcription/model/language panel
-/voice_input language         Open language panel: choose Auto or User input
+sillytavern_telegram_bridge.py  launcher
+bridge/runtime.py               shared compatibility loader
+bridge/common.py                configuration, workers, permissions
+bridge/cards.py                 cards, prompts, World Info, panels
+bridge/database.py              sessions and generation settings
+bridge/memory.py                Hindsight and summaries
+bridge/rag.py                   Data Bank, FTS5, embeddings
+bridge/catalog.py               provider catalog and health
+bridge/generation.py            adapters, streaming, continuation
+bridge/telegram.py              Telegram transport and splitting
+bridge/help*.py/json            Help rendering and editable details
+bridge/sync_*.py                Live Sync primitives and API
+bridge/groups.py                Forum Topic orchestration
+bridge/media.py                 images, voice, STT, TTS
+bridge/main.py                  polling and durable job dispatch
 ```
 
-Automatic voice replies are quote-driven. Enable them with `/voice`, then a
-model response such as `*walks closer* "I am here."` sends the text message as
-usual and synthesizes only `I am here.`. Narration and unquoted model text are
-not spoken. The manual `/tts` command is disabled; use `/voice` to toggle this
-behavior. Multiple quoted dialogue segments are combined in their original
-order, and a response without quoted dialogue produces no voice message.
+## License
 
-In the voice input panel, choose **Language** and then either a fixed language
-choice such as `id` or `en`, **Auto** for detection, or **User input** to enter a
-custom 2–8 letter language code. The custom input is session-bound and expires
-after the pending-input timeout; `/cancel` leaves the existing language unchanged.
-
-Group control panel:
-
-```text
-/group                        Open topic-only group control panel in a Forum Topic
-→ Add character              Choose a character card
-→ Remove character           Remove a group member
-→ Choose speaker             Choose the next speaker
-→ Mode                      Select round robin/contextual/manual/autonomous
-→ Claim turn                Claim the user turn in manual mode
-→ Pass user turn            Pass to the next known group user
-→ New group session          Start a clean topic-local Character → World Info setup
-→ Enable / Disable           Change group state
-→ Next speaker               Advance manual mode
-```
-
-`/group` is available only inside a Telegram Forum Topic. In a direct 1-on-1
-chat, the command is rejected because group sessions are topic-local. **New
-group session** creates a clean session for the current topic, then opens the
-Character picker and World Info picker before returning to the Group panel.
-
-In `manual` mode, the first allowed user to send a normal message becomes the
-turn owner. Other users receive a not-your-turn response and their message is
-not queued. The owner can use **Pass user turn**; Telegram bots cannot disable
-the native Send button in another user's client, so enforcement happens before
-the durable message job is created.
-
-Disabling group chat is idempotent: repeating **Disable** safely keeps the group
-off and does not produce a callback-processing error when the panel already has
-the requested state.
-
-Telegram Forum Topics are isolated by `message_thread_id`; each topic keeps separate history, queue, group state, media routing, and replies.
-## 📝 System Prompt choices
-
-Keep reusable prompts as separate `.txt` files in a private directory and point the bridge to it. **One TXT file produces one panel choice.**
-
-```dotenv
-SILLYTAVERN_SYSTEM_PROMPTS_DIR=/path/to/sillytavern-telegram-bridge/systemprompt
-```
-
-Each file contains ordinary multiline text. The panel label comes from the filename:
-
-```text
-Stay in character, answer naturally,
-and do not speak for the user.
-```
-
-If `SILLYTAVERN_SYSTEM_PROMPTS_DIR` points outside the bridge home, set `SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS=true` to apply 0700/0600 protection; otherwise the bridge only hardens bridge-local/default prompt paths.
-
-Examples:
-
-```text
-balanced.txt → Balanced
-concise.txt  → Concise
-natural.txt  → Natural
-```
-
-Public examples are in `config/system_prompts.example/`: `balanced.txt`, `concise.txt`, and `natural.txt`.
-
-Telegram commands:
-
-```text
-/systemprompt
-→ opens an inline choice panel
-```
-
-The panel loads TXT choices from `SILLYTAVERN_SYSTEM_PROMPTS_DIR` and includes `Off`. Close deletes the panel message; if Telegram rejects deletion, the bridge hides the message and removes its buttons. Arbitrary System Prompt text is disabled.
-
-If `SILLYTAVERN_CHARACTER_DIR`, `SILLYTAVERN_WORLD_DIR`, or model/cache paths are changed outside the documented defaults, update the systemd unit's `ReadWritePaths=` entries to match; `ProtectSystem=strict` otherwise blocks writes.
-
-
-Character panel:
-
-```text
-/character                    Open the panel
-Select                        Choose a character, then choose the target session
-Info                          Show card metadata sizes
-Delete                        Choose a non-active card, then confirm deletion
-Upload                        Show the safe Telegram Document upload instruction
-```
-
-Legacy `/character info`, `/character versions`, `/character restore`, and `/character delete` text forms are removed. Use the panel for all character management actions.
-
-Send a metadata-bearing SillyTavern PNG as a Telegram **Document**, not as a compressed Telegram Photo. The bridge verifies the `chara` PNG text chunk before installing it, writes a private backup, and verifies the backup checksum before reporting success.
-
-Plain avatars are not imported as character cards.
-
-## 📚 Data Bank RAG
-
-Upload a supported document directly to the bot. `.jsonl` files remain chat-import files; other supported documents are indexed in the per-chat Data Bank.
-
-The index uses:
-
-1. SQLite FTS5 lexical search.
-2. Optional OpenAI-compatible embeddings.
-3. Hybrid ranking.
-4. Lexical fallback when the embedding endpoint is unavailable.
-
-Files are limited to 10 MB. DOCX XML members, PDF page counts, and extracted text are bounded. Image bytes are not inserted into the text Data Bank. When RAG contributes a source, generated replies include a `Sources:` footer with the indexed filenames. Embeddings are isolated by endpoint/model/dimensions and cached query vectors expire with runtime cache retention. The Data Bank panel shows current embedding coverage and provides `Reindex embeddings`; semantic retrieval currently scans at most 5,000 vectors in Python, while FTS5 remains the complete lexical fallback. Set a dedicated `SILLYTAVERN_RAG_EMBEDDING_API_KEY` for external embedding endpoints; local loopback embedding endpoints may run without a key.
-Set `SILLYTAVERN_RAG_EMBEDDING_REVISION` to a new value when the same endpoint/model/dimensions changes implementation; this creates a new namespace and requires reindexing.
-
-PDF extraction runs in an isolated `bridge/pdf_parser.py` subprocess with bounded input, page count, extracted text, CPU time, and memory. The parent worker applies a 45-second timeout and reports parser failures without falling back to in-process PDF parsing.
-
-
-Hindsight retention and automatic TTS are best-effort auxiliary jobs; a saturated utility queue may defer or drop them without affecting the durable chat turn.
-
-## 🔐 Security and privacy
-
-> **Credentials must remain environment-only and must not be printed, committed, or packaged.**
-
-- Keep `.env`, SQLite databases, exported chats, logs, character cards, and persona files outside the public repository.
-- Restrict the bot with `SILLYTAVERN_TELEGRAM_ALLOWED_USERS`.
-- Do not expose a tool-capable API publicly without authentication and TLS.
-- Treat uploaded documents as private chat data.
-- Hindsight recall is hard-filtered to the active session; cross-session recall is disabled.
-- The release publisher is private maintainer tooling and is not included in the public runtime repository or distribution ZIP.
-- The repository contains no credentials, live database, user allowlist, or character card.
-
-## 🏗️ Architecture
-
-The entrypoint is intentionally small:
-
-```text
-sillytavern_telegram_bridge.py  # launcher
-bridge/runtime.py               # compatibility runtime loader
-bridge/common.py                # configuration, workers, and runtime permissions
-bridge/cards.py                 # character cards, World Info, prompts, panels
-bridge/schema.py                # SQLite schema and migrations
-bridge/database.py              # SQLite sessions and generation settings
-bridge/memory.py                # Hindsight memory and summaries
-bridge/rag.py                   # Data Bank, FTS5, and embeddings
-bridge/pdf_parser.py           # isolated, resource-limited PDF extraction worker
-bridge/groups.py                # multi-character orchestration
-bridge/telegram.py              # Telegram transport and imports
-bridge/help.py                  # help categories and command registration
-bridge/help_details.py          # Help rendering, callbacks, and JSON loader
-bridge/help_details.json        # editable detailed Help descriptions
-bridge/sync_core.py             # Live Sync transcript/checkpoint primitives
-bridge/catalog.py               # provider/model catalog
-bridge/media.py                 # images, voice, STT, and TTS
-bridge/generation.py            # prompts, adapters, variants, branches
-bridge/commands.py              # message and document commands
-bridge/input_flows.py           # scoped pending text-input transitions
-bridge/command_routes.py        # normalized command routing
-bridge/panel_callback_routes.py # panel callback routing
-bridge/callbacks.py             # inline-button callbacks
-bridge/main.py                  # polling loop and startup checks
-```
-
-Each domain file is kept below 500 lines. Help descriptions are public, editable
-JSON data; private runtime state remains outside the repository.
-
-## 🧱 Architecture boundary
-
-This bridge reimplements selected SillyTavern concepts directly. It does not execute every SillyTavern extension or STscript hook. Prompt parity includes character metadata, personas, World Info recursion, macros, summaries, memory, RAG, group context, and generation settings; native extension execution remains outside the bridge.
-
-## 📄 License
-
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).
