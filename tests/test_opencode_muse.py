@@ -38,6 +38,26 @@ class OpenCodeMuseTests(unittest.TestCase):
         else:
             rt.os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = self.old_hosts
 
+    def test_startup_allows_keyless_muse_transport(self):
+        old_key = rt.os.environ.pop("LLM_API_KEY", None)
+        try:
+            rt.validate_startup_credential("opencode-free::muse-spark-1.3-contributor-free")
+        finally:
+            if old_key is not None:
+                rt.os.environ["LLM_API_KEY"] = old_key
+
+    def test_startup_still_requires_credentials_for_keyed_transport(self):
+        old_key = rt.os.environ.pop("LLM_API_KEY", None)
+        old_spec = rt.get_provider_spec
+        rt.get_provider_spec = lambda _provider: {"transport": "openai_chat"}
+        try:
+            with self.assertRaisesRegex(RuntimeError, "required provider credential"):
+                rt.validate_startup_credential("provider::model")
+        finally:
+            rt.get_provider_spec = old_spec
+            if old_key is not None:
+                rt.os.environ["LLM_API_KEY"] = old_key
+
     def test_muse_uses_responses_and_canonical_keyless_headers(self):
         captured = []
 
