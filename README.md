@@ -213,15 +213,20 @@ The bridge keeps its active SillyTavern model independent from any other agent r
 Optional settings:
 
 ```dotenv
+# Override the native character/world directories when needed.
 SILLYTAVERN_CHARACTER_DIR=/path/to/SillyTavern/data/default-user/characters
 SILLYTAVERN_CHARACTER_BACKUP_DIR=/path/to/private-character-backups
 SILLYTAVERN_WORLD_DIR=/path/to/SillyTavern/data/default-user/worlds
+# Hindsight memory service and optional credential.
 HINDSIGHT_API_URL=http://127.0.0.1:8890
 HINDSIGHT_API_KEY=replace-me
+# Optional embedding service used by Data Bank RAG.
 SILLYTAVERN_RAG_EMBEDDING_URL=http://127.0.0.1:8891/v1/embeddings
 SILLYTAVERN_RAG_EMBEDDING_MODEL=text-embedding-3-small
 SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS=1536
+# Local speech-to-text and Edge TTS settings.
 SILLYTAVERN_STT_MODEL=base
+SILLYTAVERN_TTS_BIN=/path/to/edge-tts
 SILLYTAVERN_TTS_VOICE=id-ID-GadisNeural
 ```
 

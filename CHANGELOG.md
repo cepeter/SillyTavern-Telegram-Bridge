@@ -2,6 +2,13 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.008] - 2026-09-17
+
+### Changed
+
+- Added concise comments to provider and environment configuration examples so each field's purpose is clear.
+- Expanded README and Help descriptions for Expressions, image generation, semantic splitting, User dialogue/User action formatting, and quote-driven voice replies.
+
 ## [0.2.007] - 2026-09-17
 
 ### Added
