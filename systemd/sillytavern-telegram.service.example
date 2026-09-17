@@ -8,6 +8,7 @@ Type=simple
 WorkingDirectory=%h/sillytavern-telegram-bridge
 Environment=SILLYTAVERN_ENV_FILE=%h/.config/sillytavern-telegram/.env
 Environment=SILLYTAVERN_BRIDGE_HOME=%h/.local/share/sillytavern-telegram
+Environment=SILLYTAVERN_BRIDGE_SOURCE_DIR=%h/sillytavern-telegram-bridge
 ExecStart=%h/.hermes/hermes-agent/venv/bin/python %h/sillytavern-telegram-bridge/sillytavern_telegram_bridge.py
 Restart=on-failure
 RestartSec=5

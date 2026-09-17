@@ -1,13 +1,44 @@
 """Confirmed, fast-forward-only bridge self-update workflow."""
 
+import json
+import os
+import re
+import subprocess
+import urllib.request
+from pathlib import Path
+
 UPDATE_REPO = "cepeter/SillyTavern-Telegram-Bridge"
-UPDATE_REPO_DIR = Path(__file__).resolve().parents[1]
 UPDATE_LIVE_DIR = Path(os.environ.get("SILLYTAVERN_LIVE_BRIDGE_DIR", str(Path.home() / ".hermes/scripts")))
 
 
-def installed_bridge_version() -> str:
-    match = re.search(r"^## \[([^]]+)\]", (UPDATE_REPO_DIR / "CHANGELOG.md").read_text(encoding="utf-8"), re.MULTILINE)
+def _is_bridge_checkout(path: Path) -> bool:
+    return (path / ".git").exists() and (path / "CHANGELOG.md").is_file()
+
+
+def _resolve_update_repo_dir() -> Path:
+    configured = os.environ.get("SILLYTAVERN_BRIDGE_SOURCE_DIR")
+    candidates = [Path(configured).expanduser()] if configured else []
+    candidates.extend((Path(__file__).resolve().parents[1], Path.home() / "sillytavern-telegram-bridge"))
+    for candidate in candidates:
+        if _is_bridge_checkout(candidate):
+            return candidate
+    return candidates[0] if candidates else Path(__file__).resolve().parents[1]
+
+
+UPDATE_REPO_DIR = _resolve_update_repo_dir()
+
+
+def _changelog_version(path: Path) -> str:
+    try:
+        match = re.search(r"^## \[([^]]+)\]", path.read_text(encoding="utf-8"), re.MULTILINE)
+    except OSError:
+        return "unknown"
     return match.group(1) if match else "unknown"
+
+
+def installed_bridge_version() -> str:
+    live_version = _changelog_version(UPDATE_LIVE_DIR / "CHANGELOG.md")
+    return live_version if live_version != "unknown" else _changelog_version(UPDATE_REPO_DIR / "CHANGELOG.md")
 
 
 def latest_bridge_release() -> tuple[str, str]:
@@ -46,13 +77,21 @@ def _run_update() -> str:
         return f"Update refused: could not verify latest release ({exc})."
     if latest == current:
         return f"Already latest (v{current}); no update was performed."
+    if not _is_bridge_checkout(UPDATE_REPO_DIR):
+        return f"Update refused: source checkout not found at {UPDATE_REPO_DIR}. Set SILLYTAVERN_BRIDGE_SOURCE_DIR."
     if subprocess.run(["git", "status", "--porcelain"], cwd=UPDATE_REPO_DIR, capture_output=True, text=True, timeout=20).stdout.strip():
         return "Update refused: local repository has uncommitted changes."
-    subprocess.run(["git", "fetch", "origin", "main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    subprocess.run(["git", "merge", "--ff-only", "origin/main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        subprocess.run(["git", "fetch", "origin", "main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        subprocess.run(["git", "merge", "--ff-only", "origin/main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        detail = re.sub(r"(https?://)[^/@\s]+@", r"\1***@", detail)
+        return f"Update refused: git {' '.join(exc.cmd[1:])} failed (exit {exc.returncode}{': ' + detail if detail else ''})."
     UPDATE_LIVE_DIR.joinpath("bridge").mkdir(parents=True, exist_ok=True)
     subprocess.run(["rsync", "-a", "--delete", f"{UPDATE_REPO_DIR}/bridge/", f"{UPDATE_LIVE_DIR}/bridge/"], check=True, timeout=120)
     subprocess.run(["cp", str(UPDATE_REPO_DIR / "sillytavern_telegram_bridge.py"), str(UPDATE_LIVE_DIR / "sillytavern_telegram_bridge.py")], check=True, timeout=20)
+    subprocess.run(["cp", str(UPDATE_REPO_DIR / "CHANGELOG.md"), str(UPDATE_LIVE_DIR / "CHANGELOG.md")], check=True, timeout=20)
     subprocess.run(["systemctl", "--user", "restart", "sillytavern-telegram.service"], check=True, timeout=120)
     return f"Bridge updated to v{installed_bridge_version()} and restarted."
 
