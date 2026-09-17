@@ -39,6 +39,16 @@ class SessionNamingTests(unittest.TestCase):
         self.assertEqual(rt.get_meta(self.db, "active_session:chat", ""), "job-42")
         self.assertEqual(rt.get_meta(self.db, "session_name_input:chat", ""), "")
 
+    def test_status_displays_custom_session_title_with_technical_id(self):
+        rt.update_session(self.db, "chat", self.session["session_id"], title="Evening Story")
+        original_card = rt.card_fields_from_file
+        rt.card_fields_from_file = lambda _filename: {"name": "Test", "post_history_instructions": ""}
+        try:
+            rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, {}, "chat", "/status")
+        finally:
+            rt.card_fields_from_file = original_card
+        self.assertIn("Session: Evening Story (default)", self.sent[-1])
+
     def test_invalid_name_reprompts_without_creating_session(self):
         rt.start_session_name_input(self.db, "token", "chat", self.session)
         self.assertTrue(rt.handle_pending_input(self.db, "token", "chat", self.session, "/bad", operation_id=43))

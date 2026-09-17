@@ -39,7 +39,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         group = group_state(db, chat_id, session_id)
         group_labels = group_member_labels(group["members"])
         group_state_text = f"{'on' if group['enabled'] else 'off'} ({', '.join(group_labels) if group_labels else 'none'})"
-        send_text(token, chat_id, f"Character: {fields['name']}\nSession: {session_id}\nStored messages: {count}\nModel: {current_model}\nResponse language: {response_language_label(session.get('response_language') or 'auto')}\nPersona: {persona}\nWorld Info: {world}\nAuthor's Note: {note_state}\nSummary: {summary_state}\nHindsight: {memory_mode(db, chat_id)} ({memory_scope(db, chat_id)})\nData Bank RAG: {rag_mode(db, chat_id)} ({len(rag_docs)} documents)\nGroup chat: {group_state_text}\nGeneration: temperature={generation['temperature']}, max_tokens={generation['max_tokens']}, top_p={generation['top_p']}")
+        send_text(token, chat_id, f"Character: {fields['name']}\nSession: {session.get('title') or session_id} ({session_id})\nStored messages: {count}\nModel: {current_model}\nResponse language: {response_language_label(session.get('response_language') or 'auto')}\nPersona: {persona}\nWorld Info: {world}\nAuthor's Note: {note_state}\nSummary: {summary_state}\nHindsight: {memory_mode(db, chat_id)} ({memory_scope(db, chat_id)})\nData Bank RAG: {rag_mode(db, chat_id)} ({len(rag_docs)} documents)\nGroup chat: {group_state_text}\nGeneration: temperature={generation['temperature']}, max_tokens={generation['max_tokens']}, top_p={generation['top_p']}")
         return True
     if command == "/retry":
         failed = latest_failed_turn(db, chat_id)
