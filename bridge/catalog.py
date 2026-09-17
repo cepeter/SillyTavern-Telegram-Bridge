@@ -100,6 +100,20 @@ def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, st
             headers["Authorization"] = f"Bearer {key}"
         headers.update(spec.get("extra_headers") or {})
         try:
+            if str(spec.get("health_check") or "").casefold() == "chat_completion":
+                model = str(spec.get("model") or (spec.get("models") or [""])[0])
+                health_body = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": "Reply OK."}],
+                    "max_tokens": 8,
+                    "temperature": 0,
+                    "stream": True,
+                }
+                request = urllib.request.Request(endpoint + "/chat/completions", data=json.dumps(health_body).encode("utf-8"), headers={**headers, "Accept": "text/event-stream"}, method="POST")
+                with strict_urlopen(request, timeout=30) as response:
+                    response.read(1)
+                results.append((current_id, str(spec.get("name") or current_id), "healthy (chat completion)"))
+                continue
             request = urllib.request.Request(endpoint + "/models", headers=headers, method="GET")
             with strict_urlopen(request, timeout=10) as response:
                 results.append((current_id, str(spec.get("name") or current_id), f"healthy ({response.status})"))
