@@ -396,7 +396,7 @@ class AuditRegressionTests(unittest.TestCase):
             rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, fields, "chat", "/reset")
             self.assertEqual(panel, [True])
             self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
-            rt.reset_session(self.db, "token", "chat", session, fields, operation_id=902)
+            rt.reset_session(self.db, "token", "chat", session, operation_id=902)
         finally:
             rt.card_fields_from_file = original_card
             rt.send_reset_confirmation_menu = original_panel
@@ -439,7 +439,7 @@ class AuditRegressionTests(unittest.TestCase):
         rt.purge_hindsight_session = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
         rt.send_text = lambda *_args, **_kwargs: None
         try:
-            rt.reset_session(self.db, "token", "chat", session, fields)
+            rt.reset_session(self.db, "token", "chat", session)
         finally:
             rt.purge_hindsight_session = original_purge
             rt.send_text = original_reply

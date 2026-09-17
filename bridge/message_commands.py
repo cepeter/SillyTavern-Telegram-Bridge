@@ -13,7 +13,7 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     telegram_request(token, method, payload)
 
 
-def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict, operation_id: int | str | None = None) -> None:
+def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None) -> None:
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "reset"):
             return
