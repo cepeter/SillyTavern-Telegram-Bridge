@@ -27,6 +27,17 @@ def _stream_text(value) -> str:
     return ""
 
 
+def _recovery_settings(settings: dict[str, object]) -> dict[str, object] | None:
+    """Increase the output budget when a provider spends the whole budget reasoning."""
+    current = int(settings.get("max_tokens") or DEFAULT_MAX_TOKENS)
+    target = min(max(current * 2, 4096), 12000)
+    if target <= current:
+        return None
+    recovered = dict(settings)
+    recovered["max_tokens"] = target
+    return recovered
+
+
 def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str) -> str:
     system_parts = [str(message.get("content") or "") for message in messages if message.get("role") == "system"]
     conversation = []
@@ -168,7 +179,7 @@ def opencode_muse_generate(actual_model: str, messages: list[dict], settings: di
     return "".join(chunks).strip()
 
 
-def generate_text(api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None, force_non_stream: bool = False) -> str:
+def generate_text(api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None, force_non_stream: bool = False, _recovery_attempt: int = 0) -> str:
     """Generate through the selected bridge provider adapter."""
     provider_id, actual_model = resolve_provider_model(model)
     spec = get_provider_spec(provider_id)
@@ -237,11 +248,15 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
         if not is_streaming:
             result = json.loads(response.read().decode("utf-8"))
             choices = result.get("choices") or []
+            finish_reason = choices[0].get("finish_reason") if choices else None
             content = choices[0].get("message", {}).get("content") if choices else None
             if not content:
+                if finish_reason == "length" and _recovery_attempt < 2:
+                    recovered = _recovery_settings(generation)
+                    if recovered:
+                        return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=True, _recovery_attempt=_recovery_attempt + 1)
                 raise RuntimeError("backend returned no assistant content")
             content = str(content).strip()
-            finish_reason = choices[0].get("finish_reason") if choices else None
             if finish_reason != "length":
                 return content
 
@@ -310,6 +325,10 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
         if stream_callback and content:
             stream_callback(content)
         if not content:
+            if finish_reason == "length" and _recovery_attempt < 2:
+                recovered = _recovery_settings(generation)
+                if recovered:
+                    return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=True, _recovery_attempt=_recovery_attempt + 1)
             raise RuntimeError(f"{provider_id} returned no visible content (finish_reason={finish_reason})")
         if finish_reason == "length" and not force_non_stream:
             continuation_messages = list(messages) + [
@@ -317,7 +336,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
                 {"role": "user", "content": "Continue from the exact ending without repeating existing text. Preserve the response language exactly. Output only the continuation."},
             ]
             try:
-                continuation = generate_text(api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=True)
+                continuation = generate_text(api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=True, _recovery_attempt=_recovery_attempt)
                 return " ".join(part for part in (content, continuation) if part)
             except Exception:
                 logging.warning("Automatic continuation failed after streaming length stop", exc_info=True)

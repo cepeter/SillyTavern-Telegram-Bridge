@@ -18,6 +18,15 @@ class _FakeResponse:
         return json.dumps(self.payload).encode()
 
 
+class _FakeStreamResponse(_FakeResponse):
+    def __init__(self, lines):
+        super().__init__(None)
+        self.lines = [line.encode("utf-8") for line in lines]
+
+    def __iter__(self):
+        return iter(self.lines)
+
+
 class GenerationContinuationTests(unittest.TestCase):
     def setUp(self):
         self.original_resolve = rt.resolve_provider_model
@@ -46,6 +55,42 @@ class GenerationContinuationTests(unittest.TestCase):
             rt.os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
         else:
             rt.os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = self.old_hosts
+
+    def test_empty_stream_length_retries_with_larger_non_stream_budget(self):
+        self.original_spec = rt.get_provider_spec
+        rt.get_provider_spec = lambda _provider: {
+            "transport": "openai_compatible",
+            "api_endpoint": "https://openrouter.ai/api/v1",
+            "api_key_env": "TEST_OPENROUTER_KEY",
+            "streaming": True,
+        }
+        responses = [
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"reasoning":"thinking"},"finish_reason":null}]}\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ]),
+            _FakeResponse({"choices": [{"message": {"content": "Recovered answer."}, "finish_reason": "stop"}]}),
+        ]
+        requests = []
+
+        def fake_urlopen(request, timeout):
+            requests.append(json.loads(request.data.decode()))
+            return responses.pop(0)
+
+        rt.strict_urlopen = fake_urlopen
+        result = rt.generate_text(
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings={**rt.GENERATION_DEFAULTS, "max_tokens": 1800},
+        )
+
+        self.assertEqual(result, "Recovered answer.")
+        self.assertEqual(len(requests), 2)
+        self.assertTrue(requests[0]["stream"])
+        self.assertFalse(requests[1]["stream"])
+        self.assertEqual(requests[1]["max_tokens"], 4096)
 
     def test_length_finish_adds_one_bounded_continuation(self):
         payloads = [
