@@ -9,7 +9,7 @@
   "/update": "Checks the latest GitHub release and shows installed version, latest version, and bounded release notes. If both versions match, it shows Already latest and performs no update, sync, or restart. Otherwise Confirm update runs only with a clean checkout and fast-forwardable origin/main, then synchronizes the live bridge and restarts the service; Cancel performs no update.",
   "/providers": "Opens the provider/model catalog. Select an adapter-enabled model; catalog-only entries cannot run inference.",
   "/providers refresh": "Opens the provider panel, where Refresh models updates discoverable provider catalogs.",
-  "/providers health": "Opens the provider panel, where Provider health checks configured endpoints without exposing credentials.",
+  "/providers health": "Opens the provider panel, where Provider health checks configured endpoints without exposing credentials. Providers without GET /models can use health_check: chat_completion for a bounded streaming chat probe.",
   "/character": "Opens character selection, refresh, card information, upload guidance, and safe deletion controls. Refresh reloads native card labels and treats an unchanged redraw as success. Native SillyTavern renames rebind stale session filenames only when one unique card identity is proven.",
   "/persona": "Opens native SillyTavern Persona controls. Choose, create, edit, or disable Persona metadata stored in settings.json and avatars stored in the native User Avatars folder. Delete opens an inactive Persona picker; the active Persona and Personas referenced by another session are protected.",
   "/world": "Opens World Info selection. Multiple validated JSON lorebooks can be active together.",

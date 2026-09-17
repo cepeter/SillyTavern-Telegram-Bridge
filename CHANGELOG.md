@@ -2,6 +2,15 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.011] - 2026-09-17
+
+### Fixed
+
+- Removed retired provider entries and stale model-cache data from the live bridge configuration.
+- Added a Hive streaming chat health check for providers that do not expose a `/models` endpoint; JSON requests now include the required content type.
+- Recovered streaming replies that end with `finish_reason=length` before producing visible content by retrying with bounded larger output budgets.
+- Documented provider health behavior for endpoints without model discovery.
+
 ## [0.2.010] - 2026-09-17
 
 ### Fixed

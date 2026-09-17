@@ -12,7 +12,7 @@ HELP_CATEGORIES = {
     "characters": [
         ("/providers", "Open the single provider/model catalog; adapter-enabled entries can generate, catalog-only entries are view-only."),
         ("/providers refresh", "Open the provider panel; use Refresh models there."),
-        ("/providers health", "Open the provider panel; use Provider health there."),
+        ("/providers health", "Open the provider panel; use Provider health there. Providers without /models use a bounded streaming chat probe."),
         ("/character", "Open the character panel for selection, info, safe deletion, and upload guidance."),
         ("/persona", "Choose, create, edit, or disable the user persona; delete only inactive, unreferenced Personas."),
         ("/world", "Open the panel to choose or disable a World Info lorebook."),
