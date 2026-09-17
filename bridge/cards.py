@@ -346,7 +346,7 @@ def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id
         rows.append(navigation)
     rows.append([{"text": "🚫 Persona off", "callback_data": "persona:off"}])
     if current_persona and current_persona in personas:
-        rows.append([{"text": "✏️ Edit current persona", "callback_data": "persona:edit"}, {"text": "🗑️ Delete current", "callback_data": "persona:delete"}])
+        rows.append([{"text": "✏️ Edit current persona", "callback_data": "persona:edit"}, {"text": "🗑️ Delete inactive", "callback_data": "persona:delete"}])
     rows.append([{"text": "➕ Create persona", "callback_data": "persona:create"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""

@@ -160,7 +160,7 @@ def opencode_muse_generate(actual_model: str, messages: list[dict], settings: di
     return "".join(chunks).strip()
 
 
-def generate_text(api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None) -> str:
+def generate_text(api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None, force_non_stream: bool = False) -> str:
     """Generate through the selected bridge provider adapter."""
     provider_id, actual_model = resolve_provider_model(model)
     spec = get_provider_spec(provider_id)
@@ -190,7 +190,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
         request_key = api_key
     if not request_key:
         raise RuntimeError(f"Missing provider credential: {key_env}")
-    is_streaming = bool(spec.get("streaming") or spec.get("stream"))
+    is_streaming = bool(spec.get("streaming") or spec.get("stream")) and not force_non_stream
     max_tokens = int(generation["max_tokens"])
     effective_max_tokens = max_tokens
     body = {
@@ -302,6 +302,16 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
             stream_callback(content)
         if not content:
             raise RuntimeError(f"{provider_id} returned no visible content (finish_reason={finish_reason})")
+        if finish_reason == "length" and not force_non_stream:
+            continuation_messages = list(messages) + [
+                {"role": "assistant", "content": content},
+                {"role": "user", "content": "Continue from the exact ending without repeating existing text. Preserve the response language exactly. Output only the continuation."},
+            ]
+            try:
+                continuation = generate_text(api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=True)
+                return " ".join(part for part in (content, continuation) if part)
+            except Exception:
+                logging.warning("Automatic continuation failed after streaming length stop", exc_info=True)
         return content
 
 
