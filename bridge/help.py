@@ -7,7 +7,7 @@ HELP_CATEGORIES = {
         ("/reset", "Open confirmation to reset only the active session and its Hindsight memory, preserving other sessions."),
         ("/session", "List, switch, create, or delete inactive session data and its session-scoped Hindsight documents."),
         ("/sync", "Open session-scoped Live API Sync controls."),
-        ("/update", "Check the latest GitHub release and open a confirmation panel before updating and restarting."),
+        ("/update", "Check the latest GitHub release; if already current, no update or restart is performed. Otherwise open a confirmation panel before updating and restarting."),
     ],
     "characters": [
         ("/providers", "Open the single provider/model catalog; adapter-enabled entries can generate, catalog-only entries are view-only."),

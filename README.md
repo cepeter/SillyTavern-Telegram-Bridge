@@ -280,7 +280,7 @@ Core commands:
 /reset                        Confirm active-session reset, purge only its Hindsight memory, and restart from the character opening greeting
 /session                      Switch, create, or safely delete an inactive session
 /sync                         Open Live API Sync controls
-/update                       Check the latest version and open a confirmed update panel
+/update                       Check the latest version; confirm only when an update is available
 /providers                    Open the synchronized provider catalog
 /character                    Open character panel: select, info, delete, upload guidance
 /persona                      Choose, create, edit, or disable a user persona

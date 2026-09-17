@@ -19,6 +19,8 @@ def latest_bridge_release() -> tuple[str, str]:
 
 
 def update_menu_text(current: str, latest: str, notes: str) -> str:
+    if latest == current:
+        return f"Bridge update\nInstalled: v{current}\nLatest: v{latest}\nStatus: Already latest\nNo update is required."
     return f"Bridge update\nInstalled: v{current}\nLatest: v{latest}\n\nRelease notes:\n{notes}\n\nChoose Confirm update only after reviewing the changes."
 
 
@@ -28,7 +30,7 @@ def send_update_menu(token: str, chat_id: str, message_id: int | None = None) ->
         latest, notes = latest_bridge_release()
     except Exception as exc:
         latest, notes = "unavailable", f"Could not check GitHub: {exc}"
-    rows = [[{"text": "✅ Confirm update", "callback_data": "update:confirm"}, {"text": "❌ Cancel", "callback_data": "update:cancel"}]]
+    rows = [[{"text": "✅ Already latest", "callback_data": "update:no_change"}, {"text": "❌ Cancel", "callback_data": "update:cancel"}]] if latest == current else [[{"text": "✅ Confirm update", "callback_data": "update:confirm"}, {"text": "❌ Cancel", "callback_data": "update:cancel"}]]
     payload = {"chat_id": chat_id, "text": update_menu_text(current, latest, notes), "reply_markup": {"inline_keyboard": rows}}
     method = "editMessageText" if message_id else "sendMessage"
     if message_id:
@@ -37,6 +39,13 @@ def send_update_menu(token: str, chat_id: str, message_id: int | None = None) ->
 
 
 def _run_update() -> str:
+    current = installed_bridge_version()
+    try:
+        latest, _notes = latest_bridge_release()
+    except Exception as exc:
+        return f"Update refused: could not verify latest release ({exc})."
+    if latest == current:
+        return f"Already latest (v{current}); no update was performed."
     if subprocess.run(["git", "status", "--porcelain"], cwd=UPDATE_REPO_DIR, capture_output=True, text=True, timeout=20).stdout.strip():
         return "Update refused: local repository has uncommitted changes."
     subprocess.run(["git", "fetch", "origin", "main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -53,6 +62,9 @@ def handle_update_callback(token: str, callback: dict, data: str, chat_id: str) 
         return False
     answer_callback(token, str(callback.get("id", "")), "Update")
     if data == "update:cancel":
+        remove_inline_keyboard(token, callback)
+        return True
+    if data == "update:no_change":
         remove_inline_keyboard(token, callback)
         return True
     if data == "update:confirm":
