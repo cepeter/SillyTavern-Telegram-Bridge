@@ -207,11 +207,15 @@ def _merge_system_prompt_json(result: dict[str, dict[str, str]], path: Path) -> 
     if isinstance(raw, str) and raw.strip():
         result[path.stem] = {"name": path.stem.replace("_", " ").replace("-", " ").title(), "prompt": raw}
         return
-    if isinstance(raw, dict) and str(raw.get("prompt") or "").strip():
-        key = str(raw.get("id") or path.stem)
-        result[key] = {"name": str(raw.get("name") or path.stem), "prompt": str(raw["prompt"])}
-        return
+    if isinstance(raw, dict):
+        prompt = str(raw.get("prompt") or raw.get("content") or "")
+        if prompt.strip():
+            key = str(raw.get("id") or path.stem)
+            result[key] = {"name": str(raw.get("name") or path.stem), "prompt": prompt}
+            return
     for key, value in (raw.items() if isinstance(raw, dict) else []):
+        if str(key) in {"id", "name", "prompt", "content", "post_history"}:
+            continue
         if isinstance(value, str):
             result[str(key)] = {"name": str(key), "prompt": value}
         elif isinstance(value, dict) and str(value.get("prompt") or "").strip():

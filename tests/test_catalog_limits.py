@@ -66,6 +66,16 @@ class CatalogLimitTests(unittest.TestCase):
         self.assertEqual(len(rt.load_system_prompts()), 40)
         self.assertEqual(rt.character_card_paths()[-1].name, "39.png")
 
+    def test_native_system_prompt_json_uses_content_and_name(self):
+        native = rt.SYSTEM_PROMPTS_DIR / "Native Prompt.json"
+        native.write_text(json.dumps({"name": "Native Prompt", "content": "native content", "post_history": "ignored by bridge"}), encoding="utf-8")
+        prompts = rt.load_system_prompts()
+        self.assertEqual(prompts["Native Prompt"]["name"], "Native Prompt")
+        self.assertEqual(prompts["Native Prompt"]["prompt"], "native content")
+        self.assertNotIn("name", prompts)
+        self.assertNotIn("content", prompts)
+        self.assertNotIn("post_history", prompts)
+
     def test_persona_panel_shows_at_most_40(self):
         personas = {f"p{index:02}.png": f"Persona {index}" for index in range(41)}
         settings = {"power_user": {"personas": personas, "persona_descriptions": {key: {"description": "d"} for key in personas}}}

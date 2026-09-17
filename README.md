@@ -169,7 +169,7 @@ SILLYTAVERN_PROVIDER_CONFIG=/path/to/private/providers.yaml
 SILLYTAVERN_BRIDGE_SOURCE_DIR=/path/to/sillytavern-telegram-bridge
 SILLYTAVERN_CHARACTER_DIR=/path/to/SillyTavern/data/default-user/characters
 SILLYTAVERN_WORLD_DIR=/path/to/SillyTavern/data/default-user/worlds
-SILLYTAVERN_SYSTEM_PROMPTS_DIR=/path/to/private/system-prompts
+SILLYTAVERN_SYSTEM_PROMPTS_DIR=/path/to/SillyTavern/data/default-user/sysprompt
 ```
 
 Provider-specific credentials are named by each private provider catalog entry's
@@ -251,7 +251,7 @@ are rejected before normal generation.
 /character          Open character management
 /persona            Open native Persona controls
 /world              Open World Info/lorebook controls
-/systemprompt       Choose a private TXT System Prompt
+/systemprompt       Choose a native SillyTavern System Prompt
 /note               Open Author's Note controls
 /providers          Open provider/model, Health, and Refresh controls
 ```
@@ -430,8 +430,12 @@ not supported.
 
 ### Prompts and lorebooks
 
-- `/systemprompt` selects one configured multiline TXT file. Prompt bodies stay
-  private and are applied at generation time; Telegram menus show only labels.
+- `/systemprompt` selects a native SillyTavern System Prompt from
+  `data/default-user/sysprompt/` (JSON `name` + `content`, plus TXT fallback).
+  Native `post_history` fields are currently ignored by the bridge. Prompt bodies
+  stay private and are applied at generation time; Telegram menus show only
+  labels. `SILLYTAVERN_SYSTEM_PROMPTS_DIR` can explicitly override the native
+  path when a different SillyTavern user profile is required.
 - `/note` controls the session Author's Note. `Off` clears it; `User input`
   collects the next scoped text message.
 - `/world` selects or disables native World Info files. Multiple validated
