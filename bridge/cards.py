@@ -61,38 +61,6 @@ def card_fields_from_file(name: str) -> dict[str, str]:
     path = safe_character_path(name) or CARD_FILE
     return card_fields(read_png_chara(path))
 
-def load_world_document(name: str) -> tuple[Path, dict]:
-    path = safe_world_path(name)
-    if path is None:
-        raise ValueError("World Info file not found")
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError("World Info document must be a JSON object")
-    return path, data
-
-
-def save_world_document(path: Path, data: dict) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
-
-
-def world_entries(data: dict) -> tuple[list[str], list[dict]]:
-    raw = data.get("entries", {})
-    if isinstance(raw, dict):
-        keys = [str(key) for key in raw]
-        return keys, [dict(raw[key]) if isinstance(raw[key], dict) else {} for key in raw]
-    values = list(raw or [])
-    return [str(index) for index in range(len(values))], [dict(item) if isinstance(item, dict) else {} for item in values]
-
-
-def replace_world_entries(data: dict, keys: list[str], entries: list[dict]) -> None:
-    if isinstance(data.get("entries"), dict):
-        data["entries"] = {key: entry for key, entry in zip(keys, entries)}
-    else:
-        data["entries"] = entries
-
-
 def world_file_paths() -> list[Path]:
     if not WORLD_DIR.exists():
         return []

@@ -21,15 +21,6 @@ def _image_provider_specs() -> list[tuple[str, dict, str]]:
     return result
 
 
-def image_provider_choices() -> list[tuple[str, str]]:
-    choices = []
-    for provider_id, spec, _default in _image_provider_specs():
-        label = str(spec.get("name") or provider_id)
-        for model in spec.get("image_models") or []:
-            choices.append((f"{label} · {model}", f"{provider_id}::{model}"))
-    return choices
-
-
 def _resolve_image_provider(selection: str = "") -> tuple[str, dict, str]:
     requested_provider, requested_model = (selection.split("::", 1) + [""])[:2] if "::" in selection else ("", selection)
     for provider_id, spec, default_model in _image_provider_specs():

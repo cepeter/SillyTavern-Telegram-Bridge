@@ -93,19 +93,6 @@ def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str,
     regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(row[0]), new_text.strip()[:12000], operation_id=operation_id)
 
 
-def coerce_world_value(field: str, value: str):
-    if field in {"key", "keysecondary"}:
-        return [value]
-    if field == "order":
-        return int(value)
-    if field in {"constant", "disable"}:
-        normalized = value.casefold()
-        if normalized not in {"true", "false"}:
-            raise ValueError(f"{field} must be true or false")
-        return normalized == "true"
-    return value
-
-
 def send_stscript_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
     """Show the allowlisted STscript actions without accepting arbitrary scripts."""
     payload = {"chat_id": chat_id, "text": "Safe STscript actions:\n\nReset clears only the active session after confirmation.", "reply_markup": {"inline_keyboard": [[{"text": "♻️ Reset", "callback_data": "enum:stscript:reset"}], [{"text": "❌ Close", "callback_data": "enum:stscript:cancel"}]]}}
