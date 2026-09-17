@@ -409,26 +409,23 @@ continuation/recovery. A streaming response with no visible content is retried
 with larger budgets up to the configured recovery ceiling. `/continue` remains
 available when another segment is still needed.
 
-### Response formatting and automatic voice
+### User reply formatting
 
-Use the following convention in model replies:
+Use the following convention when sending a user message:
 
 ```text
-**She steps back and watches the doorway.**  Narrative/action; stays as text
-"I heard something outside."                   Dialogue; eligible for auto-TTS
-The door opens slowly.                          Unquoted text; stays as text
+*She walks toward the doorway.*  User action/narration
+"I heard something outside."       User dialogue
+I heard something outside.           User dialogue without a marker
+**text**                             Literal text; not an action marker
 ```
 
-When `/voice on` is enabled, the bridge extracts only complete dialogue spans in
-straight double quotes (`"..."`) for TTS. Narrative/action—including `**bold
-narrative**`—and other unquoted text are never synthesized. The original model
-reply remains unchanged in Telegram and SQLite. Smart/curly quotes are not the
-TTS delimiter.
-
-For incoming user messages, the prompt formatter recognizes single-star action
-spans (`*waves*`) and labels them as `User action`; `**text**` is preserved
-literally and is not treated as an action marker. This formatting changes only
-the prompt representation, not the stored transcript.
+The bridge recognizes single-star spans (`*text*`) and presents them to the
+model as `User action`; the remaining text is presented as `User dialogue`.
+Double-star spans (`**text**`) are preserved literally and are not interpreted
+as actions. Quotation marks do not trigger TTS for user messages; automatic
+voice replies apply only to eligible quoted dialogue in model responses when
+`/voice on` is enabled. The stored user transcript remains unchanged.
 
 ## Characters, Personas, prompts, and World Info
 
