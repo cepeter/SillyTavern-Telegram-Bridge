@@ -154,9 +154,11 @@ class StateIntegrityTests(unittest.TestCase):
         )
         calls = []
         original_retain = rt.retain_session_memory
+        original_card = rt.card_fields_from_file
         rt.retain_session_memory = lambda _db, chat_id, current, fields: calls.append(
             (chat_id, current["session_id"])
         )
+        rt.card_fields_from_file = lambda _filename: {"name": "Test"}
         try:
             rt.apply_sync_snapshot(
                 self.db,
@@ -168,6 +170,7 @@ class StateIntegrityTests(unittest.TestCase):
             )
         finally:
             rt.retain_session_memory = original_retain
+            rt.card_fields_from_file = original_card
         updated = rt.load_session(self.db, "chat", session["session_id"], rt.DEFAULT_MODEL)
         self.assertEqual(updated["persona_id"], "")
         self.assertEqual(updated["world_file"], "")
