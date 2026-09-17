@@ -24,8 +24,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         send_help_menu(token, chat_id)
         return True
     if command == "/new":
-        new_session = create_session(db, chat_id, model, session_id=f"job-{operation_id}" if operation_id is not None else None)
-        send_text(token, chat_id, f"New session started: {new_session['session_id']}")
+        start_session_name_input(db, token, chat_id, session)
         return True
     if command == "/status":
         count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()[0]

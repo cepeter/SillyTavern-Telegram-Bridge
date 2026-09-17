@@ -1,0 +1,131 @@
+import json
+import unittest
+
+import bridge.runtime as rt
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode()
+
+
+class GenerationContinuationTests(unittest.TestCase):
+    def setUp(self):
+        self.original_resolve = rt.resolve_provider_model
+        self.original_spec = rt.get_provider_spec
+        self.original_urlopen = rt.strict_urlopen
+        self.old_key = rt.os.environ.get("TEST_OPENROUTER_KEY")
+        self.old_hosts = rt.os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
+        rt.resolve_provider_model = lambda _model: ("openrouter", "test/model")
+        rt.get_provider_spec = lambda _provider: {
+            "transport": "openai_compatible",
+            "api_endpoint": "https://openrouter.ai/api/v1",
+            "api_key_env": "TEST_OPENROUTER_KEY",
+        }
+        rt.os.environ["TEST_OPENROUTER_KEY"] = "test-only"
+        rt.os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "openrouter.ai"
+
+    def tearDown(self):
+        rt.resolve_provider_model = self.original_resolve
+        rt.get_provider_spec = self.original_spec
+        rt.strict_urlopen = self.original_urlopen
+        if self.old_key is None:
+            rt.os.environ.pop("TEST_OPENROUTER_KEY", None)
+        else:
+            rt.os.environ["TEST_OPENROUTER_KEY"] = self.old_key
+        if self.old_hosts is None:
+            rt.os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
+        else:
+            rt.os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = self.old_hosts
+
+    def test_length_finish_adds_one_bounded_continuation(self):
+        payloads = [
+            {"choices": [{"message": {"content": "Part one."}, "finish_reason": "length"}]},
+            {"choices": [{"message": {"content": "Part two."}, "finish_reason": "stop"}]},
+        ]
+        requests = []
+
+        def fake_urlopen(request, timeout):
+            requests.append(json.loads(request.data.decode()))
+            return _FakeResponse(payloads.pop(0))
+
+        rt.strict_urlopen = fake_urlopen
+        result = rt.generate_text(
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings=dict(rt.GENERATION_DEFAULTS),
+        )
+
+        self.assertEqual(result, "Part one. Part two.")
+        self.assertEqual(len(requests), 2)
+        self.assertEqual([item["role"] for item in requests[1]["messages"][-2:]], ["assistant", "user"])
+        self.assertEqual(requests[1]["messages"][-2]["content"], "Part one.")
+        self.assertIn("exact ending", requests[1]["messages"][-1]["content"])
+
+    def test_failed_automatic_continuation_keeps_first_segment(self):
+        calls = 0
+
+        def fake_urlopen(_request, timeout):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return _FakeResponse(
+                    {"choices": [{"message": {"content": "Partial but usable."}, "finish_reason": "length"}]}
+                )
+            raise RuntimeError("temporary provider failure")
+
+        rt.strict_urlopen = fake_urlopen
+        result = rt.generate_text(
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings=dict(rt.GENERATION_DEFAULTS),
+        )
+
+        self.assertEqual(result, "Partial but usable.")
+        self.assertEqual(calls, 2)
+
+    def test_auto_language_render_returns_original_without_backend_call(self):
+        original_generate = rt.generate_text
+        rt.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("auto must not render"))
+        try:
+            result = rt.render_response_language("", "model", "original", "auto", "session", {})
+        finally:
+            rt.generate_text = original_generate
+        self.assertEqual(result, "original")
+
+    def test_fixed_language_render_uses_minimal_indonesian_rewrite(self):
+        captured = {}
+        original_generate = rt.generate_text
+
+        def fake_generate(api_key, model, messages, session_id="telegram", settings=None, **_kwargs):
+            captured.update({"messages": messages, "session_id": session_id, "settings": settings})
+            return "hasil Indonesia"
+
+        rt.generate_text = fake_generate
+        try:
+            result = rt.render_response_language(
+                "", "model", "English source", "id", "telegram:chat:session", dict(rt.GENERATION_DEFAULTS)
+            )
+        finally:
+            rt.generate_text = original_generate
+        self.assertEqual(result, "hasil Indonesia")
+        self.assertEqual(captured["session_id"], "telegram:chat:session:language-render")
+        self.assertIn("Bahasa Indonesia (id)", captured["messages"][0]["content"])
+        self.assertEqual(captured["messages"][1]["content"], "<source_text>\nEnglish source\n</source_text>")
+        self.assertEqual(captured["settings"]["temperature"], 0.2)
+        self.assertEqual(captured["settings"]["reasoning_budget"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

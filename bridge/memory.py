@@ -16,6 +16,120 @@ def hindsight_client():
     return Hindsight(base_url=base_url, api_key=api_key, timeout=30.0, user_agent="SillyTavernTelegramBridge/1.0")
 
 
+_HINDSIGHT_SESSION_LOCKS: dict[tuple[str, str], threading.RLock] = {}
+_HINDSIGHT_SESSION_LOCKS_GUARD = threading.Lock()
+
+
+def hindsight_session_lock(chat_id: str, session_id: str) -> threading.RLock:
+    key = (str(chat_id), str(session_id))
+    with _HINDSIGHT_SESSION_LOCKS_GUARD:
+        return _HINDSIGHT_SESSION_LOCKS.setdefault(key, threading.RLock())
+
+
+def hindsight_session_prefix(session_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", str(session_id)).strip("-.")[:80] or "session"
+    digest = hashlib.sha256(str(session_id).encode("utf-8")).hexdigest()[:12]
+    return f"st-session-{safe}-{digest}"
+
+
+def hindsight_conversation_document_id(session_id: str) -> str:
+    return hindsight_session_prefix(session_id) + "-conversation"
+
+
+def hindsight_explicit_document_id(session_id: str, fact: str) -> str:
+    digest = hashlib.sha256(fact.strip().encode("utf-8")).hexdigest()[:32]
+    return hindsight_session_prefix(session_id) + "-explicit-" + digest
+
+
+def _record_hindsight_document(chat_id: str, session_id: str, document_id: str, kind: str) -> None:
+    mapping_db = db_connect()
+    try:
+        mapping_db.execute(
+            "INSERT OR REPLACE INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
+            (str(chat_id), str(session_id), str(document_id), str(kind), time.time()),
+        )
+        mapping_db.commit()
+    finally:
+        mapping_db.close()
+
+
+def _hindsight_not_found(exc: Exception) -> bool:
+    status = getattr(exc, "status", None) or getattr(exc, "status_code", None)
+    return status == 404 or "404" in str(exc)
+
+
+async def _listed_hindsight_document_ids(api, bank_id: str, **filters) -> set[str]:
+    found = set()
+    offset = 0
+    while True:
+        result = await api.list_documents(bank_id=bank_id, limit=1000, offset=offset, **filters)
+        items = list(getattr(result, "items", []) or [])
+        for item in items:
+            document_id = item.get("id") if isinstance(item, dict) else getattr(item, "id", "")
+            if document_id:
+                found.add(str(document_id))
+        offset += len(items)
+        if not items or offset >= int(getattr(result, "total", 0) or 0):
+            break
+    return found
+
+
+async def _delete_hindsight_session_documents(client, bank_id: str, session_id: str, mapped_ids: set[str]) -> int:
+    api = client.documents
+    tag = f"session:{session_id}"
+    prefix = hindsight_session_prefix(session_id)
+    try:
+        tagged = await _listed_hindsight_document_ids(api, bank_id, tags=[tag], tags_match="any_strict")
+        prefixed = await _listed_hindsight_document_ids(api, bank_id, q=prefix)
+    except Exception as exc:
+        if _hindsight_not_found(exc):
+            return 0
+        raise
+    document_ids = tagged | prefixed | set(mapped_ids) | {f"st-session-{session_id}"}
+    deleted = 0
+    for document_id in sorted(document_ids):
+        try:
+            await api.delete_document(bank_id=bank_id, document_id=document_id)
+            deleted += 1
+        except Exception as exc:
+            if not _hindsight_not_found(exc):
+                raise
+    remaining = (
+        await _listed_hindsight_document_ids(api, bank_id, tags=[tag], tags_match="any_strict")
+        | await _listed_hindsight_document_ids(api, bank_id, q=prefix)
+    )
+    if remaining:
+        raise RuntimeError("Hindsight session documents remain after deletion")
+    return deleted
+
+
+async def _delete_hindsight_session_documents_and_close(client, bank_id: str, session_id: str, mapped_ids: set[str]) -> int:
+    try:
+        return await _delete_hindsight_session_documents(client, bank_id, session_id, mapped_ids)
+    finally:
+        api_client = getattr(client.documents, "api_client", None)
+        if api_client is not None:
+            await api_client.close()
+
+
+def purge_hindsight_session(db: sqlite3.Connection, chat_id: str, session_id: str) -> int:
+    """Delete only documents attributable to one session, failing closed."""
+    with hindsight_session_lock(chat_id, session_id):
+        mapped_ids = {
+            str(row[0]) for row in db.execute(
+                "SELECT document_id FROM hindsight_documents WHERE chat_id=? AND session_id=?",
+                (str(chat_id), str(session_id)),
+            ).fetchall()
+        }
+        try:
+            return asyncio.run(_delete_hindsight_session_documents_and_close(
+                hindsight_client(), hindsight_bank_id(chat_id), str(session_id), mapped_ids,
+            ))
+        except Exception as exc:
+            logging.error("Hindsight session purge failed for %s/%s", chat_id, session_id, exc_info=True)
+            raise RuntimeError("Hindsight session memory cleanup failed") from exc
+
+
 def purge_hindsight_bank(chat_id: str) -> None:
     """Delete and recreate the entire per-chat Hindsight bank."""
     client = hindsight_client()
@@ -80,19 +194,33 @@ def recall_memory_context(db: sqlite3.Connection, chat_id: str, session: dict[st
 
 
 def _retain_session_memory(chat_id: str, session: dict[str, str], character_name: str, conversation: str) -> None:
-    try:
-        client = hindsight_client()
-        client.retain(
-            bank_id=hindsight_bank_id(chat_id),
-            content=conversation,
-            context=f"SillyTavern Telegram roleplay session with character {character_name}",
-            document_id=f"st-session-{session['session_id']}",
-            metadata={"source": "sillytavern_telegram_bridge", "session_id": session["session_id"], "character": character_name},
-            tags=hindsight_tags(chat_id, session["session_id"], character_name),
-            retain_async=True,
-        )
-    except Exception:
-        logging.warning("Hindsight retain unavailable for chat %s", chat_id, exc_info=True)
+    session_id = str(session["session_id"])
+    with hindsight_session_lock(chat_id, session_id):
+        session_db = db_connect()
+        try:
+            exists = session_db.execute(
+                "SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?",
+                (str(chat_id), session_id),
+            ).fetchone()
+        finally:
+            session_db.close()
+        if not exists:
+            return
+        document_id = hindsight_conversation_document_id(session_id)
+        try:
+            client = hindsight_client()
+            client.retain(
+                bank_id=hindsight_bank_id(chat_id),
+                content=conversation,
+                context=f"SillyTavern Telegram roleplay session with character {character_name}",
+                document_id=document_id,
+                metadata={"source": "sillytavern_telegram_bridge", "session_id": session_id, "character": character_name},
+                tags=hindsight_tags(chat_id, session_id, character_name),
+                retain_async=False,
+            )
+            _record_hindsight_document(chat_id, session_id, document_id, "conversation")
+        except Exception:
+            logging.warning("Hindsight retain unavailable for chat %s", chat_id, exc_info=True)
 
 
 def retain_session_memory(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str]) -> None:
@@ -109,20 +237,27 @@ def retain_session_memory(db: sqlite3.Connection, chat_id: str, session: dict[st
 def remember_fact(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], fact: str) -> bool:
     if not fact.strip():
         return False
-    try:
-        client = hindsight_client()
-        client.retain(
-            bank_id=hindsight_bank_id(chat_id),
-            content=f"User explicitly stated: {fact.strip()[:4000]}",
-            context=f"Explicit user memory request for character {fields['name']}",
-            document_id="st-explicit-" + hashlib.sha256(fact.strip().encode("utf-8")).hexdigest()[:32],
-            tags=hindsight_tags(chat_id, session["session_id"], fields["name"]),
-            retain_async=True,
-        )
-        return True
-    except Exception:
-        logging.warning("Hindsight explicit retain unavailable for chat %s", chat_id, exc_info=True)
-        return False
+    session_id = str(session["session_id"])
+    with hindsight_session_lock(chat_id, session_id):
+        if not db.execute("SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (str(chat_id), session_id)).fetchone():
+            return False
+        document_id = hindsight_explicit_document_id(session_id, fact)
+        try:
+            client = hindsight_client()
+            client.retain(
+                bank_id=hindsight_bank_id(chat_id),
+                content=f"User explicitly stated: {fact.strip()[:4000]}",
+                context=f"Explicit user memory request for character {fields['name']}",
+                document_id=document_id,
+                metadata={"source": "sillytavern_telegram_bridge", "session_id": session_id, "character": fields["name"]},
+                tags=hindsight_tags(chat_id, session_id, fields["name"]),
+                retain_async=False,
+            )
+            _record_hindsight_document(chat_id, session_id, document_id, "explicit")
+            return True
+        except Exception:
+            logging.warning("Hindsight explicit retain unavailable for chat %s", chat_id, exc_info=True)
+            return False
 
 
 def handle_memory_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict[str, str], command_text: str) -> None:

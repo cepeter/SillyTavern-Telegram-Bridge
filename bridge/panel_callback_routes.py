@@ -161,6 +161,7 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
 def handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     """Handle character selection, info, upload, and deletion callbacks."""
     if data == "character:menu":
+        answer_callback(token, str(callback.get("id", "")), "Refreshed")
         send_character_menu(token, chat_id, session["character_file"], message.get("message_id"))
         return True
     if data == "character:info":
@@ -304,17 +305,8 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
             set_meta(db, f"character_session_input:{chat_id}", "")
             remove_inline_keyboard(token, callback)
         elif value == "new":
-            new_session = create_session(db, chat_id, DEFAULT_MODEL, session_id=f"job-{operation_id}" if operation_id is not None else None)
-            answer_callback(token, str(callback.get("id", "")), "New session")
-            pending_character = pending_character_for_session(db, chat_id)
-            if pending_character:
-                update_session(db, chat_id, new_session["session_id"], operation_id=operation_id, operation_kind="character_select", character_file=Path(pending_character["character_file"]).name)
-                set_meta(db, f"character_session_input:{chat_id}", "")
-            remove_inline_keyboard(token, callback)
-            if pending_character:
-                send_text(token, chat_id, f"Character selected for new session: {pending_character.get('character_name') or Path(pending_character['character_file']).stem}\nNew session started: {new_session['session_id']}")
-            else:
-                send_text(token, chat_id, f"New session started: {new_session['session_id']}")
+            answer_callback(token, str(callback.get("id", "")), "Enter session name")
+            start_session_name_input(db, token, chat_id, session, message=message)
         else:
             available = {item["session_id"] for item in list_sessions(db, chat_id)}
             if value in available:

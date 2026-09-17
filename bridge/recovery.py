@@ -10,7 +10,7 @@ import contextvars
 
 _OPERATION_CONTEXT = contextvars.ContextVar("bridge_operation_id", default=None)
 _ORIGINAL_PROCESS_MESSAGE = process_message
-_ORIGINAL_EXPORT_SESSION = export_session
+
 
 
 def begin_operation(db, operation_id, kind):
@@ -175,6 +175,7 @@ def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=N
         settings=get_generation_settings(db, chat_id, session_id),
     )
     reply += rag_citation_footer(db, chat_id, user_text, rag_bundle)
+    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
     last_user_rowid = int(rows[last_user_index][0])
     old_message_ids = _outgoing_ids_after(db, chat_id, session_id, last_user_rowid)
     _set_operation_payload(db, operation_id, {"old_message_ids": old_message_ids, "user_rowid": last_user_rowid})
@@ -242,6 +243,7 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
         settings=get_generation_settings(db, chat_id, session_id),
     )
     reply += rag_citation_footer(db, chat_id, instruction, rag_bundle)
+    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
     combined = assistant_row[2].rstrip() + " " + reply.lstrip()
     old_message_ids = _message_ids_from_rows(
         db.execute("SELECT telegram_message_id,telegram_message_ids FROM messages WHERE rowid=?", (int(assistant_row[0]),)).fetchall()
@@ -313,6 +315,7 @@ def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_ro
         settings=get_generation_settings(db, chat_id, session_id),
     )
     reply += rag_citation_footer(db, chat_id, new_text, rag_bundle)
+    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
     old_message_ids = _outgoing_ids_after(db, chat_id, session_id, int(user_rowid))
     _set_operation_payload(db, operation_id, {"old_message_ids": old_message_ids, "user_rowid": int(user_rowid)})
 
@@ -335,12 +338,6 @@ def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_ro
     retain_session_memory(db, chat_id, session, fields)
     send_reply(token, chat_id, f"✏️ Edited message regenerated.\n\n{reply}", db, session_id, assistant_rowid)
     _finish_operation(db, operation_id, "edit")
-
-
-def export_session(token, db, session, fields, chat_id, operation_id=None):
-    if operation_id is None:
-        operation_id = _OPERATION_CONTEXT.get()
-    return _ORIGINAL_EXPORT_SESSION(token, db, session, fields, chat_id, operation_id=operation_id)
 
 
 def _operation_command(text):
@@ -390,7 +387,7 @@ def process_message(db, token, api_key, model, fields, chat_id, text, telegram_m
 
 
 def sync_status_text(db: sqlite3.Connection, chat_id: str, session: dict[str, str]) -> str:
-    """Render the safe manual-sync status for the active session."""
+    """Render Live API Sync status for the active session."""
     binding = ensure_sync_binding(db, chat_id, session["session_id"])
     count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0]
     if binding["last_synced_at"]:
@@ -398,23 +395,20 @@ def sync_status_text(db: sqlite3.Connection, chat_id: str, session: dict[str, st
         last = f"{binding['last_direction']} at {timestamp}"
     else:
         last = "never"
-    return ("Manual SillyTavern sync\n\n"
-            "This panel transfers a compatible JSONL copy; it does not overwrite the active session.\n"
+    return ("Live Sync\n\n"
+            "Live Sync uses the local SillyTavern API.\n"
             f"Session: {session['session_id']}\n"
             f"Messages: {count}\n"
             f"Sync ID: {binding['sync_id']}\n"
-            f"Last transfer: {last}\n\n{phase2_sync_status_line(db, chat_id, session)}\n{phase3_sync_status_line(db, chat_id, session['session_id'])}")
+            f"Last sync: {last}\n\n{phase3_sync_status_line(db, chat_id, session['session_id'])}")
 
 
 def send_sync_menu(token: str, chat_id: str, db: sqlite3.Connection, session: dict[str, str], message_id: int | None = None) -> None:
-    """Send or edit the manual bidirectional SillyTavern sync panel."""
+    """Send or edit the Live API Sync panel."""
     payload = {
         "chat_id": chat_id,
         "text": sync_status_text(db, chat_id, session),
         "reply_markup": {"inline_keyboard": [
-            [{"text": "⬆️ Export → SillyTavern", "callback_data": "sync:export"}],
-            [{"text": "⬇️ Import ← SillyTavern", "callback_data": "sync:import"}],
-            [{"text": "⚡ Auto sync: toggle", "callback_data": "sync:auto"}],
             [{"text": "🚀 Realtime API: toggle", "callback_data": "sync:realtime"}],
             [{"text": "🔁 Sync now", "callback_data": "sync:now"}],
             [{"text": "🔄 Refresh status", "callback_data": "sync:status"}],
@@ -428,28 +422,8 @@ def send_sync_menu(token: str, chat_id: str, db: sqlite3.Connection, session: di
     telegram_request(token, method, payload)
 
 
-def send_sync_import_instructions(token: str, chat_id: str, message_id: int | None = None) -> None:
-    """Explain the safe, new-session-only SillyTavern JSONL import path."""
-    payload = {
-        "chat_id": chat_id,
-        "text": ("Import from SillyTavern\n\n"
-                 "Send a SillyTavern-compatible .jsonl file as a Telegram Document. "
-                 "The bridge validates it and creates a separate session; the active session data is preserved and the imported session is selected afterward.\n\n"
-                 "Use /cancel to leave this instruction."),
-        "reply_markup": {"inline_keyboard": [[
-            {"text": "⬅️ Back", "callback_data": "sync:menu"},
-            {"text": "❌ Close", "callback_data": "sync:close"},
-        ]]},
-    }
-    method = "sendMessage"
-    if message_id:
-        method = "editMessageText"
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
-
-
 def handle_sync_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
-    """Handle manual export/import instructions and sync status callbacks."""
+    """Handle Live API Sync callbacks."""
     if not data.startswith("sync:"):
         return False
     action = data.split(":", 1)[1]
@@ -460,33 +434,17 @@ def handle_sync_callback(db, token, callback, answer_callback, data, chat_id, me
     elif action in {"menu", "status"}:
         answer_callback(token, str(callback.get("id", "")), "Sync status")
         send_sync_menu(token, chat_id, db, session, message_id)
-    elif action == "import":
-        answer_callback(token, str(callback.get("id", "")), "Send JSONL")
-        send_sync_import_instructions(token, chat_id, message_id)
-    elif action == "auto":
-        result = phase2_toggle_auto(db, chat_id, session_id)
-        answer_callback(token, str(callback.get("id", "")), result[:200])
-        send_sync_menu(token, chat_id, db, session, message_id)
     elif action == "realtime":
         result = phase3_toggle_realtime(db, chat_id, session_id)
         answer_callback(token, str(callback.get("id", "")), result[:200])
         send_sync_menu(token, chat_id, db, session, message_id)
     elif action == "now":
-        binding = _phase2_binding(db, chat_id, session_id)
-        if binding.get("realtime_enabled"):
-            try:
-                result = phase3_sync_now(db, chat_id, session_id)
-            except (SillyTavernApiError, ValueError) as exc:
-                _phase3_disable(db, chat_id, session_id, str(exc))
-                result = f"realtime API unavailable: {exc}"
-        else:
-            result = phase2_sync_now(db, chat_id, session_id)
+        try:
+            result = phase3_sync_now(db, chat_id, session_id)
+        except (SillyTavernApiError, ValueError) as exc:
+            _phase3_disable(db, chat_id, session_id, str(exc))
+            result = f"Live API unavailable: {exc}"
         answer_callback(token, str(callback.get("id", "")), result[:200])
-        send_sync_menu(token, chat_id, db, session, message_id)
-    elif action == "export":
-        answer_callback(token, str(callback.get("id", "")), "Export queued")
-        fields = card_fields_from_file(session["character_file"])
-        export_session(token, db, session, fields, chat_id, operation_id=operation_id)
         send_sync_menu(token, chat_id, db, session, message_id)
     else:
         answer_callback(token, str(callback.get("id", "")), "Unknown sync action")

@@ -113,13 +113,13 @@ def group_setup_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> 
     return state
 
 
-def start_group_session(db: sqlite3.Connection, chat_id: str, default_model: str) -> dict[str, str]:
+def start_group_session(db: sqlite3.Connection, chat_id: str, default_model: str, title: str = "New group session", session_id: str | None = None) -> dict[str, str]:
     """Create a clean topic-local session for the New group session wizard."""
-    session_id = f"group-{time.time_ns()}"
-    session = create_session(db, chat_id, default_model, session_id=session_id)
+    session_id = session_id or f"group-{time.time_ns()}"
+    session = create_session(db, chat_id, default_model, session_id=session_id, title=title)
     update_session(db, chat_id, session_id, character_file=DEFAULT_CHARACTER_FILE, world_file="")
     save_group_state(db, chat_id, session_id, {
-        "title": "New group session",
+        "title": title,
         "enabled": False,
         "turn_index": 0,
         "mode": "round_robin",
@@ -203,10 +203,7 @@ def send_group_mode_menu(db: sqlite3.Connection, token: str, chat_id: str, sessi
 def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict, operation_id: int | str | None = None, sender_id: str = "") -> None:
     message_id = message.get("message_id")
     if data == "group:new_session":
-        new_session = start_group_session(db, chat_id, session.get("model_id") or DEFAULT_MODEL)
-        set_panel_session_context(new_session["session_id"])
-        close_panel_message(token, chat_id, {"message": message})
-        send_character_menu(token, chat_id, new_session["character_file"])
+        start_session_name_input(db, token, chat_id, session, kind="group", message=message)
     elif data == "group:menu":
         send_group_menu(db, token, chat_id, session, message_id)
     elif data == "group:add":

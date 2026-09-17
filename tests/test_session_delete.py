@@ -12,8 +12,12 @@ class SessionDeletionTests(unittest.TestCase):
         with rt._DB_SCHEMA_LOCK:
             rt._DB_SCHEMA_READY = False
         self.db = rt.db_connect()
+        self.original_purge = rt.purge_hindsight_session
+        self.purged = []
+        rt.purge_hindsight_session = lambda _db, chat_id, session_id: self.purged.append((chat_id, session_id)) or 0
 
     def tearDown(self):
+        rt.purge_hindsight_session = self.original_purge
         self.db.close()
         self.tmp.cleanup()
 
@@ -40,6 +44,24 @@ class SessionDeletionTests(unittest.TestCase):
         self.assertIsNotNone(rt.load_session(self.db, "chat", active["session_id"], rt.DEFAULT_MODEL))
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages WHERE session_id='inactive'").fetchone()[0], 0)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM group_sessions WHERE session_id='inactive'").fetchone()[0], 0)
+        self.assertEqual(self.purged, [("chat", "inactive")])
+
+    def test_hindsight_cleanup_failure_preserves_local_session(self):
+        active = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
+        inactive = rt.create_session(self.db, "chat", rt.DEFAULT_MODEL, session_id="preserved")
+        self.db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
+            ("chat", inactive["session_id"], "user", "keep", rt.time.time()),
+        )
+        self.db.commit()
+        rt.purge_hindsight_session = lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))
+
+        deleted, reason = rt.delete_session_data(self.db, "chat", inactive["session_id"], active["session_id"])
+
+        self.assertFalse(deleted)
+        self.assertIn("Hindsight cleanup failed", reason)
+        self.assertIsNotNone(self.db.execute("SELECT 1 FROM sessions WHERE chat_id='chat' AND session_id='preserved'").fetchone())
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages WHERE chat_id='chat' AND session_id='preserved'").fetchone()[0], 1)
 
     def test_active_session_and_busy_session_are_protected(self):
         active = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)

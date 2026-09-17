@@ -165,6 +165,8 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
     reasoning_budget = int(generation.get("reasoning_budget") or 0)
     if reasoning_budget > 0:
         body["reasoning"] = {"max_tokens": reasoning_budget}
+    elif (urllib.parse.urlparse(endpoint_base).hostname or "").casefold() == "openrouter.ai":
+        body["reasoning"] = {"enabled": False}
     headers = {
         "Authorization": f"Bearer {request_key}",
         "Content-Type": "application/json",
@@ -186,7 +188,37 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
             content = choices[0].get("message", {}).get("content") if choices else None
             if not content:
                 raise RuntimeError("backend returned no assistant content")
-            return str(content).strip()
+            content = str(content).strip()
+            finish_reason = choices[0].get("finish_reason") if choices else None
+            if finish_reason != "length":
+                return content
+
+            continuation_body = dict(body)
+            continuation_body["messages"] = list(body["messages"]) + [
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": "Continue from the exact ending without repeating existing text. Preserve the response language exactly. Output only the continuation.",
+                },
+            ]
+            continuation_request = urllib.request.Request(
+                endpoint,
+                data=json.dumps(continuation_body).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with strict_urlopen(continuation_request, timeout=180) as continuation_response:
+                    continuation_result = json.loads(continuation_response.read().decode("utf-8"))
+                continuation_choices = continuation_result.get("choices") or []
+                continuation = continuation_choices[0].get("message", {}).get("content") if continuation_choices else None
+            except Exception:
+                logging.warning("Automatic continuation failed; returning the first generated segment", exc_info=True)
+                return content
+            if not continuation:
+                logging.warning("Automatic continuation returned no assistant content; returning the first generated segment")
+                return content
+            return content.rstrip() + " " + str(continuation).lstrip()
 
         parts = []
         finish_reason = None
@@ -221,15 +253,45 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
         return content
 
 
+def render_response_language(api_key: str, model: str, text: str, language: str, session_id: str, settings: dict[str, object] | None = None) -> str:
+    """Render one completed visible response in a fixed target language."""
+    normalized = normalize_response_language(language or "auto")
+    if normalized == "auto" or not text.strip():
+        return text
+    label = response_language_label(normalized)
+    render_settings = dict(settings or GENERATION_DEFAULTS)
+    render_settings.update({"temperature": 0.2, "reasoning_budget": 0, "stop_sequences": ""})
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                f"You are a language renderer. Rewrite all supplied visible prose into natural {label} ({normalized}). "
+                "Preserve meaning, names, dialogue, markdown, action formatting, URLs, filenames, and code blocks. "
+                "You MUST translate every prose segment into the target language, even when the source is long or uses roleplay formatting. "
+                "Do not continue, summarize, censor, explain, or add content. "
+                "Output only the rendered text."
+            ),
+        },
+        {"role": "user", "content": "<source_text>\n" + text + "\n</source_text>"},
+    ]
+    return generate_text(api_key, model, messages, session_id=f"{session_id}:language-render", settings=render_settings)
+
+
+def render_session_response(api_key: str, session: dict[str, str], text: str, chat_id: str, settings: dict[str, object]) -> str:
+    session_id = str(session["session_id"])
+    return render_response_language(api_key, session["model_id"], text, session.get("response_language") or "auto", f"telegram:{chat_id}:{session_id}", settings)
+
+
 def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_text: str, history_rows: list[tuple[str, str]], image_data_uri: str | None = None, memory_context: str = "", session_summary: str = "", rag_context: str = "", group_context: str = "") -> list[dict]:
     current_persona = session["persona_id"]
     user_name = persona_name(current_persona) if current_persona else "Punto"
     history = [{"role": role, "content": content} for role, content in history_rows]
+    language_value = session.get("response_language") or "auto"
+    language_instruction = response_language_instruction(language_value)
     system = build_system_prompt(fields, user_name)
     session_system_prompt = str(session.get("system_prompt") or "").strip()
     if session_system_prompt:
         system += "\n\n## Session System Prompt\n" + replace_macros(session_system_prompt, fields, user_name)
-    system += "\n\n## Response language\n" + response_language_instruction(session.get("response_language") or "auto")
     persona = get_persona(current_persona) if current_persona else None
     if persona:
         description = str(persona.get("description") or "").strip()
@@ -255,10 +317,13 @@ def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_te
     post_history = replace_macros(fields["post_history_instructions"], fields, user_name)
     if post_history:
         system += f"\n\n## Final instruction\n{post_history}"
+    system += "\n\n## Mandatory response language\n" + language_instruction
     messages = [{"role": "system", "content": system}]
     if not history and fields["first_mes"]:
         messages.append({"role": "assistant", "content": replace_macros(fields["first_mes"], fields, user_name)})
     messages.extend(history)
+    if normalize_response_language(language_value) != "auto":
+        messages.append({"role": "system", "content": "## Runtime output constraint\n" + language_instruction})
     user_content = user_text
     if memory_context:
         user_content = "<untrusted_memory>\n" + memory_context[:HINDSIGHT_CONTEXT_MAX_CHARS] + "\n</untrusted_memory>\n\n" + user_content
@@ -304,6 +369,7 @@ def regenerate_last(db: sqlite3.Connection, token: str, api_key: str, session: d
     send_typing(token, chat_id)
     reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=get_generation_settings(db, chat_id, session_id))
     reply += rag_citation_footer(db, chat_id, user_text, rag_bundle)
+    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
     last_user_rowid = rows[last_user_index][0]
     delete_outgoing_messages(db, token, chat_id, session_id, last_user_rowid)
     db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?", (chat_id, session_id, last_user_rowid))
@@ -397,6 +463,7 @@ def continue_last(db: sqlite3.Connection, token: str, api_key: str, session: dic
     send_typing(token, chat_id)
     reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=get_generation_settings(db, chat_id, session_id))
     reply += rag_citation_footer(db, chat_id, instruction, rag_bundle)
+    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
     combined = assistant_row[2].rstrip() + " " + reply.lstrip()
     db.execute("UPDATE messages SET content=? WHERE rowid=?", (combined, assistant_row[0]))
     user_row = next((row for row in reversed(rows) if row[1] == "user" and row[0] < assistant_row[0]), None)
@@ -412,63 +479,3 @@ def continue_last(db: sqlite3.Connection, token: str, api_key: str, session: dic
     if operation_id is not None:
         record_operation(db, operation_id, "continue")
         db.commit()
-
-
-def export_session(token: str, db: sqlite3.Connection, session: dict[str, str], fields: dict[str, str], chat_id: str, operation_id: int | str | None = None) -> None:
-    if operation_id is not None:
-        if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "export"):
-            return
-    session_id = session["session_id"]
-    rows = db.execute("SELECT role,content,created_at FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session_id)).fetchall()
-    sync_binding = ensure_sync_binding(db, chat_id, session_id)
-    transcript_hash = sync_transcript_hash([(role, content) for role, content, _created_at in rows])
-    user_name = persona_name(session["persona_id"]) if session["persona_id"] else "Punto"
-    header = {
-        "chat_metadata": {
-            "name": session["title"],
-            "session_id": session_id,
-            "character": fields["name"],
-            "character_file": session["character_file"],
-            "model": session["model_id"],
-            "response_language": session.get("response_language") or "auto",
-            "persona": session["persona_id"],
-            "world_info": active_world_files(session["world_file"]),
-            "author_note": session["author_note"],
-            "generation_settings": get_generation_settings(db, chat_id, session_id),
-            "session_summary": get_session_summary(db, chat_id, session_id)[0],
-            "bridge_sync": {
-                "version": 1,
-                "sync_id": sync_binding["sync_id"],
-                "transcript_hash": transcript_hash,
-            },
-        },
-        "user_name": user_name,
-        "character_name": fields["name"],
-    }
-    lines = [json.dumps(header, ensure_ascii=False)]
-    for role, content, created_at in rows:
-        lines.append(json.dumps({
-            "name": user_name if role == "user" else fields["name"],
-            "is_user": role == "user",
-            "is_system": False,
-            "send_date": time.strftime("%Y-%m-%d @ %H:%M:%S", time.localtime(created_at)),
-            "mes": content,
-            "extra": {},
-        }, ensure_ascii=False))
-    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    safe_name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in fields["name"]).strip("_-") or "character"
-    safe_name = safe_name.encode("utf-8")[:64].decode("utf-8", "ignore").rstrip("_-")
-    safe_session = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in session_id).strip("_-") or "session"
-    safe_session = safe_session.encode("utf-8")[:64].decode("utf-8", "ignore").rstrip("_-")
-    path = EXPORT_DIR / f"{safe_name}-{safe_session}-{int(time.time())}.jsonl"
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    if send_document(token, chat_id, path, f"SillyTavern chat export: {fields['name']} / {session_id}"):
-        path.unlink(missing_ok=True)
-        if operation_id is not None:
-            record_operation(db, operation_id, "export")
-        record_sync_binding(db, chat_id, session_id, transcript_hash, "bridge_to_sillytavern")
-        if operation_id is not None:
-            db.commit()
-    else:
-        path.unlink(missing_ok=True)
-        send_text(token, chat_id, "Chat export failed.")

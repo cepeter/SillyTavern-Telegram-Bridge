@@ -230,7 +230,6 @@ def main() -> int:
     logging.info("Bridge started for card=%s model=%s", fields["name"], model)
     while True:
         try:
-            phase2_sync_poll(db)
             updates = telegram_request(token, "getUpdates", {"offset": offset, "timeout": 50, "allowed_updates": ["message", "edited_message", "callback_query"]})
             for update in updates:
                 update_id = int(update["update_id"])
@@ -320,7 +319,7 @@ def main() -> int:
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
                     job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "document", {"document": document, "model": model, "resolve_active": True})
                     queued = submit_durable_chat_job(db, "document", chat_id, process_document_job, token, chat_id, document, model, message_id, job_id)
-                    send_text(token, chat_id, "📄 Document queued for import/indexing." if queued else "📄 Document saved for import after restart.")
+                    send_text(token, chat_id, "📄 Document queued for character-card processing or Data Bank indexing." if queued else "📄 Document saved for processing after restart.")
                     complete_update(db, update_id, offset)
                     continue
                 if not text:

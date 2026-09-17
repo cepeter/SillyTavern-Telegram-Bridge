@@ -1,0 +1,193 @@
+"""Shared transcript and checkpoint primitives for Live API Sync."""
+
+import json
+from pathlib import Path
+import sqlite3
+import time
+
+
+SYNC_MAX_PAYLOAD_BYTES = SYNC_MAX_BYTES
+
+
+def sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
+    """Return the stable binding and Live API state for one bridge session."""
+    base = ensure_sync_binding(db, chat_id, session_id)
+    row = db.execute(
+        "SELECT conflict,last_error,last_checked_at,realtime_enabled,"
+        "realtime_failures,realtime_next_retry_at FROM sync_bindings "
+        "WHERE chat_id=? AND session_id=?",
+        (chat_id, session_id),
+    ).fetchone()
+    if row is None:
+        raise ValueError("sync binding could not be created")
+    base.update(dict(zip(
+        ("conflict", "last_error", "last_checked_at", "realtime_enabled", "realtime_failures", "realtime_next_retry_at"),
+        row,
+    )))
+    return base
+
+
+def sync_file_id(binding: dict[str, object]) -> str:
+    """Build a stable SillyTavern API chat id without a filesystem path."""
+    return "bridge-" + str(binding["sync_id"])
+
+
+def sync_local_rows(db: sqlite3.Connection, chat_id: str, session_id: str) -> list[tuple[int, str, str, float]]:
+    """Load the complete ordered bridge transcript."""
+    return db.execute(
+        "SELECT rowid,role,content,created_at FROM messages "
+        "WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
+        (chat_id, session_id),
+    ).fetchall()
+
+
+def _sync_swipe_records(db: sqlite3.Connection, chat_id: str, session_id: str, user_rowid: int) -> list[str]:
+    rows = db.execute(
+        "SELECT response FROM response_variants WHERE chat_id=? AND session_id=? "
+        "AND user_rowid=? ORDER BY variant_index",
+        (chat_id, session_id, user_rowid),
+    ).fetchall()
+    return [str(row[0]) for row in rows if str(row[0] or "")]
+
+
+def build_sync_records(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+    sync_id: str,
+    rows: list[tuple[int, str, str, float]],
+) -> list[dict]:
+    """Build API chat records with compatible SillyTavern swipes."""
+    user_name = persona_name(session["persona_id"]) if session["persona_id"] else "Punto"
+    transcript_hash = sync_transcript_hash([(role, content) for _rowid, role, content, _created_at in rows])
+    header = {
+        "chat_metadata": {
+            "name": session["title"],
+            "session_id": session["session_id"],
+            "character": fields["name"],
+            "character_file": session["character_file"],
+            "model": session["model_id"],
+            "response_language": session.get("response_language") or "auto",
+            "persona": session["persona_id"],
+            "world_info": active_world_files(session["world_file"]),
+            "author_note": session["author_note"],
+            "generation_settings": get_generation_settings(db, chat_id, session["session_id"]),
+            "session_summary": get_session_summary(db, chat_id, session["session_id"])[0],
+            "bridge_sync": {
+                "version": 3,
+                "transport": "api",
+                "sync_id": sync_id,
+                "transcript_hash": transcript_hash,
+            },
+        },
+        "user_name": user_name,
+        "character_name": fields["name"],
+    }
+    records = [header]
+    previous_user_rowid = None
+    for rowid, role, content, created_at in rows:
+        record = {
+            "name": user_name if role == "user" else fields["name"],
+            "is_user": role == "user",
+            "is_system": False,
+            "send_date": time.strftime("%Y-%m-%d @ %H:%M:%S", time.localtime(created_at)),
+            "mes": content,
+            "extra": {},
+        }
+        if role == "user":
+            previous_user_rowid = rowid
+        elif previous_user_rowid is not None:
+            variants = _sync_swipe_records(db, chat_id, session["session_id"], previous_user_rowid)
+            if len(variants) > 1:
+                selected = variants.index(content) if content in variants else len(variants)
+                if content not in variants:
+                    variants.append(content)
+                record["swipes"], record["swipe_id"] = variants, selected
+        records.append(record)
+    return records
+
+
+def apply_sync_snapshot(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    metadata: dict,
+    messages: list[tuple[str, str]],
+    variants: dict[int, tuple[list[str], int]],
+) -> str:
+    """Replace one bridge transcript from a validated Live API snapshot."""
+    values = {"title": str(metadata.get("name") or session["title"])[:120]}
+    character_file = str(metadata.get("character_file") or "")
+    if character_file and safe_character_path(character_file):
+        values["character_file"] = Path(character_file).name
+    if metadata.get("model"):
+        values["model_id"] = str(metadata["model"])[:200]
+    persona_id = str(metadata.get("persona") or "")
+    if persona_id and get_persona(persona_id):
+        values["persona_id"] = persona_id
+    raw_worlds = metadata.get("world_info")
+    candidates = raw_worlds if isinstance(raw_worlds, list) else ([raw_worlds] if raw_worlds else [])
+    valid_worlds = [Path(str(name)).name for name in candidates if safe_world_path(str(name))]
+    if valid_worlds:
+        values["world_file"] = encode_world_files(valid_worlds)
+    values["author_note"] = str(metadata.get("author_note") or "")[:2000]
+    values["system_prompt"] = str(metadata.get("system_prompt") or "")[:8000]
+    try:
+        values["response_language"] = normalize_response_language(str(metadata.get("response_language") or "auto"))
+    except ValueError:
+        pass
+    update_session(db, chat_id, session["session_id"], **values)
+    imported_settings = metadata.get("generation_settings")
+    if isinstance(imported_settings, dict):
+        normalized = {}
+        for key, raw_value in imported_settings.items():
+            if key in GENERATION_DEFAULTS:
+                try:
+                    normalized[key] = parse_generation_setting(key, str(raw_value))[1]
+                except ValueError:
+                    pass
+        if normalized:
+            update_generation_settings(db, chat_id, session["session_id"], **normalized)
+    db.execute("DELETE FROM response_variants WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"]))
+    db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"]))
+    user_rowids = {}
+    for index, (role, content) in enumerate(messages):
+        cursor = db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
+            (chat_id, session["session_id"], role, content, time.time() + index * 0.001),
+        )
+        if role == "user":
+            user_rowids[index] = (int(cursor.lastrowid), content)
+    for index, (swipes, selected) in variants.items():
+        user_index = next((item for item in range(index - 1, -1, -1) if item in user_rowids), None)
+        if user_index is None:
+            continue
+        user_rowid, user_content = user_rowids[user_index]
+        ordered = [value for pos, value in enumerate(swipes) if pos != selected] + [swipes[selected]]
+        for response in ordered:
+            save_response_variant(
+                db, chat_id, session["session_id"], user_content, response,
+                user_rowid=user_rowid, commit=False,
+            )
+    db.commit()
+    return sync_transcript_hash(messages)
+
+
+def set_sync_state(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+    local_hash: str,
+    direction: str,
+    conflict: str = "",
+    error: str = "",
+) -> None:
+    """Persist a Live API checkpoint or stopped conflict state."""
+    ensure_sync_binding(db, chat_id, session_id)
+    db.execute(
+        "UPDATE sync_bindings SET last_hash=?,last_direction=?,last_synced_at=?,"
+        "conflict=?,last_error=?,last_checked_at=? WHERE chat_id=? AND session_id=?",
+        (local_hash, direction, time.time(), conflict, error[:1000], time.time(), chat_id, session_id),
+    )
+    db.commit()

@@ -13,6 +13,7 @@ import bridge.runtime as rt
 class _ApiHandler(BaseHTTPRequestHandler):
     records = []
     seen = []
+    settings = {"power_user": {"personas": {}, "persona_descriptions": {}}}
 
     def log_message(self, *_args):
         return
@@ -49,6 +50,11 @@ class _ApiHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/chats/save":
             self.__class__.records = copy.deepcopy(body["chat"])
             self._json({"ok": True})
+        elif self.path == "/api/settings/get":
+            self._json({"settings": json.dumps(self.__class__.settings)})
+        elif self.path == "/api/settings/save":
+            self.__class__.settings = copy.deepcopy(body)
+            self._json({"result": "ok"})
         else:
             self.send_error(404)
 
@@ -75,9 +81,6 @@ class Phase3SyncTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = rt.DB_FILE
-        self.old_chat = rt.PHASE2_SYNC_CHAT_DIR
-        self.old_group = rt.PHASE2_SYNC_GROUP_DIR
-        self.old_backup = rt.PHASE2_SYNC_BACKUP_DIR
         self.old_url = rt.PHASE3_SYNC_API_URL
         self.old_handle = rt.PHASE3_SYNC_API_HANDLE
         self.old_password = rt.PHASE3_SYNC_API_PASSWORD
@@ -86,9 +89,6 @@ class Phase3SyncTests(unittest.TestCase):
         self.old_client = rt.phase3_client
         self.old_card = rt.card_fields_from_file
         rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        rt.PHASE2_SYNC_CHAT_DIR = Path(self.tmp.name) / "chats"
-        rt.PHASE2_SYNC_GROUP_DIR = Path(self.tmp.name) / "groups"
-        rt.PHASE2_SYNC_BACKUP_DIR = Path(self.tmp.name) / "backups"
         rt.PHASE3_SYNC_API_URL = "http://127.0.0.1:8000"
         rt.card_fields_from_file = lambda _name: {"name": "Test", "first_mes": "", "description": "", "personality": "", "scenario": ""}
         with rt._DB_SCHEMA_LOCK:
@@ -101,9 +101,6 @@ class Phase3SyncTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
         rt.DB_FILE = self.old_db
-        rt.PHASE2_SYNC_CHAT_DIR = self.old_chat
-        rt.PHASE2_SYNC_GROUP_DIR = self.old_group
-        rt.PHASE2_SYNC_BACKUP_DIR = self.old_backup
         rt.PHASE3_SYNC_API_URL = self.old_url
         rt.PHASE3_SYNC_API_HANDLE = self.old_handle
         rt.PHASE3_SYNC_API_PASSWORD = self.old_password
@@ -150,6 +147,23 @@ class Phase3SyncTests(unittest.TestCase):
         paths = [item[0] for item in _ApiHandler.seen]
         self.assertEqual(paths, ["/api/users/login", "/api/ping", "/api/chats/save", "/api/chats/get"])
 
+    def test_http_client_reads_and_saves_native_persona_settings(self):
+        _ApiHandler.settings = {"power_user": {"personas": {}, "persona_descriptions": {}}, "unchanged": True}
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _ApiHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            client = rt.SillyTavernApiClient(f"http://127.0.0.1:{server.server_port}")
+            settings = client.get_settings()
+            settings["power_user"]["personas"]["user-default.png"] = "Punto"
+            client.save_settings(settings)
+            self.assertEqual(client.get_settings()["power_user"]["personas"]["user-default.png"], "Punto")
+            self.assertTrue(client.get_settings()["unchanged"])
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
     def test_realtime_round_trip_and_conflict_stop(self):
         self._add("Original")
         self.assertIn("realtime API sync enabled", rt.phase3_toggle_realtime(self.db, "chat", "phase3"))
@@ -166,20 +180,19 @@ class Phase3SyncTests(unittest.TestCase):
         self.db.commit()
         self.fake.records[1]["mes"] = "Remote conflict"
         self.assertEqual(rt.phase3_sync_now(self.db, "chat", "phase3"), "conflict detected; realtime stopped")
-        binding = rt._phase2_binding(self.db, "chat", "phase3")
+        binding = rt.sync_binding(self.db, "chat", "phase3")
         self.assertEqual(binding["realtime_enabled"], 0)
         self.assertEqual(binding["conflict"], "conflict")
 
-    def test_auth_failure_disables_realtime_but_keeps_phase2_state(self):
+    def test_auth_failure_disables_realtime(self):
         self._add("Original")
         rt.ensure_sync_binding(self.db, "chat", "phase3")
-        self.db.execute("UPDATE sync_bindings SET realtime_enabled=1,auto_enabled=1 WHERE chat_id='chat' AND session_id='phase3'")
+        self.db.execute("UPDATE sync_bindings SET realtime_enabled=1 WHERE chat_id='chat' AND session_id='phase3'")
         self.db.commit()
         self.fake.error = rt.SillyTavernApiError("authentication failed", status=403)
         rt.phase3_sync_poll(self.db)
-        binding = rt._phase2_binding(self.db, "chat", "phase3")
+        binding = rt.sync_binding(self.db, "chat", "phase3")
         self.assertEqual(binding["realtime_enabled"], 0)
-        self.assertEqual(binding["auto_enabled"], 1)
 
     def test_sync_panel_exposes_realtime_control(self):
         calls = []
@@ -191,6 +204,7 @@ class Phase3SyncTests(unittest.TestCase):
             rt.telegram_request = original
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("sync:realtime", callbacks)
+        self.assertNotIn("sync:auto", callbacks)
         self.assertIn("Live API sync", calls[-1][1]["text"])
 
     def test_manual_sync_now_failure_disables_realtime_without_callback_error(self):
@@ -209,8 +223,8 @@ class Phase3SyncTests(unittest.TestCase):
             rt.phase3_sync_now = original_sync
             rt.send_sync_menu = original_menu
         self.assertTrue(handled)
-        self.assertIn("realtime API unavailable", answers[0])
-        self.assertEqual(rt._phase2_binding(self.db, "chat", "phase3")["realtime_enabled"], 0)
+        self.assertIn("Live API unavailable", answers[0])
+        self.assertEqual(rt.sync_binding(self.db, "chat", "phase3")["realtime_enabled"], 0)
 
 
 if __name__ == "__main__":

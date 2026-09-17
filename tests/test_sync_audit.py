@@ -23,14 +23,13 @@ class SyncAuditHardeningTests(unittest.TestCase):
     def _binding(self, chat_id="chat", session_id="session"):
         self.db.execute(
             "INSERT OR REPLACE INTO sync_bindings("
-            "chat_id,session_id,sync_id,auto_enabled,realtime_enabled,"
+            "chat_id,session_id,sync_id,realtime_enabled,"
             "realtime_failures,realtime_next_retry_at,last_checked_at"
-            ") VALUES(?,?,?,?,?,?,?,?)",
+            ") VALUES(?,?,?,?,?,?,?)",
             (
                 chat_id,
                 session_id,
                 f"stb-{session_id.encode().hex()[:32]:0<32}",
-                1,
                 1,
                 0,
                 0,
@@ -43,14 +42,13 @@ class SyncAuditHardeningTests(unittest.TestCase):
         for index in range(32):
             self.db.execute(
                 "INSERT INTO sync_bindings("
-                "chat_id,session_id,sync_id,auto_enabled,realtime_enabled,"
+                "chat_id,session_id,sync_id,realtime_enabled,"
                 "realtime_next_retry_at,last_checked_at"
-                ") VALUES(?,?,?,?,?,?,?)",
+                ") VALUES(?,?,?,?,?,?)",
                 (
                     f"a{index:02d}",
                     f"s{index:02d}",
                     f"stb-{index:032x}",
-                    1,
                     1,
                     0,
                     0,
@@ -58,49 +56,13 @@ class SyncAuditHardeningTests(unittest.TestCase):
             )
         self.db.execute(
             "INSERT INTO sync_bindings("
-            "chat_id,session_id,sync_id,auto_enabled,realtime_enabled,"
+            "chat_id,session_id,sync_id,realtime_enabled,"
             "realtime_next_retry_at,last_checked_at"
-            ") VALUES(?,?,?,?,?,?,?)",
-            ("z-eligible", "s32", f"stb-{32:032x}", 1, 1, 0, 0),
+            ") VALUES(?,?,?,?,?,?)",
+            ("z-eligible", "s32", f"stb-{32:032x}", 1, 0, 0),
         )
         self.db.commit()
 
-    def test_phase2_auto_sync_skips_chat_with_active_job_lock(self):
-        self._binding()
-        calls = []
-        original = rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL
-        rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL = (
-            lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
-        )
-        lock = rt.chat_job_lock("chat")
-        lock.acquire()
-        try:
-            rt.phase2_sync_poll(self.db)
-            self.assertEqual(calls, [])
-        finally:
-            lock.release()
-            rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL = original
-
-    def test_phase2_auto_sync_skips_queued_durable_job(self):
-        self._binding()
-        now = rt.time.time()
-        self.db.execute(
-            "INSERT INTO jobs(update_id,chat_id,session_id,telegram_message_id,kind,"
-            "payload_json,state,attempts,last_error,created_at,updated_at) "
-            "VALUES(?,?,?,?,?,?,'queued',0,'',?,?)",
-            (7001, "chat", "session", "1", "generation", "{}", now, now),
-        )
-        self.db.commit()
-        calls = []
-        original = rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL
-        rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL = (
-            lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
-        )
-        try:
-            rt.phase2_sync_poll(self.db)
-        finally:
-            rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL = original
-        self.assertEqual(calls, [])
 
     def test_sync_lock_is_released_when_job_query_fails(self):
         class BrokenDb:
@@ -111,24 +73,6 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self.assertIsNone(rt._try_sync_chat_lock(BrokenDb(), "query-error"))
         self.assertTrue(lock.acquire(blocking=False))
         lock.release()
-
-    def test_phase2_poll_scans_past_32_locked_candidates(self):
-        self._many_bindings()
-        calls = []
-        original = rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL
-        rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL = (
-            lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
-        )
-        locks = [rt.chat_job_lock(f"a{index:02d}") for index in range(32)]
-        for lock in locks:
-            lock.acquire()
-        try:
-            rt.phase2_sync_poll(self.db)
-        finally:
-            for lock in locks:
-                lock.release()
-            rt._ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL = original
-        self.assertEqual(calls, [("z-eligible", "s32")])
 
     def test_phase3_realtime_sync_skips_chat_with_active_job_lock(self):
         self._binding()
@@ -234,18 +178,23 @@ class SyncAuditHardeningTests(unittest.TestCase):
         rt.set_meta(self.db, "active_session:chat", active["session_id"])
         rt.ensure_sync_binding(self.db, "chat", inactive["session_id"])
         self.db.execute(
-            "UPDATE sync_bindings SET auto_enabled=1,realtime_enabled=1 "
+            "UPDATE sync_bindings SET realtime_enabled=1 "
             "WHERE chat_id='chat' AND session_id='inactive'"
         )
         self.db.commit()
 
-        deleted, reason = rt.delete_session_data(
-            self.db,
-            "chat",
-            inactive["session_id"],
-            active["session_id"],
-            operation_id=991,
-        )
+        original_purge = rt.purge_hindsight_session
+        rt.purge_hindsight_session = lambda *_args: 0
+        try:
+            deleted, reason = rt.delete_session_data(
+                self.db,
+                "chat",
+                inactive["session_id"],
+                active["session_id"],
+                operation_id=991,
+            )
+        finally:
+            rt.purge_hindsight_session = original_purge
 
         self.assertTrue(deleted, reason)
         self.assertIsNone(

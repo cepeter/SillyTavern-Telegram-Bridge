@@ -86,13 +86,15 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertNotIn("/import", public_commands)
         self.assertIn("/sync", public_commands)
 
-    def test_sync_help_prioritizes_live_sync_and_fallbacks(self):
+    def test_sync_help_exposes_only_live_api_sync(self):
         summary = dict(rt.HELP_CATEGORIES["basic"])["/sync"]
         detail = rt.command_detail("/sync", summary)
-        self.assertIn("Live Sync", summary)
-        self.assertIn("file fallback", summary)
+        self.assertIn("Live API Sync", summary)
+        self.assertIn("Live API Sync controls", summary)
+        self.assertNotIn("file sync", summary.lower())
         self.assertNotIn("Phase ", summary)
-        self.assertIn("Sync now uses the API", detail)
+        self.assertIn("Sync now runs a one-shot API reconciliation", detail)
+        self.assertNotIn("file sync", detail.lower())
         self.assertIn("Refresh status only redraws state", detail)
         calls = []
         original_request = rt.telegram_request
@@ -102,7 +104,7 @@ class HelpDrilldownTests(unittest.TestCase):
         finally:
             rt.telegram_request = original_request
         commands = {item["command"]: item["description"] for item in calls[-1][1]["commands"]}
-        self.assertEqual(commands["sync"], "Open live sync and fallback controls")
+        self.assertEqual(commands["sync"], "Open Live API Sync controls")
 
     def test_sync_binding_is_stable_and_panel_is_scoped(self):
         session = rt.create_session(self.db, "chat", "provider/model", session_id="sync-session")
@@ -117,49 +119,7 @@ class HelpDrilldownTests(unittest.TestCase):
         finally:
             rt.telegram_request = original_request
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
-        self.assertEqual(callbacks, {"sync:export", "sync:import", "sync:auto", "sync:realtime", "sync:now", "sync:status", "sync:close"})
-
-    def test_export_contains_sync_identity_and_metadata(self):
-        session = rt.create_session(self.db, "chat", "provider/model", session_id="export-session")
-        self.db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", ("chat", "export-session", "user", "Hello", 1.0))
-        self.db.commit()
-        export_dir = Path(self.tmp.name) / "exports"
-        original_dir, original_send = rt.EXPORT_DIR, rt.send_document
-        captured = []
-        rt.EXPORT_DIR = export_dir
-        rt.send_document = lambda _token, _chat, path, _caption: captured.append(json.loads(path.read_text(encoding="utf-8").splitlines()[0])) or True
-        try:
-            rt.export_session("token", self.db, session, {"name": "Test"}, "chat")
-        finally:
-            rt.EXPORT_DIR, rt.send_document = original_dir, original_send
-        metadata = captured[0]["chat_metadata"]
-        self.assertRegex(metadata["bridge_sync"]["sync_id"], r"^stb-[a-f0-9]{32}$")
-        self.assertEqual(metadata["bridge_sync"]["version"], 1)
-        self.assertEqual(metadata["character_file"], session["character_file"])
-
-    def test_import_creates_new_session_and_records_direction(self):
-        sync_id = "stb-" + "a" * 32
-        raw = (json.dumps({"chat_metadata": {"name": "Imported", "bridge_sync": {"version": 1, "sync_id": sync_id}}}) + "\n" + json.dumps({"is_user": True, "is_system": False, "mes": "From ST"}) + "\n").encode()
-        imported = rt.import_chat_session(self.db, "chat", raw, "provider/model")
-        self.assertNotEqual(imported["session_id"], "default")
-        binding = self.db.execute("SELECT sync_id,last_direction FROM sync_bindings WHERE chat_id=? AND session_id=?", ("chat", imported["session_id"])).fetchone()
-        self.assertEqual(binding, (sync_id, "sillytavern_to_bridge"))
-        count = self.db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", ("chat", imported["session_id"])).fetchone()[0]
-        self.assertEqual(count, 1)
-
-    def test_sync_import_callback_shows_safe_instructions(self):
-        answers, calls = [], []
-        original_request = rt.telegram_request
-        rt.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
-        try:
-            handled = rt.handle_sync_callback(self.db, "token", {"id": "cb"}, lambda _t, _i, text: answers.append(text), "sync:import", "chat", {"message_id": 77}, {}, "sync-session", None)
-        finally:
-            rt.telegram_request = original_request
-        self.assertTrue(handled)
-        self.assertEqual(answers, ["Send JSONL"])
-        self.assertEqual(calls[-1][0], "editMessageText")
-        self.assertIn("creates a separate session", calls[-1][1]["text"])
-
+        self.assertEqual(callbacks, {"sync:realtime", "sync:now", "sync:status", "sync:close"})
 
 if __name__ == "__main__":
     unittest.main()

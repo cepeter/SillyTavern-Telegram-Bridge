@@ -3,10 +3,10 @@ HELP_CATEGORIES = {
         ("/start", "Send the character card's first message only."),
         ("/help", "Open this help menu; use /help <command> for one command."),
         ("/status", "Show active card, session, model, memory, RAG, group, and generation state."),
-        ("/new", "Create and activate a new isolated session."),
+        ("/new", "Name, create, and activate a new isolated session."),
         ("/reset", "Open confirmation to reset only the active session while purging all Hindsight memory for the chat, then restart from the opening greeting."),
-        ("/session", "List, switch, create, or delete inactive session data; Hindsight memory is retained."),
-        ("/sync", "Open Live Sync with file fallback and manual transfer controls."),
+        ("/session", "List, switch, create, or delete inactive session data and its session-scoped Hindsight documents."),
+        ("/sync", "Open session-scoped Live API Sync controls."),
     ],
     "characters": [
         ("/providers", "Open the single provider/model catalog; adapter-enabled entries can generate, catalog-only entries are view-only."),
@@ -412,7 +412,7 @@ def process_document_job(token: str, chat_id: str, document: dict, default_model
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
-            import_telegram_document(db, token, chat_id, document, default_model, telegram_message_id=message_id, operation_id=job_id)
+            import_telegram_document(db, token, chat_id, document, default_model, telegram_message_id=message_id)
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
@@ -433,7 +433,7 @@ def set_bot_commands(token: str) -> None:
                 {"command": "providers", "description": "Open provider catalog; catalog-only entries are view-only"},
                 {"command": "character", "description": "Open character management panel"},
                 {"command": "session", "description": "Manage sessions; delete inactive only"},
-                {"command": "sync", "description": "Open live sync and fallback controls"},
+                {"command": "sync", "description": "Open Live API Sync controls"},
                 {"command": "persona", "description": "Choose user persona"},
                 {"command": "world", "description": "Choose World Info lore"},
                 {"command": "status", "description": "Show model and chat status"},
@@ -451,7 +451,7 @@ def set_bot_commands(token: str) -> None:
                 {"command": "summarize", "description": "Summarize active session"},
                 {"command": "databank", "description": "Open RAG/list/remove panel"},
                 {"command": "group", "description": "Open topic-only group panel"},
-                {"command": "new", "description": "Start a new session"},
+                {"command": "new", "description": "Name and start a new session"},
                 {"command": "reset", "description": "Confirm active-session reset"},
                 {"command": "regen", "description": "Regenerate last response"},
                 {"command": "swipe", "description": "Browse response variants"},

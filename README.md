@@ -37,7 +37,7 @@ runs beside SillyTavern without patching or executing the SillyTavern source.
 - Multi-character groups with round-robin, contextual, manual user-turn gating, topic-only New group sessions, and bounded autonomous modes.
 - Telegram Forum Topics with topic-scoped sessions, history, queues, group state, media, and replies.
 - Inline help menu with command categories.
-- Live Sync through the loopback API with explicit conflict stops; manual JSONL and automatic file sync remain recovery fallbacks.
+- Live Sync through the loopback API with explicit conflict stops.
 - Bounded background workers for STT, TTS, document indexing, and memory retention.
 - Durable SQLite jobs for normal generation, long-running commands, voice transcription, image analysis, document imports, callbacks, and native edits, with per-chat ordering and session-aware execution.
 - UTF-16-safe Telegram splitting, typed World Info editing, bounded processed-update retention, and isolated generation/utility worker pools.
@@ -253,15 +253,19 @@ Open the interactive command guide:
 
 Categories use plain-language labels such as **Start & Sessions**, **Replies & Settings**, and **Memory & Files**. Each category renders one button per command, with up to eight command buttons per page. Use Next/Previous for larger categories, then select a command to replace the page with a clear **What it does** explanation and a Back button.
 
+Persona, Character, System Prompt, and World Info catalogs accept a maximum of
+**40 items each**. New persona creation, native persona export/import, and
+character uploads stop safely at the limit; existing files are never deleted.
+
 Core commands:
 
 ```text
 /start                         Send the character card first message only
 /status                       Show active runtime state
-/new                          Create a new isolated session
+/new                          Name, create, and activate a new isolated session
 /reset                        Confirm active-session reset, purge all chat Hindsight memory, and restart from the character opening greeting
 /session                      Switch, create, or safely delete an inactive session
-/sync                         Open Live Sync with file and manual fallback controls
+/sync                         Open Live API Sync controls
 /providers                    Open the synchronized provider catalog
 /character                    Open character panel: select, info, delete, upload guidance
 /persona                      Choose, create, edit, or disable a user persona
@@ -291,14 +295,29 @@ Session deletion:
 /session                      Open the session panel
 → 🗑️ Delete session           List inactive sessions only
 → Select a session            Open a separate confirmation
-→ ✅ Confirm delete            Remove that session's local SQLite data
+→ ✅ Confirm delete            Remove SQLite data and session-scoped Hindsight documents
 ```
 
 The active session cannot be deleted, and sessions with queued or running jobs
 are protected. Deleting a session removes its transcript, variants, summary,
-generation settings, group state, failed turns, and session record. Hindsight
-memories are retained because the current Hindsight bank is shared by the
-Telegram chat; use `/reset` when the entire chat memory should be purged.
+generation settings, group state, failed turns, session record, and every
+Hindsight document tagged or prefixed for that session. Memories from other
+sessions remain in the shared per-chat bank. Deletion fails closed when
+Hindsight is unavailable; `/reset` still purges the entire chat bank.
+
+New sessions use a scoped naming prompt:
+
+```text
+/new or Session → New session
+→ Send a name (1–80 characters)
+→ Session is created only after validation
+→ /cancel leaves no empty session behind
+```
+
+The Character → Session and topic-only New group session wizards use the same
+name-first flow. Renaming a character in native SillyTavern is reconciled by a
+unique PNG image fingerprint or unique embedded card name; ambiguous matches are
+never rebound automatically. Use **Refresh** in `/character` to redraw labels.
 
 World Info/lorebook panel:
 
@@ -329,6 +348,11 @@ Generation and branches:
 /summarize                    Force a session summary
 ```
 
+When a non-stream provider stops at its output-token limit, the bridge requests
+one bounded continuation automatically and stores/sends the combined response.
+Use `/continue` only when another segment is still needed or an automatic
+follow-up could not be completed.
+
 `/settings` re-renders with a `Current values` line after every valid change, showing
 temperature, max tokens, top P, penalties, and stop sequences. Invalid values are
 rejected without changing the previous value; their feedback and input prompt are
@@ -345,6 +369,9 @@ Response language:
 
 The response language is stored per session and added as a model instruction. It
 controls generated replies, not SillyTavern's UI language or voice transcription.
+Auto mode adds no extra provider request. A fixed language applies one final
+language-render pass to normal, image, edit, regenerate, and continue responses;
+streaming preview is disabled so only the target-language result is displayed.
 The panel also supports `ja`, `zh`, `ko`, `es`, `fr`, `de`, `pt`, `ru`, `ar`,
 `hi`, `vi`, and `th`.
 
@@ -360,11 +387,33 @@ Persona editing:
 /persona
 → Create persona
 → Send: id | display name | persona description
+
+/persona
+→ Import from SillyTavern     Read native persona names/descriptions into the bridge
+→ Export current → SillyTavern
+                              Add or update only the selected bridge persona natively
 ```
 
 Persona changes are validated, backed up, and written atomically to the private
 `SILLYTAVERN_PERSONA_FILE`. Input is scoped to the session and expires; `/cancel`
 leaves the existing persona unchanged.
+
+Native persona interoperability uses SillyTavern's supported storage instead of
+the repository-level `personas/` directory. Avatar files are created atomically
+under `data/default-user/User Avatars/`; persona names and descriptions are read
+and saved through the authenticated loopback `/api/settings/get|save` routes.
+Export takes a verified private backup first, performs a best-effort pre-save
+concurrency check plus full-document readback verification, preserves unrelated
+settings and native persona fields, and never deletes another native persona.
+Import is read-only on the SillyTavern side.
+
+The default native paths derive from `SILLYTAVERN_DIR`. Override them only for a
+non-default SillyTavern data layout:
+
+```dotenv
+SILLYTAVERN_NATIVE_SETTINGS_FILE=/path/to/SillyTavern/data/default-user/settings.json
+SILLYTAVERN_NATIVE_AVATAR_DIR=/path/to/SillyTavern/data/default-user/User Avatars
+```
 
 Memory and RAG:
 
@@ -374,7 +423,7 @@ Memory and RAG:
 /remember <fact>              Queue an explicit memory (free text)
 /databank                     Open RAG/list/remove/reindex panel
 /databank search <query>      Search Data Bank (free-text query)
-/sync                        Open Live Sync with file and manual fallback controls
+/sync                        Open Live API Sync controls
 ```
 
 ## 🔄 Synchronization
@@ -387,12 +436,12 @@ Memory and RAG:
   `/api/chats/get|save`, and `/api/chats/group/get|save` routes. It does not
   patch SillyTavern or install an extension.
 - A dedicated worker checks enabled bindings every two seconds by default,
-  while retaining the same `sync_id`, transcript hash, swipe, and three-way
-  conflict protections used by file sync.
+  while retaining stable `sync_id`, transcript-hash, swipe, and three-way
+  conflict protection.
 - Only loopback hosts (`127.0.0.1`, `::1`, or `localhost`) are accepted.
   Credentials and CSRF/session state are never stored in chat metadata.
 - Authentication, schema, sync-ID, or conflict failures disable realtime sync
-  for that binding. File sync and manual JSONL transfer remain available.
+  for that binding.
 
 Optional Live Sync settings:
 
@@ -415,29 +464,11 @@ Quick start:
 5. Tap **Realtime API: toggle**. The bridge performs an initial reconciliation;
    realtime becomes `on` only when that succeeds.
 
-The sync controls are scoped to the active Telegram session. **Sync now** uses
-Live Sync while realtime is on; otherwise it runs file sync. **Refresh
-status** only redraws current state. A sync-ID mismatch, initial divergence, or
+The sync controls are scoped to the active Telegram session. **Sync now** runs
+one Live API reconciliation even when the background realtime toggle is off.
+**Refresh status** only redraws current state. A sync-ID mismatch, initial divergence, or
 two-sided edit conflict stops realtime instead of selecting a winner. Resolve
 the divergence manually, then enable realtime again.
-
-### Fallback and recovery
-
-**Manual JSONL transfer** exports the active session or imports a validated
-SillyTavern-compatible JSONL file into a separate session. It never overwrites
-the active session. The file carries transcript, title, character reference,
-persona, World Info references, Author's Note, and compatible generation settings.
-
-**Automatic file sync** is also off by default. Enable **Auto sync: toggle** for
-one session to exchange compatible chat-file changes every 30 seconds by default.
-Two-sided edits stop with a conflict instead of silently choosing one side.
-
-```text
-SILLYTAVERN_SYNC_INTERVAL_SECONDS=30
-SILLYTAVERN_SYNC_MAX_FILE_BYTES=10485760
-SILLYTAVERN_SYNC_CHAT_DIR=/path/to/SillyTavern/data/default-user/chats
-SILLYTAVERN_SYNC_GROUP_DIR=/path/to/SillyTavern/data/default-user/groups
-```
 
 Credentials must remain environment-only and must not be printed, committed, or packaged.
 
@@ -552,12 +583,11 @@ The index uses:
 3. Hybrid ranking.
 4. Lexical fallback when the embedding endpoint is unavailable.
 
-Files are limited to 10 MB. JSONL imports reject messages over 12,000 characters or transcripts over 200,000 characters. DOCX XML members, PDF page counts, and extracted text are bounded. Image bytes are not inserted into the text Data Bank. When RAG contributes a source, generated replies include a `Sources:` footer with the indexed filenames. Embeddings are isolated by endpoint/model/dimensions and cached query vectors expire with runtime cache retention. The Data Bank panel shows current embedding coverage and provides `Reindex embeddings`; semantic retrieval currently scans at most 5,000 vectors in Python, while FTS5 remains the complete lexical fallback. Set a dedicated `SILLYTAVERN_RAG_EMBEDDING_API_KEY` for external embedding endpoints; local loopback embedding endpoints may run without a key.
+Files are limited to 10 MB. DOCX XML members, PDF page counts, and extracted text are bounded. Image bytes are not inserted into the text Data Bank. When RAG contributes a source, generated replies include a `Sources:` footer with the indexed filenames. Embeddings are isolated by endpoint/model/dimensions and cached query vectors expire with runtime cache retention. The Data Bank panel shows current embedding coverage and provides `Reindex embeddings`; semantic retrieval currently scans at most 5,000 vectors in Python, while FTS5 remains the complete lexical fallback. Set a dedicated `SILLYTAVERN_RAG_EMBEDDING_API_KEY` for external embedding endpoints; local loopback embedding endpoints may run without a key.
 Set `SILLYTAVERN_RAG_EMBEDDING_REVISION` to a new value when the same endpoint/model/dimensions changes implementation; this creates a new namespace and requires reindexing.
 
 PDF extraction runs in an isolated `bridge/pdf_parser.py` subprocess with bounded input, page count, extracted text, CPU time, and memory. The parent worker applies a 45-second timeout and reports parser failures without falling back to in-process PDF parsing.
 
-JSONL import metadata is trusted legacy input: its System Prompt field is preserved for compatibility and is not a new panel choice. New interactive System Prompt selection remains TXT-panel-only.
 
 Hindsight retention and automatic TTS are best-effort auxiliary jobs; a saturated utility queue may defer or drop them without affecting the durable chat turn.
 
@@ -592,7 +622,7 @@ bridge/telegram.py              # Telegram transport and imports
 bridge/help.py                  # help categories and command registration
 bridge/help_details.py          # Help rendering, callbacks, and JSON loader
 bridge/help_details.json        # editable detailed Help descriptions
-bridge/sync.py                  # opt-in file sync and conflict detection
+bridge/sync_core.py             # Live Sync transcript/checkpoint primitives
 bridge/catalog.py               # provider/model catalog
 bridge/media.py                 # images, voice, STT, and TTS
 bridge/generation.py            # prompts, adapters, variants, branches

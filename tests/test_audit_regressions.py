@@ -18,6 +18,60 @@ class AuditRegressionTests(unittest.TestCase):
         self.db.close()
         self.tmp.cleanup()
 
+    def test_openrouter_reasoning_zero_is_explicitly_disabled(self):
+        captured = []
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return rt.json.dumps({"choices": [{"message": {"content": "visible"}}]}).encode()
+
+        original_resolve = rt.resolve_provider_model
+        original_spec = rt.get_provider_spec
+        original_urlopen = rt.strict_urlopen
+        old_key = rt.os.environ.get("TEST_OPENROUTER_KEY")
+        old_hosts = rt.os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
+        rt.resolve_provider_model = lambda _model: ("openrouter", "test/model")
+        rt.get_provider_spec = lambda _provider: {
+            "transport": "openai_compatible",
+            "api_endpoint": "https://openrouter.ai/api/v1",
+            "api_key_env": "TEST_OPENROUTER_KEY",
+        }
+
+        def fake_urlopen(request, timeout):
+            captured.append(rt.json.loads(request.data.decode()))
+            return FakeResponse()
+
+        rt.strict_urlopen = fake_urlopen
+        rt.os.environ["TEST_OPENROUTER_KEY"] = "test-only"
+        rt.os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "openrouter.ai"
+        try:
+            settings = dict(rt.GENERATION_DEFAULTS)
+            settings["reasoning_budget"] = 0
+            self.assertEqual(rt.generate_text("", "test", [{"role": "user", "content": "hello"}], settings=settings), "visible")
+            settings["reasoning_budget"] = 1024
+            self.assertEqual(rt.generate_text("", "test", [{"role": "user", "content": "hello"}], settings=settings), "visible")
+        finally:
+            rt.resolve_provider_model = original_resolve
+            rt.get_provider_spec = original_spec
+            rt.strict_urlopen = original_urlopen
+            if old_key is None:
+                rt.os.environ.pop("TEST_OPENROUTER_KEY", None)
+            else:
+                rt.os.environ["TEST_OPENROUTER_KEY"] = old_key
+            if old_hosts is None:
+                rt.os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
+            else:
+                rt.os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = old_hosts
+
+        self.assertEqual(captured[0]["reasoning"], {"enabled": False})
+        self.assertEqual(captured[1]["reasoning"], {"max_tokens": 1024})
+
     def test_begin_operation_commits_prepared_marker(self):
         self.assertTrue(rt.begin_operation(self.db, 101, "test"))
 
@@ -370,12 +424,21 @@ class AuditRegressionTests(unittest.TestCase):
             "scenario": "",
             "mes_example": "",
             "first_mes": "",
-            "post_history_instructions": "",
+            "post_history_instructions": "An earlier character-card instruction.",
         }
 
         messages = rt.build_chat_messages(session, fields, "Halo", [])
 
-        self.assertIn("Reply in English (en)", messages[0]["content"])
+        system = messages[0]["content"]
+        self.assertIn("selected output language is English (en)", system)
+        self.assertIn("MUST write all visible response text in English", system)
+        self.assertGreater(system.index("## Mandatory response language"), system.index("## Final instruction"))
+        self.assertTrue(system.endswith(rt.response_language_instruction("en")))
+        self.assertIn("MUST write all visible response text in Bahasa Indonesia", rt.response_language_instruction("id"))
+        self.assertEqual(messages[-2]["role"], "system")
+        self.assertIn("## Runtime output constraint", messages[-2]["content"])
+        self.assertIn("MUST write all visible response text in English", messages[-2]["content"])
+        self.assertEqual(messages[-1]["role"], "user")
 
     def test_response_language_validation_and_pagination(self):
         self.assertEqual(rt.normalize_response_language("bahasa indonesia"), "id")
@@ -391,97 +454,6 @@ class AuditRegressionTests(unittest.TestCase):
             and not row[0]["callback_data"].startswith("language:page:")
         ]
         self.assertEqual(len(selectable), 8)
-
-        captured = {}
-        original = rt._ORIGINAL_EXPORT_SESSION
-        context_token = rt._OPERATION_CONTEXT.set(88)
-        try:
-            def fake_export(token, db, session, fields, chat_id, operation_id=None):
-                captured["operation_id"] = operation_id
-                return "ok"
-
-            rt._ORIGINAL_EXPORT_SESSION = fake_export
-            result = rt.export_session("token", self.db, {}, {}, "chat")
-        finally:
-            rt._ORIGINAL_EXPORT_SESSION = original
-            rt._OPERATION_CONTEXT.reset(context_token)
-
-        self.assertEqual(result, "ok")
-        self.assertEqual(captured["operation_id"], 88)
-
-    def test_import_replay_does_not_duplicate_messages_or_variants(self):
-        original_parser = rt.parse_sillytavern_jsonl
-        rt.parse_sillytavern_jsonl = lambda _raw: (
-            {"name": "Imported regression chat"},
-            [("user", "hello"), ("assistant", "world")],
-        )
-        try:
-            rt.import_chat_session(
-                self.db,
-                "chat",
-                b"{}",
-                rt.DEFAULT_MODEL,
-                operation_id=77,
-            )
-            session_id = "import-job-77"
-            message_count = self.db.execute(
-                "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?",
-                ("chat", session_id),
-            ).fetchone()[0]
-            variant_count = self.db.execute(
-                "SELECT COUNT(*) FROM response_variants WHERE chat_id=? AND session_id=?",
-                ("chat", session_id),
-            ).fetchone()[0]
-            self.assertEqual(message_count, 2)
-            self.assertEqual(variant_count, 1)
-
-            self.db.execute(
-                "UPDATE meta SET value='created' WHERE key='import_phase:77'"
-            )
-            self.db.commit()
-            rt.import_chat_session(
-                self.db,
-                "chat",
-                b"{}",
-                rt.DEFAULT_MODEL,
-                operation_id=77,
-            )
-            self.assertEqual(
-                self.db.execute(
-                    "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?",
-                    ("chat", session_id),
-                ).fetchone()[0],
-                2,
-            )
-            self.assertEqual(
-                self.db.execute(
-                    "SELECT COUNT(*) FROM response_variants WHERE chat_id=? AND session_id=?",
-                    ("chat", session_id),
-                ).fetchone()[0],
-                1,
-            )
-
-            self.db.execute(
-                "UPDATE meta SET value='summary_loaded' WHERE key='import_phase:77'"
-            )
-            self.db.commit()
-            rt.import_chat_session(
-                self.db,
-                "chat",
-                b"{}",
-                rt.DEFAULT_MODEL,
-                operation_id=77,
-            )
-            self.assertEqual(
-                self.db.execute(
-                    "SELECT COUNT(*) FROM response_variants WHERE chat_id=? AND session_id=?",
-                    ("chat", session_id),
-                ).fetchone()[0],
-                1,
-            )
-        finally:
-            rt.parse_sillytavern_jsonl = original_parser
-
 
 if __name__ == "__main__":
     unittest.main()

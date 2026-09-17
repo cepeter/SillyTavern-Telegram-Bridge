@@ -160,27 +160,6 @@ def start_persona_input(db, token: str, chat_id: str, session_id: str, mode: str
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
-def _editable_personas() -> dict[str, dict[str, object]]:
-    """Load and validate the persona catalog before allowing an edit."""
-    if not PERSONA_FILE.exists():
-        return {}
-    raw = PERSONA_FILE.read_bytes()
-    if len(raw) > 1_000_000:
-        raise ValueError("persona catalog is too large")
-    data = json.loads(raw.decode("utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError("persona catalog must be a JSON object")
-    result = {}
-    for persona_id, persona in data.items():
-        if not isinstance(persona_id, str) or not isinstance(persona, dict):
-            raise ValueError("persona catalog has an invalid entry")
-        if not isinstance(persona.get("name"), str) or not isinstance(persona.get("description"), str):
-            raise ValueError("persona entries require name and description")
-        tags = persona.get("tags", [])
-        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
-            raise ValueError("persona tags must be strings")
-        result[persona_id] = dict(persona)
-    return result
 
 
 def _write_personas_atomically(personas: dict[str, dict[str, object]]) -> None:
@@ -213,13 +192,19 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
         return True
     mode = str(state.get("mode") or "")
     persona_id = str(state.get("persona_id") or "")
+    original_personas = None
+    written_catalog_hash = ""
     with PERSONA_EDIT_LOCK:
         try:
             personas = _editable_personas()
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
             send_pending_input_message(db, token, chat_id, meta_key, state, f"Persona catalog cannot be edited: {exc}. Try /cancel.")
             return True
+        original_personas = json.loads(json.dumps(personas, ensure_ascii=False))
         if mode == "create":
+            if len(personas) >= CATALOG_MAX_ITEMS:
+                send_pending_input_message(db, token, chat_id, meta_key, state, f"Persona catalog is full ({CATALOG_MAX_ITEMS} maximum). Send /cancel.")
+                return True
             parts = [part.strip() for part in stripped.split("|", 2)]
             if len(parts) != 3 or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", parts[0]):
                 send_pending_input_message(db, token, chat_id, meta_key, state, "Use: id | display name | persona description. Try again or send /cancel.")
@@ -254,8 +239,26 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
             return True
         try:
             _write_personas_atomically(personas)
+            written_catalog_hash = hashlib.sha256(PERSONA_FILE.read_bytes()).hexdigest()
         except (OSError, TypeError, ValueError) as exc:
             send_pending_input_message(db, token, chat_id, meta_key, state, f"Persona could not be saved: {exc}. Try again or send /cancel.")
+            return True
+    if phase3_api_configured():
+        try:
+            export_persona_to_native(persona_id)
+        except Exception as exc:
+            logging.warning("Native SillyTavern persona export failed", exc_info=True)
+            rolled_back = False
+            with PERSONA_EDIT_LOCK:
+                current_hash = hashlib.sha256(PERSONA_FILE.read_bytes()).hexdigest() if PERSONA_FILE.exists() else ""
+                if written_catalog_hash and current_hash == written_catalog_hash:
+                    _write_personas_atomically(original_personas or {})
+                    rolled_back = True
+            if rolled_back:
+                feedback = f"Persona was not saved because native SillyTavern sync failed: {exc}. Try again or send /cancel."
+            else:
+                feedback = f"Native SillyTavern sync failed, but a newer local persona edit was preserved: {exc}. Refresh the panel before retrying."
+            send_pending_input_message(db, token, chat_id, meta_key, state, feedback)
             return True
     if mode == "create":
         update_session(db, chat_id, session["session_id"], persona_id=persona_id, operation_id=operation_id, operation_kind="persona_create")
@@ -268,6 +271,9 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
 def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, operation_id: int | None = None) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
+    session_name = _pending_state(db, f"session_name_input:{chat_id}", session_id, token, chat_id)
+    if session_name:
+        return handle_session_name_input(db, token, chat_id, session, stripped, session_name, operation_id)
     settings = _pending_state(db, f"settings_input:{chat_id}", session_id, token, chat_id)
     if settings.get("key"):
         return _handle_settings_input(db, token, chat_id, session_id, stripped, settings)
@@ -291,10 +297,12 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
     if not data.startswith("persona:"):
         return False
     value = data.split(":", 1)[1]
+    message_id = message.get("message_id")
+    if handle_native_persona_callback(token, callback, answer_callback, value, chat_id, message_id, session):
+        return True
     field_actions = {"create", "edit", "edit_name", "edit_description", "edit_all"}
     if not value.startswith("page:") and value not in {"cancel", "off", "menu", *field_actions}:
         value = resolve_dynamic_callback_token(value, "persona", chat_id) or ""
-    message_id = message.get("message_id")
     if value.startswith("page:"):
         answer_callback(token, str(callback.get("id", "")), "Page")
         send_persona_menu(token, chat_id, session["persona_id"], message_id, int(value.split(":", 1)[1]))

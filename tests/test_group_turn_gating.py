@@ -112,19 +112,25 @@ class GroupTurnGatingTests(unittest.TestCase):
         original_close = rt.close_panel_message
         original_menu = rt.send_character_menu
         original_context = rt.set_panel_session_context
+        original_send = rt.send_text
         rt.close_panel_message = lambda *_args, **_kwargs: None
         rt.send_character_menu = lambda _token, _chat, _character: opened.append(True)
         rt.set_panel_session_context = lambda session_id: opened.append(session_id)
+        rt.send_text = lambda *_args, **_kwargs: []
         callback = {"id": "callback", "from": {"id": "user"}, "data": "group:new_session", "message": {"message_id": 10, "chat": {"id": chat_id}}}
         try:
             rt.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user")
+            pending = rt.get_meta(self.db, f"session_name_input:{chat_id}", "")
+            self.assertTrue(pending)
+            rt.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77)
         finally:
             rt.close_panel_message = original_close
             rt.send_character_menu = original_menu
             rt.set_panel_session_context = original_context
+            rt.send_text = original_send
         active_id = rt.get_meta(self.db, f"active_session:{chat_id}", "")
         setup = rt.group_setup_state(self.db, chat_id, active_id)
-        self.assertTrue(active_id.startswith("group-"))
+        self.assertEqual(active_id, "group-77")
         self.assertIsNotNone(setup)
         self.assertEqual(setup["stage"], "character")
         self.assertEqual(opened[-1], True)

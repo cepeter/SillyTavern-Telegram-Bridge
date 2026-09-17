@@ -125,6 +125,71 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertEqual(rt.PERSONA_FILE.read_bytes(), broken)
         self.assertTrue(json.loads(rt.get_meta(self.db, "persona_input:chat")))
 
+    def test_one_corrupt_entry_is_normalized_without_blocking_edits(self):
+        rt.PERSONA_FILE.write_text(json.dumps({
+            "punto": {"name": "Punto", "description": "Original description", "tags": ["default"]},
+            "broken": {"name": None, "tags": "invalid"},
+        }), encoding="utf-8")
+        self._start("create")
+        handled = rt.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | Still editable")
+        self.assertTrue(handled)
+        data = json.loads(rt.PERSONA_FILE.read_text(encoding="utf-8"))
+        self.assertEqual(data["broken"]["name"], "broken")
+        self.assertEqual(data["broken"]["description"], "")
+        self.assertEqual(data["broken"]["tags"], [])
+        self.assertEqual(data["writer"]["description"], "Still editable")
+
+    def test_malformed_catalog_warning_is_visible_in_persona_panel(self):
+        rt.PERSONA_FILE.write_text("{broken json", encoding="utf-8")
+        original_refresh = rt.refresh_native_persona_cache
+        rt.refresh_native_persona_cache = lambda *_args, **_kwargs: "skipped"
+        try:
+            rt.send_persona_menu("token", "chat", "")
+        finally:
+            rt.refresh_native_persona_cache = original_refresh
+        self.assertIn("Persona catalog cannot be read", self.calls[-1][1]["text"])
+
+    def test_native_export_failure_rolls_back_unchanged_local_edit(self):
+        self._start("edit_description", "punto")
+        original_configured = rt.phase3_api_configured
+        original_export = rt.export_persona_to_native
+        rt.phase3_api_configured = lambda: True
+        rt.export_persona_to_native = lambda _persona_id: (_ for _ in ()).throw(RuntimeError("offline"))
+        try:
+            rt.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update")
+        finally:
+            rt.phase3_api_configured = original_configured
+            rt.export_persona_to_native = original_export
+        data = json.loads(rt.PERSONA_FILE.read_text(encoding="utf-8"))
+        self.assertEqual(data["punto"]["description"], "Original description")
+
+    def test_native_export_failure_preserves_newer_concurrent_edit(self):
+        self._start("edit_description", "punto")
+        feedback = []
+        original_configured = rt.phase3_api_configured
+        original_export = rt.export_persona_to_native
+        original_send_text = rt.send_text
+        rt.phase3_api_configured = lambda: True
+        rt.send_text = lambda _token, _chat, text: feedback.append(text) or [501]
+
+        def concurrent_edit_then_fail(_persona_id):
+            with rt.PERSONA_EDIT_LOCK:
+                personas = rt._editable_personas()
+                personas["punto"]["description"] = "Concurrent edit"
+                rt._write_personas_atomically(personas)
+            raise RuntimeError("offline")
+
+        rt.export_persona_to_native = concurrent_edit_then_fail
+        try:
+            rt.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update")
+        finally:
+            rt.phase3_api_configured = original_configured
+            rt.export_persona_to_native = original_export
+            rt.send_text = original_send_text
+        data = json.loads(rt.PERSONA_FILE.read_text(encoding="utf-8"))
+        self.assertEqual(data["punto"]["description"], "Concurrent edit")
+        self.assertTrue(any("newer local persona edit was preserved" in text for text in feedback))
+
     def test_cancel_clears_pending_persona_input(self):
         self._start("create")
         handled = rt.handle_pending_input(self.db, "token", "chat", self.session, "/cancel")

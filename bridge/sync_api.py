@@ -18,7 +18,7 @@ PHASE3_SYNC_API_HANDLE = ""
 PHASE3_SYNC_API_PASSWORD = ""
 PHASE3_SYNC_INTERVAL_SECONDS = 2.0
 PHASE3_SYNC_TIMEOUT_SECONDS = 10
-_PHASE3_ALLOWED_PATHS = {"/csrf-token", "/api/users/login", "/api/ping", "/api/chats/get", "/api/chats/save", "/api/chats/group/get", "/api/chats/group/save"}
+_PHASE3_ALLOWED_PATHS = {"/csrf-token", "/api/users/login", "/api/ping", "/api/chats/get", "/api/chats/save", "/api/chats/group/get", "/api/chats/group/save", "/api/settings/get", "/api/settings/save"}
 _PHASE3_CLIENT = None
 _PHASE3_CLIENT_LOCK = threading.Lock()
 _PHASE3_WORKER_LOCK = threading.Lock()
@@ -91,12 +91,12 @@ class SillyTavernApiClient:
         request = urllib.request.Request(self.base_url + path, data=data, headers=headers, method=method)
         try:
             with self.opener.open(request, timeout=PHASE3_SYNC_TIMEOUT_SECONDS) as response:
-                raw = response.read(PHASE2_SYNC_MAX_FILE_BYTES + 1)
+                raw = response.read(SYNC_MAX_PAYLOAD_BYTES + 1)
         except urllib.error.HTTPError as exc:
             raise SillyTavernApiError(f"SillyTavern API returned HTTP {exc.code}", status=int(exc.code), transient=int(exc.code) in {429, 500, 502, 503, 504}) from exc
         except (OSError, TimeoutError) as exc:
             raise SillyTavernApiError("SillyTavern API is unavailable", transient=True) from exc
-        if len(raw) > PHASE2_SYNC_MAX_FILE_BYTES:
+        if len(raw) > SYNC_MAX_PAYLOAD_BYTES:
             raise SillyTavernApiError("SillyTavern API response exceeds the sync limit")
         try:
             return json.loads(raw.decode("utf-8")) if raw else {}
@@ -129,6 +129,24 @@ class SillyTavernApiClient:
                 self.authenticated = False
                 self.authenticate(force=True)
                 return self._raw("POST", path, payload, use_csrf=True)
+
+    def get_settings(self) -> dict:
+        """Read the complete SillyTavern settings document through its API."""
+        result = self.post("/api/settings/get", {})
+        raw = result.get("settings") if isinstance(result, dict) else None
+        try:
+            settings = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError as exc:
+            raise SillyTavernApiError("SillyTavern settings are invalid JSON") from exc
+        if not isinstance(settings, dict):
+            raise SillyTavernApiError("SillyTavern settings response has an invalid shape")
+        return settings
+
+    def save_settings(self, settings: dict) -> None:
+        """Save a complete settings document through SillyTavern's atomic route."""
+        result = self.post("/api/settings/save", settings)
+        if not isinstance(result, dict) or result.get("result") != "ok":
+            raise SillyTavernApiError("SillyTavern refused the persona settings update")
 
     def get_chat(self, session: dict[str, str], file_id: str, is_group: bool) -> list[dict]:
         result = self.post("/api/chats/group/get", {"id": file_id}) if is_group else self.post("/api/chats/get", {"avatar_url": Path(session["character_file"]).name, "file_name": file_id})
@@ -179,10 +197,7 @@ def phase3_client() -> SillyTavernApiClient:
 
 
 def _phase3_records(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], binding: dict[str, object], rows: list[tuple]) -> list[dict]:
-    payload = _build_phase2_jsonl(db, chat_id, session, fields, str(binding["sync_id"]), rows)
-    records = [json.loads(line) for line in payload.decode("utf-8").splitlines() if line.strip()]
-    records[0]["chat_metadata"]["bridge_sync"].update({"version": 3, "transport": "api"})
-    return records
+    return build_sync_records(db, chat_id, session, fields, str(binding["sync_id"]), rows)
 
 
 def _phase3_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], dict[int, tuple[list[str], int]]]:
@@ -222,53 +237,52 @@ def phase3_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> st
     """Synchronize one binding through SillyTavern's supported chat API."""
     client = phase3_client()
     session = load_session(db, chat_id, session_id, DEFAULT_MODEL)
-    binding = _phase2_binding(db, chat_id, session_id)
-    path = _phase2_path(db, chat_id, session, binding)
-    file_id = path.stem
+    binding = sync_binding(db, chat_id, session_id)
+    file_id = sync_file_id(binding)
     group = group_state(db, chat_id, session_id)
     is_group = bool(group.get("enabled"))
-    rows = _local_rows(db, chat_id, session_id)
+    rows = sync_local_rows(db, chat_id, session_id)
     local_hash = sync_transcript_hash([(role, content) for _rowid, role, content, _created_at in rows])
     remote_records = client.get_chat(session, file_id, is_group)
     fields = card_fields_from_file(session["character_file"])
     if not remote_records:
         client.save_chat(session, fields, file_id, is_group, _phase3_records(db, chat_id, session, fields, binding, rows))
-        _set_phase2_state(db, chat_id, session_id, path, local_hash, local_hash, time.time_ns(), "bridge_to_sillytavern_api")
+        set_sync_state(db, chat_id, session_id, local_hash, "bridge_to_sillytavern_api")
         _phase3_reset_failures(db, chat_id, session_id)
         return "created SillyTavern API chat"
     metadata, remote_messages, remote_variants = _phase3_snapshot(remote_records)
     remote_sync = metadata.get("bridge_sync") if isinstance(metadata.get("bridge_sync"), dict) else {}
     if remote_sync.get("sync_id") and remote_sync.get("sync_id") != binding["sync_id"]:
-        _set_phase2_state(db, chat_id, session_id, path, local_hash, "", time.time_ns(), "", "sync_id_mismatch", "API chat sync ID does not match this session")
+        set_sync_state(db, chat_id, session_id, local_hash, "", "sync_id_mismatch", "API chat sync ID does not match this session")
         _phase3_disable(db, chat_id, session_id, "sync ID mismatch")
         return "sync ID mismatch; realtime stopped"
     remote_hash = sync_transcript_hash(remote_messages)
     baseline = str(binding.get("last_hash") or "")
     if remote_hash == local_hash:
-        _set_phase2_state(db, chat_id, session_id, path, local_hash, remote_hash, time.time_ns(), str(binding.get("last_direction") or ""))
+        set_sync_state(db, chat_id, session_id, local_hash, str(binding.get("last_direction") or ""))
         _phase3_reset_failures(db, chat_id, session_id)
         return "unchanged"
     if not baseline:
-        _set_phase2_state(db, chat_id, session_id, path, local_hash, remote_hash, time.time_ns(), "", "initial_divergence", "API chat has no common checkpoint")
+        set_sync_state(db, chat_id, session_id, local_hash, "", "initial_divergence", "API chat has no common checkpoint")
         _phase3_disable(db, chat_id, session_id, "initial divergence")
         return "initial divergence; realtime stopped"
     if local_hash == baseline and remote_hash != baseline:
-        imported_hash = _apply_external_session(db, chat_id, session, metadata, remote_messages, remote_variants)
-        _set_phase2_state(db, chat_id, session_id, path, imported_hash, remote_hash, time.time_ns(), "sillytavern_api_to_bridge")
+        imported_hash = apply_sync_snapshot(db, chat_id, session, metadata, remote_messages, remote_variants)
+        set_sync_state(db, chat_id, session_id, imported_hash, "sillytavern_api_to_bridge")
         _phase3_reset_failures(db, chat_id, session_id)
         return "imported SillyTavern API changes"
     if remote_hash == baseline and local_hash != baseline:
         client.save_chat(session, fields, file_id, is_group, _phase3_records(db, chat_id, session, fields, binding, rows))
-        _set_phase2_state(db, chat_id, session_id, path, local_hash, local_hash, time.time_ns(), "bridge_to_sillytavern_api")
+        set_sync_state(db, chat_id, session_id, local_hash, "bridge_to_sillytavern_api")
         _phase3_reset_failures(db, chat_id, session_id)
         return "exported bridge changes through API"
-    _set_phase2_state(db, chat_id, session_id, path, local_hash, remote_hash, time.time_ns(), "", "conflict", "both sides changed since the last checkpoint")
+    set_sync_state(db, chat_id, session_id, local_hash, "", "conflict", "both sides changed since the last checkpoint")
     _phase3_disable(db, chat_id, session_id, "conflict detected")
     return "conflict detected; realtime stopped"
 
 
 def phase3_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
-    binding = _phase2_binding(db, chat_id, session_id)
+    binding = sync_binding(db, chat_id, session_id)
     if binding.get("realtime_enabled"):
         _phase3_disable(db, chat_id, session_id, "")
         return "realtime API sync disabled"
@@ -287,7 +301,7 @@ def phase3_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: str
 
 
 def phase3_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
-    binding = _phase2_binding(db, chat_id, session_id)
+    binding = sync_binding(db, chat_id, session_id)
     enabled = "on" if binding.get("realtime_enabled") else "off"
     configured = "configured" if phase3_api_configured() else "not configured"
     return f"Live API sync: {enabled} ({configured})"

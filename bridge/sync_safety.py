@@ -1,13 +1,12 @@
 """Late-loaded synchronization and lifecycle hardening.
 
-Phase 2/3 automatic sync runs outside the durable Telegram per-chat queues. Keep
-automatic sync from mutating a chat while one of those jobs owns its chat lock,
-rotate bounded Phase 3 polling fairly, and keep sync/import lifecycle state
+Live API sync runs outside the durable Telegram per-chat queues. Keep it from
+mutating a chat while one of those jobs owns its chat lock, rotate bounded
+polling fairly, and keep sync/import lifecycle state
 consistent with session lifecycle.
 """
 
 _ORIGINAL_SYNC_INITIALIZE_DATABASE_SCHEMA = initialize_database_schema
-_ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL = phase2_sync_now
 _ORIGINAL_PHASE3_SYNC_NOW_FOR_POLL = phase3_sync_now
 _SYNC_POLL_ATTEMPT_LIMIT = 32
 
@@ -57,38 +56,6 @@ def _try_sync_chat_lock(db: sqlite3.Connection, chat_id: str):
         lock.release()
         return None
     return lock
-
-
-def phase2_sync_poll(db: sqlite3.Connection) -> None:
-    """Poll automatic file sync without racing durable Telegram work."""
-    now = time.time()
-    rows = db.execute(
-        "SELECT chat_id,session_id,last_checked_at FROM sync_bindings "
-        "WHERE auto_enabled=1 AND (last_checked_at=0 OR last_checked_at<?) "
-        "ORDER BY last_checked_at ASC,chat_id,session_id",
-        (now - PHASE2_SYNC_INTERVAL_SECONDS,),
-    ).fetchall()
-    attempted = 0
-    for chat_id, session_id, _last_checked in rows:
-        if attempted >= _SYNC_POLL_ATTEMPT_LIMIT:
-            break
-        lock = _try_sync_chat_lock(db, str(chat_id))
-        if lock is None:
-            continue
-        attempted += 1
-        try:
-            try:
-                _ORIGINAL_PHASE2_SYNC_NOW_FOR_POLL(db, str(chat_id), str(session_id))
-            except Exception as exc:
-                logging.warning("Phase 2 sync failed for session %s: %s", session_id, exc, exc_info=True)
-                db.execute(
-                    "UPDATE sync_bindings SET last_checked_at=?,last_error=? "
-                    "WHERE chat_id=? AND session_id=?",
-                    (time.time(), str(exc)[:1000], chat_id, session_id),
-                )
-                db.commit()
-        finally:
-            lock.release()
 
 
 def phase3_sync_poll(db: sqlite3.Connection) -> None:

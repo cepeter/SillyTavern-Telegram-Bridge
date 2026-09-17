@@ -6,34 +6,6 @@ def remove_inline_keyboard(token: str, callback: dict) -> None:
         close_panel_message(token, chat_id, callback)
 
 
-def send_document(token: str, chat_id: str, path: Path, caption: str = "") -> bool:
-    boundary = f"----BridgeMultipart{int(time.time() * 1000000)}"
-    real_chat_id, thread_id = parse_topic_scope(chat_id)
-    chunks = []
-    for key, value in (("chat_id", real_chat_id), ("caption", caption)):
-        chunks.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{key}\"\r\n\r\n{value}\r\n".encode())
-    if thread_id is not None:
-        chunks.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"message_thread_id\"\r\n\r\n{thread_id}\r\n".encode())
-    chunks.append(
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"{path.name}\"\r\nContent-Type: application/json\r\n\r\n".encode()
-        + path.read_bytes() + b"\r\n"
-    )
-    chunks.append(f"--{boundary}--\r\n".encode())
-    request = urllib.request.Request(
-        f"https://api.telegram.org/bot{token}/sendDocument",
-        data=b"".join(chunks),
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        return bool(result.get("ok"))
-    except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
-        logging.error("Telegram document upload failed for %s", path.name, exc_info=True)
-        return False
-
-
 def send_voice(token: str, chat_id: str, path: Path, caption: str = "") -> bool:
     boundary = f"----BridgeVoice{int(time.time() * 1000000)}"
     real_chat_id, thread_id = parse_topic_scope(chat_id)

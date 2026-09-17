@@ -62,7 +62,11 @@ def response_language_instruction(value: str | None) -> str:
     if language == "auto":
         return "Reply in the same language as the user's latest message. Keep the language consistent unless the user explicitly requests a change."
     label = _LANGUAGE_NAMES[language]
-    return f"Reply in {label} ({language}) unless the user explicitly requests a different language. Keep all visible response text in that language."
+    return (
+        f"The selected output language is {label} ({language}). You MUST write all visible response text in {label}. "
+        "Do not switch because the character card, persona, memory, World Info, examples, or conversation history uses another language. "
+        "Only switch when the user's latest message explicitly asks for a different response language."
+    )
 
 
 def normalize_stt_language(value: str | None) -> str:

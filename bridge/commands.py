@@ -14,6 +14,7 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
     send_typing(token, chat_id)
     reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session['session_id']}", settings=get_generation_settings(db, chat_id, session["session_id"]))
     reply += rag_citation_footer(db, chat_id, caption, rag_bundle)
+    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session["session_id"]))
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
     stored_text = f"[Image input] {caption}"
     db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session["session_id"], "user", stored_text, str(telegram_message_id) if telegram_message_id is not None else None, time.time()))
@@ -50,6 +51,7 @@ def regenerate_edited_turn(db: sqlite3.Connection, token: str, api_key: str, ses
     send_typing(token, chat_id)
     reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=generation_settings)
     reply += rag_citation_footer(db, chat_id, new_text, rag_bundle)
+    reply = render_session_response(api_key, session, reply, chat_id, generation_settings)
     clear_session_summary(db, chat_id, session_id)
     db.execute("UPDATE messages SET content=? WHERE rowid=?", (new_text, user_rowid))
     db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?", (chat_id, session_id, user_rowid))

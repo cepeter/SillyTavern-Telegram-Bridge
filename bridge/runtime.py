@@ -12,7 +12,7 @@ _MODULES = (
     "common.py", "cards.py", "schema.py", "database.py", "memory.py", "rag.py", "groups.py",
     "telegram.py", "language.py", "help_details.py", "help.py", "input_flows.py", "catalog.py", "media.py", "generation.py",
     "commands.py", "command_routes.py", "message_commands.py", "callbacks.py", "panel_callback_routes.py", "main.py",
-    "recovery.py", "import_recovery.py", "sync.py", "sync_api.py", "sync_safety.py", "callback_safety.py",
+    "recovery.py", "sync_core.py", "sync_api.py", "persona_sync.py", "character_identity.py", "session_naming.py", "sync_safety.py", "callback_safety.py",
     "scheduler_safety.py",
 )
 _BASE = Path(__file__).parent

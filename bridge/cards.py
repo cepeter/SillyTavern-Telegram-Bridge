@@ -46,7 +46,7 @@ def card_fields(card: dict) -> dict[str, str]:
 def character_card_paths() -> list[Path]:
     if not CHARACTER_DIR.exists():
         return []
-    return sorted(p for p in CHARACTER_DIR.glob("*.png") if p.is_file())
+    return sorted(p for p in CHARACTER_DIR.glob("*.png") if p.is_file())[:CATALOG_MAX_ITEMS]
 
 
 def safe_character_path(name: str) -> Path | None:
@@ -96,7 +96,7 @@ def replace_world_entries(data: dict, keys: list[str], entries: list[dict]) -> N
 def world_file_paths() -> list[Path]:
     if not WORLD_DIR.exists():
         return []
-    return sorted(p for p in WORLD_DIR.glob("*.json") if p.is_file())
+    return sorted(p for p in WORLD_DIR.glob("*.json") if p.is_file())[:CATALOG_MAX_ITEMS]
 
 
 def safe_world_path(name: str) -> Path | None:
@@ -236,7 +236,7 @@ def load_system_prompts() -> dict[str, dict[str, str]]:
     if SYSTEM_PROMPTS_DIR.exists():
         for path in sorted(list(SYSTEM_PROMPTS_DIR.glob("*.json")) + list(SYSTEM_PROMPTS_DIR.glob("*.txt"))):
             _merge_system_prompt_text(result, path) if path.suffix.casefold() == ".txt" else _merge_system_prompt_json(result, path)
-    return result
+    return dict(list(result.items())[:CATALOG_MAX_ITEMS])
 
 
 _CALLBACK_TOKEN_VALUES: dict[str, tuple[str, str, str, float]] = {}
@@ -334,8 +334,12 @@ def panel_navigation(prefix: str, page: int, total_pages: int) -> list[dict[str,
 
 
 def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0) -> None:
+    try:
+        refresh_native_persona_cache()
+    except Exception:
+        logging.warning("Could not refresh native SillyTavern persona cache", exc_info=True)
     personas = load_personas()
-    options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in personas.items()]
+    options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in list(personas.items())[:CATALOG_MAX_ITEMS]]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for persona_id, label in page_options:
@@ -347,10 +351,15 @@ def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id
     rows.append([{"text": "🚫 Persona off", "callback_data": "persona:off"}])
     if current_persona and current_persona in personas:
         rows.append([{"text": "✏️ Edit current persona", "callback_data": "persona:edit"}])
+        rows.append([{"text": "⬆️ Export current → SillyTavern", "callback_data": "persona:native_export"}])
+    rows.append([{"text": "⬇️ Import from SillyTavern", "callback_data": "persona:native_import"}])
     rows.append([{"text": "➕ Create persona", "callback_data": "persona:create"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current Persona: {persona_name(current_persona) if current_persona else 'off'}{page_label}\nChoose a persona:"
+    warning = persona_catalog_warning()
+    if warning:
+        text += f"\n\n⚠️ {warning}"
     method = "editMessageText" if message_id else "sendMessage"
     payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
     if message_id:
@@ -359,13 +368,7 @@ def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id
 
 
 def send_character_menu(token: str, chat_id: str, current_character: str, message_id: int | None = None, page: int = 0) -> None:
-    options = []
-    for path in character_card_paths():
-        try:
-            label = card_fields(read_png_chara(path))["name"]
-        except Exception:
-            label = path.stem
-        options.append((path.name, label))
+    options = [(path.name, character_display_name(path)) for path in character_card_paths()]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for filename, label in page_options:
@@ -375,7 +378,8 @@ def send_character_menu(token: str, chat_id: str, current_character: str, messag
     if navigation:
         rows.append(navigation)
     rows.append([{"text": "ℹ️ Info", "callback_data": "character:info"}, {"text": "🗑️ Delete", "callback_data": "character:delete"}])
-    rows.append([{"text": "📤 Upload", "callback_data": "character:upload"}, {"text": "❌ Cancel", "callback_data": "character:cancel"}])
+    rows.append([{"text": "🔄 Refresh", "callback_data": "character:menu"}, {"text": "📤 Upload", "callback_data": "character:upload"}])
+    rows.append([{"text": "❌ Cancel", "callback_data": "character:cancel"}])
     current_label = current_character
     if safe_character_path(current_character):
         current_label = card_fields_from_file(current_character)["name"]
@@ -385,11 +389,16 @@ def send_character_menu(token: str, chat_id: str, current_character: str, messag
     payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
     if message_id:
         payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    try:
+        telegram_request(token, method, payload)
+    except RuntimeError as exc:
+        if method == "editMessageText" and "not modified" in str(exc).casefold():
+            return
+        raise
 
 
 def send_character_info_menu(token: str, chat_id: str, message_id: int | None = None, page: int = 0) -> None:
-    options = [(path.name, path.stem) for path in character_card_paths()]
+    options = [(path.name, character_display_name(path)) for path in character_card_paths()]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = [[{"text": label, "callback_data": "characterinfo:" + dynamic_callback_token("character", filename, chat_id)}] for filename, label in page_options]
     navigation = panel_navigation("characterinfo", current_page, total_pages)
@@ -405,7 +414,7 @@ def send_character_info_menu(token: str, chat_id: str, message_id: int | None = 
 
 
 def send_character_delete_menu(token: str, chat_id: str, active_character: str, message_id: int | None = None, page: int = 0) -> None:
-    options = [(path.name, path.stem) for path in character_card_paths() if path.name != active_character]
+    options = [(path.name, character_display_name(path)) for path in character_card_paths() if path.name != active_character]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = [[{"text": label, "callback_data": "characterdelete:" + dynamic_callback_token("character", filename, chat_id)}] for filename, label in page_options]
     navigation = panel_navigation("characterdelete", current_page, total_pages)
@@ -442,7 +451,7 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
     rows.append([{"text": "➕ New session", "callback_data": "session:new"}, {"text": "🗑️ Delete session", "callback_data": "session:delete"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "session:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
-    text = f"Current session: {current_id}{page_label}\nChoose a session, create a new one, or delete an inactive session. Hindsight memories are retained."
+    text = f"Current session: {current_id}{page_label}\nChoose a session, create a new one, or delete an inactive session with its session-scoped Hindsight documents."
     method = "editMessageText" if message_id else "sendMessage"
     payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
     if message_id:

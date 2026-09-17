@@ -7,6 +7,7 @@ then sends the assembled conversation to an OpenAI-compatible backend.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import base64
 import concurrent.futures
 from collections import deque
@@ -72,13 +73,11 @@ WORLD_DIR = Path(os.environ.get("SILLYTAVERN_WORLD_DIR", str(SILLYTAVERN_DIR / "
 PERSONA_FILE = Path(os.environ.get("SILLYTAVERN_PERSONA_FILE", str(BRIDGE_HOME / "scripts/sillytavern_personas.json")))
 SYSTEM_PROMPTS_DIR = Path(os.environ.get("SILLYTAVERN_SYSTEM_PROMPTS_DIR", str(SILLYTAVERN_DIR / "system_prompts")))
 SYSTEM_PROMPTS_FILE = os.environ.get("SILLYTAVERN_SYSTEM_PROMPTS_FILE", "")
-EXPORT_DIR = BRIDGE_HOME / "scripts" / "sillytavern_exports"
-IMPORT_MAX_BYTES = 10 * 1024 * 1024
+SYNC_MAX_BYTES = 10 * 1024 * 1024
 IMAGE_MAX_BYTES = 8 * 1024 * 1024
 TTS_MAX_CHARS = 4000
 STT_MAX_BYTES = 20 * 1024 * 1024
 STT_DEFAULT_MODEL = "base"
-IMPORT_DIR = BRIDGE_HOME / "scripts" / "sillytavern_imports"
 DB_FILE = BRIDGE_HOME / "scripts" / "sillytavern_telegram.sqlite3"
 PROCESSED_UPDATE_RETENTION_SECONDS = 30 * 86400
 LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
@@ -124,9 +123,10 @@ GENERATION_DEFAULTS = {
 DEFAULT_PROVIDER_URL = "https://api.example.com/v1/chat/completions"
 MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
-IMPORT_MAX_MESSAGE_CHARS = 12000
-IMPORT_MAX_TOTAL_CHARS = 200000
+SYNC_MAX_MESSAGE_CHARS = 12000
+SYNC_MAX_TOTAL_CHARS = 200000
 PENDING_SETTINGS_TTL_SECONDS = 600
+CATALOG_MAX_ITEMS = 40
 CARD_FIELD_MAX_CHARS = 20000
 CARD_TOTAL_MAX_CHARS = 60000
 MODEL_CHOICES = [
@@ -293,7 +293,7 @@ def load_env_file() -> None:
 
 
 def enforce_runtime_permissions() -> None:
-    private_dirs = {DB_FILE.parent, LOG_FILE.parent, BRIDGE_HOME / "backups", IMPORT_DIR, EXPORT_DIR, CHARACTER_BACKUP_DIR}
+    private_dirs = {DB_FILE.parent, LOG_FILE.parent, BRIDGE_HOME / "backups", CHARACTER_BACKUP_DIR}
     enforce_prompt_permissions = os.environ.get("SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS", "false").casefold() == "true"
     if SYSTEM_PROMPTS_DIR.exists() and (enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)):
         private_dirs.add(SYSTEM_PROMPTS_DIR)

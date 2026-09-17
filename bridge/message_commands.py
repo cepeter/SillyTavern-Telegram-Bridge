@@ -71,8 +71,10 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
     rag_bundle = rag_retrieval_bundle(db, chat_id, text)
     messages = build_chat_messages(session, fields, text, history_rows, memory_context=recall_memory_context(db, chat_id, session, fields, text), session_summary=session_summary_for_prompt(db, chat_id, session), rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle), group_context=group_context)
     send_typing(token, chat_id)
+    language = session.get("response_language") or "auto"
+    fixed_language = normalize_response_language(language) != "auto"
     stream_message_id = None
-    if get_meta(db, f"stream_mode:{chat_id}", "on") == "on":
+    if not fixed_language and get_meta(db, f"stream_mode:{chat_id}", "on") == "on":
         try:
             placeholder = telegram_request(token, "sendMessage", {"chat_id": chat_id, "text": "⌛ Generating…"})
             stream_message_id = int(placeholder.get("message_id")) if placeholder.get("message_id") else None
@@ -87,8 +89,11 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
         except Exception:
             logging.debug("Streaming Telegram edit failed", exc_info=True)
 
-    reply = generate_text(api_key, current_model, messages, session_id=f"telegram:{chat_id}:{session_id}", settings=get_generation_settings(db, chat_id, session_id), stream_callback=stream_update if stream_message_id else None)
+    generation_settings = get_generation_settings(db, chat_id, session_id)
+    generation_session_id = f"telegram:{chat_id}:{session_id}"
+    reply = generate_text(api_key, current_model, messages, session_id=generation_session_id, settings=generation_settings, stream_callback=stream_update if stream_message_id else None)
     reply += rag_citation_footer(db, chat_id, text, rag_bundle)
+    reply = render_response_language(api_key, current_model, reply, language, generation_session_id, generation_settings)
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
     now = time.time()
     db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "user", text, str(telegram_message_id) if telegram_message_id is not None else None, now))
@@ -137,12 +142,16 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
             record_operation(db, operation_id, "recovery_delivery")
             db.commit()
             return
-    fields = card_fields_from_file(session["character_file"])
     if handle_pending_input(db, token, chat_id, session, stripped, operation_id=operation_id):
         return
     if command == "/reset":
         send_reset_confirmation_menu(token, chat_id)
         return
+    if command == "/session":
+        send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id)
+        return
+    session = reconcile_session_character(db, chat_id, session)
+    fields = card_fields_from_file(session["character_file"])
     group_turn = group_current_speaker(db, chat_id, session, text)
     group_context = ""
     if group_turn:

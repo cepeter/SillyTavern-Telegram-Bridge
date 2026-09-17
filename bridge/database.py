@@ -225,14 +225,11 @@ def sync_transcript_hash(rows: list[tuple[str, str]]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def ensure_sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str, requested_sync_id: str = "") -> dict[str, object]:
+def ensure_sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
     """Return or create the stable external-sync identity for a session."""
     row = db.execute("SELECT sync_id,last_hash,last_direction,last_synced_at FROM sync_bindings WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
     if row is None:
-        candidate = str(requested_sync_id or "")
-        if not re.fullmatch(r"stb-[a-f0-9]{32}", candidate):
-            candidate = ""
-        sync_id = candidate or "stb-" + hashlib.sha256(f"{chat_id}:{session_id}:{time.time_ns()}".encode("utf-8")).hexdigest()[:32]
+        sync_id = "stb-" + hashlib.sha256(f"{chat_id}:{session_id}:{time.time_ns()}".encode("utf-8")).hexdigest()[:32]
         try:
             db.execute("INSERT INTO sync_bindings(chat_id,session_id,sync_id) VALUES(?,?,?)", (chat_id, session_id, sync_id))
         except sqlite3.IntegrityError:
@@ -241,9 +238,3 @@ def ensure_sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str, r
         db.commit()
         return {"sync_id": sync_id, "last_hash": "", "last_direction": "", "last_synced_at": 0.0}
     return {"sync_id": str(row[0]), "last_hash": str(row[1] or ""), "last_direction": str(row[2] or ""), "last_synced_at": float(row[3] or 0)}
-
-
-def record_sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str, transcript_hash: str, direction: str) -> None:
-    """Record the last successful manual export or import checkpoint."""
-    db.execute("UPDATE sync_bindings SET last_hash=?,last_direction=?,last_synced_at=? WHERE chat_id=? AND session_id=?", (transcript_hash, direction, time.time(), chat_id, session_id))
-    db.commit()

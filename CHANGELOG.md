@@ -2,6 +2,32 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.004] - 2026-09-17
+
+### Added
+
+- Added validated naming before creating normal, Character-driven, or topic-local group sessions; cancellation leaves no empty session behind.
+- Added deterministic session-prefixed Hindsight document IDs, local document mapping, and fail-closed targeted memory cleanup when deleting an inactive session.
+- Added native persona interoperability through SillyTavern's authenticated settings API and native User Avatars directory, with verified backups, atomic writes, and readback checks.
+- Added safe recovery of session character references after native card renames using a unique PNG image fingerprint or unique embedded card name.
+- Added a topic-only New group session wizard that chains Character and World Info selection without colliding with ordinary session flows.
+
+### Changed
+
+- Character cards and World Info now use SillyTavern's native local paths directly; bridge JSON remains cache/fallback state where needed.
+- Increased Character, Persona, System Prompt, and World Info catalog limits to 40 entries.
+- Removed automatic chat-file synchronization, manual JSONL Export/Import, document-import routing, recovery state machines, fallback-only database helpers, and their panel controls. Live API Sync is now the only conversation synchronization path.
+- Simplified `/sync`, README, and Help around Live API Sync only.
+
+### Fixed
+
+- Rebound the Character panel to a uniquely renamed native card and refreshed its embedded display name.
+- Treated an unchanged Character panel refresh as a successful idempotent action instead of reporting `Callback processing failed`.
+- Normalized isolated invalid Persona entries without blocking the catalog, surfaced malformed-catalog warnings in the panel, and preserved newer concurrent edits when native export rollback was needed.
+- Enforced fixed response-language selections with a final bounded render pass across normal, image, edit, regenerate, and continue paths; Auto mode remains single-pass and fixed-language streaming previews are suppressed.
+- Explicitly disabled hidden reasoning on OpenRouter when the configured reasoning budget is zero, and automatically requested one bounded continuation when a non-stream response stopped at its output-token limit.
+- Kept session and group setup callback state scoped to the correct chat, topic, and session.
+
 ## [0.2.003] - 2026-09-16
 
 ### Added

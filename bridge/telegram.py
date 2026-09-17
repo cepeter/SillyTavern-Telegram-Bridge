@@ -36,10 +36,11 @@ def update_session(db: sqlite3.Connection, chat_id: str, session_id: str, operat
     db.commit()
 
 
-def create_session(db: sqlite3.Connection, chat_id: str, default_model: str, session_id: str | None = None) -> dict[str, str]:
+def create_session(db: sqlite3.Connection, chat_id: str, default_model: str, session_id: str | None = None, title: str = "New session") -> dict[str, str]:
     session_id = session_id or ("s" + str(int(time.time() * 1000)))
+    title = normalize_session_title(title)
     now = time.time()
-    row = (chat_id, session_id, "New session", DEFAULT_CHARACTER_FILE,
+    row = (chat_id, session_id, title, DEFAULT_CHARACTER_FILE,
            get_meta(db, "model", default_model), get_meta(db, "persona_id", "punto"),
            get_meta(db, "world_file", ""), "", "", "auto")
     db.execute("INSERT OR IGNORE INTO sessions(chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
@@ -63,7 +64,7 @@ def send_session_delete_menu(token: str, chat_id: str, sessions: list[dict[str, 
     if navigation:
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "session:back"}, {"text": "❌ Close", "callback_data": "session:cancel"}])
-    text = f"Choose an inactive session to delete (page {current_page + 1}/{total_pages}). Hindsight memories for this chat are retained."
+    text = f"Choose an inactive session to delete (page {current_page + 1}/{total_pages}). Session-scoped Hindsight documents are deleted; memories from other sessions remain."
     method = "editMessageText" if message_id else "sendMessage"
     payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
     if message_id:
@@ -73,7 +74,7 @@ def send_session_delete_menu(token: str, chat_id: str, sessions: list[dict[str, 
 
 def send_session_delete_confirm(token: str, chat_id: str, session_id: str, title: str, message_id: int | None = None) -> None:
     token_value = dynamic_callback_token("session", session_id, chat_id)
-    payload = {"chat_id": chat_id, "text": f"Delete session '{panel_label(title)}'?\n\nThis removes its SQLite transcript, variants, summary, generation settings, group state, failed turns, and session record. The active session cannot be deleted. Hindsight memories are retained because the current bank is shared by this chat. This cannot be undone.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "sessiondeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "session:delete"}]]}}
+    payload = {"chat_id": chat_id, "text": f"Delete session '{panel_label(title)}'?\n\nThis removes its SQLite transcript, variants, summary, generation settings, group state, failed turns, session record, and session-scoped Hindsight documents. Memories from other sessions remain. The active session cannot be deleted. Cleanup fails closed if Hindsight is unavailable. This cannot be undone.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "sessiondeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "session:delete"}]]}}
     method = "editMessageText" if message_id else "sendMessage"
     if message_id:
         payload["message_id"] = message_id
@@ -89,21 +90,32 @@ def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id:
     busy = db.execute("SELECT 1 FROM jobs WHERE chat_id=? AND session_id=? AND state IN ('queued','scheduled','running') LIMIT 1", (chat_id, target_session_id)).fetchone()
     if busy:
         return False, "session has active jobs"
-    if operation_id is not None and not begin_operation(db, operation_id, "session_delete"):
-        return False, "already processed"
-    db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    db.execute("DELETE FROM response_variants WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    db.execute("DELETE FROM session_summaries WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    db.execute("DELETE FROM generation_settings WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    db.execute("DELETE FROM group_sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    db.execute("DELETE FROM failed_turns WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    db.execute("DELETE FROM panel_sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    db.execute("DELETE FROM jobs WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    db.execute("DELETE FROM meta WHERE key IN (?, ?)", (swipe_state_key(chat_id, target_session_id), f"swipe_message:{chat_id}:{target_session_id}"))
-    db.execute("DELETE FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
-    if operation_id is not None:
-        record_operation(db, operation_id, "session_delete")
-    db.commit()
+    with hindsight_session_lock(chat_id, target_session_id):
+        if not db.execute("SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id)).fetchone():
+            return False, "session not found"
+        busy = db.execute("SELECT 1 FROM jobs WHERE chat_id=? AND session_id=? AND state IN ('queued','scheduled','running') LIMIT 1", (chat_id, target_session_id)).fetchone()
+        if busy:
+            return False, "session has active jobs"
+        try:
+            purge_hindsight_session(db, chat_id, target_session_id)
+        except RuntimeError:
+            return False, "Hindsight cleanup failed; session was preserved"
+        if operation_id is not None and not begin_operation(db, operation_id, "session_delete"):
+            return False, "already processed"
+        db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM response_variants WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM session_summaries WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM generation_settings WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM group_sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM failed_turns WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM panel_sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM jobs WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM hindsight_documents WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        db.execute("DELETE FROM meta WHERE key IN (?, ?)", (swipe_state_key(chat_id, target_session_id), f"swipe_message:{chat_id}:{target_session_id}"))
+        db.execute("DELETE FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id))
+        if operation_id is not None:
+            record_operation(db, operation_id, "session_delete")
+        db.commit()
     return True, "deleted"
 
 
@@ -153,7 +165,7 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
     return result["result"]
 
 
-def download_telegram_file(token: str, file_id: str, max_bytes: int = IMPORT_MAX_BYTES) -> bytes:
+def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_BYTES) -> bytes:
     file_info = telegram_request(token, "getFile", {"file_id": file_id})
     file_path = file_info.get("file_path")
     if not file_path:
@@ -178,86 +190,16 @@ def parse_sillytavern_jsonl(raw: bytes) -> tuple[dict, list[tuple[str, str]]]:
             continue
         role = "user" if record.get("is_user") else "assistant"
         content = str(record.get("mes") or "").strip()
-        if len(content) > IMPORT_MAX_MESSAGE_CHARS:
-            raise ValueError(f"JSONL message exceeds {IMPORT_MAX_MESSAGE_CHARS} characters")
+        if len(content) > SYNC_MAX_MESSAGE_CHARS:
+            raise ValueError(f"JSONL message exceeds {SYNC_MAX_MESSAGE_CHARS} characters")
         total_chars += len(content)
-        if total_chars > IMPORT_MAX_TOTAL_CHARS:
-            raise ValueError(f"JSONL transcript exceeds {IMPORT_MAX_TOTAL_CHARS} characters")
+        if total_chars > SYNC_MAX_TOTAL_CHARS:
+            raise ValueError(f"JSONL transcript exceeds {SYNC_MAX_TOTAL_CHARS} characters")
         if content:
             messages.append((role, content))
     if not messages:
         raise ValueError("JSONL contains no user/assistant messages")
     return metadata if isinstance(metadata, dict) else {}, messages
-
-
-def import_chat_session(db: sqlite3.Connection, chat_id: str, raw: bytes, default_model: str, operation_id: int | str | None = None) -> dict[str, str]:
-    metadata, imported_messages = parse_sillytavern_jsonl(raw)
-    deterministic_session_id = f"import-job-{operation_id}" if operation_id is not None else None
-    phase_key = f"import_phase:{operation_id}" if operation_id is not None else ""
-    phase = get_meta(db, phase_key, "created") if phase_key else "created"
-    session = create_session(db, chat_id, default_model, session_id=deterministic_session_id)
-    if phase == "complete":
-        return session
-    if phase == "created":
-        values = {"title": str(metadata.get("name") or "Imported chat")[:120]}
-        character_file = str(metadata.get("character_file") or "")
-        if safe_character_path(character_file):
-            values["character_file"] = Path(character_file).name
-        if metadata.get("model"):
-            values["model_id"] = str(metadata["model"])[:200]
-        persona_id = str(metadata.get("persona") or "")
-        if persona_id and get_persona(persona_id):
-            values["persona_id"] = persona_id
-        raw_worlds = metadata.get("world_info")
-        world_candidates = raw_worlds if isinstance(raw_worlds, list) else ([raw_worlds] if raw_worlds else [])
-        valid_worlds = [Path(str(name)).name for name in world_candidates if safe_world_path(str(name))]
-        if valid_worlds:
-            values["world_file"] = encode_world_files(valid_worlds)
-        values["author_note"] = str(metadata.get("author_note") or "")[:2000]
-        values["system_prompt"] = str(metadata.get("system_prompt") or "")[:8000]
-        try:
-            values["response_language"] = normalize_response_language(str(metadata.get("response_language") or "auto"))
-        except ValueError:
-            pass
-        update_session(db, chat_id, session["session_id"], **values)
-        imported_settings = metadata.get("generation_settings")
-        if isinstance(imported_settings, dict):
-            normalized = {}
-            for key, raw_value in imported_settings.items():
-                if key not in GENERATION_DEFAULTS:
-                    continue
-                try:
-                    normalized[key] = parse_generation_setting(key, str(raw_value))[1]
-                except ValueError:
-                    continue
-            if normalized:
-                update_generation_settings(db, chat_id, session["session_id"], **normalized)
-        for role, content in imported_messages:
-            db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session["session_id"], role, content, time.time()))
-            time.sleep(0.001)
-        db.commit()
-        if phase_key:
-            set_meta(db, phase_key, "messages_loaded")
-        phase = "messages_loaded"
-    if phase == "messages_loaded":
-        imported_summary = str(metadata.get("session_summary") or "")[:SUMMARY_MAX_CHARS]
-        if imported_summary:
-            last_rowid = int(db.execute("SELECT COALESCE(MAX(rowid), 0) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0])
-            db.execute("INSERT OR REPLACE INTO session_summaries(chat_id,session_id,summary,covered_until_rowid,updated_at) VALUES(?,?,?,?,?)", (chat_id, session["session_id"], imported_summary, last_rowid, time.time()))
-            db.commit()
-        if phase_key:
-            set_meta(db, phase_key, "summary_loaded")
-        phase = "summary_loaded"
-    if phase == "summary_loaded":
-        last_user = None
-        for role, content in imported_messages:
-            if role == "user":
-                last_user = content
-            elif role == "assistant" and last_user is not None:
-                save_response_variant(db, chat_id, session["session_id"], last_user, content)
-        if phase_key:
-            set_meta(db, phase_key, "complete")
-    return ensure_session(db, chat_id, default_model)
 
 
 def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None) -> None:
@@ -327,6 +269,10 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
     target = CHARACTER_DIR / f"{stem}.png"
     if target.exists() and target.read_bytes() != raw:
         target = CHARACTER_DIR / f"{stem}-{hashlib.sha256(raw).hexdigest()[:8]}.png"
+    installed_count = sum(1 for path in CHARACTER_DIR.glob("*.png") if path.is_file()) if CHARACTER_DIR.exists() else 0
+    if not target.exists() and installed_count >= CATALOG_MAX_ITEMS:
+        send_text(token, chat_id, f"Character catalog is full ({CATALOG_MAX_ITEMS} maximum). Delete one before uploading another.")
+        return
     CHARACTER_DIR.mkdir(parents=True, exist_ok=True)
     if target.exists():
         if target.read_bytes() == raw:
@@ -348,7 +294,7 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
     send_text(token, chat_id, f"Character card imported: {fields['name']} ({target.name}). Backup verified: {backup.name}.")
 
 
-def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None, operation_id: int | str | None = None) -> None:
+def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
     file_size = int(document.get("file_size") or 0)
@@ -362,14 +308,6 @@ def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, d
             process_image_message(db, token, os.environ.get("LLM_API_KEY", ""), session, fields, chat_id, str(document.get("caption") or ""), raw, mime_type="image/png", telegram_message_id=telegram_message_id)
         else:
             import_character_card(db, token, chat_id, filename, raw)
-        return
-    if suffix == ".jsonl":
-        if file_size > IMPORT_MAX_BYTES:
-            send_text(token, chat_id, "File import terlalu besar. Batasnya 10 MB.")
-            return
-        raw = download_telegram_file(token, str(document.get("file_id")))
-        session = import_chat_session(db, chat_id, raw, default_model, operation_id=operation_id)
-        send_text(token, chat_id, f"Chat imported into session {session['session_id']} ({session['title']}).")
         return
     if suffix not in RAG_SUPPORTED_SUFFIXES:
         send_text(token, chat_id, "Format Data Bank tidak didukung. Gunakan PDF, TXT, MD, JSON, YAML, CSV, HTML, XML, atau DOCX.")

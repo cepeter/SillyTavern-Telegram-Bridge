@@ -86,6 +86,15 @@ def _ensure_generation_tables(db: sqlite3.Connection) -> None:
         updated_at REAL NOT NULL,
         PRIMARY KEY(chat_id, session_id)
     )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS hindsight_documents (
+        chat_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        PRIMARY KEY(chat_id, session_id, document_id)
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS hindsight_documents_session_idx ON hindsight_documents(chat_id, session_id)")
 
 
 
@@ -206,10 +215,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         last_hash TEXT NOT NULL DEFAULT '',
         last_direction TEXT NOT NULL DEFAULT '',
         last_synced_at REAL NOT NULL DEFAULT 0,
-        external_path TEXT NOT NULL DEFAULT '',
-        external_hash TEXT NOT NULL DEFAULT '',
-        external_mtime_ns INTEGER NOT NULL DEFAULT 0,
-        auto_enabled INTEGER NOT NULL DEFAULT 0,
         conflict TEXT NOT NULL DEFAULT '',
         last_error TEXT NOT NULL DEFAULT '',
         last_checked_at REAL NOT NULL DEFAULT 0,
@@ -221,10 +226,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
     )""")
     sync_columns = {row[1] for row in db.execute("PRAGMA table_info(sync_bindings)").fetchall()}
     for column, definition in {
-        "external_path": "TEXT NOT NULL DEFAULT ''",
-        "external_hash": "TEXT NOT NULL DEFAULT ''",
-        "external_mtime_ns": "INTEGER NOT NULL DEFAULT 0",
-        "auto_enabled": "INTEGER NOT NULL DEFAULT 0",
         "conflict": "TEXT NOT NULL DEFAULT ''",
         "last_error": "TEXT NOT NULL DEFAULT ''",
         "last_checked_at": "REAL NOT NULL DEFAULT 0",
@@ -234,7 +235,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
     }.items():
         if column not in sync_columns:
             db.execute(f"ALTER TABLE sync_bindings ADD COLUMN {column} {definition}")
-    db.execute("CREATE INDEX IF NOT EXISTS sync_bindings_auto_idx ON sync_bindings(auto_enabled, last_checked_at)")
     db.execute("CREATE INDEX IF NOT EXISTS sync_bindings_realtime_idx ON sync_bindings(realtime_enabled, realtime_next_retry_at)")
     db.execute("DELETE FROM operations WHERE updated_at < ?", (time.time() - 90 * 86400,))
     db.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS data_bank_fts USING fts5(
