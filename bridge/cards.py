@@ -208,7 +208,7 @@ def default_persona_id() -> str:
 
 def persona_name(persona_id: str) -> str:
     persona = get_persona(persona_id)
-    return str(persona.get("name") or persona_id or DEFAULT_USER_NAME) if persona else DEFAULT_USER_NAME
+    return str(persona.get("name") or "") if persona else ""
 
 
 def _merge_system_prompt_json(result: dict[str, dict[str, str]], path: Path) -> None:

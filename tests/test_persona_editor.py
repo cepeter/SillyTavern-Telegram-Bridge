@@ -74,7 +74,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_default_persona_resolves_only_native_persona(self):
         self.assertEqual(rt.default_persona_id(), "bridge-user.png")
-        self.assertEqual(rt.persona_name(""), "User")
+        self.assertEqual(rt.persona_name(""), "")
 
     def test_edit_name_and_description_updates_native_settings(self):
         self._start("edit", "bridge-user.png")
