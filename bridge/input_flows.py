@@ -51,6 +51,8 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
         elif action == "tts":
             if len(value) > TTS_MAX_CHARS or not send_tts(token, chat_id, value, operation_id=operation_id):
                 raise ValueError(f"TTS input is invalid or exceeds {TTS_MAX_CHARS} characters")
+        elif action == "imagine":
+            handle_imagine_prompt(token, chat_id, value)
         elif action == "memory_search":
             handle_memory_command(db, token, chat_id, session, fields, "/memory search " + value)
             send_memory_menu(token, chat_id, db)

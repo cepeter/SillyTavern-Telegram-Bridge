@@ -20,6 +20,12 @@ providers:
     models:
       - provider-two/model-a
 
+#   image_enabled: false
+#   image_endpoint: https://provider-one.example/v1/images/generations
+#   image_models:
+#     - provider-one/image-model
+#   image_default_size: 1024x1024
+
 # Optional Anthropic Messages provider.
 # Uncomment and configure ANTHROPIC_API_KEY to enable it.
 #  provider-anthropic:

@@ -19,6 +19,7 @@ HELP_CATEGORIES = {
         ("/systemprompt", "Open the panel to choose a configured TXT System Prompt; text fallback is disabled."),
         ("/language", "Choose the language used for generated model replies in this session."),
         ("/expression", "Choose manual or automatic character expressions; native sprites are discovered from the active card."),
+        ("/imagine", "Generate an image from a prompt using an enabled image provider."),
     ],
     "generation": [
         ("/settings", "Open this session's generation panel; choose reasoning or set validated numeric fields."),
@@ -463,6 +464,8 @@ def set_bot_commands(token: str) -> None:
                 {"command": "note", "description": "Open Author's Note panel"},
                 {"command": "systemprompt", "description": "Choose TXT System Prompt from panel"},
                 {"command": "language", "description": "Choose model reply language"},
+                {"command": "expression", "description": "Choose manual or automatic character expressions"},
+                {"command": "imagine", "description": "Generate an image from a prompt"},
             ]
         })
     except Exception:
