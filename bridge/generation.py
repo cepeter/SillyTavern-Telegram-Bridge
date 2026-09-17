@@ -1,3 +1,8 @@
+import hashlib
+import re
+import time
+
+
 def anthropic_content(value):
     if isinstance(value, str):
         return value
@@ -118,6 +123,43 @@ def resolve_provider_model(model: str) -> tuple[str, str]:
     return "provider-one", model
 
 
+def opencode_muse_headers(session_id: str) -> dict[str, str]:
+    base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    digest = hashlib.sha256(f"opencode\\0{session_id}".encode("utf-8")).digest()
+    session_key = f"ses_{digest[:6].hex()}" + "".join(base62[value % 62] for value in digest[6:20])
+    request_digest = hashlib.sha256(f"opencode-request\\0{session_key}\\0{time.time_ns()}".encode("utf-8")).digest()
+    request_id = f"msg_{request_digest[:6].hex()}" + "".join(base62[value % 62] for value in request_digest[6:20])
+    version = os.environ.get("OPENCODE_CLIENT_VERSION", "1.18.31")
+    return {"Authorization": "", "x-opencode-session": session_key, "x-opencode-request": request_id, "x-opencode-client": "cli", "User-Agent": f"opencode/{version}", "Origin": "https://opencode.ai", "Referer": "https://opencode.ai/", "HTTP-Referer": "https://opencode.ai/", "X-Title": "opencode", "Content-Type": "application/json", "Accept": "application/json"}
+
+
+def opencode_muse_generate(actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str) -> str:
+    endpoint = str(spec.get("api_endpoint") or spec.get("api") or "https://opencode.ai/zen/v1").rstrip("/")
+    validate_provider_endpoint(endpoint)
+    inputs = []
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, list):
+            content = "\\n".join(str(item.get("text") or "") for item in content if isinstance(item, dict))
+        inputs.append({"role": str(message.get("role") or "user"), "content": [{"type": "input_text", "text": str(content or "")}]})
+    requested = int(settings.get("max_tokens") or 0)
+    body = {"model": actual_model, "input": inputs, "stream": False, "store": False, "max_output_tokens": max(3000, requested), "reasoning": {"effort": "low"}}
+    request = urllib.request.Request(endpoint + "/responses", data=json.dumps(body).encode("utf-8"), headers=opencode_muse_headers(session_id), method="POST")
+    with strict_urlopen(request, timeout=180) as response:
+        result = json.loads(response.read().decode("utf-8"))
+    output_text = result.get("output_text")
+    if output_text:
+        return str(output_text).strip()
+    chunks = []
+    for item in result.get("output") or []:
+        for content in item.get("content") or []:
+            if content.get("type") in {"output_text", "text"} and content.get("text"):
+                chunks.append(str(content["text"]))
+    if not chunks:
+        raise RuntimeError("OpenCode Muse returned no assistant content")
+    return "".join(chunks).strip()
+
+
 def generate_text(api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None) -> str:
     """Generate through the selected bridge provider adapter."""
     provider_id, actual_model = resolve_provider_model(model)
@@ -125,6 +167,8 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
     transport = str(spec.get("transport") or "chat_completions")
     generation = dict(GENERATION_DEFAULTS)
     generation.update(settings or {})
+    if transport == "opencode_muse":
+        return opencode_muse_generate(actual_model, messages, generation, spec, session_id)
     if transport == "anthropic_messages":
         configured_key_env = spec.get("api_key_env")
         key_env = str(configured_key_env or "ANTHROPIC_API_KEY")

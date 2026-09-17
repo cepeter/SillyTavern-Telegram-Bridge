@@ -30,3 +30,13 @@ providers:
 #    anthropic_version: "2023-06-01"
 #    models:
 #      - claude-sonnet
+
+# Optional OpenCode Zen Muse Free provider.
+# This transport is keyless and uses the OpenCode /responses contract.
+#  opencode-free:
+#    name: OpenCode Muse Free
+#    api_endpoint: https://opencode.ai/zen/v1
+#    transport: opencode_muse
+#    adapter: opencode_muse
+#    models:
+#      - muse-spark-1.3-contributor-free

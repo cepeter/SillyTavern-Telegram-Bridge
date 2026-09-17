@@ -86,12 +86,13 @@ def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, st
         configured_key_env = spec.get("api_key_env")
         key_env = str(configured_key_env or "LLM_API_KEY")
         key = os.environ.get(key_env, "")
+        transport = str(spec.get("transport") or "")
         if not key and (not configured_key_env or key_env == "LLM_API_KEY"):
             key = os.environ.get("LLM_API_KEY", "")
-        if configured_key_env and not key:
+        if configured_key_env and not key and transport != "opencode_muse":
             results.append((current_id, str(spec.get("name") or current_id), f"missing credential ({key_env})"))
             continue
-        headers = {"Accept": "application/json", "User-Agent": "SillyTavernTelegramBridge/1.0"}
+        headers = opencode_muse_headers(f"health:{current_id}") if transport == "opencode_muse" else {"Accept": "application/json", "User-Agent": "SillyTavernTelegramBridge/1.0"}
         if str(spec.get("transport") or "") == "anthropic_messages":
             headers["x-api-key"] = key
             headers["anthropic-version"] = str(spec.get("anthropic_version") or "2023-06-01")
@@ -112,7 +113,7 @@ def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, st
 def get_model_groups() -> dict[str, tuple[str, list[tuple[str, str]], bool]]:
     """Read every bridge provider/model group; mark bridge-supported providers."""
     groups: dict[str, tuple[str, list[tuple[str, str]], bool]] = {}
-    supported_adapters = {"chat_completions", "openai", "openai_compatible", "anthropic_messages"}
+    supported_adapters = {"chat_completions", "openai", "openai_compatible", "anthropic_messages", "opencode_muse"}
     try:
         config, _, _ = refresh_model_catalog()
         providers = config.get("providers") or {}
