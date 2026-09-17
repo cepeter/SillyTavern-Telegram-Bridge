@@ -14,7 +14,6 @@ class CatalogLimitTests(unittest.TestCase):
         self.old_world = rt.WORLD_DIR
         self.old_prompts = rt.SYSTEM_PROMPTS_DIR
         self.old_prompt_file = rt.SYSTEM_PROMPTS_FILE
-        self.old_persona = rt.PERSONA_FILE
         self.old_native_settings = rt.NATIVE_PERSONA_SETTINGS_FILE
         self.old_native_avatars = rt.NATIVE_PERSONA_AVATAR_DIR
         self.old_native_cache = rt._NATIVE_PERSONA_CACHE
@@ -25,7 +24,6 @@ class CatalogLimitTests(unittest.TestCase):
         rt.WORLD_DIR = root / "worlds"
         rt.SYSTEM_PROMPTS_DIR = root / "prompts"
         rt.SYSTEM_PROMPTS_FILE = ""
-        rt.PERSONA_FILE = root / "personas.json"
         rt.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
         rt.NATIVE_PERSONA_AVATAR_DIR = root / "avatars"
         rt.NATIVE_PERSONA_AVATAR_DIR.mkdir()
@@ -48,7 +46,6 @@ class CatalogLimitTests(unittest.TestCase):
         rt.WORLD_DIR = self.old_world
         rt.SYSTEM_PROMPTS_DIR = self.old_prompts
         rt.SYSTEM_PROMPTS_FILE = self.old_prompt_file
-        rt.PERSONA_FILE = self.old_persona
         rt.NATIVE_PERSONA_SETTINGS_FILE = self.old_native_settings
         rt.NATIVE_PERSONA_AVATAR_DIR = self.old_native_avatars
         rt._NATIVE_PERSONA_CACHE = self.old_native_cache

@@ -1,7 +1,0 @@
-{
-  "default": {
-    "name": "User",
-    "description": "Describe the user's communication preferences and role here.",
-    "tags": ["default"]
-  }
-}

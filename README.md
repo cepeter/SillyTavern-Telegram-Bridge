@@ -98,15 +98,17 @@ Dependency files:
 Copy the example environment file and edit it outside Git:
 
 ```bash
-mkdir -p ~/.config/sillytavern-telegram
-cp .env.example ~/.config/sillytavern-telegram/.env
-chmod 600 ~/.config/sillytavern-telegram/.env
+mkdir -p ~/.local/share/sillytavern-telegram
+cp .env.example ~/.local/share/sillytavern-telegram/.env
+chmod 600 ~/.local/share/sillytavern-telegram/.env
 ```
 
-For a dedicated bridge-local environment file, set this variable in the service unit:
+`SILLYTAVERN_ENV_FILE` is optional. When it is not set, the launcher uses
+`~/.local/share/sillytavern-telegram/.env`. For an explicit environment file,
+set this variable in the service unit:
 
 ```ini
-Environment=SILLYTAVERN_ENV_FILE=%h/.config/sillytavern-telegram/.env
+Environment=SILLYTAVERN_ENV_FILE=%h/.local/share/sillytavern-telegram/.env
 ```
 
 The bridge reads that file before processing credentials. Keep it outside Git.
@@ -590,7 +592,7 @@ Hindsight retention and automatic TTS are best-effort auxiliary jobs; a saturate
 - Restrict the bot with `SILLYTAVERN_TELEGRAM_ALLOWED_USERS`.
 - Do not expose a tool-capable API publicly without authentication and TLS.
 - Treat uploaded documents as private chat data.
-- Review Hindsight bank scope before enabling cross-session recall.
+- Hindsight recall is hard-filtered to the active session; cross-session recall is disabled.
 - The release publisher is private maintainer tooling and is not included in the public runtime repository or distribution ZIP.
 - The repository contains no credentials, live database, user allowlist, or character card.
 

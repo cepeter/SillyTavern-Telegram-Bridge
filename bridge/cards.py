@@ -351,9 +351,6 @@ def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id
     rows.append([{"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current Persona: {persona_name(current_persona) if current_persona else 'off'}{page_label}\nChoose a persona:"
-    warning = persona_catalog_warning()
-    if warning:
-        text += f"\n\n⚠️ {warning}"
     method = "editMessageText" if message_id else "sendMessage"
     payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
     if message_id:

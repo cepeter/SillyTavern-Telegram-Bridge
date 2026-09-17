@@ -70,7 +70,6 @@ CHARACTER_BACKUP_DIR = Path(os.environ.get("SILLYTAVERN_CHARACTER_BACKUP_DIR", s
 DEFAULT_CHARACTER_FILE = os.environ.get("SILLYTAVERN_DEFAULT_CHARACTER", "Alisha.png")
 CARD_FILE = CHARACTER_DIR / DEFAULT_CHARACTER_FILE
 WORLD_DIR = Path(os.environ.get("SILLYTAVERN_WORLD_DIR", str(SILLYTAVERN_DIR / "data/default-user/worlds")))
-PERSONA_FILE = Path(os.environ.get("SILLYTAVERN_PERSONA_FILE", str(BRIDGE_HOME / "scripts/sillytavern_personas.json")))
 SYSTEM_PROMPTS_DIR = Path(os.environ.get("SILLYTAVERN_SYSTEM_PROMPTS_DIR", str(SILLYTAVERN_DIR / "system_prompts")))
 SYSTEM_PROMPTS_FILE = os.environ.get("SILLYTAVERN_SYSTEM_PROMPTS_FILE", "")
 SYNC_MAX_BYTES = 10 * 1024 * 1024
@@ -303,7 +302,7 @@ def enforce_runtime_permissions() -> None:
             directory.chmod(0o700)
         except OSError:
             logging.warning("Could not protect runtime directory %s", directory, exc_info=True)
-    private_files = {ENV_FILE, DB_FILE, LOG_FILE, PROVIDER_CONFIG_FILE, MODEL_CACHE_FILE, PERSONA_FILE}
+    private_files = {ENV_FILE, DB_FILE, LOG_FILE, PROVIDER_CONFIG_FILE, MODEL_CACHE_FILE}
     if SYSTEM_PROMPTS_DIR.exists() and (enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)):
         private_files.update(SYSTEM_PROMPTS_DIR.glob("*.txt"))
         private_files.update(SYSTEM_PROMPTS_DIR.glob("*.json"))
