@@ -58,6 +58,7 @@ class CatalogPanelTests(unittest.TestCase):
         self.assertTrue(request.full_url.endswith("/api/v3/chat/completions"))
         body = json.loads(request.data.decode("utf-8"))
         self.assertTrue(body["stream"])
+        self.assertEqual(request.headers["Content-type"], "application/json")
         self.assertEqual(body["model"], "zai-org/glm-5.3-flash")
 
     def test_model_panel_treats_not_modified_as_success(self):

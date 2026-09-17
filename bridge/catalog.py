@@ -109,7 +109,7 @@ def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, st
                     "temperature": 0,
                     "stream": True,
                 }
-                request = urllib.request.Request(endpoint + "/chat/completions", data=json.dumps(health_body).encode("utf-8"), headers={**headers, "Accept": "text/event-stream"}, method="POST")
+                request = urllib.request.Request(endpoint + "/chat/completions", data=json.dumps(health_body).encode("utf-8"), headers={**headers, "Accept": "text/event-stream", "Content-Type": "application/json"}, method="POST")
                 with strict_urlopen(request, timeout=30) as response:
                     response.read(1)
                 results.append((current_id, str(spec.get("name") or current_id), "healthy (chat completion)"))
