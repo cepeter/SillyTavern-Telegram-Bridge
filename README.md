@@ -244,22 +244,23 @@ are rejected before normal generation.
 
 ```text
 /start              Send the character card opening message
-/status             Show active character, session, model, and runtime state
+/status             Show detailed active session and generation state
 /new                Create and activate a named isolated session
-/reset              Confirm an active-session reset
+/reset              Confirm active-session reset and memory purge
 /session            Switch, create, or delete an inactive session
 /character          Open character management
 /persona            Open native Persona controls
 /world              Open World Info/lorebook controls
 /systemprompt       Choose a private TXT System Prompt
 /note               Open Author's Note controls
+/providers          Open provider/model, Health, and Refresh controls
 ```
 
 ### Replies and settings
 
 ```text
-/settings           Configure generation values
-/stream             Toggle streaming preview
+/settings           Configure reasoning and generation values
+/stream             Toggle streaming preview or fixed-language delivery
 /preset             Use, save, or delete a generation preset
 /regen              Generate another response variant
 /swipe              Browse stored response variants
@@ -272,13 +273,14 @@ are rejected before normal generation.
 /expression         Choose manual, automatic, or off expressions
 /macro              Preview supported SillyTavern macros
 /stscript           Open the allowlisted STscript panel
+/cancel             Cancel the current pending input
 ```
 
 ### Voice, files, memory, and groups
 
 ```text
 /voice              Toggle quote-driven automatic TTS
-/voice_input        Configure local transcription
+/voice_input        Configure transcription, STT model, and language
 /imagine            Generate an image through an enabled image provider
 /memory             Open Hindsight memory and search controls
 /remember           Store one explicit long-term fact
@@ -287,6 +289,7 @@ are rejected before normal generation.
 /sync               Open Live API Sync controls
 /group              Open Forum Topic group controls
 /help               Open the interactive command guide
+/help <command>     Show detailed behavior for one command
 /update             Check and, after confirmation, update the bridge
 ```
 
@@ -315,6 +318,37 @@ rejected rather than applied to the current session.
 `/stscript` exposes only the supported bridge actions in a panel. It cannot run
 arbitrary shell commands, filesystem operations, or network requests. The Reset
 action opens the same confirmation flow as `/reset`.
+
+### Command details
+
+- `/status` includes the active card, custom session title plus technical ID,
+  model, response language, Persona, World Info, Author's Note, expression,
+  summary, Hindsight, RAG, group, and generation state.
+- `/providers` is the canonical model selector. `Health` runs bounded adapter-
+  aware probes; `Refresh models` updates discoverable catalogs. Catalog-only
+  models remain view-only and are not used for generation.
+- `/settings` exposes reasoning presets and validated temperature, token,
+  sampling, penalty, and stop-sequence values. `/preset` supports list, use,
+  save, and delete through the panel.
+- `/memory` supports on/off/status and active-session search. `/databank`
+  supports on/off/status/list/search/remove/reindex. `/language` supports list,
+  status, and a session-scoped language choice.
+- `/voice_input` supports on/off/status, STT model selection, and language
+  choices: Auto, a fixed code, or scoped User input. `/group` supports the
+  round-robin, contextual, manual Claim/Pass, and bounded autonomous modes.
+
+### Media and edit inputs
+
+- Send a Telegram photo with an optional caption to queue vision analysis against
+  the active session. Vision-capable model support is required; unsupported
+  vision fails closed without changing the transcript.
+- Send a supported file as a Telegram Document to queue Data Bank ingestion.
+  Character-card PNG Documents are routed to card validation before generic image
+  handling.
+- Send a Telegram voice message when `/voice_input on` is enabled to queue STT;
+  the transcription is then handled as a normal session-scoped user turn.
+- Editing a Telegram user message queues a native edit/regeneration operation
+  against the active session and preserves durable ordering.
 
 ## Session lifecycle and memory
 
@@ -520,6 +554,9 @@ A systemd template is available at
 `SILLYTAVERN_BRIDGE_SOURCE_DIR` when `/update` runs from the live launcher copy.
 
 ## Architecture
+
+The runtime is loaded through `bridge/runtime.py`; the list below highlights the
+main boundaries rather than every source file.
 
 ```text
 sillytavern_telegram_bridge.py  launcher
