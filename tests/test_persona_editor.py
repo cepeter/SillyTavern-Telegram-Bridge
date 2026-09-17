@@ -23,7 +23,7 @@ class PersonaEditorTests(unittest.TestCase):
         rt.NATIVE_PERSONA_BACKUP_DIR = root / "backups"
         rt.NATIVE_PERSONA_AVATAR_DIR.mkdir()
         (rt.NATIVE_PERSONA_AVATAR_DIR / "user-default.png").write_bytes(b"avatar")
-        self.native = {"user_avatar": "user-default.png", "power_user": {"personas": {"bridge-punto.png": "Punto"}, "persona_descriptions": {"bridge-punto.png": {"description": "Original description", "connections": ["keep"]}}}, "unrelated": {"keep": True}}
+        self.native = {"user_avatar": "user-default.png", "power_user": {"personas": {"bridge-user.png": "Test User"}, "persona_descriptions": {"bridge-user.png": {"description": "Original description", "connections": ["keep"]}}}, "unrelated": {"keep": True}}
         rt.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(self.native), encoding="utf-8")
         rt._NATIVE_PERSONA_CACHE = {}
         rt._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
@@ -72,23 +72,27 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertEqual(rt.load_session(self.db, "chat", "persona-session", "provider/model")["persona_id"], "bridge-writer.png")
         self.assertEqual(settings["unrelated"], {"keep": True})
 
+    def test_default_persona_resolves_only_native_persona(self):
+        self.assertEqual(rt.default_persona_id(), "bridge-user.png")
+        self.assertEqual(rt.persona_name(""), "User")
+
     def test_edit_name_and_description_updates_native_settings(self):
-        self._start("edit", "bridge-punto.png")
+        self._start("edit", "bridge-user.png")
         rt.handle_pending_input(self.db, "token", "chat", self.session, "Updated Name | Updated description")
         settings = self._settings()
-        self.assertEqual(settings["power_user"]["personas"]["bridge-punto.png"], "Updated Name")
-        self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-punto.png"]["description"], "Updated description")
-        self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-punto.png"]["connections"], ["keep"])
+        self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Updated Name")
+        self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-user.png"]["description"], "Updated description")
+        self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-user.png"]["connections"], ["keep"])
 
     def test_edit_description_only_preserves_native_name(self):
-        self._start("edit_description", "bridge-punto.png")
+        self._start("edit_description", "bridge-user.png")
         rt.handle_pending_input(self.db, "token", "chat", self.session, "Description only")
         settings = self._settings()
-        self.assertEqual(settings["power_user"]["personas"]["bridge-punto.png"], "Punto")
-        self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-punto.png"]["description"], "Description only")
+        self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Test User")
+        self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-user.png"]["description"], "Description only")
 
     def test_edit_callback_reads_native_metadata(self):
-        rt.update_session(self.db, "chat", self.session["session_id"], persona_id="bridge-punto.png")
+        rt.update_session(self.db, "chat", self.session["session_id"], persona_id="bridge-user.png")
         self.session = rt.load_session(self.db, "chat", self.session["session_id"], "provider/model")
         answers = []
         handled = rt.handle_persona_callback(self.db, "token", {"id": "cb"}, lambda _t, _i, text: answers.append(text), "persona:edit", "chat", {"message_id": 77}, self.session, "persona-session", None)
@@ -118,7 +122,7 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertEqual(self._settings(), self.native)
 
     def test_save_failure_keeps_native_settings_and_pending_state(self):
-        self._start("edit_description", "bridge-punto.png")
+        self._start("edit_description", "bridge-user.png")
         original_save = rt._save_native_settings
         rt._save_native_settings = lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))
         try:

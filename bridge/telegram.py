@@ -1,10 +1,42 @@
+def _default_session_persona(db: sqlite3.Connection) -> str:
+    configured = str(get_meta(db, "persona_id", "") or "").strip()
+    if configured and get_persona(configured):
+        return configured
+    return default_persona_id()
+
+
+def _default_session_world(db: sqlite3.Connection) -> str:
+    configured = str(get_meta(db, "world_file", "") or "").strip()
+    if configured and any(safe_world_path(name) for name in active_world_files(configured)):
+        return configured
+    return ""
+
+
+def _normalize_session_defaults(db: sqlite3.Connection, session: dict[str, str]) -> dict[str, str]:
+    persona_id = session.get("persona_id") or ""
+    world_file = session.get("world_file") or ""
+    replacement_persona = persona_id if not persona_id or get_persona(persona_id) else _default_session_persona(db)
+    replacement_world = world_file if not world_file or any(safe_world_path(name) for name in active_world_files(world_file)) else _default_session_world(db)
+    changes = {}
+    if replacement_persona != persona_id:
+        changes["persona_id"] = replacement_persona
+    if replacement_world != world_file:
+        changes["world_file"] = replacement_world
+    if changes:
+        assignments = ", ".join(f"{key}=?" for key in changes)
+        db.execute(f"UPDATE sessions SET {assignments}, updated_at=? WHERE chat_id=? AND session_id=?", (*changes.values(), time.time(), session["chat_id"], session["session_id"]))
+        db.commit()
+        session.update(changes)
+    return session
+
+
 def load_session(db: sqlite3.Connection, chat_id: str, session_id: str, default_model: str) -> dict[str, str]:
     row = db.execute("SELECT chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
     if row is None:
         raise ValueError(f"queued session no longer exists: {session_id}")
     get_generation_settings(db, chat_id, session_id)
     keys = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
-    return dict(zip(keys, row))
+    return _normalize_session_defaults(db, dict(zip(keys, row)))
 
 
 def ensure_session(db: sqlite3.Connection, chat_id: str, default_model: str) -> dict[str, str]:
@@ -13,13 +45,13 @@ def ensure_session(db: sqlite3.Connection, chat_id: str, default_model: str) -> 
     if row is None:
         now = time.time()
         row = (chat_id, active_id, "Default session", DEFAULT_CHARACTER_FILE,
-               get_meta(db, "model", default_model), get_meta(db, "persona_id", "punto"),
-               get_meta(db, "world_file", ""), "", "", "auto")
+               get_meta(db, "model", default_model), _default_session_persona(db),
+               _default_session_world(db), "", "", "auto")
         db.execute("INSERT OR REPLACE INTO sessions(chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
         db.commit()
     get_generation_settings(db, chat_id, active_id)
     keys = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
-    return dict(zip(keys, row))
+    return _normalize_session_defaults(db, dict(zip(keys, row)))
 
 
 def update_session(db: sqlite3.Connection, chat_id: str, session_id: str, operation_id: int | str | None = None, operation_kind: str = "session_update", **values) -> None:
@@ -41,8 +73,8 @@ def create_session(db: sqlite3.Connection, chat_id: str, default_model: str, ses
     title = normalize_session_title(title)
     now = time.time()
     row = (chat_id, session_id, title, DEFAULT_CHARACTER_FILE,
-           get_meta(db, "model", default_model), get_meta(db, "persona_id", "punto"),
-           get_meta(db, "world_file", ""), "", "", "auto")
+           get_meta(db, "model", default_model), _default_session_persona(db),
+           _default_session_world(db), "", "", "auto")
     db.execute("INSERT OR IGNORE INTO sessions(chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
     set_meta(db, f"active_session:{chat_id}", session_id)
     db.commit()

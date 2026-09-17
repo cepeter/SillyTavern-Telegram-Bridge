@@ -391,7 +391,7 @@ def format_user_dialogue_action(text: str) -> str:
 
 def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_text: str, history_rows: list[tuple[str, str]], image_data_uri: str | None = None, memory_context: str = "", session_summary: str = "", rag_context: str = "", group_context: str = "") -> list[dict]:
     current_persona = session["persona_id"]
-    user_name = persona_name(current_persona) if current_persona else "Punto"
+    user_name = persona_name(current_persona) if current_persona else DEFAULT_USER_NAME
     history = [{"role": role, "content": format_user_dialogue_action(content) if role == "user" else content} for role, content in history_rows]
     language_value = session.get("response_language") or "auto"
     language_instruction = response_language_instruction(language_value)

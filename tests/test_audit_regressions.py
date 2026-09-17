@@ -157,7 +157,7 @@ class AuditRegressionTests(unittest.TestCase):
         rt.send_preset_menu = lambda *_args, **_kwargs: opened.append("preset")
         rt.send_swipe_menu = lambda *_args, **_kwargs: opened.append("branch")
         try:
-            for command in ("/persona punto", "/preset use creative", "/branch 2"):
+            for command in ("/persona user", "/preset use creative", "/branch 2"):
                 rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, fields, "chat", command)
         finally:
             rt.card_fields_from_file = originals["card"]

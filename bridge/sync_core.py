@@ -59,7 +59,7 @@ def build_sync_records(
     rows: list[tuple[int, str, str, float]],
 ) -> list[dict]:
     """Build API chat records with compatible SillyTavern swipes."""
-    user_name = persona_name(session["persona_id"]) if session["persona_id"] else "Punto"
+    user_name = persona_name(session["persona_id"]) if session["persona_id"] else DEFAULT_USER_NAME
     transcript_hash = sync_transcript_hash([(role, content) for _rowid, role, content, _created_at in rows])
     header = {
         "chat_metadata": {

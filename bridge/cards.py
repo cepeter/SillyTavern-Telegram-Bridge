@@ -133,7 +133,7 @@ def encode_world_files(names: list[str]) -> str:
     return json.dumps(list(dict.fromkeys(names)), ensure_ascii=False, separators=(",", ":")) if names else ""
 
 
-def build_world_info(world_names: str | list[str], context: str, fields: dict[str, str], user_name: str = "Punto") -> str:
+def build_world_info(world_names: str | list[str], context: str, fields: dict[str, str], user_name: str = DEFAULT_USER_NAME) -> str:
     """Activate basic SillyTavern World Info entries by key and secondary key."""
     sections = []
     for world_name in active_world_files(world_names):
@@ -190,9 +190,25 @@ def get_persona(persona_id: str) -> dict[str, str] | None:
     return load_personas().get(persona_id)
 
 
+def default_persona_id() -> str:
+    """Resolve the native default Persona without exposing a private identity."""
+    try:
+        personas = load_personas()
+        settings = _native_settings()
+        power_user = settings.get("power_user") if isinstance(settings, dict) else {}
+        configured = str((power_user or {}).get("default_persona") or "").strip()
+        if configured in personas:
+            return configured
+        if len(personas) == 1:
+            return next(iter(personas))
+    except Exception:
+        logging.warning("Could not resolve the native default Persona", exc_info=True)
+    return ""
+
+
 def persona_name(persona_id: str) -> str:
     persona = get_persona(persona_id)
-    return str(persona.get("name") or persona_id or "Punto") if persona else "Punto"
+    return str(persona.get("name") or persona_id or DEFAULT_USER_NAME) if persona else DEFAULT_USER_NAME
 
 
 def _merge_system_prompt_json(result: dict[str, dict[str, str]], path: Path) -> None:
@@ -454,7 +470,7 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
     telegram_request(token, method, payload)
 
 
-def replace_macros(text: str, fields: dict[str, str], user_name: str = "Punto") -> str:
+def replace_macros(text: str, fields: dict[str, str], user_name: str = DEFAULT_USER_NAME) -> str:
     result = (text.replace("{{char}}", fields["name"])
                 .replace("{{user}}", user_name)
                 .replace("<USER>", user_name)
@@ -469,7 +485,7 @@ def replace_macros(text: str, fields: dict[str, str], user_name: str = "Punto") 
                  .replace("{{weekday}}", time.strftime("%A", now)))
 
 
-def build_system_prompt(fields: dict[str, str], user_name: str = "Punto") -> str:
+def build_system_prompt(fields: dict[str, str], user_name: str = DEFAULT_USER_NAME) -> str:
     system = fields["system_prompt"] or (
         "Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}. "
         "Stay in character and do not speak for {{user}}."

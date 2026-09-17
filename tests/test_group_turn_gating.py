@@ -99,7 +99,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         rt.send_text = lambda _token, _chat, text: sent.append(text) or []
         session = {"session_id": "session", "persona_id": "", "model_id": rt.DEFAULT_MODEL, "author_note": "", "world_file": "", "system_prompt": "", "response_language": "auto"}
         try:
-            handled = rt.handle_command_route(self.db, "token", "key", rt.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", rt.DEFAULT_MODEL, "", "Punto")
+            handled = rt.handle_command_route(self.db, "token", "key", rt.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", rt.DEFAULT_MODEL, "", "Test User")
         finally:
             rt.send_text = original_send
         self.assertTrue(handled)

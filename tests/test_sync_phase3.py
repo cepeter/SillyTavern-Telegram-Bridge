@@ -155,9 +155,9 @@ class Phase3SyncTests(unittest.TestCase):
         try:
             client = rt.SillyTavernApiClient(f"http://127.0.0.1:{server.server_port}")
             settings = client.get_settings()
-            settings["power_user"]["personas"]["user-default.png"] = "Punto"
+            settings["power_user"]["personas"]["user-default.png"] = "Test User"
             client.save_settings(settings)
-            self.assertEqual(client.get_settings()["power_user"]["personas"]["user-default.png"], "Punto")
+            self.assertEqual(client.get_settings()["power_user"]["personas"]["user-default.png"], "Test User")
             self.assertTrue(client.get_settings()["unchanged"])
         finally:
             server.shutdown()
