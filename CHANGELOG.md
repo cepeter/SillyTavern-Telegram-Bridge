@@ -2,6 +2,22 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.007] - 2026-09-17
+
+### Added
+
+- Added native SillyTavern expression sprite discovery with session-scoped manual or automatic selection, change-only Telegram delivery, and neutral/fixed-avatar fallbacks.
+- Added guarded `/imagine` prompt input and OpenAI-compatible Images API adapter; image generation remains opt-in through provider catalog fields.
+- Added semantic Telegram message splitting that prefers paragraphs, newlines, sentence boundaries, and whitespace while preserving the UTF-16 limit.
+- Added User dialogue/User action prompt formatting for single-star action spans without changing stored transcript text or user role semantics.
+
+### Changed
+
+- Automatic voice replies now synthesize only model dialogue enclosed in straight double quotes; narration and unquoted text are not spoken.
+- Disabled the manual `/tts` command; `/voice` controls automatic quote-driven voice replies.
+- Expanded README, Help, provider examples, and environment examples with concise configuration guidance.
+- Removed live deployment endpoint and port details from the changelog.
+
 ## [0.2.006] - 2026-09-17
 
 ### Added

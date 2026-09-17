@@ -1,6 +1,6 @@
 LONG_RUNNING_COMMANDS = (
     "/retry", "/regen", "/continue", "/edit", "/summarize",
-    "/providers health", "/providers refresh", "/tts",
+    "/providers health", "/providers refresh",
 )
 
 

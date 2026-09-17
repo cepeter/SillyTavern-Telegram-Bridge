@@ -48,9 +48,6 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
             send_text(token, chat_id, "Memory queued for Hindsight.")
         elif action == "macro":
             handle_macro_command(db, token, chat_id, session, fields, "/macro " + value)
-        elif action == "tts":
-            if len(value) > TTS_MAX_CHARS or not send_tts(token, chat_id, value, operation_id=operation_id):
-                raise ValueError(f"TTS input is invalid or exceeds {TTS_MAX_CHARS} characters")
         elif action == "imagine":
             handle_imagine_prompt(token, chat_id, value)
         elif action == "memory_search":

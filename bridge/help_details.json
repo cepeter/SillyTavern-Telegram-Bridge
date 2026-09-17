@@ -15,6 +15,8 @@
   "/note": "Opens Author's Note controls: Off clears it, and User input consumes the next scoped text message.",
   "/systemprompt": "Opens the TXT System Prompt picker. The prompt body stays private and is applied during generation.",
   "/language": "Opens per-session model reply language controls. Auto follows the user's language with no extra rendering request. A fixed language applies a final bounded language-render pass to every normal, image, edit, regenerate, and continue response; streaming preview is disabled so only the final target-language output is shown.",
+  "/expression": "Opens session-scoped character expression controls. Automatic mode classifies the model reply locally and sends a native sprite only when the effective expression changes. Manual mode selects a discovered sprite; neutral or the fixed avatar is used as fallback.",
+  "/imagine": "Opens scoped prompt input for an explicitly enabled OpenAI-compatible Images provider. Enter 1–4,000 characters or use /imagine <prompt>; unsupported or unconfigured providers fail closed. /cancel aborts pending input.",
   "/settings": "Opens generation settings. Choose reasoning or enter validated values for temperature, token limits, sampling, penalties, and stop sequences.",
   "/stream on|off": "Opens streaming controls. Streaming edits a temporary preview and sends the complete final response afterward.",
   "/preset": "Opens preset controls for applying, saving, or deleting validated generation settings.",
@@ -32,8 +34,7 @@
   "/summarize": "Regenerates the active session summary from stored transcript content.",
   "/databank": "Opens Data Bank RAG controls for status, listing, search, removal, and reindexing.",
 
-  "/tts": "Opens a panel, then accepts text to convert to a voice message through the configured TTS provider. Send /cancel to leave.",
-  "/voice on|off": "Opens automatic voice-reply controls.",
+  "/voice on|off": "Enables or disables automatic voice replies. When enabled, only model dialogue enclosed in straight double quotes is synthesized; narration and unquoted text are not spoken.",
   "/voice_input on|off": "Opens transcription, STT model, and language controls.",
   "/voice_input language": "Opens STT language controls, including Auto, fixed codes, and scoped User input.",
   "/group": "Available only inside a Telegram Forum Topic. Opens topic-local group controls; New group session asks for a validated name before opening the Character and World Info wizard."

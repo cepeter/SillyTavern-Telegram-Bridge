@@ -18,8 +18,8 @@ HELP_CATEGORIES = {
         ("/note", "Open the session Author's Note panel; choose Off or User input."),
         ("/systemprompt", "Open the panel to choose a configured TXT System Prompt; text fallback is disabled."),
         ("/language", "Choose the language used for generated model replies in this session."),
-        ("/expression", "Choose manual or automatic character expressions; native sprites are discovered from the active card."),
-        ("/imagine", "Generate an image from a prompt using an enabled image provider."),
+        ("/expression", "Off by default; choose automatic or a native sprite label discovered from the active card."),
+        ("/imagine", "Opt-in only; opens a 1–4,000 character prompt panel or accepts /imagine <prompt> when an image provider is enabled."),
     ],
     "generation": [
         ("/settings", "Open this session's generation panel; choose reasoning or set validated numeric fields."),
@@ -42,8 +42,7 @@ HELP_CATEGORIES = {
         ("/databank", "Open RAG mode/list/search/remove/reindex panel."),
     ],
     "voice_group": [
-        ("/tts", "Open a panel, then send one text-to-speech voice message."),
-        ("/voice on|off", "Open automatic voice reply panel."),
+        ("/voice on|off", "Toggle automatic voice replies; only model dialogue inside straight double quotes is synthesized."),
         ("/voice_input on|off", "Open transcription/model/language panel; choose Auto or User input for language."),
         ("/voice_input language", "Open the voice input language panel; choose Auto, a fixed code, or User input."),
         ("/group", "Open topic-only group controls; New group session chains Character and World Info."),
@@ -440,7 +439,6 @@ def set_bot_commands(token: str) -> None:
                 {"command": "world", "description": "Choose World Info lore"},
                 {"command": "status", "description": "Show model and chat status"},
                 {"command": "edit", "description": "Edit last user message"},
-                {"command": "tts", "description": "Convert text to voice"},
                 {"command": "voice", "description": "Open automatic voice panel"},
                 {"command": "voice_input", "description": "Open transcription/model/language panel"},
                 {"command": "settings", "description": "Open generation settings panel"},

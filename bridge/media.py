@@ -106,6 +106,12 @@ def delete_outgoing_message_row(db: sqlite3.Connection, token: str, chat_id: str
     db.commit()
 
 
+def quoted_speech_from_reply(text: str) -> str:
+    """Return only dialogue enclosed in straight double quotes for TTS."""
+    quoted = re.findall(r'"([^"\n]{1,4000})"', str(text or ""), flags=re.DOTALL)
+    return re.sub(r"\s+", " ", " ".join(quoted)).strip()
+
+
 def send_reply(token: str, chat_id: str, text: str, db: sqlite3.Connection | None = None, session_id: str | None = None, assistant_rowid: int | None = None) -> None:
     if db is not None and session_id:
         deliver_expression(token, chat_id, text, db, session_id)
@@ -114,7 +120,8 @@ def send_reply(token: str, chat_id: str, text: str, db: sqlite3.Connection | Non
         db.execute("UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid))
         db.commit()
     if db is not None and session_id and get_meta(db, f"voice_mode:{chat_id}", "off") == "tts":
-        if not submit_background("tts", send_tts, token, chat_id, text):
+        speech = quoted_speech_from_reply(text)
+        if speech and not submit_background("tts", send_tts, token, chat_id, speech):
             logging.warning("Automatic TTS dropped for chat %s", chat_id)
 
 

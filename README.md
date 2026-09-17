@@ -29,7 +29,9 @@ runs beside SillyTavern without patching or executing the SillyTavern source.
 - Provider/model selection from a configurable catalog.
 - `/regen`, `/swipe`, `/branch`, `/continue`, and native Telegram edit handling.
 - Image input and local Faster-Whisper voice transcription.
-- Text-to-speech responses through Edge TTS.
+- Automatic Edge TTS for model dialogue enclosed in straight double quotes.
+- Native SillyTavern expression sprite discovery with manual/automatic selection and changed-expression-only Telegram delivery.
+- Optional `/imagine` image generation through an explicitly enabled OpenAI-compatible Images provider.
 - Hindsight long-term memory with hard active-session-only recall.
 - Auto-summary and bounded context compression.
 - Data Bank RAG for PDF, DOCX, TXT, Markdown, JSON, YAML, CSV, HTML, and XML.
@@ -41,6 +43,7 @@ runs beside SillyTavern without patching or executing the SillyTavern source.
 - Bounded background workers for STT, TTS, document indexing, and memory retention.
 - Durable SQLite jobs for normal generation, long-running commands, voice transcription, image analysis, document imports, callbacks, and native edits, with per-chat ordering and session-aware execution.
 - UTF-16-safe Telegram splitting, typed World Info editing, bounded processed-update retention, and isolated generation/utility worker pools.
+- Semantic Telegram splitting prefers paragraphs, newlines, sentence boundaries, and whitespace before hard-splitting; message content and message IDs remain recoverable.
 - All dynamic inline panels paginate at 8 options per page with Previous/Next navigation.
 
 ## 🧩 Requirements
@@ -148,6 +151,8 @@ export SILLYTAVERN_PROVIDER_CONFIG="$HOME/.config/sillytavern-telegram/providers
 The catalog contains provider names, `api_endpoint` URLs, model lists, and `api_key_env` names. The actual API keys remain only in `.env`. The included basic example has two generic Chat Completions providers and uses `PROVIDER_ONE_API_KEY` and `PROVIDER_TWO_API_KEY`.
 
 The bridge supports OpenAI-compatible Chat Completions. Set `streaming: true` in a provider entry when that endpoint returns SSE chunks; omit it for normal JSON responses. The optional `transport: anthropic_messages` adapter is also supported when explicitly configured; it is not enabled in the basic two-provider example. `discover_models` and `extra_headers` are optional provider-specific fields; the basic example does not need them.
+
+Image generation uses separate catalog fields: `image_enabled`, `image_models`, optional `image_endpoint`, and `image_default_size`. It is disabled unless explicitly enabled and never uses chat-only models. See the commented `openai-images` entry in `config/providers.example.yaml`; put its `OPENAI_API_KEY` value only in the private `.env` file.
 
 A provider is selectable for inference when its `adapter` or `transport` is one of `chat_completions`, `openai`, `openai_compatible`, or `anthropic_messages`. Providers with a missing or unsupported adapter remain visible as **catalog-only** and cannot generate replies. The `/providers` panel shows 8 provider/model options per page with Previous/Next navigation.
 
@@ -274,8 +279,48 @@ Core commands:
 /world                         Open the World Info/lorebook panel
 /systemprompt                  Open the configured TXT System Prompt panel
 /language                      Choose the model reply language for this session
-/note                         Open Author's Note panel: Off or User input
+/expression                    Choose manual, automatic, or off character expressions
+/imagine                       Enter a prompt for an enabled image-generation provider
+/note                          Open Author's Note panel: Off or User input
 ```
+
+Expression sprites:
+
+```text
+/expression                    Open the expression panel
+→ ✨ Automatic                 Classify the model reply locally
+→ Choose an expression        Send its native sprite only when it changes
+→ 🚫 Off                      Disable expression image delivery
+```
+
+Native sprites are discovered from the active character's SillyTavern expression
+folder and fall back to a neutral sprite or the fixed character avatar. The
+original model text is unchanged. Automatic classification is local and does not
+send chat content to a third-party classifier.
+
+Image generation:
+
+```text
+/imagine                      Open scoped prompt input
+/imagine <prompt>             Generate directly
+→ Send a prompt (1–4,000 characters)
+→ Telegram receives one generated image
+→ /cancel aborts pending input
+```
+
+`/imagine` is disabled until a provider with `image_enabled: true`, an
+`image_endpoint`, and an allowlisted `image_models` entry is configured. Muse
+text models and providers without a verified Images API remain unavailable.
+
+User dialogue and actions:
+
+```text
+I am coming *walking toward the door*
+```
+
+The bridge stores and displays the original message, while the model prompt is
+rendered as separate `User dialogue` and `User action` sections. Both remain in
+the same `user` role; no narrator role is created.
 
 Author's Note panel:
 
@@ -465,11 +510,17 @@ Credentials must remain environment-only and must not be printed, committed, or 
 ## 🎙️ Voice, media, and groups
 
 ```text
-/tts <text>                   Send one voice message (free text)
 /voice                        Open automatic TTS panel
 /voice_input                  Open transcription/model/language panel
 /voice_input language         Open language panel: choose Auto or User input
 ```
+
+Automatic voice replies are quote-driven. Enable them with `/voice`, then a
+model response such as `*walks closer* "I am here."` sends the text message as
+usual and synthesizes only `I am here.`. Narration and unquoted model text are
+not spoken. The manual `/tts` command is disabled; use `/voice` to toggle this
+behavior. Multiple quoted dialogue segments are combined in their original
+order, and a response without quoted dialogue produces no voice message.
 
 In the voice input panel, choose **Language** and then either a fixed language
 choice such as `id` or `en`, **Auto** for detection, or **User input** to enter a

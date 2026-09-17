@@ -1,30 +1,36 @@
 # Standalone provider catalog example.
-# Replace the example endpoints, models, and API key names for your providers.
-# The bridge supports OpenAI-compatible Chat Completions by default.
+# Copy this file to a private catalog, then replace example values.
+# Each provider entry tells the bridge how to call one model service.
 providers:
   provider-one:
-    name: Provider One
-    api_endpoint: https://provider-one.example/v1
-    api_key_env: PROVIDER_ONE_API_KEY
-    adapter: chat_completions
-    # streaming: true  # enable for providers that return SSE chunks
-    models:
+    name: Provider One # Label shown in the provider panel.
+    api_endpoint: https://provider-one.example/v1 # API base URL; use HTTPS for remote providers.
+    api_key_env: PROVIDER_ONE_API_KEY # Environment variable containing this provider's key.
+    adapter: chat_completions # Request format used for normal text replies.
+    # streaming: true # Enable only when the endpoint returns SSE chunks.
+    models: # Model IDs accepted by this provider.
       - provider-one/model-a
 
   provider-two:
-    name: Provider Two
-    api_endpoint: https://provider-two.example/v1
-    api_key_env: PROVIDER_TWO_API_KEY
-    adapter: chat_completions
-    # streaming: true  # enable for providers that return SSE chunks
-    models:
+    name: Provider Two # Label shown in the provider panel.
+    api_endpoint: https://provider-two.example/v1 # API base URL; use HTTPS for remote providers.
+    api_key_env: PROVIDER_TWO_API_KEY # Environment variable containing this provider's key.
+    adapter: chat_completions # Request format used for normal text replies.
+    # streaming: true # Enable only when the endpoint returns SSE chunks.
+    models: # Model IDs accepted by this provider.
       - provider-two/model-a
 
-#   image_enabled: false
-#   image_endpoint: https://provider-one.example/v1/images/generations
-#   image_models:
-#     - provider-one/image-model
-#   image_default_size: 1024x1024
+# Optional OpenAI-compatible Images provider for /imagine.
+# Enable only when the provider exposes POST /images/generations.
+#  openai-images:
+#    name: OpenAI Images # Label shown for /imagine.
+#    api_endpoint: https://api.openai.com/v1 # API base URL.
+#    api_key_env: OPENAI_API_KEY # Environment variable containing the API key.
+#    image_enabled: true # Opt in to image generation for this provider.
+#    image_endpoint: https://api.openai.com/v1/images/generations # Image request URL.
+#    image_models: # Image model IDs; chat-only models are not used here.
+#      - gpt-image-2.5-sunburst
+#    image_default_size: 1024x1024 # Default WIDTHxHEIGHT output size.
 
 # Optional Anthropic Messages provider.
 # Uncomment and configure ANTHROPIC_API_KEY to enable it.

@@ -326,10 +326,27 @@ def render_session_response(api_key: str, session: dict[str, str], text: str, ch
     return render_response_language(api_key, session["model_id"], text, session.get("response_language") or "auto", f"telegram:{chat_id}:{session_id}", settings)
 
 
+def format_user_dialogue_action(text: str) -> str:
+    """Make user dialogue and single-star actions explicit to the model."""
+    original = str(text or "").strip()
+    actions = re.findall(r"(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)", original, flags=re.DOTALL)
+    if not actions:
+        return original
+    dialogue = re.sub(r"(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)", " ", original, flags=re.DOTALL)
+    dialogue = re.sub(r"\s+", " ", dialogue).strip()
+    action_text = " ".join(re.sub(r"\s+", " ", item).strip() for item in actions).strip()
+    sections = []
+    if dialogue:
+        sections.append("User dialogue:\n" + dialogue)
+    if action_text:
+        sections.append("User action:\n" + action_text)
+    return "\n\n".join(sections) or original
+
+
 def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_text: str, history_rows: list[tuple[str, str]], image_data_uri: str | None = None, memory_context: str = "", session_summary: str = "", rag_context: str = "", group_context: str = "") -> list[dict]:
     current_persona = session["persona_id"]
     user_name = persona_name(current_persona) if current_persona else "Punto"
-    history = [{"role": role, "content": content} for role, content in history_rows]
+    history = [{"role": role, "content": format_user_dialogue_action(content) if role == "user" else content} for role, content in history_rows]
     language_value = session.get("response_language") or "auto"
     language_instruction = response_language_instruction(language_value)
     system = build_system_prompt(fields, user_name)
@@ -368,7 +385,7 @@ def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_te
     messages.extend(history)
     if normalize_response_language(language_value) != "auto":
         messages.append({"role": "system", "content": "## Runtime output constraint\n" + language_instruction})
-    user_content = user_text
+    user_content = format_user_dialogue_action(user_text)
     if memory_context:
         user_content = "<untrusted_memory>\n" + memory_context[:HINDSIGHT_CONTEXT_MAX_CHARS] + "\n</untrusted_memory>\n\n" + user_content
     if rag_context:

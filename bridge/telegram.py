@@ -323,20 +323,50 @@ def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, d
         send_text(token, chat_id, f"Added {filename} to Data Bank ({chunks} chunks). RAG is {rag_mode(db, chat_id)}.")
 
 
+def _utf16_length(value: str) -> int:
+    return len(value.encode("utf-16-le")) // 2
+
+
+def _semantic_boundary(text: str, start: int, end: int) -> int:
+    """Choose the latest safe paragraph, sentence, or whitespace boundary."""
+    segment = text[start:end]
+    patterns = (r"\n\s*\n", r"\n", r"(?<=[.!?。！？])\s+", r"\s+")
+    for pattern in patterns:
+        candidates = []
+        for match in re.finditer(pattern, segment):
+            position = start + match.end()
+            if position <= end and segment[:match.end()].count("```") % 2 == 0:
+                candidates.append(position)
+        if candidates:
+            return max(candidates)
+    return end
+
+
 def split_telegram_text(text: str, limit: int = MAX_TELEGRAM_LENGTH) -> list[str]:
+    """Split text semantically while respecting Telegram's UTF-16 limit."""
     text = str(text)
+    if limit <= 0:
+        raise ValueError("Telegram message limit must be positive")
+    if _utf16_length(text) <= limit:
+        return [text]
     chunks = []
     start = 0
-    units = 0
-    for index, character in enumerate(text):
-        width = len(character.encode("utf-16-le")) // 2
-        if units and units + width > limit:
-            chunks.append(text[start:index])
-            start = index
-            units = 0
-        units += width
-    if start < len(text) or not chunks:
-        chunks.append(text[start:])
+    while start < len(text):
+        units = 0
+        hard_end = start
+        for index in range(start, len(text)):
+            width = _utf16_length(text[index])
+            if units and units + width > limit:
+                break
+            units += width
+            hard_end = index + 1
+        if hard_end == start:
+            hard_end = start + 1
+        boundary = len(text) if hard_end == len(text) else _semantic_boundary(text, start, hard_end)
+        if boundary <= start:
+            boundary = hard_end
+        chunks.append(text[start:boundary])
+        start = boundary
     return chunks
 
 

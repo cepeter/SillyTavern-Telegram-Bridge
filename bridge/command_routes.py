@@ -145,9 +145,6 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
             send_group_menu(db, token, chat_id, session)
         return True
 
-    if command == "/tts" or command.startswith("/tts "):
-        start_text_action_input(db, token, chat_id, session["session_id"], "tts", "Send the text to convert into a voice message.")
-        return True
     return False
 
 
