@@ -70,7 +70,10 @@ class GenerationContinuationTests(unittest.TestCase):
                 'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
                 "data: [DONE]\n",
             ]),
-            _FakeResponse({"choices": [{"message": {"content": "Recovered answer."}, "finish_reason": "stop"}]}),
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Recovered answer."},"finish_reason":"stop"}]}\n',
+                "data: [DONE]\n",
+            ]),
         ]
         requests = []
 
@@ -89,8 +92,46 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertEqual(result, "Recovered answer.")
         self.assertEqual(len(requests), 2)
         self.assertTrue(requests[0]["stream"])
-        self.assertFalse(requests[1]["stream"])
+        self.assertTrue(requests[1]["stream"])
         self.assertEqual(requests[1]["max_tokens"], 4096)
+
+    def test_streaming_length_continuation_stays_streaming(self):
+        self.original_spec = rt.get_provider_spec
+        rt.get_provider_spec = lambda _provider: {
+            "transport": "openai_compatible",
+            "api_endpoint": "https://openrouter.ai/api/v1",
+            "api_key_env": "TEST_OPENROUTER_KEY",
+            "streaming": True,
+        }
+        responses = [
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ]),
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":"stop"}]}\n',
+                "data: [DONE]\n",
+            ]),
+        ]
+        requests = []
+
+        def fake_urlopen(request, timeout):
+            requests.append(json.loads(request.data.decode()))
+            return responses.pop(0)
+
+        rt.strict_urlopen = fake_urlopen
+        result = rt.generate_text(
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings={**rt.GENERATION_DEFAULTS, "max_tokens": 1800},
+        )
+
+        self.assertEqual(result, "Part one. Part two.")
+        self.assertEqual(len(requests), 2)
+        self.assertTrue(all(request["stream"] for request in requests))
+        self.assertEqual([item["role"] for item in requests[1]["messages"][-2:]], ["assistant", "user"])
 
     def test_length_finish_adds_one_bounded_continuation(self):
         payloads = [

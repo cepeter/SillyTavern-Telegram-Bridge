@@ -328,7 +328,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
             if finish_reason == "length" and _recovery_attempt < 2:
                 recovered = _recovery_settings(generation)
                 if recovered:
-                    return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=True, _recovery_attempt=_recovery_attempt + 1)
+                    return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=False, _recovery_attempt=_recovery_attempt + 1)
             raise RuntimeError(f"{provider_id} returned no visible content (finish_reason={finish_reason})")
         if finish_reason == "length" and not force_non_stream:
             continuation_messages = list(messages) + [
@@ -336,7 +336,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
                 {"role": "user", "content": "Continue from the exact ending without repeating existing text. Preserve the response language exactly. Output only the continuation."},
             ]
             try:
-                continuation = generate_text(api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=True, _recovery_attempt=_recovery_attempt)
+                continuation = generate_text(api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=False, _recovery_attempt=_recovery_attempt + 1)
                 return " ".join(part for part in (content, continuation) if part)
             except Exception:
                 logging.warning("Automatic continuation failed after streaming length stop", exc_info=True)
