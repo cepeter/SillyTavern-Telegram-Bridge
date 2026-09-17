@@ -19,6 +19,14 @@ def anthropic_content(value):
     return blocks or [{"type": "text", "text": ""}]
 
 
+def _stream_text(value) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(str(item.get("text") or item.get("content") or "") for item in value if isinstance(item, dict))
+    return ""
+
+
 def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str) -> str:
     system_parts = [str(message.get("content") or "") for message in messages if message.get("role") == "system"]
     conversation = []
@@ -60,10 +68,10 @@ def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], se
         parts = []
         for raw_line in response:
             line = raw_line.decode("utf-8", "replace").strip()
-            if not line.startswith("data: "):
+            if not line.startswith("data:"):
                 continue
             try:
-                event = json.loads(line[6:])
+                event = json.loads(line[5:].lstrip())
             except json.JSONDecodeError:
                 continue
             delta = event.get("delta") or {}
@@ -279,9 +287,9 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
             if cancel_event is not None and cancel_event.is_set():
                 break
             line = raw_line.decode("utf-8", "replace").strip()
-            if not line.startswith("data: "):
+            if not line.startswith("data:"):
                 continue
-            payload = line[6:]
+            payload = line[5:].lstrip()
             if payload == "[DONE]":
                 continue
             try:
@@ -290,8 +298,9 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
                 continue
             for choice in event.get("choices", []):
                 delta = choice.get("delta") or {}
-                if delta.get("content"):
-                    parts.append(str(delta["content"]))
+                text_delta = _stream_text(delta.get("content"))
+                if text_delta:
+                    parts.append(text_delta)
                 if choice.get("finish_reason"):
                     finish_reason = choice["finish_reason"]
             if stream_callback and parts and time.monotonic() - last_emit >= 0.5:
