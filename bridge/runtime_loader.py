@@ -26,7 +26,7 @@ DEFAULT_RUNTIME_STAGES = (
         (
             "common.py", "cards.py", "schema.py", "database.py", "memory.py",
             "rag.py", "groups.py", "telegram.py", "persona_delete_panel.py",
-            "language.py", "help_details.py", "help.py", "input_flows.py",
+            "language.py", "greetings.py", "help_details.py", "help.py", "input_flows.py",
             "catalog.py", "update.py", "image_generation.py", "expressions.py",
             "media.py", "generation.py", "commands.py", "command_routes.py",
             "message_commands.py", "callbacks.py", "panel_callback_routes.py",

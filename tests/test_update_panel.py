@@ -85,5 +85,40 @@ class UpdatePanelTests(unittest.TestCase):
         self.assertIn("remote unavailable", result)
 
 
+    def test_update_fetches_and_merges_exact_release_tag(self):
+        old_repo = rt.UPDATE_REPO_DIR
+        old_live = rt.UPDATE_LIVE_DIR
+        old_latest = rt.latest_bridge_release
+        old_run = rt.subprocess.run
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = root / "repo"
+            live = root / "live"
+            (repo / ".git").mkdir(parents=True)
+            (repo / "CHANGELOG.md").write_text("## [0.0.1]\\n", encoding="utf-8")
+            rt.UPDATE_REPO_DIR = repo
+            rt.UPDATE_LIVE_DIR = live
+            rt.latest_bridge_release = lambda: ("0.0.2", "")
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+                return type("Result", (), {"stdout": "", "stderr": ""})()
+
+            rt.subprocess.run = fake_run
+            try:
+                rt._run_update()
+            finally:
+                rt.subprocess.run = old_run
+                rt.latest_bridge_release = old_latest
+                rt.UPDATE_LIVE_DIR = old_live
+                rt.UPDATE_REPO_DIR = old_repo
+
+        self.assertIn(["git", "fetch", "origin", "tag", "v0.0.2"], calls)
+        self.assertIn(["git", "merge", "--ff-only", "v0.0.2"], calls)
+        self.assertNotIn(["git", "fetch", "origin", "main"], calls)
+        self.assertNotIn(["git", "merge", "--ff-only", "origin/main"], calls)
+
+
 if __name__ == "__main__":
     unittest.main()

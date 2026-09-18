@@ -81,9 +81,10 @@ def _run_update() -> str:
         return f"Update refused: source checkout not found at {UPDATE_REPO_DIR}. Set SILLYTAVERN_BRIDGE_SOURCE_DIR."
     if subprocess.run(["git", "status", "--porcelain"], cwd=UPDATE_REPO_DIR, capture_output=True, text=True, timeout=20).stdout.strip():
         return "Update refused: local repository has uncommitted changes."
+    release_ref = f"v{latest}"
     try:
-        subprocess.run(["git", "fetch", "origin", "main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        subprocess.run(["git", "merge", "--ff-only", "origin/main"], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        subprocess.run(["git", "fetch", "origin", "tag", release_ref], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        subprocess.run(["git", "merge", "--ff-only", release_ref], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
         detail = re.sub(r"(https?://)[^/@\s]+@", r"\1***@", detail)

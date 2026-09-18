@@ -169,5 +169,34 @@ class PanelLifecycleTests(unittest.TestCase):
         self.assertIsNone(rt.panel_session_for_message(self.db, "chat", 106))
 
 
+    def test_owned_panel_rejects_different_user_without_closing_it(self):
+        session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
+        rt.update_session(self.db, "chat", session["session_id"], author_note="keep me")
+        rt.bind_panel_session(self.db, "chat", 107, session["session_id"], "user-1")
+        answers = []
+        original_answer = rt.answer_callback
+        original_send = rt.send_text
+        rt.answer_callback = lambda _token, _callback_id, text: answers.append(text)
+        rt.send_text = lambda *_args, **_kwargs: []
+        callback = {
+            "id": "callback-107",
+            "from": {"id": "user-2"},
+            "data": "note:off",
+            "message": {"message_id": 107, "chat": {"id": "chat"}},
+        }
+        try:
+            rt.process_callback(self.db, "token", callback)
+        finally:
+            rt.answer_callback = original_answer
+            rt.send_text = original_send
+        self.assertEqual(answers, ["This panel belongs to another user"])
+        self.assertEqual(
+            rt.load_session(self.db, "chat", session["session_id"], rt.DEFAULT_MODEL)["author_note"],
+            "keep me",
+        )
+        self.assertEqual(rt.panel_owner_for_message(self.db, "chat", 107), "user-1")
+        self.assertEqual(rt.panel_session_for_message(self.db, "chat", 107), session["session_id"])
+
+
 if __name__ == "__main__":
     unittest.main()

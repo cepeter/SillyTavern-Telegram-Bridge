@@ -48,5 +48,39 @@ class QuotedVoiceTests(unittest.TestCase):
         self.assertNotIn("/tts", commands)
 
 
+    def test_assistant_tts_uses_content_scoped_idempotency_key(self):
+        class FakeDB:
+            def execute(self, *_args, **_kwargs):
+                return None
+
+            def commit(self):
+                return None
+
+        calls = []
+        original_expression = rt.deliver_expression
+        original_send = rt.send_text
+        original_meta = rt.get_meta
+        original_submit = rt.submit_background
+        rt.deliver_expression = lambda *_args, **_kwargs: None
+        rt.send_text = lambda *_args, **_kwargs: [88]
+        rt.get_meta = lambda *_args: "tts"
+        rt.submit_background = lambda *args: calls.append(args) or True
+        db = FakeDB()
+        try:
+            rt.send_reply("token", "chat", '"Hello there."', db, "session", 7)
+            rt.send_reply("token", "chat", '"Hello there."', db, "session", 7)
+            rt.send_reply("token", "chat", '"Changed reply."', db, "session", 7)
+        finally:
+            rt.deliver_expression = original_expression
+            rt.send_text = original_send
+            rt.get_meta = original_meta
+            rt.submit_background = original_submit
+
+        first_id = calls[0][-1]
+        self.assertEqual(first_id, calls[1][-1])
+        self.assertNotEqual(first_id, calls[2][-1])
+        self.assertTrue(first_id.startswith("assistant-tts:chat:session:7:"))
+
+
 if __name__ == "__main__":
     unittest.main()
