@@ -395,7 +395,7 @@ def reindex_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: 
             vectors = embed_rag_batch([content for _, content in batch])
             for (chunk_id, _content), vector in zip(batch, vectors):
                 if vector:
-                    db.execute("INSERT OR REPLACE INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json) VALUES(?,?,?,?)", (chunk_id, namespace, len(vector), json.dumps(vector, separators=(",", ":"))))
+                    db.execute("INSERT OR REPLACE INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm) VALUES(?,?,?,?,?,?)", (chunk_id, namespace, len(vector), json.dumps(vector, separators=(",", ":")), embedding_signature(vector), embedding_norm(vector)))
                     indexed += 1
     db.commit()
     return total, indexed
