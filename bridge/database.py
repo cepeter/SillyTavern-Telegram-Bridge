@@ -1,9 +1,98 @@
+def _apply_connection_pragmas(db: sqlite3.Connection, timeout: float = 30.0) -> None:
+    """Apply connection-local pragmas for latency, caching, and safety.
+
+    Safe to run on every connection: these settings affect only the current
+    handle and never negotiate database-wide state or a write lock.
+    """
+    timeout_ms = int(max(1.0, float(timeout)) * 1000)
+    db.execute(f"PRAGMA busy_timeout={timeout_ms}")
+    db.execute("PRAGMA synchronous=NORMAL")
+    db.execute("PRAGMA temp_store=MEMORY")
+    db.execute("PRAGMA cache_size=-64000")
+    db.execute("PRAGMA foreign_keys=ON")
+
+
+def _load_optional_vector_extension(db: sqlite3.Connection) -> bool:
+    """Optionally load sqlite-vec if installed in the environment."""
+    try:
+        import sqlite_vec
+    except ImportError:
+        return False
+    if not hasattr(db, "enable_load_extension"):
+        return False
+    try:
+        db.enable_load_extension(True)
+        sqlite_vec.load(db)
+        return True
+    except Exception:
+        logging.debug("sqlite-vec extension could not be loaded", exc_info=True)
+        return False
+    finally:
+        try:
+            db.enable_load_extension(False)
+        except Exception:
+            pass
+
+
+def optimize_database(db: sqlite3.Connection) -> None:
+    """Refresh query planner statistics on the caller's connection.
+
+    Deliberately performs no VACUUM and never touches isolation_level:
+    reclamation lives in run_database_maintenance() so request paths can never
+    trigger a database-wide writer operation.
+    """
+    try:
+        db.execute("PRAGMA optimize")
+    except sqlite3.OperationalError:
+        pass
+
+
+def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: float = 5.0) -> bool:
+    """Reclaim disk space on a dedicated autocommit connection.
+
+    VACUUM is a database-wide writer operation that can starve durable job
+    transitions, so it only ever runs here: on its own connection, outside all
+    request transactions, guarded by a short busy timeout so maintenance yields
+    to live traffic instead of blocking it, and only when freelist slack
+    actually justifies the rewrite.
+    """
+    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(DB_FILE, timeout=timeout, isolation_level=None)
+    reclaimed = False
+    try:
+        _apply_connection_pragmas(db, timeout=timeout)
+        try:
+            db.execute("PRAGMA optimize")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            freelist_row = db.execute("PRAGMA freelist_count").fetchone()
+            freelist = int(freelist_row[0]) if freelist_row else 0
+            if freelist >= vacuum_freelist_threshold:
+                db.execute("VACUUM")
+                db.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                reclaimed = True
+            else:
+                db.execute("PRAGMA incremental_vacuum")
+        except sqlite3.OperationalError as exc:
+            logging.warning("Database maintenance skipped after lock timeout: %s", exc)
+    finally:
+        db.close()
+    return reclaimed
+
+
 def db_connect() -> sqlite3.Connection:
     """Open the configured SQLite database and initialize its schema."""
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_FILE, timeout=30)
-    db.execute("PRAGMA busy_timeout=30000")
+    _apply_connection_pragmas(db, timeout=30.0)
+    # One-time database-level setup, on the schema-init connection only and
+    # never on per-worker lightweight connections. auto_vacuum must precede
+    # WAL negotiation: switching auto_vacuum is a no-op once the file has
+    # been touched by WAL.
+    db.execute("PRAGMA auto_vacuum=INCREMENTAL")
     db.execute("PRAGMA journal_mode=WAL")
+    _load_optional_vector_extension(db)
     initialize_database_schema(db)
     return db
 

@@ -12,6 +12,9 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Changed
 
+- Added SQLite connection performance pragmas (`synchronous = NORMAL`, `temp_store = MEMORY`, `cache_size = -64000`, `foreign_keys = ON`); worker connections stay connection-local while WAL and optional extension setup happen once on the schema-init connection.
+- Added query planner maintenance (`optimize_database`, `PRAGMA optimize`) after bulk deletions, and dedicated end-of-shutdown disk reclamation (`run_database_maintenance`) with incremental auto-vacuum initialization and a bounded-timeout `VACUUM` on a separate connection.
+- Added optional `sqlite-vec` vector extension detection and initialization support, with extension loading always disabled after the attempt.
 - Removed the unused native-cache reset hook.
 - Removed the redundant Live API Sync JSONL serialization/parsing round trip; API chat records are now validated and normalized directly.
 - Kept bounded message/transcript validation, metadata handling, and swipe variants while removing retired JSONL-transfer limits from shared configuration.

@@ -397,6 +397,9 @@ def main() -> int:
     sync_stopped = stop_phase3_sync_worker(timeout=5.0)
     drained = shutdown_background_executors(timeout=20.0)
     db.close()
+    # Explicit maintenance on a dedicated connection after executors drained:
+    # VACUUM never competes with durable job transitions on the live handle.
+    run_database_maintenance()
     if not sync_stopped:
         logging.warning("Realtime sync worker did not stop before shutdown deadline")
     if not drained:
