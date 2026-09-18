@@ -114,8 +114,19 @@ class UpdatePanelTests(unittest.TestCase):
                 rt.UPDATE_LIVE_DIR = old_live
                 rt.UPDATE_REPO_DIR = old_repo
 
-        self.assertIn(["git", "fetch", "origin", "tag", "v0.0.2"], calls)
-        self.assertIn(["git", "merge", "--ff-only", "v0.0.2"], calls)
+        fetched_ref = "refs/bridge-release/v0.0.2"
+        self.assertIn(
+            [
+                "git",
+                "fetch",
+                "--force",
+                "--no-tags",
+                rt.UPDATE_CANONICAL_GIT_URL,
+                f"refs/tags/v0.0.2:{fetched_ref}",
+            ],
+            calls,
+        )
+        self.assertIn(["git", "merge", "--ff-only", fetched_ref], calls)
         self.assertNotIn(["git", "fetch", "origin", "main"], calls)
         self.assertNotIn(["git", "merge", "--ff-only", "origin/main"], calls)
 
