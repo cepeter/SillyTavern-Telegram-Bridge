@@ -31,12 +31,8 @@ def send_group_menu(db: sqlite3.Connection, token: str, chat_id: str, session: d
         rows.append([{"text": "🆕 New group session", "callback_data": "group:new_session"}])
     rows.append([{"text": "➡️ Next speaker", "callback_data": "group:next"}, {"text": "❌ Close", "callback_data": "group:close"}])
     text = f"Group chat: {'on' if state['enabled'] else 'off'}\nMode: {state['mode']}\nMembers: {', '.join(labels) if labels else 'none'}\nCurrent speaker: {current}\nUser turn: {user_turn}\nChoose a group action:"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
     try:
-        telegram_request(token, method, payload)
+        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
     except RuntimeError as exc:
         if "not modified" in str(exc).casefold():
             logging.info("Group panel already shows the requested state")
@@ -170,22 +166,14 @@ def send_group_character_menu(db: sqlite3.Connection, token: str, chat_id: str, 
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "group:menu"}, {"text": "❌ Close", "callback_data": "group:close"}])
     text = f"Group {action} character (page {current_page + 1}/{total_pages}):"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def send_group_speaker_menu(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], message_id: int | None = None) -> None:
     state = group_state(db, chat_id, session["session_id"])
     rows = [[{"text": panel_label(label), "callback_data": f"groupchars:speak:{dynamic_callback_token('group_character', filename, chat_id)}"}] for filename, label in zip(state["members"], group_member_labels(state["members"]))]
     rows.append([{"text": "⬅️ Back", "callback_data": "group:menu"}, {"text": "❌ Close", "callback_data": "group:close"}])
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": "Choose the next group speaker:", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, "Choose the next group speaker:", {"inline_keyboard": rows}, message_id)
 
 
 def send_group_mode_menu(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], message_id: int | None = None) -> None:
@@ -193,11 +181,7 @@ def send_group_mode_menu(db: sqlite3.Connection, token: str, chat_id: str, sessi
     modes = [("round_robin", "Round robin"), ("contextual", "Contextual"), ("director", "Director"), ("manual", "Manual"), ("autonomous", "Autonomous")]
     rows = [[{"text": ("✅ " if mode == state["mode"] else "") + label, "callback_data": f"groupmode:{mode}"}] for mode, label in modes]
     rows.append([{"text": "⬅️ Back", "callback_data": "group:menu"}, {"text": "❌ Close", "callback_data": "group:close"}])
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Current group mode: {state['mode']}\nChoose a mode:", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Current group mode: {state['mode']}\nChoose a mode:", {"inline_keyboard": rows}, message_id)
 
 
 def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict, operation_id: int | str | None = None, sender_id: str = "") -> None:
