@@ -622,8 +622,9 @@ A systemd template lives at `systemd/sillytavern-telegram.service.example`. Set
 `SILLYTAVERN_BRIDGE_SOURCE_DIR` if `/update` runs from a live launcher copy.
 
 `/update` is confirmation-gated. If you're already on the latest release, it
-does nothing. Otherwise it requires a clean checkout and a fast-forwardable
-`origin/main`, then syncs the live bridge and restarts the service.
+does nothing. Otherwise it requires a clean checkout and fast-forwards only to
+the exact published release tag shown in the panel, then syncs the live bridge
+and restarts the service.
 
 ## Architecture
 

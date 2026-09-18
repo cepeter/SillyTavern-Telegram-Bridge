@@ -42,6 +42,14 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
             return None
     message_id = message.get("message_id")
     bound_session_id = panel_session_for_message(db, chat_id, message_id) if message_id else None
+    bound_owner_id = panel_owner_for_message(db, chat_id, message_id) if message_id else ""
+    if message_id and bound_owner_id and sender != bound_owner_id:
+        feedback = "This panel belongs to another user"
+        if callback.get("_queued"):
+            send_text(token, chat_id, feedback)
+        else:
+            answer_callback(token, str(callback.get("id", "")), feedback)
+        return
     if message_id and is_session_scoped_panel_callback(data) and not bound_session_id:
         feedback = "Panel expired; reopen it"
         discard_panel_binding(db, chat_id, message_id)

@@ -152,6 +152,14 @@ def panel_session_context() -> str:
     return str(getattr(_PANEL_SESSION_CONTEXT, "session_id", "") or "")
 
 
+def set_panel_actor_context(user_id: str | None) -> None:
+    _PANEL_SESSION_CONTEXT.user_id = str(user_id) if user_id else ""
+
+
+def panel_actor_context() -> str:
+    return str(getattr(_PANEL_SESSION_CONTEXT, "user_id", "") or "")
+
+
 _BACKGROUND_MAX_QUEUED_PER_CHAT = 256
 _BACKGROUND_MAX_SCOPED_QUEUES = 1024
 BACKGROUND_MAX_JOBS = 8
