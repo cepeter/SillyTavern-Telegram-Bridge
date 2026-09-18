@@ -7,6 +7,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 ### Added
 
 - Added covering indexes for cleanup deletes: `callback_tokens_expires_idx` on `callback_tokens(expires_at)`, `panel_sessions_expires_idx` on `panel_sessions(expires_at)`, `operations_state_idx` on `operations(state, updated_at)` to prevent full table scans on every schema init.
+- Added `/world` panel actions for uploading validated native World Info JSON and deleting inactive lorebooks with confirmation and reference protection.
 
 ### Fixed
 

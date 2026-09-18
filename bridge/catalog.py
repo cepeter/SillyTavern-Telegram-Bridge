@@ -230,11 +230,16 @@ def send_world_menu(token: str, chat_id: str, current_world: str, message_id: in
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for name, label in page_options:
+        token = dynamic_callback_token("world", name, chat_id)
         mark = "✅ " if name in selected else ""
-        rows.append([{"text": mark + panel_label(label), "callback_data": "world:" + dynamic_callback_token("world", name, chat_id)}])
+        rows.append([
+            {"text": mark + panel_label(label), "callback_data": "world:" + token},
+            {"text": "🗑️", "callback_data": "worlddelete:" + token},
+        ])
     navigation = panel_navigation("world", current_page, total_pages)
     if navigation:
         rows.append(navigation)
+    rows.append([{"text": "📤 Upload World JSON", "callback_data": "world:upload"}])
     rows.append([{"text": "🚫 Clear all World Info", "callback_data": "world:off"}, {"text": "✅ Close", "callback_data": "world:done"}])
     selected_label = ", ".join(Path(name).stem for name in selected) if selected else "off"
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
@@ -246,6 +251,47 @@ def send_world_menu(token: str, chat_id: str, current_world: str, message_id: in
             logging.info("Panel already shows the requested state")
             return
         raise
+
+
+def install_world_info_document(filename: str, raw: bytes) -> Path:
+    name = Path(str(filename)).name
+    if name != str(filename) or Path(name).suffix != ".json" or name in {"", ".", ".."}:
+        raise ValueError("World Info upload must be a JSON file with a simple filename")
+    try:
+        payload = json.loads(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("World Info JSON is invalid") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("entries"), dict):
+        raise ValueError("World Info JSON must contain an entries object")
+    WORLD_DIR.mkdir(parents=True, exist_ok=True)
+    target = WORLD_DIR / name
+    if target.exists():
+        raise FileExistsError(f"World Info file already exists: {name}")
+    temporary = tempfile.NamedTemporaryFile(prefix=".world-", suffix=".tmp", dir=WORLD_DIR, delete=False)
+    try:
+        temporary.write(raw)
+        temporary.flush()
+        os.fsync(temporary.fileno())
+        temporary.close()
+        os.replace(temporary.name, target)
+    except Exception:
+        try:
+            temporary.close()
+        except Exception:
+            pass
+        Path(temporary.name).unlink(missing_ok=True)
+        raise
+    return target
+
+
+def delete_world_info_file(db, chat_id: str, filename: str) -> None:
+    path = safe_world_path(filename)
+    if path is None:
+        raise ValueError("World Info file not found")
+    for (world_value,) in db.execute("SELECT world_file FROM sessions").fetchall():
+        if path.name in active_world_files(world_value):
+            raise ValueError("World Info is active in a session; disable it before deleting")
+    path.unlink()
 
 
 def answer_callback(token: str, callback_id: str, text: str) -> None:

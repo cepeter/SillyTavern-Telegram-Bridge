@@ -282,6 +282,14 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
 def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
+    world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
+    if world_upload:
+        if stripped.casefold() in {"/cancel", "cancel"}:
+            set_meta(db, f"world_upload:{chat_id}", "")
+            send_text(token, chat_id, "World Info upload cancelled.")
+        else:
+            send_text(token, chat_id, "Please send the World Info JSON as a document, or use /cancel.")
+        return True
     text_action = _pending_state(db, f"text_action_input:{chat_id}", session_id, token, chat_id)
     if text_action:
         action_fields = fields if fields is not None else card_fields_from_file(session["character_file"])

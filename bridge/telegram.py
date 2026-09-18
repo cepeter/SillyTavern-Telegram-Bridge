@@ -310,10 +310,45 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
     send_text(token, chat_id, f"Character card imported: {fields['name']} ({target.name}). Backup verified: {backup.name}.")
 
 
+def _consume_world_upload(db: sqlite3.Connection, chat_id: str) -> bool:
+    raw_state = get_meta(db, f"world_upload:{chat_id}")
+    if not raw_state:
+        return False
+    set_meta(db, f"world_upload:{chat_id}", "")
+    try:
+        state = json.loads(raw_state)
+    except json.JSONDecodeError:
+        return False
+    if float(state.get("expires_at", 0)) < time.time():
+        return False
+    return True
+
+
+def import_world_info_document(db: sqlite3.Connection, token: str, chat_id: str, filename: str, raw: bytes) -> None:
+    try:
+        target = install_world_info_document(filename, raw)
+    except FileExistsError:
+        send_text(token, chat_id, f"World Info already exists: {Path(filename).name}. Delete it first, then upload again.")
+    except (OSError, ValueError) as exc:
+        send_text(token, chat_id, f"World Info upload refused: {exc}")
+    else:
+        send_text(token, chat_id, f"World Info imported: {target.name}. Open /world to enable it.")
+
+
 def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
     file_size = int(document.get("file_size") or 0)
+    if _consume_world_upload(db, chat_id):
+        if suffix != ".json":
+            send_text(token, chat_id, "World Info upload expects a .json document. Use /world and try again.")
+            return
+        if file_size > RAG_MAX_FILE_BYTES:
+            send_text(token, chat_id, "World Info file is too large. The limit is 10 MB.")
+            return
+        raw = download_telegram_file(token, str(document.get("file_id") or ""), RAG_MAX_FILE_BYTES)
+        import_world_info_document(db, token, chat_id, filename, raw)
+        return
     if suffix == ".png":
         raw = download_telegram_file(token, str(document.get("file_id") or ""), RAG_MAX_FILE_BYTES)
         try:

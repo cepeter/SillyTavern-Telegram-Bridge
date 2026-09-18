@@ -552,7 +552,11 @@ falls back to a generic label rather than exposing a private identity.
 ### World Info and System Prompts
 
 `/world` selects or disables one or more native World Info JSON files. Active
-lorebooks are path-validated and merged deterministically at prompt time.
+lorebooks are path-validated and merged deterministically at prompt time. The
+panel also supports uploading a `.json` World Info document. Uploads must use
+SillyTavern's `{ "entries": { ... } }` format, are limited to 10 MB, and refuse
+to overwrite an existing filename. The trash button deletes only inactive
+World Info files; files referenced by any session are protected.
 
 `/systemprompt` reads native System Prompts from:
 

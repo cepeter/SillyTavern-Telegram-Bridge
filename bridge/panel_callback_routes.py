@@ -363,17 +363,43 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
 
 
 def handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
-    """Handle World Info selection, clearing, and pagination callbacks."""
+    """Handle World Info selection, upload, deletion, and pagination callbacks."""
+    message_id = message.get("message_id")
+    if data.startswith("worlddeleteconfirm:"):
+        value = resolve_dynamic_callback_token(data.split(":", 1)[1], "world", chat_id) or ""
+        try:
+            delete_world_info_file(db, chat_id, value)
+        except (ValueError, OSError) as exc:
+            answer_callback(token, str(callback.get("id", "")), "Delete refused")
+            send_text(token, chat_id, str(exc))
+        else:
+            answer_callback(token, str(callback.get("id", "")), "World Info deleted")
+            send_world_menu(token, chat_id, session["world_file"], message_id, 0)
+        return True
+    if data.startswith("worlddelete:"):
+        value = resolve_dynamic_callback_token(data.split(":", 1)[1], "world", chat_id) or ""
+        if not safe_world_path(value):
+            answer_callback(token, str(callback.get("id", "")), "World Info file not found")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
+        send_panel_message(token, chat_id, f"Delete World Info '{Path(value).name}'? This cannot be undone.", {"inline_keyboard": [[{"text": "🗑️ Delete", "callback_data": "worlddeleteconfirm:" + dynamic_callback_token("world", value, chat_id)}, {"text": "Cancel", "callback_data": "world:cancel"}]]}, message_id)
+        return True
     if data.startswith("world:"):
         setup = group_setup_state(db, chat_id, session_id)
         value = data.split(":", 1)[1]
-        if not value.startswith("page:") and value not in {"cancel", "done", "off"}:
+        if not value.startswith("page:") and value not in {"cancel", "done", "off", "upload"}:
             value = resolve_dynamic_callback_token(value, "world", chat_id) or ""
         if value.startswith("page:"):
             answer_callback(token, str(callback.get("id", "")), "Page")
             send_world_menu(token, chat_id, session["world_file"], message.get("message_id"), int(value.split(":", 1)[1]))
             return True
-        if value == "cancel":
+        if value == "upload":
+            pending = {"session_id": session_id, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
+            set_meta(db, f"world_upload:{chat_id}", json.dumps(pending))
+            answer_callback(token, str(callback.get("id", "")), "Send JSON document")
+            discard_panel_binding(db, chat_id, message_id)
+            send_text(token, chat_id, "Send the World Info JSON as a Telegram document. Use /cancel to abort.")
+        elif value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
             if setup:
                 set_meta(db, f"group_setup:{chat_id}", "")
