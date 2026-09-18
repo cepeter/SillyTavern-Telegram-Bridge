@@ -81,6 +81,51 @@ def command_detail(command: str, summary: str) -> str:
     return COMMAND_DETAILS.get(command, summary)
 
 
+def normalize_help_command(text: str) -> str | None:
+    """Return the requested help topic, or None for non-Help messages."""
+    parts = str(text or "").strip().split(None, 1)
+    if not parts:
+        return None
+    command = parts[0].casefold()
+    if command.startswith("/help@"):
+        command = "/help"
+    if command != "/help":
+        return None
+    return parts[1].strip() if len(parts) > 1 else ""
+
+
+def _help_command_target(requested: str) -> tuple[str, int] | None:
+    normalized = "/" + str(requested or "").strip().lstrip("/").casefold()
+    if normalized == "/":
+        return None
+    base_match = None
+    for category, entries in HELP_CATEGORIES.items():
+        for index, (command, _summary) in enumerate(entries):
+            command_normalized = command.casefold()
+            if command_normalized == normalized:
+                return category, index
+            if base_match is None and command_normalized.split()[0].split("|", 1)[0] == normalized:
+                base_match = (category, index)
+    return base_match
+
+
+def send_help_command(token: str, chat_id: str, text: str, message_id: int | None = None) -> bool:
+    """Render a Help panel for an exact Help command without text fallback."""
+    requested = normalize_help_command(text)
+    if requested is None:
+        return False
+    target = _help_command_target(requested) if requested else None
+    if target is None:
+        send_help_menu(token, chat_id, message_id=message_id)
+    else:
+        send_help_menu(token, chat_id, target[0], message_id, target[1])
+    return True
+
+
+def is_help_callback(data: str) -> bool:
+    return str(data or "").startswith("help:")
+
+
 def handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     """Handle paginated help categories, command details, Back, and Close."""
     if data.startswith("help:cmdpage:"):

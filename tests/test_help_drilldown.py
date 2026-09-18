@@ -130,5 +130,51 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertIn("1,200 characters", rt.command_detail("/group goal", ""))
         self.assertIn("utility model", rt.command_detail("/scene refresh", ""))
 
+    def test_help_command_fast_path_always_renders_panel(self):
+        calls = []
+        original_send = rt.send_help_menu
+        rt.send_help_menu = lambda *args, **kwargs: calls.append((args, kwargs))
+        try:
+            self.assertEqual(rt.normalize_help_command("/help@SillyTavernPunzmeBot"), "")
+            self.assertEqual(rt.normalize_help_command("/help scene refresh"), "scene refresh")
+            self.assertIsNone(rt.normalize_help_command("help"))
+            self.assertTrue(rt.send_help_command("token", "chat", "/help scene refresh"))
+            self.assertEqual(calls[-1][0], ("token", "chat", "voice_group", None, 7))
+            self.assertTrue(rt.send_help_command("token", "chat", "/help unknown"))
+            self.assertEqual(calls[-1][0], ("token", "chat"))
+            self.assertFalse(rt.send_help_command("token", "chat", "/helper"))
+        finally:
+            rt.send_help_menu = original_send
+
+    def test_help_callbacks_are_marked_for_fast_path(self):
+        self.assertTrue(rt.is_help_callback("help:menu"))
+        self.assertTrue(rt.is_help_callback("help:cmd:voice_group:7"))
+        self.assertFalse(rt.is_help_callback("persona:menu"))
+
+    def test_read_only_and_feature_commands_render_panels(self):
+        session = rt.create_session(self.db, "chat", rt.DEFAULT_MODEL, session_id="panel-session")
+        calls = []
+        original_panel = rt.send_panel_message
+        original_groups = rt.get_model_groups
+        rt.send_panel_message = lambda *args, **kwargs: calls.append((args, kwargs))
+        rt.get_model_groups = lambda: {}
+        try:
+            rt.send_status_menu("token", "chat", self.db, session, {"name": "Test"}, rt.DEFAULT_MODEL, "")
+            self.assertIn("status:character", str(calls[-1]))
+            rt.send_prompt_menu("token", "chat", self.db, session, {"name": "Test"})
+            self.assertIn("prompt:budget", str(calls[-1]))
+            rt.send_scene_menu("token", "chat", self.db, session)
+            self.assertIn("scene:refresh", str(calls[-1]))
+            rt.set_director_goal(self.db, "chat", session["session_id"], "Reveal the door")
+            rt.send_director_goal_menu("token", "chat", self.db, session)
+            self.assertIn("goal:set", str(calls[-1]))
+            rt.send_task_model_menu("token", "chat", self.db, session)
+            self.assertIn("taskmodel:model:", str(calls[-1]))
+            rt.send_curated_memory_menu("token", "chat", self.db, session)
+            self.assertIn("curated:refresh", str(calls[-1]))
+        finally:
+            rt.send_panel_message = original_panel
+            rt.get_model_groups = original_groups
+
 if __name__ == "__main__":
     unittest.main()

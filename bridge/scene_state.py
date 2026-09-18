@@ -341,8 +341,7 @@ def handle_scene_command(
 ) -> None:
     action = command.split(None, 1)[1].strip().casefold() if " " in command else "status"
     if action in {"", "status"}:
-        state = scene_state_text(db, chat_id, session["session_id"])
-        send_text(token, chat_id, "Scene state:\n" + (state or "No structured scene state has been established yet."))
+        send_scene_menu(token, chat_id, db, session)
         return
     if action == "clear":
         clear_scene_state(db, chat_id, session["session_id"])

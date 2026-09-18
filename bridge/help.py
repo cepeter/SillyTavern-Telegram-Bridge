@@ -3,7 +3,7 @@ HELP_CATEGORIES = {
         ("/start", "Show the character greeting when Persona, World Info, and System Prompt are all enabled; otherwise show what's off and how to fix it."),
 
         ("/help", "Open this guide. Use /help <command> to jump straight to one command."),
-        ("/status", "Show everything about the current session — card, model, memory, RAG, group, and generation state."),
+        ("/status", "Open the read-only session status panel. Use /status text for the plain diagnostic message."),
         ("/new", "Name and create a fresh isolated session, then switch to it."),
         ("/reset", "Open a confirmation panel to clear only the active session and its Hindsight memory. Other sessions stay untouched."),
         ("/session", "Switch between sessions, create new ones, or delete inactive ones — deletion removes session data and its Hindsight documents."),
@@ -25,7 +25,7 @@ HELP_CATEGORIES = {
     ],
     "generation": [
         ("/settings", "Open this session's generation panel — pick a reasoning level or set your own temperature, tokens, and sampling values."),
-        ("/taskmodel", "Route utility tasks such as session summarization to a per-session model, or follow the main model."),
+        ("/taskmodel", "Open a utility-model picker. Choose Follow main model, a catalog model, or use /taskmodel <provider::model> as a text shortcut."),
         ("/stream on|off", "Toggle streaming preview on or off."),
         ("/preset", "Open the preset panel — apply, save, or delete generation setting presets."),
         ("/macro", "Open a panel, then send one message to preview supported SillyTavern macros"),
@@ -36,10 +36,11 @@ HELP_CATEGORIES = {
         ("/continue", "Continue the latest assistant response from where it stopped."),
         ("/edit", "Open a panel, then send replacement text for the latest user turn"),
         ("/retry", "Retry the latest failed character response — no duplicate turns."),
-        ("/prompt", "Inspect prompt sections and smart context budget — history candidates, memory, RAG, and World Info — without the full prompt."),
+        ("/prompt", "Open a read-only prompt inspector with budget, memory/RAG, and group-context sections. Use /prompt text for the plain diagnostic output."),
     ],
     "memory_rag": [
         ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),
+        ("/memory curated", "Open the curated-memory panel to view durable distilled facts or refresh them with the utility model."),
         ("/remember", "Open a panel, then send one explicit long-term fact to store in memory."),
         ("/summarize", "Regenerate the active session's summary from its stored conversation."),
         ("/databank", "Open Data Bank RAG controls. Same-name uploads create versions; use versions/activate to inspect or roll back."),
@@ -200,8 +201,34 @@ def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message
     mode = rag_mode(db, chat_id)
     docs = data_bank_documents(db, chat_id)
     total_chunks, indexed_chunks = rag_embedding_coverage(db, chat_id)
-    rows = [[{"text": ("✅ " if mode == "on" else "") + "RAG on", "callback_data": "enum:rag:on"}, {"text": ("✅ " if mode == "off" else "") + "RAG off", "callback_data": "enum:rag:off"}], [{"text": "List documents", "callback_data": "enum:rag:list"}, {"text": "🔎 Search", "callback_data": "enum:rag:search"}], [{"text": "Remove document", "callback_data": "enum:rag:remove"}], [{"text": "Reindex embeddings", "callback_data": "enum:rag:reindex"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
+    rows = [[{"text": ("✅ " if mode == "on" else "") + "RAG on", "callback_data": "enum:rag:on"}, {"text": ("✅ " if mode == "off" else "") + "RAG off", "callback_data": "enum:rag:off"}], [{"text": "List documents", "callback_data": "enum:rag:list"}, {"text": "🔎 Search", "callback_data": "enum:rag:search"}], [{"text": "Document versions", "callback_data": "enum:rag:versions"}], [{"text": "Remove document", "callback_data": "enum:rag:remove"}], [{"text": "Reindex embeddings", "callback_data": "enum:rag:reindex"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
     send_panel_message(token, chat_id, f"Data Bank RAG: {mode}\nDocuments: {len(docs)}\nEmbedding coverage: {indexed_chunks}/{total_chunks} chunks", {"inline_keyboard": rows}, message_id)
+
+
+def send_databank_versions_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, filename: str | None = None, page: int = 0) -> None:
+    docs = data_bank_documents(db, chat_id)
+    if not filename:
+        options = [str(row[1]) for row in docs]
+        page_options, current_page, total_pages = panel_page(options, page)
+        rows = [[{"text": panel_label(name), "callback_data": "enum:ragversions:" + dynamic_callback_token("rag_document", name, chat_id)}] for name in page_options]
+        if total_pages > 1:
+            navigation = []
+            if current_page > 0:
+                navigation.append({"text": "⬅️ Previous", "callback_data": f"enum:ragversionspage:{current_page - 1}"})
+            if current_page < total_pages - 1:
+                navigation.append({"text": "Next ➡️", "callback_data": f"enum:ragversionspage:{current_page + 1}"})
+            rows.append(navigation)
+        rows.append([{"text": "⬅️ Data Bank", "callback_data": "enum:rag:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
+        send_panel_message(token, chat_id, f"Choose a document to inspect versions (page {current_page + 1}/{total_pages}):", {"inline_keyboard": rows}, message_id)
+        return
+    versions = data_bank_document_versions(db, chat_id, filename)
+    rows = []
+    for _document_id, version_number, active, byte_size, chunks in versions:
+        token_value = dynamic_callback_token("rag_version", f"{filename}|{version_number}", chat_id)
+        label = f"{'✅ ' if active else ''}v{version_number} ({chunks} chunks, {byte_size} bytes)"
+        rows.append([{"text": label, "callback_data": "enum:ragactivate:" + token_value}])
+    rows.append([{"text": "⬅️ Documents", "callback_data": "enum:rag:versions"}, {"text": "❌ Close", "callback_data": "enum:close"}])
+    send_panel_message(token, chat_id, f"Versions for {filename}:\nChoose one to activate.", {"inline_keyboard": rows}, message_id)
 
 
 def send_databank_remove_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
@@ -339,6 +366,23 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         send_preset_delete_menu(token, chat_id, db, message_id)
     elif data == "enum:rag:search":
         start_text_action_input(db, token, chat_id, session["session_id"], "databank_search", "Send a query to search the active Data Bank.", {"message": message})
+    elif data == "enum:rag:versions":
+        send_databank_versions_menu(token, chat_id, db, message_id)
+    elif data.startswith("enum:ragversionspage:"):
+        send_databank_versions_menu(token, chat_id, db, message_id, page=int(parts[2]))
+    elif data.startswith("enum:ragversions:"):
+        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id) or ""
+        send_databank_versions_menu(token, chat_id, db, message_id, filename=filename)
+    elif data.startswith("enum:ragactivate:"):
+        raw = resolve_dynamic_callback_token(parts[2], "rag_version", chat_id) or ""
+        filename, _, raw_version = raw.rpartition("|")
+        try:
+            version = int(raw_version)
+        except ValueError:
+            version = 0
+        if filename and version > 0:
+            activate_data_bank_version(db, chat_id, filename, version)
+        send_databank_versions_menu(token, chat_id, db, message_id, filename=filename)
     elif data == "enum:rag:remove":
         send_databank_remove_menu(token, chat_id, db, message_id)
     elif data == "enum:rag:back":
@@ -396,12 +440,12 @@ def set_bot_commands(token: str) -> None:
                 {"command": "update", "description": "Check and confirm bridge update"},
                 {"command": "persona", "description": "Choose user persona"},
                 {"command": "world", "description": "Choose World Info lore"},
-                {"command": "status", "description": "Show model and chat status"},
+                {"command": "status", "description": "Open read-only session status panel"},
                 {"command": "edit", "description": "Edit last user message"},
                 {"command": "voice", "description": "Open automatic voice panel"},
                 {"command": "voice_input", "description": "Open transcription/model/language panel"},
                 {"command": "settings", "description": "Open generation settings panel"},
-                {"command": "taskmodel", "description": "Route utility tasks to another model"},
+                {"command": "taskmodel", "description": "Choose the utility task model"},
                 {"command": "stream", "description": "Open streaming on/off panel"},
                 {"command": "preset", "description": "Open preset use/delete panel"},
                 {"command": "macro", "description": "Preview a macro"},
@@ -416,7 +460,7 @@ def set_bot_commands(token: str) -> None:
                 {"command": "regen", "description": "Regenerate last response"},
                 {"command": "swipe", "description": "Browse response variants"},
                 {"command": "branch", "description": "Choose an active chat branch"},
-                {"command": "prompt", "description": "Inspect prompt context"},
+                {"command": "prompt", "description": "Open prompt inspector panel"},
                 {"command": "continue", "description": "Continue last response"},
                 {"command": "retry", "description": "Retry the last failed response"},
                 {"command": "note", "description": "Open Author's Note panel"},
@@ -424,6 +468,7 @@ def set_bot_commands(token: str) -> None:
                 {"command": "language", "description": "Choose model reply language"},
                 {"command": "expression", "description": "Choose manual or automatic character expressions"},
                 {"command": "imagine", "description": "Generate an image from a prompt"},
+                {"command": "scene", "description": "Open structured scene state panel"},
             ]
         })
     except Exception:

@@ -315,7 +315,7 @@ prevents accidental changes.
 | Command | What it does |
 |---|---|
 | `/start` | Show the greeting when Persona, World Info, and System Prompt are enabled |
-| `/status` | Show active card, session, model, memory, RAG, and generation state |
+| `/status` | Open read-only session status and drilldown panels |
 | `/new` | Create and activate a named isolated session |
 | `/reset` | Confirm an active-session reset and memory purge |
 | `/session` | Switch, create, or delete an inactive session |
@@ -331,8 +331,11 @@ prevents accidental changes.
 | Command | What it does |
 |---|---|
 | `/settings` | Configure reasoning and generation values |
+| `/taskmodel` | Choose the utility task model from a panel |
+| `/taskmodel <provider::model>` | Set a utility model directly |
 | `/stream` | Toggle streaming preview |
 | `/preset` | Use, save, or delete a generation preset |
+| `/prompt` | Open the read-only prompt inspector panel |
 | `/regen` | Generate another response variant |
 | `/swipe` | Browse stored response variants |
 | `/branch` | Choose the active response branch |
@@ -354,15 +357,17 @@ prevents accidental changes.
 | `/voice_input` | Configure transcription, STT model, and language |
 | `/imagine` | Generate an image through an enabled image provider |
 | `/memory` | Open Hindsight memory and search controls |
+| `/memory curated` | View or refresh curated durable memory |
 | `/remember` | Store one explicit long-term fact |
-| `/summarize` | Regenerate the active-session summary |
+| `/summarize` | Confirm before regenerating the active-session summary |
 | `/databank` | Open Data Bank RAG controls |
 | `/sync` | Open Live API Sync controls |
 | `/group` | Open Forum Topic group controls |
 | `/group goal` | View the hidden Director scene objective |
 | `/group goal <objective>` | Set a session-local hidden objective for Director mode |
-| `/scene` | View structured scene state |
+| `/scene` | Open structured scene state panel |
 | `/scene refresh` | Rebuild scene state with the utility model |
+| `/scene clear` | Clear structured scene state |
 | `/help` | Open the interactive command guide |
 | `/help <command>` | Show detailed behavior for one command |
 | `/update` | Check and, after confirmation, update the bridge |

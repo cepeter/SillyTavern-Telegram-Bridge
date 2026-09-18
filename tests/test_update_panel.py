@@ -17,6 +17,31 @@ class UpdatePanelTests(unittest.TestCase):
         self.assertIn("Status: Already latest", text)
         self.assertNotIn("Release notes:", text)
 
+    def test_unreleased_panel_shows_release_base_and_local_state(self):
+        text = rt.update_menu_text("0.2.013", "0.2.013", "ignored", unreleased=True)
+        self.assertIn("Installed: v0.2.013 (unreleased local changes)", text)
+        self.assertIn("Status: Local unreleased changes", text)
+        self.assertNotIn("Confirm update", text)
+
+    def test_unreleased_changelog_uses_latest_released_heading(self):
+        old_live = rt.UPDATE_LIVE_DIR
+        old_repo = rt.UPDATE_REPO_DIR
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            live = root / "live"
+            repo = root / "repo"
+            live.mkdir()
+            repo.mkdir()
+            (live / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [0.2.013] - 2026-09-18\n", encoding="utf-8")
+            rt.UPDATE_LIVE_DIR = live
+            rt.UPDATE_REPO_DIR = repo
+            try:
+                self.assertEqual(rt.installed_bridge_version(), "0.2.013")
+                self.assertTrue(rt.installed_bridge_has_unreleased())
+            finally:
+                rt.UPDATE_LIVE_DIR = old_live
+                rt.UPDATE_REPO_DIR = old_repo
+
     def test_update_noop_skips_subprocess_when_latest(self):
         old_latest = rt.latest_bridge_release
         old_run = rt.subprocess.run

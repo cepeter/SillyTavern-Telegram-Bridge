@@ -44,7 +44,7 @@ class SessionNamingTests(unittest.TestCase):
         original_card = rt.card_fields_from_file
         rt.card_fields_from_file = lambda _filename: {"name": "Test", "post_history_instructions": ""}
         try:
-            rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, {}, "chat", "/status")
+            rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, {}, "chat", "/status text")
         finally:
             rt.card_fields_from_file = original_card
         self.assertIn("Session: Evening Story (default)", self.sent[-1])

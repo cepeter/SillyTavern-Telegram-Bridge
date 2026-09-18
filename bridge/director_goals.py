@@ -196,13 +196,7 @@ def handle_director_goal_command(
     suffix = raw[len("/group goal"):].strip()
     current = get_director_goal(db, chat_id, session["session_id"])
     if not suffix or suffix.casefold() == "status":
-        send_text(
-            token,
-            chat_id,
-            "Director scene objective:\n" +
-            (current or "No hidden scene objective is configured.") +
-            "\n\nUse /group goal <objective> or /group goal clear.",
-        )
+        send_director_goal_menu(token, chat_id, db, session)
         return
     if suffix.casefold() in {"clear", "off", "none"}:
         set_director_goal(db, chat_id, session["session_id"], "")

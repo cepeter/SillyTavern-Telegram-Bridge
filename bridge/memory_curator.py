@@ -324,14 +324,7 @@ def handle_curated_memory_command(
 ) -> None:
     suffix = command[len("/memory curated"):].strip().casefold()
     if suffix in {"", "status"}:
-        text = curated_memory_text(db, chat_id, session["session_id"])
-        _items, covered = get_curated_memory_state(db, chat_id, session["session_id"])
-        send_text(
-            token,
-            chat_id,
-            "Curated memory" + (f" (through message row {covered})" if covered else "") +
-            ":\n" + (text or "No curated durable memories yet."),
-        )
+        send_curated_memory_menu(token, chat_id, db, session)
         return
     if suffix == "refresh":
         if memory_mode(db, chat_id) != "on":

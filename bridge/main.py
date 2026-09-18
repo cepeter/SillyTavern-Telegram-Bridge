@@ -281,13 +281,29 @@ def main() -> int:
                     if callback_chat_id:
                         callback_message.setdefault("chat", {})["id"] = callback_chat_id
                     if sender in permitted and callback_chat_id:
-                        callback["_queued"] = True
-                        callback_session = ensure_session(db, callback_chat_id, model)["session_id"]
-                        callback_message_id = int(callback_message.get("message_id") or 0)
-                        job_id = enqueue_job(db, update_id, callback_chat_id, callback_session, callback_message_id, "callback", {"callback": callback, "model": model})
-                        submit_durable_chat_job(db, "callback", callback_chat_id, process_callback_job, token, callback_chat_id, callback, job_id)
-                        answer_callback(token, str(callback.get("id", "")), "Queued")
-                    complete_update(db, update_id, offset)
+                        if is_help_callback(str(callback.get("data") or "")):
+                            handle_help_callback(
+                                db,
+                                token,
+                                callback,
+                                answer_callback,
+                                str(callback.get("data") or ""),
+                                callback_chat_id,
+                                callback_message,
+                                {},
+                                "",
+                                None,
+                            )
+                        else:
+                            callback["_queued"] = True
+                            callback_session = ensure_session(db, callback_chat_id, model)["session_id"]
+                            callback_message_id = int(callback_message.get("message_id") or 0)
+                            job_id = enqueue_job(db, update_id, callback_chat_id, callback_session, callback_message_id, "callback", {"callback": callback, "model": model})
+                            submit_durable_chat_job(db, "callback", callback_chat_id, process_callback_job, token, callback_chat_id, callback, job_id)
+                            answer_callback(token, str(callback.get("id", "")), "Queued")
+                        complete_update(db, update_id, offset)
+                    else:
+                        complete_update(db, update_id, offset)
                     continue
 
                 edited_message = update.get("edited_message")
@@ -358,6 +374,9 @@ def main() -> int:
                     complete_update(db, update_id, offset)
                     continue
                 if not text:
+                    complete_update(db, update_id, offset)
+                    continue
+                if send_help_command(token, chat_id, str(text)):
                     complete_update(db, update_id, offset)
                     continue
                 message_id = int(message.get("message_id"))

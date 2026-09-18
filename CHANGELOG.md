@@ -11,12 +11,14 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 ### Fixed
 
 - Translated leftover Indonesian-language user-facing error messages (voice/image/character-card/Data Bank size and format limits) to English for consistency with the rest of the bot's UI copy.
+- Fixed `/update` version display so an `Unreleased` changelog is compared against its latest released base without overwriting local development changes.
 
 ## [0.2.013] - 2026-09-18
 
 ### Added
 
 - Added per-session utility-task model routing, invisible Group Director mode, Data Bank document versioning, and budget-aware context compaction.
+- Added read-only status/prompt/scene panels, Director-goal and curated-memory panels, summary confirmation, and a synchronous Help fast path.
 - Added bounded RAG retrieval improvements, optional SQLite vector support, and safer runtime override loading.
 
 ### Changed

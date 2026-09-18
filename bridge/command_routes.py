@@ -1,13 +1,7 @@
 def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id):
     """Handle onboarding, status, retry, and prompt inspection commands."""
     if command.startswith("/help "):
-        requested = command.split(None, 1)[1].strip().lstrip("/")
-        for _category, entries in HELP_CATEGORIES.items():
-            match = next((description for command_name, description in entries if command_name.split()[0].lstrip("/") == requested), None)
-            if match:
-                send_text(token, chat_id, f"/{requested} — {match}")
-                return True
-        send_help_menu(token, chat_id)
+        send_help_command(token, chat_id, stripped)
         return True
     if command == "/start":
         persona_ready = bool(current_persona)
@@ -37,21 +31,10 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         start_session_name_input(db, token, chat_id, session)
         return True
     if command == "/status":
-        count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()[0]
-        worlds = active_world_files(session["world_file"])
-        world = ", ".join(Path(name).stem for name in worlds) if worlds else "off"
-        persona = persona_name(current_persona) if current_persona else "off"
-        note_state = "on" if session["author_note"] else "off"
-        generation = get_generation_settings(db, chat_id, session_id)
-        summary, covered_until = get_session_summary(db, chat_id, session_id)
-        summary_state = f"on (through message {covered_until})" if summary else "off"
-        rag_docs = data_bank_documents(db, chat_id)
-        group = group_state(db, chat_id, session_id)
-        group_labels = group_member_labels(group["members"])
-        group_state_text = f"{'on' if group['enabled'] else 'off'} ({', '.join(group_labels) if group_labels else 'none'})"
-        expression_mode = get_meta(db, expression_mode_key(chat_id, session_id), "off")
-        utility_model = task_model_for_session(db, chat_id, session, "utility")
-        send_text(token, chat_id, f"Character: {fields['name']}\nSession: {session.get('title') or session_id} ({session_id})\nStored messages: {count}\nModel: {current_model}\nUtility model: {utility_model}\nResponse language: {response_language_label(session.get('response_language') or 'auto')}\nPersona: {persona}\nWorld Info: {world}\nSystem Prompt: {system_prompt_label(session.get('system_prompt'))}\nAuthor's Note: {note_state}\nExpressions: {expression_mode}\nSummary: {summary_state}\nHindsight: {memory_mode(db, chat_id)} ({memory_scope(db, chat_id)})\nData Bank RAG: {rag_mode(db, chat_id)} ({len(rag_docs)} documents)\nGroup chat: {group_state_text}\nGeneration: temperature={generation['temperature']}, max_tokens={generation['max_tokens']}, top_p={generation['top_p']}")
+        send_status_menu(token, chat_id, db, session, fields, current_model, current_persona)
+        return True
+    if command == "/status text":
+        send_text(token, chat_id, status_text(db, chat_id, session, fields, current_model, current_persona))
         return True
     if command == "/retry":
         failed = latest_failed_turn(db, chat_id)
@@ -76,10 +59,16 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
             record_failed_turn(db, chat_id, failed_message_id, str(failed[1]), str(failed[2]), str(exc), failed_session_id)
             send_text(token, chat_id, "Retry failed again; the turn remains queued for /retry.")
         return True
-    if command == "/taskmodel" or command == "/taskmodel status" or command.startswith("/taskmodel "):
+    if command == "/taskmodel" or command == "/taskmodel status":
+        send_task_model_menu(token, chat_id, db, session)
+        return True
+    if command.startswith("/taskmodel "):
         handle_task_model_command(db, token, chat_id, session, stripped)
         return True
     if command == "/prompt":
+        send_prompt_menu(token, chat_id, db, session, fields)
+        return True
+    if command == "/prompt text":
         send_text(token, chat_id, prompt_diagnostics(db, chat_id, session, fields))
         return True
     return False
@@ -105,9 +94,11 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
     if command == "/stream" or command.startswith("/stream "):
         send_stream_menu(token, chat_id, db)
         return True
-    if command == "/macro" or command.startswith("/macro "):
+    if command == "/macro":
         start_text_action_input(db, token, chat_id, session_id, "macro", "Send text to preview with supported SillyTavern macros.")
         return True
+    if command.startswith("/macro "):
+        return handle_inline_text_action(db, token, "", chat_id, session, fields, "macro", stripped.split(None, 1)[1], operation_id)
     if command == "/stscript" or command.startswith("/stscript "):
         send_stscript_menu(token, chat_id)
         return True
@@ -131,22 +122,30 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
     if command == "/memory" or command in {"/memory on", "/memory off", "/memory status", "/memory scope"}:
         send_memory_menu(token, chat_id, db)
         return True
-    if command.startswith("/memory search"):
+    if command == "/memory search":
         send_memory_menu(token, chat_id, db)
+        return True
+    if command.startswith("/memory search "):
+        handle_memory_command(db, token, chat_id, session, fields, stripped)
         return True
     if command.startswith("/memory "):
         send_memory_menu(token, chat_id, db)
         return True
-    if command == "/remember" or command.startswith("/remember "):
+    if command == "/remember":
         start_text_action_input(db, token, chat_id, session["session_id"], "remember", "Send the explicit memory fact to store in the active session.")
         return True
+    if command.startswith("/remember "):
+        return handle_inline_text_action(db, token, api_key, chat_id, session, fields, "remember", stripped.split(None, 1)[1], operation_id)
     if command == "/summarize":
-        handle_summary_command(db, token, chat_id, session)
+        send_summary_menu(token, chat_id, db, session)
         return True
     if command == "/databank" or command in {"/databank on", "/databank off", "/databank status", "/databank list", "/databank remove"}:
         send_databank_menu(token, chat_id, db)
         return True
-    if command.startswith("/databank search") or command.startswith("/databank versions") or command.startswith("/databank activate"):
+    if command in {"/databank search", "/databank versions", "/databank activate", "/databank reindex"}:
+        send_databank_menu(token, chat_id, db)
+        return True
+    if command.startswith("/databank search ") or command.startswith("/databank versions ") or command.startswith("/databank activate ") or command.startswith("/databank reindex ") or command.startswith("/databank remove "):
         handle_data_bank_command(db, token, chat_id, stripped)
         return True
     if command.startswith("/databank "):
@@ -155,11 +154,17 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
     if command == "/sync":
         send_sync_menu(token, chat_id, db, session)
         return True
-    if command == "/group" or command.startswith("/group "):
+    if command == "/group":
         if parse_topic_scope(chat_id)[1] is None:
             send_text(token, chat_id, "Group sessions are available only inside a Telegram Forum Topic.")
         else:
             send_group_menu(db, token, chat_id, session)
+        return True
+    if command.startswith("/group "):
+        if parse_topic_scope(chat_id)[1] is None:
+            send_text(token, chat_id, "Group sessions are available only inside a Telegram Forum Topic.")
+        else:
+            handle_group_command(db, token, chat_id, session, stripped, operation_id)
         return True
 
     return False
@@ -228,9 +233,11 @@ def _handle_entities(db, token, model, fields, chat_id, command, session, sessio
 
 def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, session, operation_id):
     """Handle edit, continuation, swipe, branch, and regeneration commands."""
-    if command == "/edit" or command.startswith("/edit "):
+    if command == "/edit":
         start_text_action_input(db, token, chat_id, session["session_id"], "edit", "Send the replacement text for the latest user message.")
         return True
+    if command.startswith("/edit "):
+        return handle_inline_text_action(db, token, api_key, chat_id, session, fields, "edit", stripped.split(None, 1)[1], operation_id)
     if command == "/continue":
         continue_last(db, token, api_key, session, fields, chat_id, operation_id=operation_id)
         return True

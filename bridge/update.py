@@ -31,15 +31,33 @@ UPDATE_REPO_DIR = _resolve_update_repo_dir()
 
 def _changelog_version(path: Path) -> str:
     try:
-        match = re.search(r"^## \[([^]]+)\]", path.read_text(encoding="utf-8"), re.MULTILINE)
+        headings = re.findall(r"^## \[([^]]+)\]", path.read_text(encoding="utf-8"), re.MULTILINE)
     except OSError:
         return "unknown"
-    return match.group(1) if match else "unknown"
+    for heading in headings:
+        if heading.casefold() != "unreleased":
+            return heading
+    return "unknown"
+
+
+def _changelog_has_unreleased(path: Path) -> bool:
+    try:
+        match = re.search(r"^## \[([^]]+)\]", path.read_text(encoding="utf-8"), re.MULTILINE)
+    except OSError:
+        return False
+    return bool(match and match.group(1).casefold() == "unreleased")
 
 
 def installed_bridge_version() -> str:
     live_version = _changelog_version(UPDATE_LIVE_DIR / "CHANGELOG.md")
     return live_version if live_version != "unknown" else _changelog_version(UPDATE_REPO_DIR / "CHANGELOG.md")
+
+
+def installed_bridge_has_unreleased() -> bool:
+    live_changelog = UPDATE_LIVE_DIR / "CHANGELOG.md"
+    if _changelog_version(live_changelog) != "unknown":
+        return _changelog_has_unreleased(live_changelog)
+    return _changelog_has_unreleased(UPDATE_REPO_DIR / "CHANGELOG.md")
 
 
 def latest_bridge_release() -> tuple[str, str]:
@@ -50,20 +68,23 @@ def latest_bridge_release() -> tuple[str, str]:
     return tag.removeprefix("v"), str(payload.get("body") or "No release notes.")[:2000]
 
 
-def update_menu_text(current: str, latest: str, notes: str) -> str:
+def update_menu_text(current: str, latest: str, notes: str, unreleased: bool = False) -> str:
     if latest == current:
+        if unreleased:
+            return f"Bridge update\nInstalled: v{current} (unreleased local changes)\nLatest: v{latest}\nStatus: Local unreleased changes\nNo release update is available; commit or release the local changes before updating."
         return f"Bridge update\nInstalled: v{current}\nLatest: v{latest}\nStatus: Already latest\nNo update is required."
-    return f"Bridge update\nInstalled: v{current}\nLatest: v{latest}\n\nRelease notes:\n{notes}\n\nChoose Confirm update only after reviewing the changes."
+    return f"Bridge update\nInstalled: v{current}{' (unreleased local changes)' if unreleased else ''}\nLatest: v{latest}\n\nRelease notes:\n{notes}\n\nChoose Confirm update only after reviewing the changes."
 
 
 def send_update_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
     current = installed_bridge_version()
+    unreleased = installed_bridge_has_unreleased()
     try:
         latest, notes = latest_bridge_release()
     except Exception as exc:
         latest, notes = "unavailable", f"Could not check GitHub: {exc}"
     rows = [[{"text": "✅ Already latest", "callback_data": "update:no_change"}, {"text": "❌ Cancel", "callback_data": "update:cancel"}]] if latest == current else [[{"text": "✅ Confirm update", "callback_data": "update:confirm"}, {"text": "❌ Cancel", "callback_data": "update:cancel"}]]
-    payload = {"chat_id": chat_id, "text": update_menu_text(current, latest, notes), "reply_markup": {"inline_keyboard": rows}}
+    payload = {"chat_id": chat_id, "text": update_menu_text(current, latest, notes, unreleased), "reply_markup": {"inline_keyboard": rows}}
     method = "editMessageText" if message_id else "sendMessage"
     if message_id:
         payload["message_id"] = message_id
@@ -77,6 +98,8 @@ def _run_update() -> str:
     except Exception as exc:
         return f"Update refused: could not verify latest release ({exc})."
     if latest == current:
+        if installed_bridge_has_unreleased():
+            return f"Already latest (v{current}); local unreleased changes were not overwritten."
         return f"Already latest (v{current}); no update was performed."
     if not _is_bridge_checkout(UPDATE_REPO_DIR):
         return f"Update refused: source checkout not found at {UPDATE_REPO_DIR}. Set SILLYTAVERN_BRIDGE_SOURCE_DIR."

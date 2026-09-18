@@ -33,6 +33,12 @@ def start_text_action_input(db, token: str, chat_id: str, session_id: str, actio
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
+def handle_inline_text_action(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, action: str, value: str, operation_id: int | None = None) -> bool:
+    """Run a bounded text action immediately when a command includes its value."""
+    state = {"session_id": session["session_id"], "action": action, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
+    return _handle_text_action_input(db, token, api_key, chat_id, session, fields, value, state, operation_id)
+
+
 def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, stripped: str, state: dict, operation_id: int | None) -> bool:
     meta_key = f"text_action_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
@@ -61,6 +67,11 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
         elif action == "databank_search":
             handle_data_bank_command(db, token, chat_id, "/databank search " + value)
             send_databank_menu(token, chat_id, db)
+        elif action == "director_goal":
+            if len(value) > 1200:
+                raise ValueError("Director objective exceeds 1,200 characters")
+            set_director_goal(db, chat_id, session["session_id"], value)
+            send_director_goal_menu(token, chat_id, db, session)
         else:
             raise ValueError("Unknown text action")
     except ValueError as exc:

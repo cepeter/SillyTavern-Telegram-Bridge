@@ -3,7 +3,7 @@
 
   "/help": "Opens this guide. Pick a category, then tap a command to see what it does and what it changes.",
 
-  "/status": "Shows you everything about the current session at a glance — active character, session name and ID, model, response language, persona, World Info, memory mode, RAG, group state, and generation settings.",
+  "/status": "Opens a read-only session status panel with buttons for Character, Session, Generation, Memory, Data Bank, Group, and the Prompt inspector. Use /status text for the plain diagnostic output.",
 
   "/new": "Creates a fresh isolated session. It asks for a name first (1–80 characters), then switches you to it. Send /cancel if you change your mind — no empty session is left behind.",
 
@@ -38,7 +38,7 @@
   "/imagine": "Opens prompt input for image generation — but only when you've explicitly configured an image provider. Enter 1–4,000 characters, or use /imagine <prompt> directly. Unconfigured or unsupported providers fail closed. /cancel aborts.",
 
   "/settings": "Opens the generation settings panel for this session. Pick a reasoning level or tap a field to enter your own value for temperature, max tokens, top P, frequency penalty, presence penalty, or stop sequences.",
-  "/taskmodel": "Configures a per-session utility model. Use /taskmodel <provider::model> to route non-dialogue utility work such as summarization to that model, /taskmodel main to inherit the primary session model, or /taskmodel status to inspect the route.",
+  "/taskmodel": "Opens a utility-model picker with Follow main model and catalog-backed choices. Use /taskmodel <provider::model> or /taskmodel main as text shortcuts, and /taskmodel status to reopen the picker.",
 
   "/stream on|off": "Opens streaming controls. When streaming is on, you get a live preview that updates as the model generates — the final response replaces it when done.",
 
@@ -60,13 +60,15 @@
 
   "/retry": "Retries the latest failed character response. It replays the original message without creating a duplicate committed turn — clean recovery after a crash or timeout.",
 
-  "/prompt": "Shows safe prompt diagnostics — active character, smart input-token budget, history candidate count, summary, memory, RAG, group, and World Info state. Long prompts automatically drop oldest history first, then trim retrieved RAG/memory context and finally compact the continuity summary; fixed character/system instructions and the current user turn are preserved.",
+  "/prompt": "Opens a read-only prompt inspector with sections for budget, memory/RAG, and group context. Use /prompt text for the full plain diagnostic output.",
 
   "/memory": "Opens Hindsight memory controls. You can turn memory on or off and search within the active session. Recall is always session-scoped — it never pulls in memories from other sessions, users, or characters.",
 
+  "/memory curated": "Opens the curated-memory panel to view durable distilled facts or refresh them with the utility model. Memory must be enabled for refresh.",
+
   "/remember": "Opens a panel, then waits for one explicit long-term fact to store in Hindsight. Send /cancel to leave without storing anything.",
 
-  "/summarize": "Regenerates the active session's summary from its stored conversation. Useful after long sessions or when switching models.",
+  "/summarize": "Opens a confirmation panel before regenerating the active session's summary with the utility model. The plain text shortcut remains available through the panel's confirmation action.",
 
   "/databank": "Opens Data Bank RAG controls — check status, list documents, search, remove, or reindex. Uploading different content with the same filename creates a new active version while keeping older versions out of retrieval. Use /databank versions <filename> to inspect history and /databank activate <filename> <version> to roll back atomically.",
 
