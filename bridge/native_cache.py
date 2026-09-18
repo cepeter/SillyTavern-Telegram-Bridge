@@ -45,12 +45,6 @@ def cached_png_metadata(path: Path, loader) -> dict:
     return copy.deepcopy(value)
 
 
-def clear_native_file_cache() -> None:
-    with _NATIVE_CACHE_LOCK:
-        _NATIVE_CACHE.clear()
-        _TEXT_CACHE.clear()
-
-
 def cached_text(key: str, builder) -> str:
     with _NATIVE_CACHE_LOCK:
         value = _TEXT_CACHE.get(str(key))

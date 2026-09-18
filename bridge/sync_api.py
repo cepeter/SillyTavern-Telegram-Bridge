@@ -25,6 +25,8 @@ _PHASE3_WORKER_LOCK = threading.Lock()
 _PHASE3_WORKER = None
 _PHASE3_STOP_EVENT = threading.Event()
 _PHASE3_STOP_RESULTS = {"sync ID mismatch; realtime stopped", "initial divergence; realtime stopped", "conflict detected; realtime stopped"}
+_PHASE3_MAX_MESSAGE_CHARS = 12000
+_PHASE3_MAX_TOTAL_CHARS = 200000
 
 
 def _bounded_number(raw: str, default, low, high, cast):
@@ -201,16 +203,23 @@ def _phase3_records(db: sqlite3.Connection, chat_id: str, session: dict[str, str
 
 
 def _phase3_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], dict[int, tuple[list[str], int]]]:
-    raw = ("\n".join(json.dumps(item, ensure_ascii=False) for item in records) + "\n").encode("utf-8")
-    metadata, messages = parse_sillytavern_jsonl(raw)
+    metadata = records[0].get("chat_metadata", {}) if records and isinstance(records[0], dict) else {}
+    messages = []
+    total_chars = 0
     variants = {}
     message_index = 0
     for record in records[1:] if metadata else records:
-        if record.get("is_system") or "mes" not in record:
+        if not isinstance(record, dict) or record.get("is_system") or "mes" not in record:
             continue
         content = str(record.get("mes") or "").strip()
+        if len(content) > _PHASE3_MAX_MESSAGE_CHARS:
+            raise ValueError("SillyTavern API message exceeds the sync limit")
         if not content:
             continue
+        total_chars += len(content)
+        if total_chars > _PHASE3_MAX_TOTAL_CHARS:
+            raise ValueError("SillyTavern API transcript exceeds the sync limit")
+        messages.append(("user" if record.get("is_user") else "assistant", content))
         if not record.get("is_user") and isinstance(record.get("swipes"), list):
             swipes = [str(item).strip() for item in record["swipes"] if str(item or "").strip()][:8]
             if len(swipes) > 1:
@@ -220,6 +229,10 @@ def _phase3_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], 
                     selected = 0
                 variants[message_index] = (swipes, selected)
         message_index += 1
+    if not isinstance(metadata, dict):
+        metadata = {}
+    if not messages:
+        raise ValueError("SillyTavern API chat contains no user/assistant messages")
     return metadata, messages, variants
 
 

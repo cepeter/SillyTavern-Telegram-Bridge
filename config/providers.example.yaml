@@ -1,6 +1,8 @@
 # Standalone provider catalog example.
 # Copy this file to a private catalog, then replace example values.
 # Each provider entry tells the bridge how to call one model service.
+# Live API Sync is configured separately with SILLYTAVERN_SYNC_API_* in the
+# private environment file; it does not use provider entries or chat files.
 providers:
   provider-one:
     name: Provider One # Label shown in the provider panel.

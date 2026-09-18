@@ -216,30 +216,6 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     return raw
 
 
-def parse_sillytavern_jsonl(raw: bytes) -> tuple[dict, list[tuple[str, str]]]:
-    records = [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
-    if not records:
-        raise ValueError("empty JSONL file")
-    metadata = records[0].get("chat_metadata", {}) if isinstance(records[0], dict) else {}
-    messages = []
-    total_chars = 0
-    for record in records[1:] if metadata else records:
-        if not isinstance(record, dict) or record.get("is_system") or "mes" not in record:
-            continue
-        role = "user" if record.get("is_user") else "assistant"
-        content = str(record.get("mes") or "").strip()
-        if len(content) > SYNC_MAX_MESSAGE_CHARS:
-            raise ValueError(f"JSONL message exceeds {SYNC_MAX_MESSAGE_CHARS} characters")
-        total_chars += len(content)
-        if total_chars > SYNC_MAX_TOTAL_CHARS:
-            raise ValueError(f"JSONL transcript exceeds {SYNC_MAX_TOTAL_CHARS} characters")
-        if content:
-            messages.append((role, content))
-    if not messages:
-        raise ValueError("JSONL contains no user/assistant messages")
-    return metadata if isinstance(metadata, dict) else {}, messages
-
-
 def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None) -> None:
     if file_size > IMAGE_MAX_BYTES:
         send_text(token, chat_id, "Image terlalu besar. Batasnya 8 MB.")

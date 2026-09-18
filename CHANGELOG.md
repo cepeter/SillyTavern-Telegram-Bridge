@@ -2,6 +2,15 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [0.2.012] - 2026-09-18
+
+### Changed
+
+- Removed the unused native-cache reset hook.
+- Removed the redundant Live API Sync JSONL serialization/parsing round trip; API chat records are now validated and normalized directly.
+- Kept bounded message/transcript validation, metadata handling, and swipe variants while removing retired JSONL-transfer limits from shared configuration.
+- Updated README, Help, environment examples, and provider configuration guidance to describe Live API Sync as the only conversation synchronization path.
+
 ## [0.2.011] - 2026-09-17
 
 ### Fixed

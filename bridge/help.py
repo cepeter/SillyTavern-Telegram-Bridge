@@ -7,7 +7,7 @@ HELP_CATEGORIES = {
         ("/new", "Name, create, and activate a new isolated session."),
         ("/reset", "Open confirmation to reset only the active session and its Hindsight memory, preserving other sessions."),
         ("/session", "List, switch, create, or delete inactive session data and its session-scoped Hindsight documents."),
-        ("/sync", "Open session-scoped Live API Sync controls."),
+        ("/sync", "Open session-scoped Live API Sync controls; synchronization uses the local API only, not chat files or JSONL transfer."),
         ("/update", "Check the latest GitHub release; if already current, no update or restart is performed. Otherwise open a confirmation panel before updating and restarting."),
     ],
     "characters": [

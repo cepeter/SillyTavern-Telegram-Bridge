@@ -4,7 +4,7 @@
 [![Latest release](https://img.shields.io/github/v/release/cepeter/SillyTavern-Telegram-Bridge?display_name=tag)](https://github.com/cepeter/SillyTavern-Telegram-Bridge/releases/latest)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
-> Current release: **v0.2.011**
+> Current release: **v0.2.012**
 
 Talk to your SillyTavern characters from Telegram. That's the idea. The bridge
 sits between Telegram and your model provider, handling sessions, memory, voice,
@@ -546,10 +546,11 @@ length, and embedding work are all bounded.
 
 ### Live Sync
 
-Live Sync is off by default. It uses SillyTavern's loopback API and does an
-initial reconciliation before turning on realtime updates. If anything looks
-wrong — auth errors, schema mismatches, sync-ID mismatches, two-sided
-conflicts — sync stops rather than silently picking a side.
+Live Sync is off by default. It uses SillyTavern's loopback API and processes
+the API's chat-record response directly. The bridge performs an initial
+reconciliation before turning on realtime updates. If anything looks wrong —
+auth errors, schema mismatches, sync-ID mismatches, two-sided conflicts, or
+oversized records — sync stops rather than silently picking a side.
 
 ```dotenv
 SILLYTAVERN_SYNC_API_URL=http://127.0.0.1:8000
@@ -559,8 +560,9 @@ SILLYTAVERN_SYNC_API_HANDLE=
 SILLYTAVERN_SYNC_API_PASSWORD=
 ```
 
-The bridge doesn't install extensions, sync chat files directly, or expose Live
-Sync credentials in Telegram.
+Live API Sync is the only conversation synchronization path. The bridge does
+not install extensions, poll chat files, import/export JSONL transcripts, or
+expose Live Sync credentials in Telegram.
 
 ### Forum Topic groups
 
