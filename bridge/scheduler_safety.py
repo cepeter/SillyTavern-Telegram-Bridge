@@ -10,7 +10,20 @@ _DB_SCHEMA_LOCK = threading.Lock()
 def _lightweight_db_connect(timeout: float = 30.0):
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_FILE, timeout=timeout)
-    connection.execute(f"PRAGMA busy_timeout={int(timeout * 1000)}")
+    if "_configure_db_connection" in globals():
+        _configure_db_connection(connection, timeout=timeout)
+    else:
+        timeout_ms = int(max(1.0, float(timeout)) * 1000)
+        connection.execute(f"PRAGMA busy_timeout={timeout_ms}")
+        try:
+            connection.execute("PRAGMA auto_vacuum=INCREMENTAL")
+        except sqlite3.OperationalError:
+            pass
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=NORMAL")
+        connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute("PRAGMA cache_size=-64000")
+        connection.execute("PRAGMA foreign_keys=ON")
     return connection
 
 

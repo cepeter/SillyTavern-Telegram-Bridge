@@ -388,6 +388,8 @@ def main() -> int:
     request_bridge_shutdown()
     sync_stopped = stop_phase3_sync_worker(timeout=5.0)
     drained = shutdown_background_executors(timeout=20.0)
+    if "optimize_database" in globals():
+        optimize_database(db)
     db.close()
     if not sync_stopped:
         logging.warning("Realtime sync worker did not stop before shutdown deadline")

@@ -654,6 +654,9 @@ internal for isolation and only attached to Telegram payloads when sending.
 - **⚠️ Unknown commands are rejected** before normal generation — no accidental
   messages to the character.
 - **✅ `/stscript` is allowlisted** and cannot execute arbitrary commands.
+- **⚡ SQLite performance and reclamation.** Operations run with WAL mode,
+  synchronous NORMAL, memory temp store, 64 MB cache, and automatic
+  incremental vacuum/optimization to reclaim disk space after large deletions.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---

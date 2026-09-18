@@ -1,9 +1,62 @@
+def _configure_db_connection(db: sqlite3.Connection, timeout: float = 30.0) -> None:
+    """Apply connection pragmas for WAL performance, caching, and safety."""
+    timeout_ms = int(max(1.0, float(timeout)) * 1000)
+    db.execute(f"PRAGMA busy_timeout={timeout_ms}")
+    try:
+        db.execute("PRAGMA auto_vacuum=INCREMENTAL")
+    except sqlite3.OperationalError:
+        pass
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA synchronous=NORMAL")
+    db.execute("PRAGMA temp_store=MEMORY")
+    db.execute("PRAGMA cache_size=-64000")
+    db.execute("PRAGMA foreign_keys=ON")
+    _load_optional_vector_extension(db)
+
+
+def _load_optional_vector_extension(db: sqlite3.Connection) -> bool:
+    """Optionally load sqlite-vec if installed in the environment."""
+    try:
+        import sqlite_vec
+        if hasattr(db, "enable_load_extension"):
+            db.enable_load_extension(True)
+            sqlite_vec.load(db)
+            db.enable_load_extension(False)
+            return True
+    except (ImportError, Exception):
+        pass
+    return False
+
+
+def optimize_database(db: sqlite3.Connection, vacuum_freelist_threshold: int = 500) -> bool:
+    """Update SQLite query planner statistics and reclaim disk space if freelist is large."""
+    try:
+        db.execute("PRAGMA optimize")
+    except sqlite3.OperationalError:
+        pass
+    reclaimed = False
+    try:
+        freelist_row = db.execute("PRAGMA freelist_count").fetchone()
+        freelist = int(freelist_row[0]) if freelist_row else 0
+        if freelist >= vacuum_freelist_threshold:
+            old_isolation = db.isolation_level
+            db.isolation_level = None
+            try:
+                db.execute("VACUUM")
+                db.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                reclaimed = True
+            finally:
+                db.isolation_level = old_isolation
+    except sqlite3.OperationalError:
+        pass
+    return reclaimed
+
+
 def db_connect() -> sqlite3.Connection:
     """Open the configured SQLite database and initialize its schema."""
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_FILE, timeout=30)
-    db.execute("PRAGMA busy_timeout=30000")
-    db.execute("PRAGMA journal_mode=WAL")
+    _configure_db_connection(db, timeout=30.0)
     initialize_database_schema(db)
     return db
 
