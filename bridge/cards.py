@@ -233,45 +233,57 @@ _CALLBACK_TOKEN_VALUES: dict[str, tuple[str, str, str, float]] = {}
 _CALLBACK_TOKEN_TTL_SECONDS = 900
 
 
-def dynamic_callback_token(kind: str, value: str, chat_id: str = "") -> str:
+def dynamic_callback_token(kind: str, value: str, chat_id: str = "", db=None) -> str:
     raw = f"{kind}|{chat_id}|{value}"
     token = "t" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
     expires_at = time.time() + _CALLBACK_TOKEN_TTL_SECONDS
     _CALLBACK_TOKEN_VALUES[token] = (str(kind), str(value), str(chat_id), expires_at)
+    token_db = db or db_connection_context()
+    owns_connection = token_db is None
     try:
-        token_db = db_connect()
+        token_db = token_db or db_connect()
         token_db.execute("INSERT OR REPLACE INTO callback_tokens(token,kind,value,chat_id,expires_at) VALUES(?,?,?,?,?)", (token, str(kind), str(value), str(chat_id), expires_at))
         token_db.commit()
-        token_db.close()
     except Exception:
         logging.debug("Could not persist callback token", exc_info=True)
+    finally:
+        if owns_connection and token_db is not None:
+            token_db.close()
     return token
 
 
 def resolve_dynamic_callback_token(token: str, kind: str, chat_id: str = "") -> str | None:
     item = _CALLBACK_TOKEN_VALUES.get(str(token))
     if item is None:
+        token_db = db_connection_context()
+        owns_connection = token_db is None
         try:
-            token_db = db_connect()
+            token_db = token_db or db_connect()
             row = token_db.execute("SELECT kind,value,chat_id,expires_at FROM callback_tokens WHERE token=?", (str(token),)).fetchone()
-            token_db.close()
             if row:
                 item = (str(row[0]), str(row[1]), str(row[2]), float(row[3]))
                 _CALLBACK_TOKEN_VALUES[str(token)] = item
         except Exception:
             logging.debug("Could not load callback token", exc_info=True)
+        finally:
+            if owns_connection and token_db is not None:
+                token_db.close()
     if item is None:
         return None
     stored_kind, value, stored_chat_id, expires_at = item
     if expires_at < time.time() or stored_kind != str(kind) or (stored_chat_id and stored_chat_id != str(chat_id)):
         _CALLBACK_TOKEN_VALUES.pop(str(token), None)
+        token_db = db_connection_context()
+        owns_connection = token_db is None
         try:
-            token_db = db_connect()
+            token_db = token_db or db_connect()
             token_db.execute("DELETE FROM callback_tokens WHERE token=?", (str(token),))
             token_db.commit()
-            token_db.close()
         except Exception:
             logging.debug("Could not remove expired callback token", exc_info=True)
+        finally:
+            if owns_connection and token_db is not None:
+                token_db.close()
         return None
     return value
 

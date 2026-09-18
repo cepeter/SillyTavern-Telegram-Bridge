@@ -9,13 +9,19 @@ def close_panel_message(token: str, chat_id: str, callback: dict) -> None:
             telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": "Panel closed.", "reply_markup": {"inline_keyboard": []}})
         except Exception:
             logging.warning("Panel close fallback failed", exc_info=True)
+    panel_db = None
+    owns_connection = False
     try:
-        panel_db = db_connect()
+        panel_db = db_connection_context()
+        owns_connection = panel_db is None
+        panel_db = panel_db or db_connect()
         panel_db.execute("DELETE FROM panel_sessions WHERE chat_id=? AND message_id=?", (str(chat_id), str(message_id)))
         panel_db.commit()
-        panel_db.close()
     except Exception:
         logging.debug("Could not remove closed panel binding", exc_info=True)
+    finally:
+        if owns_connection and panel_db is not None:
+            panel_db.close()
 
 
 def discard_panel_binding(db: sqlite3.Connection, chat_id: str, message_id: int | str | None) -> None:

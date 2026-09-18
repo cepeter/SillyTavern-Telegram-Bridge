@@ -193,6 +193,7 @@ def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, mode
 def process_voice_job(token: str, api_key: str, model: str, fields: dict, chat_id: str, voice: dict, message_id: int, queued_session_id: str | None = None, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
+        set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
@@ -220,6 +221,7 @@ def process_voice_job(token: str, api_key: str, model: str, fields: dict, chat_i
             send_text(token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings.")
         finally:
             set_panel_actor_context(None)
+            set_db_connection_context(None)
             db.close()
 
 

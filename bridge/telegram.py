@@ -195,11 +195,14 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
         bound_message_id = api_result.get("message_id") if isinstance(api_result, dict) else None
         bound_message_id = bound_message_id or request_payload.get("message_id")
         if bound_session and bound_message_id:
-            panel_db = db_connect()
+            panel_db = db_connection_context()
+            owns_connection = panel_db is None
             try:
+                panel_db = panel_db or db_connect()
                 bind_panel_session(panel_db, scoped_chat_id, bound_message_id, bound_session, bound_owner)
             finally:
-                panel_db.close()
+                if owns_connection and panel_db is not None:
+                    panel_db.close()
     return result["result"]
 
 

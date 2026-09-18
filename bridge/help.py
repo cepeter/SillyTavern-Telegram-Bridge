@@ -412,6 +412,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
 def process_document_job(token: str, chat_id: str, document: dict, default_model: str, message_id: int | None = None, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
+        set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
@@ -424,6 +425,7 @@ def process_document_job(token: str, chat_id: str, document: dict, default_model
                 finish_job(db, job_id, "failed", str(exc))
             send_text(token, chat_id, "Document import failed. Check the file format and size limits.")
         finally:
+            set_db_connection_context(None)
             db.close()
 
 
