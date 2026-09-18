@@ -1,6 +1,13 @@
 import subprocess
 import sys
 
+from bridge.rag_retrieval import (
+    DEFAULT_SEMANTIC_CANDIDATE_LIMIT,
+    MAX_SEMANTIC_CANDIDATE_LIMIT,
+    cosine_similarity,
+    semantic_candidate_chunk_ids,
+)
+
 
 def extract_pdf_data_bank_text(raw: bytes) -> str:
     parser = Path(__file__).with_name("pdf_parser.py")
@@ -140,11 +147,13 @@ def embed_rag_batch(texts: list[str]) -> list[list[float] | None]:
         return [embed_rag_text(text) for text in texts]
 
 
-def cosine_similarity(left: list[float], right: list[float]) -> float:
-    if len(left) != len(right) or not left:
-        return 0.0
-    denominator = math.sqrt(sum(value * value for value in left)) * math.sqrt(sum(value * value for value in right))
-    return sum(a * b for a, b in zip(left, right)) / denominator if denominator else 0.0
+def rag_semantic_candidate_limit() -> int:
+    raw = os.environ.get("SILLYTAVERN_RAG_SEMANTIC_CANDIDATES", str(DEFAULT_SEMANTIC_CANDIDATE_LIMIT))
+    try:
+        value = int(raw)
+    except ValueError:
+        value = DEFAULT_SEMANTIC_CANDIDATE_LIMIT
+    return max(64, min(value, MAX_SEMANTIC_CANDIDATE_LIMIT))
 
 
 def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, raw: bytes) -> tuple[str, int]:
@@ -222,7 +231,26 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
         candidates[int(chunk_id)] = [str(filename), str(content), str(document_id), 0.35 * lexical_score]
     query_vector = cached_rag_embedding(db, query)
     if query_vector:
-        vector_rows = db.execute("SELECT e.chunk_id,c.content,d.filename,c.document_id,e.vector_json FROM data_bank_embeddings e JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id WHERE c.chat_id=? AND e.embedding_namespace=? LIMIT 5000", (chat_id, rag_embedding_namespace())).fetchall()
+        namespace = rag_embedding_namespace()
+        semantic_ids = semantic_candidate_chunk_ids(
+            db,
+            chat_id,
+            namespace,
+            [int(row[0]) for row in lexical_rows],
+            candidate_limit=rag_semantic_candidate_limit(),
+        )
+        if semantic_ids:
+            placeholders = ",".join("?" for _ in semantic_ids)
+            vector_rows = db.execute(
+                "SELECT e.chunk_id,c.content,d.filename,c.document_id,e.vector_json "
+                "FROM data_bank_embeddings e "
+                "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
+                "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
+                f"WHERE c.chat_id=? AND e.embedding_namespace=? AND e.chunk_id IN ({placeholders})",
+                (chat_id, namespace, *semantic_ids),
+            ).fetchall()
+        else:
+            vector_rows = []
         for chunk_id, content, filename, document_id, vector_json in vector_rows:
             try:
                 semantic_score = (cosine_similarity(query_vector, json.loads(vector_json)) + 1.0) / 2.0
