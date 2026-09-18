@@ -23,7 +23,7 @@
 
   "/character": "Opens the character panel — pick a card, refresh labels, view card info, get upload guidance, or delete a card safely. Refresh reloads native card labels and treats an unchanged redraw as success. If SillyTavern renamed a card, the bridge rebinds stale session references only when it can prove exactly one unique match.",
 
-  "/persona": "Opens native SillyTavern Persona controls. Choose, create, edit, or disable a Persona — all stored in settings.json and the native User Avatars folder. The review panel includes Send description to copy, which sends the full Persona description as a plain Telegram message so you can copy it without truncation. Delete only targets inactive, unreferenced Personas — the active one and any used by other sessions are protected.",
+  "/persona": "Opens native SillyTavern Persona controls. Choose, create, edit, or disable a Persona — all stored in settings.json and the native User Avatars folder. The review panel shows the description in Telegram's copyable code block. Delete only targets inactive, unreferenced Personas — the active one and any used by other sessions are protected.",
 
   "/world": "Opens World Info selection. You can activate multiple JSON lorebooks at the same time — they're validated and merged at prompt time.",
 

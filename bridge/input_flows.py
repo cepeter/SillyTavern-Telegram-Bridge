@@ -192,7 +192,6 @@ def send_persona_edit_menu(token: str, chat_id: str, persona_id: str, message_id
     text = (f"Persona information\n\nID: {safe_id}\nName: {safe_name}\n"
             f"Description (tap the copy icon):\n<pre>{safe_description}</pre>\n\nTags: {html.escape(tags)}\n\nChoose what to update:")
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "reply_markup": {"inline_keyboard": [
-        [{"text": "📋 Send description to copy", "callback_data": "persona:copy_description"}],
         [{"text": "✏️ Edit name", "callback_data": "persona:edit_name"}],
         [{"text": "📝 Edit description", "callback_data": "persona:edit_description"}],
         [{"text": "🔧 Edit name + description", "callback_data": "persona:edit_all"}],
@@ -344,7 +343,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         return False
     value = data.split(":", 1)[1]
     message_id = message.get("message_id")
-    field_actions = {"create", "edit", "copy_description", "edit_name", "edit_description", "edit_all", "delete"}
+    field_actions = {"create", "edit", "edit_name", "edit_description", "edit_all", "delete"}
     if not value.startswith("page:") and value not in {"cancel", "off", "menu", *field_actions}:
         value = resolve_dynamic_callback_token(value, "persona", chat_id) or ""
     if value.startswith("page:"):
@@ -362,20 +361,6 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             return True
         answer_callback(token, str(callback.get("id", "")), "Review persona")
         send_persona_edit_menu(token, chat_id, persona_id, message_id)
-        return True
-    if value == "copy_description":
-        persona_id = session.get("persona_id") or ""
-        persona = get_persona(persona_id)
-        if not persona:
-            answer_callback(token, str(callback.get("id", "")), "Persona not found")
-            return True
-        description = str(persona.get("description") or "")
-        if not description:
-            answer_callback(token, str(callback.get("id", "")), "Description is empty")
-            send_text(token, chat_id, "This Persona has no description.")
-            return True
-        answer_callback(token, str(callback.get("id", "")), "Description sent")
-        send_text(token, chat_id, description)
         return True
     if value in {"create", "edit_name", "edit_description", "edit_all"}:
         persona_id = session.get("persona_id") or "" if value != "create" else ""
