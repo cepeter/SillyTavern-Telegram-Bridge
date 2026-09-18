@@ -626,17 +626,22 @@ does nothing. Otherwise it requires a clean checkout and a fast-forwardable
 
 ## Architecture
 
-The runtime loads domain modules into one shared namespace via
-`bridge/runtime.py`. Here are the main boundaries (not an exhaustive list):
+The bridge keeps a shared runtime namespace for compatibility, but loading is
+now split into validated stages. Core modules cannot silently replace public
+callables; recovery and safety overrides are explicitly declared and reported.
+Pure retrieval helpers are already moving to normal imports. Here are the main
+boundaries (not an exhaustive list):
 
 ```text
 sillytavern_telegram_bridge.py  launcher
-bridge/runtime.py               shared runtime loader
+bridge/runtime.py               compatibility runtime facade
+bridge/runtime_loader.py        validated load stages and override reporting
 bridge/common.py                configuration, queues, permissions
 bridge/cards.py                 cards, Persona display, prompts, World Info
 bridge/database.py              sessions and generation settings
 bridge/memory.py                Hindsight and summaries
-bridge/rag.py                   Data Bank, FTS5, embeddings
+bridge/rag.py                   Data Bank ingestion and retrieval orchestration
+bridge/rag_retrieval.py         bounded semantic candidate selection
 bridge/catalog.py               provider catalog and health
 bridge/generation.py            adapters, streaming, continuation
 bridge/telegram.py              Telegram transport and splitting
