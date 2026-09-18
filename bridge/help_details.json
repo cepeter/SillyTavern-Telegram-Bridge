@@ -75,5 +75,5 @@
 
   "/voice_input language": "Opens the STT language panel. Auto detects from the audio, a fixed code forces one language, and User input asks you each time.",
 
-  "/group": "Only works inside a Telegram Forum Topic. Opens topic-local group controls — New group session asks for a name, then walks you through picking characters and World Info."
+  "/group": "Only works inside a Telegram Forum Topic. Opens topic-local group controls — New group session asks for a name, then walks you through picking characters and World Info. Director mode makes one hidden bounded model call per normal user turn to choose a known speaker and a short pacing/scene direction; that decision is never stored in the transcript and falls back to round-robin if it fails."
 }
