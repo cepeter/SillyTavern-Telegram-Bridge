@@ -190,7 +190,7 @@ def send_group_speaker_menu(db: sqlite3.Connection, token: str, chat_id: str, se
 
 def send_group_mode_menu(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], message_id: int | None = None) -> None:
     state = group_state(db, chat_id, session["session_id"])
-    modes = [("round_robin", "Round robin"), ("contextual", "Contextual"), ("manual", "Manual"), ("autonomous", "Autonomous")]
+    modes = [("round_robin", "Round robin"), ("contextual", "Contextual"), ("director", "Director"), ("manual", "Manual"), ("autonomous", "Autonomous")]
     rows = [[{"text": ("✅ " if mode == state["mode"] else "") + label, "callback_data": f"groupmode:{mode}"}] for mode, label in modes]
     rows.append([{"text": "⬅️ Back", "callback_data": "group:menu"}, {"text": "❌ Close", "callback_data": "group:close"}])
     method = "editMessageText" if message_id else "sendMessage"
@@ -285,14 +285,107 @@ def group_current_speaker(db: sqlite3.Connection, chat_id: str, session: dict[st
     return members[index], state
 
 
-def group_prompt_context(db: sqlite3.Connection, chat_id: str, session: dict[str, str], speaker_file: str) -> str:
+def parse_group_director_decision(raw: str, member_files: list[str]) -> tuple[str, str] | None:
+    """Parse a bounded invisible-director decision into a known member and note."""
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    try:
+        payload = json.loads(match.group(0) if match else text)
+    except (TypeError, json.JSONDecodeError, AttributeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    speaker_value = str(payload.get("speaker") or "").strip().casefold()
+    direction = re.sub(r"\s+", " ", str(payload.get("direction") or "").strip())[:500]
+    aliases = {}
+    for filename in member_files:
+        aliases[filename.casefold()] = filename
+        aliases[Path(filename).stem.casefold()] = filename
+        try:
+            aliases[str(card_fields_from_file(filename)["name"]).casefold()] = filename
+        except Exception:
+            pass
+    speaker_file = aliases.get(speaker_value)
+    return (speaker_file, direction) if speaker_file else None
+
+
+def group_director_plan(
+    db: sqlite3.Connection,
+    api_key: str,
+    chat_id: str,
+    session: dict[str, str],
+    user_text: str,
+) -> tuple[str, dict[str, object], str] | None:
+    """Use an invisible bounded model call to choose the next speaker and pacing note."""
+    state = group_state(db, chat_id, session["session_id"])
+    members = [name for name in state["members"] if safe_character_path(name)]
+    if not state["enabled"] or state.get("mode") != "director" or len(members) < 2:
+        return None
+    forced = str(state.get("forced_speaker") or "")
+    if forced in members:
+        return forced, state, ""
+
+    labels = group_member_labels(members)
+    recent = db.execute(
+        "SELECT role,content FROM messages WHERE chat_id=? AND session_id=? "
+        "ORDER BY created_at DESC,rowid DESC LIMIT 12",
+        (chat_id, session["session_id"]),
+    ).fetchall()
+    recent = list(reversed(recent))
+    transcript = "\n".join(f"{role}: {str(content)[:1200]}" for role, content in recent)[-9000:]
+    director_messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an invisible scene director for a multi-character roleplay. "
+                "Choose exactly one next speaker from the allowed names and provide one short pacing/scene direction. "
+                "Do not write dialogue. Do not speak for the user. Output strict JSON only: "
+                '{"speaker":"NAME","direction":"short direction"}.'
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Allowed speakers: " + ", ".join(labels) + "\n"
+                "Recent transcript:\n" + (transcript or "(empty)") + "\n"
+                "Latest user turn:\n" + str(user_text)[:4000]
+            ),
+        },
+    ]
+    settings = get_generation_settings(db, chat_id, session["session_id"])
+    settings.update({"temperature": 0.1, "max_tokens": 180, "reasoning_budget": 0, "stop_sequences": ""})
+    try:
+        raw = generate_text(
+            api_key,
+            session.get("model_id") or DEFAULT_MODEL,
+            director_messages,
+            session_id=f"group-director:{chat_id}:{session['session_id']}",
+            settings=settings,
+            force_non_stream=True,
+        )
+        decision = parse_group_director_decision(raw, members)
+    except Exception:
+        logging.warning("Group director decision failed; falling back to round robin", exc_info=True)
+        decision = None
+    if decision:
+        return decision[0], state, decision[1]
+    index = int(state["turn_index"]) % len(members)
+    return members[index], state, ""
+
+
+def group_prompt_context(db: sqlite3.Connection, chat_id: str, session: dict[str, str], speaker_file: str, director_instruction: str = "") -> str:
     state = group_state(db, chat_id, session["session_id"])
     labels = group_member_labels([name for name in state["members"] if safe_character_path(name)])
     speaker = card_fields_from_file(speaker_file)["name"]
     others = ", ".join(label for label in labels if label != speaker) or "none"
     if state.get("mode") == "autonomous":
         return f"You are in a bounded autonomous multi-character scene. Current lead speaker: {speaker}. Other characters present: {others}. Write up to 3 short labeled turns using only these characters, let them react to each other, and stop. Do not speak for the user."
-    return f"You are in a multi-character group chat. Current speaker: {speaker}. Other characters present: {others}. Speak only as the current speaker. Do not write dialogue or actions for the user or other characters."
+    base = f"You are in a multi-character group chat. Current speaker: {speaker}. Other characters present: {others}. Speak only as the current speaker. Do not write dialogue or actions for the user or other characters."
+    if state.get("mode") == "director" and director_instruction:
+        base += "\nInvisible director guidance: " + director_instruction[:500] + " Treat this only as pacing/scene guidance; do not mention the director."
+    return base
 
 
 def advance_group_turn(db: sqlite3.Connection, chat_id: str, session_id: str, operation_id: int | str | None = None, commit: bool = True) -> None:
@@ -315,7 +408,7 @@ def handle_group_command(db: sqlite3.Connection, token: str, chat_id: str, sessi
         current = labels[int(state["turn_index"]) % len(labels)] if state["enabled"] and labels else "off"
         if state.get("forced_speaker") in members:
             current = group_member_labels([state["forced_speaker"]])[0]
-        send_text(token, chat_id, f"Group chat: {'on' if state['enabled'] else 'off'}\nMode: {state['mode']}\nMembers: {', '.join(labels) if labels else 'none'}\nCurrent speaker: {current}\nUse /group add <character>, /group speak <character>, /group mode <round_robin|contextual|manual|autonomous>, or /group off.")
+        send_text(token, chat_id, f"Group chat: {'on' if state['enabled'] else 'off'}\nMode: {state['mode']}\nMembers: {', '.join(labels) if labels else 'none'}\nCurrent speaker: {current}\nUse /group add <character>, /group speak <character>, /group mode <round_robin|contextual|director|manual|autonomous>, or /group off.")
         return
     if action == "add":
         requested = parts[2].strip() if len(parts) > 2 else ""
@@ -350,8 +443,8 @@ def handle_group_command(db: sqlite3.Connection, token: str, chat_id: str, sessi
         return
     if action == "mode":
         requested_mode = parts[2].casefold() if len(parts) > 2 else ""
-        if requested_mode not in {"round_robin", "contextual", "manual", "autonomous"}:
-            send_text(token, chat_id, "Use /group mode round_robin, /group mode contextual, /group mode manual, or /group mode autonomous.")
+        if requested_mode not in {"round_robin", "contextual", "director", "manual", "autonomous"}:
+            send_text(token, chat_id, "Use /group mode round_robin, /group mode contextual, /group mode director, /group mode manual, or /group mode autonomous.")
             return
         state["mode"] = requested_mode
         if requested_mode != "manual":
@@ -393,7 +486,7 @@ def handle_group_command(db: sqlite3.Connection, token: str, chat_id: str, sessi
         current = group_member_labels(members)[state["turn_index"] % len(members)]
         send_text(token, chat_id, f"Next group speaker: {current}")
         return
-    send_text(token, chat_id, "Use /group status, /group add <character>, /group remove <character>, /group speak <character>, /group mode <round_robin|contextual|manual|autonomous>, /group on, /group off, or /group next.")
+    send_text(token, chat_id, "Use /group status, /group add <character>, /group remove <character>, /group speak <character>, /group mode <round_robin|contextual|director|manual|autonomous>, /group on, /group off, or /group next.")
 
 
 def handle_summary_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str]) -> None:
