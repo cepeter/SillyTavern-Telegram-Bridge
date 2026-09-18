@@ -217,7 +217,4 @@
     </language_limits>
   </fiction_mode>
 
-  <review>
-    Review silently for task completion, active scope, factual and logical consistency, meaning preservation, formatting, and repetition beneath varied wording. In fiction, also check character ownership, world state and character knowledge, viewpoint, dialogue responsiveness and attribution, concrete action, filler, and prohibited specificity. Correct the output before sending; report review findings only when asked.
-  </review>
 </system_prompt>
