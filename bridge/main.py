@@ -1,3 +1,21 @@
+_SHUTDOWN_EVENT = threading.Event()
+
+
+def request_bridge_shutdown(signum=None, _frame=None) -> None:
+    if signum is not None:
+        logging.info("Bridge shutdown requested by signal %s", signum)
+    _SHUTDOWN_EVENT.set()
+    begin_background_shutdown()
+
+
+def install_bridge_signal_handlers() -> None:
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(signum, request_bridge_shutdown)
+        except (ValueError, OSError):
+            logging.debug("Could not install signal handler %s", signum, exc_info=True)
+
+
 LONG_RUNNING_COMMANDS = (
     "/retry", "/regen", "/continue", "/edit", "/summarize",
     "/providers health", "/providers refresh",
@@ -228,6 +246,8 @@ def main() -> int:
     set_bot_commands(token)
     if args.check:
         return run_check()
+    install_bridge_signal_handlers()
+    _SHUTDOWN_EVENT.clear()
     db = db_connect()
     start_phase3_sync_worker()
     register_durable_backlog_dispatcher(make_durable_backlog_dispatcher(token, api_key, model, fields))
@@ -235,8 +255,9 @@ def main() -> int:
     offset = int(get_meta(db, "telegram_offset", "0"))
     permitted = allowed_users()
     logging.info("Bridge started for card=%s model=%s", fields["name"], model)
-    while True:
-        try:
+    try:
+        while not _SHUTDOWN_EVENT.is_set():
+            try:
             updates = telegram_request(token, "getUpdates", {"offset": offset, "timeout": 50, "allowed_updates": ["message", "edited_message", "callback_query"]})
             for update in updates:
                 update_id = int(update["update_id"])
@@ -353,12 +374,28 @@ def main() -> int:
                     queued = submit_durable_chat_job(db, "generation", chat_id, process_message_job, token, api_key, model, fields, chat_id, str(text), message_id, None, job_id)
                     send_text(token, chat_id, "⏳ Message queued for generation." if queued else "⏳ Message saved for generation after restart.")
                 complete_update(db, update_id, offset)
-        except urllib.error.HTTPError as exc:
-            logging.error("Telegram HTTP error: %s", exc.code)
-            time.sleep(10)
-        except Exception as exc:
-            logging.error("Polling error: %s", exc, exc_info=True)
-            time.sleep(5)
+            except urllib.error.HTTPError as exc:
+                logging.error("Telegram HTTP error: %s", exc.code)
+                if not _SHUTDOWN_EVENT.wait(10):
+                    continue
+            except Exception as exc:
+                if _SHUTDOWN_EVENT.is_set():
+                    break
+                logging.error("Polling error: %s", exc, exc_info=True)
+                _SHUTDOWN_EVENT.wait(5)
+    except KeyboardInterrupt:
+        request_bridge_shutdown()
+    finally:
+        request_bridge_shutdown()
+        sync_stopped = stop_phase3_sync_worker(timeout=5.0)
+        drained = shutdown_background_executors(timeout=20.0)
+        db.close()
+        if not sync_stopped:
+            logging.warning("Realtime sync worker did not stop before shutdown deadline")
+        if not drained:
+            logging.warning("Background jobs exceeded the graceful shutdown deadline")
+        logging.info("Bridge stopped")
+    return 0
 
 
 if __name__ == "__main__":
