@@ -17,7 +17,11 @@ from typing import MutableMapping
 class RuntimeStage:
     name: str
     modules: tuple[str, ...]
-    allow_public_callable_overrides: bool = False
+    allowed_public_callable_overrides: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+    def allowed_overrides_for(self, filename: str) -> frozenset[str]:
+        mapping = dict(self.allowed_public_callable_overrides)
+        return frozenset(mapping.get(filename, ()))
 
 
 DEFAULT_RUNTIME_STAGES = (
@@ -33,9 +37,29 @@ DEFAULT_RUNTIME_STAGES = (
             "main.py",
         ),
     ),
-    RuntimeStage("recovery_overrides", ("recovery.py",), True),
+    RuntimeStage(
+        "recovery_overrides",
+        ("recovery.py",),
+        ((
+            "recovery.py",
+            (
+                "begin_operation",
+                "regenerate_last",
+                "continue_last",
+                "regenerate_edited_turn",
+                "process_message",
+                "sync_status_text",
+                "send_sync_menu",
+                "handle_sync_callback",
+            ),
+        ),),
+    ),
     RuntimeStage("sync_extensions", ("sync_core.py", "sync_api.py")),
-    RuntimeStage("native_adapter_overrides", ("persona_sync.py",), True),
+    RuntimeStage(
+        "native_adapter_overrides",
+        ("persona_sync.py",),
+        (("persona_sync.py", ("load_personas",)),),
+    ),
     RuntimeStage(
         "identity_extensions",
         ("character_identity.py", "session_naming.py"),
@@ -43,7 +67,20 @@ DEFAULT_RUNTIME_STAGES = (
     RuntimeStage(
         "safety_overrides",
         ("sync_safety.py", "state_integrity.py", "scheduler_safety.py"),
-        True,
+        (
+            ("sync_safety.py", ("initialize_database_schema", "phase3_sync_poll")),
+            (
+                "state_integrity.py",
+                (
+                    "upsert_native_persona",
+                    "delete_native_persona",
+                    "retain_session_memory",
+                    "purge_hindsight_session",
+                    "apply_sync_snapshot",
+                ),
+            ),
+            ("scheduler_safety.py", ("db_connect", "recover_jobs", "submit_durable_chat_job")),
+        ),
     ),
 )
 
@@ -53,6 +90,14 @@ def _validate_stages(stages: tuple[RuntimeStage, ...]) -> None:
     for stage in stages:
         if not stage.name:
             raise RuntimeError("runtime stage name must not be empty")
+        module_names = set(stage.modules)
+        for allowed_filename, allowed_names in stage.allowed_public_callable_overrides:
+            if allowed_filename not in module_names:
+                raise RuntimeError(
+                    f"runtime override allowlist references module outside stage {stage.name}: {allowed_filename}"
+                )
+            if len(set(allowed_names)) != len(allowed_names):
+                raise RuntimeError(f"runtime override allowlist contains duplicates for {allowed_filename}")
         for filename in stage.modules:
             if filename in seen:
                 raise RuntimeError(f"runtime module listed more than once: {filename}")
@@ -92,8 +137,10 @@ def load_runtime_namespace(
             source = path.read_text(encoding="utf-8")
             exec(compile(source, str(path), "exec"), namespace, namespace)
             overrides = _public_callable_overrides(before, namespace)
-            if overrides and not stage.allow_public_callable_overrides:
-                joined = ", ".join(overrides)
+            allowed = stage.allowed_overrides_for(filename)
+            unexpected = tuple(name for name in overrides if name not in allowed)
+            if unexpected:
+                joined = ", ".join(unexpected)
                 raise RuntimeError(
                     f"runtime module {filename} unexpectedly overrides public callables: {joined}"
                 )

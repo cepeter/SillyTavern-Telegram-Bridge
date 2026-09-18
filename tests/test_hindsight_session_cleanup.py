@@ -96,6 +96,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
 
         self.assertEqual(len(fake.retained), 2)
         self.assertTrue(all(item["retain_async"] is False for item in fake.retained))
+        self.assertTrue(fake.documents.closed)
         rows = self.db.execute(
             "SELECT document_id,kind FROM hindsight_documents WHERE chat_id='chat' AND session_id='memory-session' ORDER BY kind"
         ).fetchall()
@@ -176,6 +177,27 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         self.assertGreaterEqual(deleted, 1005)
         self.assertTrue(fake.documents.closed)
         self.assertEqual(fake.documents.documents, {"other-session": ["session:other", "character:shared"]})
+
+
+    def test_close_hindsight_client_closes_memory_and_document_api_clients_once(self):
+        class _ApiClient:
+            def __init__(self):
+                self.closed = 0
+
+            async def close(self):
+                self.closed += 1
+
+        memory_client = _ApiClient()
+        document_client = _ApiClient()
+        wrapper = SimpleNamespace(
+            _memory_api=SimpleNamespace(api_client=memory_client),
+            documents=SimpleNamespace(api_client=document_client),
+        )
+
+        rt.close_hindsight_client(wrapper)
+
+        self.assertEqual(memory_client.closed, 1)
+        self.assertEqual(document_client.closed, 1)
 
 
 if __name__ == "__main__":

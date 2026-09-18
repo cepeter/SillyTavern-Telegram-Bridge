@@ -351,3 +351,19 @@ def start_phase3_sync_worker() -> bool:
         _PHASE3_WORKER = threading.Thread(target=_phase3_worker_loop, name="sillytavern-phase3-sync", daemon=True)
         _PHASE3_WORKER.start()
         return True
+
+
+def stop_phase3_sync_worker(timeout: float = 5.0) -> bool:
+    """Stop the realtime sync worker and wait briefly for it to exit."""
+    global _PHASE3_WORKER
+    _PHASE3_STOP_EVENT.set()
+    worker = _PHASE3_WORKER
+    if worker is None:
+        return True
+    if worker is threading.current_thread():
+        return False
+    worker.join(timeout=max(0.0, float(timeout)))
+    stopped = not worker.is_alive()
+    if stopped:
+        _PHASE3_WORKER = None
+    return stopped
