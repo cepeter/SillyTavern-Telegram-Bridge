@@ -370,7 +370,8 @@ Forum Topic group state, when applicable
 2. On confirm, purges Hindsight documents for that session only.
 3. Clears the local conversation, variants, failed turns, summary, and data.
 4. The session stays available, now empty.
-5. Does **not** send the character greeting. Use `/start` if you want that.
+5. Does **not** send the character greeting. It sends a short reset-complete
+   confirmation instead. Use `/start` if you want the character's opening message.
 
 The confirmation text spells out exactly what gets deleted: the conversation,
 Hindsight memories, SQLite session data, and session documents.

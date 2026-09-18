@@ -101,6 +101,7 @@ def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, m
             return True
         answer_callback(token, str(callback.get("id", "")), "Reset complete")
         remove_inline_keyboard(token, callback)
+        send_text(token, chat_id, "Reset complete. The active session was cleared.")
         return True
     return False
 
