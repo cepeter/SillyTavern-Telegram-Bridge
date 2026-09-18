@@ -24,6 +24,11 @@ def parse_png_chara_bytes(raw: bytes) -> dict:
     return json.loads(base64.b64decode(encoded).decode("utf-8"))
 
 
+def _default_character_name() -> str:
+    """Fallback display name, derived from the configured default card file."""
+    return Path(DEFAULT_CHARACTER_FILE).stem.strip() or "Character"
+
+
 def card_fields(card: dict) -> dict[str, str]:
     data = card.get("data") if isinstance(card.get("data"), dict) else card
     fields = {}
@@ -39,7 +44,7 @@ def card_fields(card: dict) -> dict[str, str]:
         for key in ("description", "personality", "scenario", "first_mes", "mes_example", "system_prompt", "post_history_instructions"):
             fields[key] = fields[key][:remaining]
             remaining = max(0, remaining - len(fields[key]))
-    fields["name"] = fields["name"] or "Alisha"
+    fields["name"] = fields["name"] or _default_character_name()
     alternate = data.get("alternate_greetings") or card.get("alternate_greetings") or []
     if not isinstance(alternate, list):
         alternate = []

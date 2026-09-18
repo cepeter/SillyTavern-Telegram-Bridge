@@ -220,7 +220,7 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
     ).fetchall()
     assistant_row = next((row for row in reversed(rows) if row[1] == "assistant"), None)
     if assistant_row is None:
-        send_text(token, chat_id, "Belum ada response Alisha untuk dilanjutkan.")
+        send_text(token, chat_id, "Belum ada response untuk dilanjutkan.")
         return
     instruction = "Continue the previous assistant response from its exact ending. Do not repeat any existing text. Output only the continuation."
     history_rows = [(row[1], row[2]) for row in rows]

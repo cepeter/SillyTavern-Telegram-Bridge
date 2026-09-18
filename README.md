@@ -179,6 +179,10 @@ SILLYTAVERN_DEFAULT_CHARACTER=example-character.png
 SILLYTAVERN_MODEL=provider-one::provider-one/model-a
 ```
 
+The default character name used as a display fallback is derived from
+`SILLYTAVERN_DEFAULT_CHARACTER` (the filename without extension), so renaming
+the file renames the fallback too.
+
 **Need custom paths?** These overrides are available:
 
 ```dotenv
