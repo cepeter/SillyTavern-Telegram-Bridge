@@ -66,7 +66,7 @@ DEFAULT_RUNTIME_STAGES = (
     ),
     RuntimeStage(
         "safety_overrides",
-        ("sync_safety.py", "state_integrity.py", "scheduler_safety.py"),
+        ("sync_safety.py", "state_integrity.py", "scheduler_safety.py", "director_goals.py"),
         (
             ("sync_safety.py", ("initialize_database_schema", "phase3_sync_poll")),
             (
@@ -80,6 +80,7 @@ DEFAULT_RUNTIME_STAGES = (
                 ),
             ),
             ("scheduler_safety.py", ("db_connect", "recover_jobs", "submit_durable_chat_job")),
+            ("director_goals.py", ("group_director_plan", "group_prompt_context", "handle_command_route")),
         ),
     ),
 )
