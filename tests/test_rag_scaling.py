@@ -20,7 +20,13 @@ class RagScalingTests(unittest.TestCase):
         rt.DB_FILE = self.original_db
         self.tmp.cleanup()
 
-    def _insert_chunks(self, count: int, needle_index: int | None = None):
+    def _insert_chunks(
+        self,
+        count: int,
+        needle_index: int | None = None,
+        semantic_target_index: int | None = None,
+        with_signatures: bool = True,
+    ):
         now = rt.time.time()
         document_id = "doc-large"
         self.db.execute(
@@ -39,10 +45,26 @@ class RagScalingTests(unittest.TestCase):
             )
             chunk_id = int(cursor.lastrowid)
             ids.append(chunk_id)
-            self.db.execute(
-                "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json) VALUES(?,?,?,?)",
-                (chunk_id, self.namespace, 2, "[1.0,0.0]"),
-            )
+            vector = [1.0, 0.0]
+            if semantic_target_index is not None and index != semantic_target_index:
+                vector = [-1.0, 0.0]
+            if with_signatures:
+                self.db.execute(
+                    "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature) "
+                    "VALUES(?,?,?,?,?)",
+                    (
+                        chunk_id,
+                        self.namespace,
+                        2,
+                        rt.json.dumps(vector),
+                        rt.embedding_signature(vector),
+                    ),
+                )
+            else:
+                self.db.execute(
+                    "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json) VALUES(?,?,?,?)",
+                    (chunk_id, self.namespace, 2, rt.json.dumps(vector)),
+                )
             self.db.execute(
                 "INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)",
                 (content, "chat", document_id, "large.txt", chunk_id),
@@ -91,6 +113,49 @@ class RagScalingTests(unittest.TestCase):
         self.assertTrue(results)
         self.assertGreater(len(cosine_calls), 0)
         self.assertLessEqual(len(cosine_calls), 32)
+
+
+    def test_signature_shortlist_finds_nonlexical_semantic_target(self):
+        self._insert_chunks(500, semantic_target_index=251)
+        original_cached = rt.cached_rag_embedding
+        original_limit = rt.rag_semantic_candidate_limit
+        rt.cached_rag_embedding = lambda _db, _query: [1.0, 0.0]
+        rt.rag_semantic_candidate_limit = lambda: 16
+        try:
+            results = rt.retrieve_data_bank(
+                self.db,
+                "chat",
+                "meaningfulconcept",
+                limit=3,
+            )
+        finally:
+            rt.cached_rag_embedding = original_cached
+            rt.rag_semantic_candidate_limit = original_limit
+
+        self.assertTrue(results)
+        self.assertEqual(results[0][1], "chunk 251")
+
+    def test_legacy_embedding_signatures_are_backfilled_lazily(self):
+        self._insert_chunks(30, with_signatures=False)
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM data_bank_embeddings WHERE vector_signature IS NOT NULL"
+            ).fetchone()[0],
+            0,
+        )
+        updated = rt.backfill_rag_embedding_signatures(
+            self.db,
+            "chat",
+            self.namespace,
+            limit=10,
+        )
+        self.assertEqual(updated, 10)
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM data_bank_embeddings WHERE vector_signature IS NOT NULL"
+            ).fetchone()[0],
+            10,
+        )
 
 
 if __name__ == "__main__":
