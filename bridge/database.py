@@ -45,14 +45,19 @@ def committed_assistant_for_message(db: sqlite3.Connection, chat_id: str, telegr
         ORDER BY assistant.rowid LIMIT 1""", (chat_id, str(telegram_message_id))).fetchone()
 
 
-def bind_panel_session(db: sqlite3.Connection, chat_id: str, message_id: int | str, session_id: str) -> None:
-    db.execute("INSERT OR REPLACE INTO panel_sessions(chat_id,message_id,session_id,expires_at) VALUES(?,?,?,?)", (str(chat_id), str(message_id), str(session_id), time.time() + 900))
+def bind_panel_session(db: sqlite3.Connection, chat_id: str, message_id: int | str, session_id: str, owner_user_id: str = "") -> None:
+    db.execute("INSERT OR REPLACE INTO panel_sessions(chat_id,message_id,session_id,owner_user_id,expires_at) VALUES(?,?,?,?,?)", (str(chat_id), str(message_id), str(session_id), str(owner_user_id or ""), time.time() + 900))
     db.commit()
 
 
 def panel_session_for_message(db: sqlite3.Connection, chat_id: str, message_id: int | str) -> str | None:
     row = db.execute("SELECT session_id FROM panel_sessions WHERE chat_id=? AND message_id=? AND expires_at>=?", (str(chat_id), str(message_id), time.time())).fetchone()
     return str(row[0]) if row else None
+
+
+def panel_owner_for_message(db: sqlite3.Connection, chat_id: str, message_id: int | str) -> str:
+    row = db.execute("SELECT owner_user_id FROM panel_sessions WHERE chat_id=? AND message_id=? AND expires_at>=?", (str(chat_id), str(message_id), time.time())).fetchone()
+    return str(row[0] or "") if row else ""
 
 
 def operation_phase(db: sqlite3.Connection, operation_id: int | str | None) -> str:
@@ -102,6 +107,19 @@ def enqueue_job(db: sqlite3.Connection, update_id: int, chat_id: str, session_id
     db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, now))
     db.commit()
     return int(row[0])
+
+
+def job_actor_id(db: sqlite3.Connection, job_id: int | None) -> str:
+    if job_id is None:
+        return ""
+    row = db.execute("SELECT payload_json FROM jobs WHERE job_id=?", (int(job_id),)).fetchone()
+    if not row:
+        return ""
+    try:
+        payload = json.loads(row[0] or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return ""
+    return str(payload.get("actor_id") or "") if isinstance(payload, dict) else ""
 
 
 def mark_job_scheduled(db: sqlite3.Connection, job_id: int) -> bool:
