@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added covering indexes for cleanup deletes: `callback_tokens_expires_idx` on `callback_tokens(expires_at)`, `panel_sessions_expires_idx` on `panel_sessions(expires_at)`, `operations_state_idx` on `operations(state, updated_at)` to prevent full table scans on every schema init.
+
 ### Fixed
 
 - Translated leftover Indonesian-language user-facing error messages (voice/image/character-card/Data Bank size and format limits) to English for consistency with the rest of the bot's UI copy.
