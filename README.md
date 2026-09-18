@@ -503,7 +503,9 @@ Character:    *turns to look* "I will wait."
 ```
 
 Both quoted lines get queued for TTS. Actions, narration, and unquoted text
-stay text-only. The transcript is always stored as plain text, and TTS jobs run
+stay text-only. Ordinary text messages also disable Telegram link previews, so a
+character card URL cannot turn into a footer image. The transcript is always stored
+as plain text, and TTS jobs run
 in the utility queue with idempotent operation IDs so retries never duplicate
 audio.
 

@@ -408,6 +408,7 @@ def send_text(token: str, chat_id: str, text: str) -> list[int]:
         result = telegram_request(token, "sendMessage", {
             "chat_id": chat_id,
             "text": chunk,
+            "disable_web_page_preview": True,
         })
         if result.get("message_id") is not None:
             message_ids.append(int(result["message_id"]))
