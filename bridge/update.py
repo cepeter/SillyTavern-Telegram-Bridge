@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 
 UPDATE_REPO = "cepeter/SillyTavern-Telegram-Bridge"
+UPDATE_CANONICAL_GIT_URL = f"https://github.com/{UPDATE_REPO}.git"
 UPDATE_LIVE_DIR = Path(os.environ.get("SILLYTAVERN_LIVE_BRIDGE_DIR", str(Path.home() / ".hermes/scripts")))
 
 
@@ -82,9 +83,31 @@ def _run_update() -> str:
     if subprocess.run(["git", "status", "--porcelain"], cwd=UPDATE_REPO_DIR, capture_output=True, text=True, timeout=20).stdout.strip():
         return "Update refused: local repository has uncommitted changes."
     release_ref = f"v{latest}"
+    fetched_ref = f"refs/bridge-release/{release_ref}"
     try:
-        subprocess.run(["git", "fetch", "origin", "tag", release_ref], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        subprocess.run(["git", "merge", "--ff-only", release_ref], cwd=UPDATE_REPO_DIR, check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        subprocess.run(
+            [
+                "git",
+                "fetch",
+                "--force",
+                "--no-tags",
+                UPDATE_CANONICAL_GIT_URL,
+                f"refs/tags/{release_ref}:{fetched_ref}",
+            ],
+            cwd=UPDATE_REPO_DIR,
+            check=True,
+            timeout=120,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        subprocess.run(
+            ["git", "merge", "--ff-only", fetched_ref],
+            cwd=UPDATE_REPO_DIR,
+            check=True,
+            timeout=120,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
         detail = re.sub(r"(https?://)[^/@\s]+@", r"\1***@", detail)
