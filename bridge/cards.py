@@ -24,6 +24,11 @@ def parse_png_chara_bytes(raw: bytes) -> dict:
     return json.loads(base64.b64decode(encoded).decode("utf-8"))
 
 
+def _default_character_name() -> str:
+    """Fallback display name, derived from the configured default card file."""
+    return Path(DEFAULT_CHARACTER_FILE).stem.strip() or "Character"
+
+
 def card_fields(card: dict) -> dict[str, str]:
     data = card.get("data") if isinstance(card.get("data"), dict) else card
     fields = {}
@@ -39,7 +44,7 @@ def card_fields(card: dict) -> dict[str, str]:
         for key in ("description", "personality", "scenario", "first_mes", "mes_example", "system_prompt", "post_history_instructions"):
             fields[key] = fields[key][:remaining]
             remaining = max(0, remaining - len(fields[key]))
-    fields["name"] = fields["name"] or "Alisha"
+    fields["name"] = fields["name"] or _default_character_name()
     alternate = data.get("alternate_greetings") or card.get("alternate_greetings") or []
     if not isinstance(alternate, list):
         alternate = []
@@ -181,6 +186,17 @@ def persona_name(persona_id: str) -> str:
     return str(persona.get("name") or "") if persona else ""
 
 
+def _prompt_catalog_label(stem: str) -> str:
+    return stem.replace("_", " ").replace("-", " ").title()
+
+
+def _merge_system_prompt_file(result: dict[str, dict[str, str]], path: Path) -> None:
+    if path.suffix.casefold() == ".txt":
+        _merge_system_prompt_text(result, path)
+    else:
+        _merge_system_prompt_json(result, path)
+
+
 def _merge_system_prompt_json(result: dict[str, dict[str, str]], path: Path) -> None:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -188,10 +204,10 @@ def _merge_system_prompt_json(result: dict[str, dict[str, str]], path: Path) -> 
         logging.warning("Could not read System Prompt catalog %s", path, exc_info=True)
         return
     if isinstance(raw, list) and all(isinstance(item, str) for item in raw):
-        result[path.stem] = {"name": path.stem.replace("_", " ").replace("-", " ").title(), "prompt": "\n".join(raw)}
+        result[path.stem] = {"name": _prompt_catalog_label(path.stem), "prompt": "\n".join(raw)}
         return
     if isinstance(raw, str) and raw.strip():
-        result[path.stem] = {"name": path.stem.replace("_", " ").replace("-", " ").title(), "prompt": raw}
+        result[path.stem] = {"name": _prompt_catalog_label(path.stem), "prompt": raw}
         return
     if isinstance(raw, dict):
         prompt = str(raw.get("prompt") or raw.get("content") or "")
@@ -215,18 +231,32 @@ def _merge_system_prompt_text(result: dict[str, dict[str, str]], path: Path) -> 
         logging.warning("Could not read System Prompt text file %s", path, exc_info=True)
         return
     if prompt.strip():
-        result[path.stem] = {"name": path.stem.replace("_", " ").replace("-", " ").title(), "prompt": prompt}
+        result[path.stem] = {"name": _prompt_catalog_label(path.stem), "prompt": prompt}
 
 
 def load_system_prompts() -> dict[str, dict[str, str]]:
     result = {}
     if SYSTEM_PROMPTS_FILE:
-        path = Path(SYSTEM_PROMPTS_FILE)
-        _merge_system_prompt_text(result, path) if path.suffix.casefold() == ".txt" else _merge_system_prompt_json(result, path)
+        _merge_system_prompt_file(result, Path(SYSTEM_PROMPTS_FILE))
     if SYSTEM_PROMPTS_DIR.exists():
         for path in sorted(list(SYSTEM_PROMPTS_DIR.glob("*.json")) + list(SYSTEM_PROMPTS_DIR.glob("*.txt"))):
-            _merge_system_prompt_text(result, path) if path.suffix.casefold() == ".txt" else _merge_system_prompt_json(result, path)
+            _merge_system_prompt_file(result, path)
     return dict(list(result.items())[:CATALOG_MAX_ITEMS])
+
+
+def _use_db_connection(action, error_message: str):
+    """Run action(conn) on the ambient connection, or a short-lived one; log failures."""
+    conn = db_connection_context()
+    owns_connection = conn is None
+    try:
+        conn = conn or db_connect()
+        return action(conn)
+    except Exception:
+        logging.debug(error_message, exc_info=True)
+        return None
+    finally:
+        if owns_connection and conn is not None:
+            conn.close()
 
 
 _CALLBACK_TOKEN_VALUES: dict[str, tuple[str, str, str, float]] = {}
@@ -238,52 +268,43 @@ def dynamic_callback_token(kind: str, value: str, chat_id: str = "", db=None) ->
     token = "t" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
     expires_at = time.time() + _CALLBACK_TOKEN_TTL_SECONDS
     _CALLBACK_TOKEN_VALUES[token] = (str(kind), str(value), str(chat_id), expires_at)
-    token_db = db or db_connection_context()
-    owns_connection = token_db is None
-    try:
-        token_db = token_db or db_connect()
-        token_db.execute("INSERT OR REPLACE INTO callback_tokens(token,kind,value,chat_id,expires_at) VALUES(?,?,?,?,?)", (token, str(kind), str(value), str(chat_id), expires_at))
-        token_db.commit()
-    except Exception:
-        logging.debug("Could not persist callback token", exc_info=True)
-    finally:
-        if owns_connection and token_db is not None:
-            token_db.close()
+    def persist(conn):
+        conn.execute("INSERT OR REPLACE INTO callback_tokens(token,kind,value,chat_id,expires_at) VALUES(?,?,?,?,?)", (token, str(kind), str(value), str(chat_id), expires_at))
+        conn.commit()
+
+    if db is not None:
+        try:
+            persist(db)
+        except Exception:
+            logging.debug("Could not persist callback token", exc_info=True)
+    else:
+        _use_db_connection(persist, "Could not persist callback token")
     return token
 
 
 def resolve_dynamic_callback_token(token: str, kind: str, chat_id: str = "") -> str | None:
     item = _CALLBACK_TOKEN_VALUES.get(str(token))
     if item is None:
-        token_db = db_connection_context()
-        owns_connection = token_db is None
-        try:
-            token_db = token_db or db_connect()
-            row = token_db.execute("SELECT kind,value,chat_id,expires_at FROM callback_tokens WHERE token=?", (str(token),)).fetchone()
+        def load(conn):
+            row = conn.execute("SELECT kind,value,chat_id,expires_at FROM callback_tokens WHERE token=?", (str(token),)).fetchone()
             if row:
-                item = (str(row[0]), str(row[1]), str(row[2]), float(row[3]))
-                _CALLBACK_TOKEN_VALUES[str(token)] = item
-        except Exception:
-            logging.debug("Could not load callback token", exc_info=True)
-        finally:
-            if owns_connection and token_db is not None:
-                token_db.close()
+                found = (str(row[0]), str(row[1]), str(row[2]), float(row[3]))
+                _CALLBACK_TOKEN_VALUES[str(token)] = found
+                return found
+            return None
+
+        item = _use_db_connection(load, "Could not load callback token")
     if item is None:
         return None
     stored_kind, value, stored_chat_id, expires_at = item
     if expires_at < time.time() or stored_kind != str(kind) or (stored_chat_id and stored_chat_id != str(chat_id)):
         _CALLBACK_TOKEN_VALUES.pop(str(token), None)
-        token_db = db_connection_context()
-        owns_connection = token_db is None
-        try:
-            token_db = token_db or db_connect()
-            token_db.execute("DELETE FROM callback_tokens WHERE token=?", (str(token),))
-            token_db.commit()
-        except Exception:
-            logging.debug("Could not remove expired callback token", exc_info=True)
-        finally:
-            if owns_connection and token_db is not None:
-                token_db.close()
+
+        def forget(conn):
+            conn.execute("DELETE FROM callback_tokens WHERE token=?", (str(token),))
+            conn.commit()
+
+        _use_db_connection(forget, "Could not remove expired callback token")
         return None
     return value
 
@@ -346,6 +367,15 @@ def panel_navigation(prefix: str, page: int, total_pages: int) -> list[dict[str,
     return row
 
 
+def send_panel_message(token: str, chat_id: str, text: str, reply_markup: dict, message_id: int | None = None) -> None:
+    """Send a panel message, or edit the existing one in place."""
+    method = "editMessageText" if message_id else "sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "reply_markup": reply_markup}
+    if message_id:
+        payload["message_id"] = message_id
+    telegram_request(token, method, payload)
+
+
 def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0) -> None:
     personas = load_personas()
     options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in list(personas.items())[:CATALOG_MAX_ITEMS]]
@@ -364,11 +394,7 @@ def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id
     rows.append([{"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current Persona: {persona_name(current_persona) if current_persona else 'off'}{page_label}\nChoose a persona:"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def send_character_menu(token: str, chat_id: str, current_character: str, message_id: int | None = None, page: int = 0) -> None:
@@ -389,14 +415,10 @@ def send_character_menu(token: str, chat_id: str, current_character: str, messag
         current_label = card_fields_from_file(current_character)["name"]
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current character: {current_label}{page_label}\nChoose a character card:"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
     try:
-        telegram_request(token, method, payload)
+        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
     except RuntimeError as exc:
-        if method == "editMessageText" and "not modified" in str(exc).casefold():
+        if message_id is not None and "not modified" in str(exc).casefold():
             return
         raise
 
@@ -410,11 +432,7 @@ def send_character_info_menu(token: str, chat_id: str, message_id: int | None = 
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "character:menu"}, {"text": "❌ Close", "callback_data": "character:cancel"}])
     text = f"Choose a character for info (page {current_page + 1}/{total_pages}):"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def send_character_delete_menu(token: str, chat_id: str, active_character: str, message_id: int | None = None, page: int = 0) -> None:
@@ -426,20 +444,13 @@ def send_character_delete_menu(token: str, chat_id: str, active_character: str, 
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "character:menu"}, {"text": "❌ Close", "callback_data": "character:cancel"}])
     text = f"Choose a non-active character to delete (page {current_page + 1}/{total_pages}):"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def send_character_delete_confirm(token: str, chat_id: str, filename: str, message_id: int | None = None) -> None:
     token_value = dynamic_callback_token("character", filename, chat_id)
     payload = {"chat_id": chat_id, "text": f"Delete {Path(filename).stem}? The card file will be removed; verified backups are kept.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "characterdeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "character:delete"}]]}}
-    method = "editMessageText" if message_id else "sendMessage"
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
 def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], current_id: str, message_id: int | None = None, page: int = 0) -> None:
@@ -456,11 +467,7 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
     rows.append([{"text": "❌ Cancel", "callback_data": "session:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current session: {current_id}{page_label}\nChoose a session, create a new one, or delete an inactive session with its session-scoped Hindsight documents."
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def replace_macros(text: str, fields: dict[str, str], user_name: str = DEFAULT_USER_NAME) -> str:

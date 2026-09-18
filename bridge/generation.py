@@ -45,6 +45,28 @@ def _recovery_settings(settings: dict[str, object]) -> dict[str, object] | None:
     return recovered
 
 
+_CONTINUATION_INSTRUCTION = (
+    "Continue from the exact ending without repeating existing text. "
+    "Preserve the response language exactly. Output only the continuation."
+)
+
+
+def _parse_stop_sequences(raw: object) -> list[str]:
+    return [item for item in str(raw or "").split("\n") if item]
+
+
+def _resolve_provider_credential(spec: dict, api_key: str, default_env: str, label: str) -> str:
+    """Prefer the provider-specific env key; fall back to the caller-supplied key."""
+    configured_env = spec.get("api_key_env")
+    key_env = str(configured_env or default_env)
+    resolved = os.environ.get(key_env, "")
+    if not resolved and (not configured_env or key_env == "LLM_API_KEY"):
+        resolved = api_key
+    if not resolved:
+        raise RuntimeError(f"Missing {label} credential: {key_env}")
+    return resolved
+
+
 def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str) -> str:
     system_parts = [str(message.get("content") or "") for message in messages if message.get("role") == "system"]
     conversation = []
@@ -73,7 +95,7 @@ def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], se
         body["system"] = "\n\n".join(system_parts)
     if float(settings.get("top_p", 1.0)) < 1.0:
         body["top_p"] = float(settings["top_p"])
-    stops = [item for item in str(settings.get("stop_sequences") or "").split("\n") if item]
+    stops = _parse_stop_sequences(settings.get("stop_sequences"))
     if stops:
         body["stop_sequences"] = stops[:4]
     endpoint = str(spec.get("api_endpoint") or spec.get("api") or "").rstrip("/")
@@ -196,40 +218,26 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
     if transport == "opencode_muse":
         return opencode_muse_generate(actual_model, messages, generation, spec, session_id)
     if transport == "anthropic_messages":
-        configured_key_env = spec.get("api_key_env")
-        key_env = str(configured_key_env or "ANTHROPIC_API_KEY")
-        anthropic_key = os.environ.get(key_env, "")
-        if not anthropic_key and (not configured_key_env or key_env == "LLM_API_KEY"):
-            anthropic_key = api_key
-        if not anthropic_key:
-            raise RuntimeError(f"Missing Anthropic credential: {key_env}")
+        anthropic_key = _resolve_provider_credential(spec, api_key, "ANTHROPIC_API_KEY", "Anthropic")
         return anthropic_generate(anthropic_key, actual_model, messages, generation, spec, session_id)
     if transport not in {"chat_completions", "openai", "openai_compatible"}:
         raise RuntimeError(f"Provider transport '{transport}' is not supported")
     endpoint_base = str(spec.get("api_endpoint") or spec.get("api") or DEFAULT_PROVIDER_URL.rsplit("/chat/completions", 1)[0]).rstrip("/")
     validate_provider_endpoint(endpoint_base)
     endpoint = endpoint_base + "/chat/completions"
-    configured_key_env = spec.get("api_key_env")
-    key_env = str(configured_key_env or "LLM_API_KEY")
-    request_key = os.environ.get(key_env, "")
-    if not request_key and (not configured_key_env or key_env == "LLM_API_KEY"):
-        request_key = api_key
-    if not request_key:
-        raise RuntimeError(f"Missing provider credential: {key_env}")
+    request_key = _resolve_provider_credential(spec, api_key, "LLM_API_KEY", "provider")
     is_streaming = bool(spec.get("streaming") or spec.get("stream")) and not force_non_stream
-    max_tokens = int(generation["max_tokens"])
-    effective_max_tokens = max_tokens
     body = {
         "model": actual_model,
         "messages": messages,
         "temperature": float(generation["temperature"]),
-        "max_tokens": effective_max_tokens,
+        "max_tokens": int(generation["max_tokens"]),
         "top_p": float(generation["top_p"]),
         "frequency_penalty": float(generation["frequency_penalty"]),
         "presence_penalty": float(generation["presence_penalty"]),
         "stream": is_streaming,
     }
-    stops = [item for item in str(generation.get("stop_sequences") or "").split("\n") if item]
+    stops = _parse_stop_sequences(generation.get("stop_sequences"))
     if stops:
         body["stop"] = stops[:4]
     reasoning_budget = int(generation.get("reasoning_budget") or 0)
@@ -274,7 +282,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
                     {"role": "assistant", "content": segments[-1]},
                     {
                         "role": "user",
-                        "content": "Continue from the exact ending without repeating existing text. Preserve the response language exactly. Output only the continuation.",
+                        "content": _CONTINUATION_INSTRUCTION,
                     },
                 ])
                 continuation_body = dict(body)
@@ -340,7 +348,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
         if finish_reason == "length" and not force_non_stream:
             continuation_messages = list(messages) + [
                 {"role": "assistant", "content": content},
-                {"role": "user", "content": "Continue from the exact ending without repeating existing text. Preserve the response language exactly. Output only the continuation."},
+                {"role": "user", "content": _CONTINUATION_INSTRUCTION},
             ]
             try:
                 continuation = generate_text(api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=False, _recovery_attempt=_recovery_attempt + 1)
@@ -499,9 +507,10 @@ def regenerate_last(db: sqlite3.Connection, token: str, api_key: str, session: d
     rag_bundle = rag_retrieval_bundle(db, chat_id, user_text)
     messages = build_chat_messages(session, fields, user_text, history_rows, memory_context=recall_memory_context(db, chat_id, session, fields, user_text), session_summary=session_summary_for_prompt(db, chat_id, session), rag_context=rag_context_for_prompt(db, chat_id, user_text, rag_bundle))
     send_typing(token, chat_id)
-    reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=get_generation_settings(db, chat_id, session_id))
+    settings = get_generation_settings(db, chat_id, session_id)
+    reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=settings)
     reply += rag_citation_footer(db, chat_id, user_text, rag_bundle)
-    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
+    reply = render_session_response(api_key, session, reply, chat_id, settings)
     last_user_rowid = rows[last_user_index][0]
     delete_outgoing_messages(db, token, chat_id, session_id, last_user_rowid)
     db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?", (chat_id, session_id, last_user_rowid))
@@ -586,16 +595,17 @@ def continue_last(db: sqlite3.Connection, token: str, api_key: str, session: dic
     rows = db.execute("SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session_id)).fetchall()
     assistant_row = next((row for row in reversed(rows) if row[1] == "assistant"), None)
     if assistant_row is None:
-        send_text(token, chat_id, "Belum ada response Alisha untuk dilanjutkan.")
+        send_text(token, chat_id, "Belum ada response untuk dilanjutkan.")
         return
     instruction = "Continue the previous assistant response from its exact ending. Do not repeat any existing text. Output only the continuation."
     history_rows = [(row[1], row[2]) for row in rows]
     rag_bundle = rag_retrieval_bundle(db, chat_id, instruction)
     messages = build_chat_messages(session, fields, instruction, history_rows, memory_context=recall_memory_context(db, chat_id, session, fields, instruction), session_summary=session_summary_for_prompt(db, chat_id, session), rag_context=rag_context_for_prompt(db, chat_id, instruction, rag_bundle))
     send_typing(token, chat_id)
-    reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=get_generation_settings(db, chat_id, session_id))
+    settings = get_generation_settings(db, chat_id, session_id)
+    reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=settings)
     reply += rag_citation_footer(db, chat_id, instruction, rag_bundle)
-    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
+    reply = render_session_response(api_key, session, reply, chat_id, settings)
     combined = assistant_row[2].rstrip() + " " + reply.lstrip()
     db.execute("UPDATE messages SET content=? WHERE rowid=?", (combined, assistant_row[0]))
     user_row = next((row for row in reversed(rows) if row[1] == "user" and row[0] < assistant_row[0]), None)

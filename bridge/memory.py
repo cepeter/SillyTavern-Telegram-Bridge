@@ -205,6 +205,30 @@ def recall_memory_context(db: sqlite3.Connection, chat_id: str, session: dict[st
     return "\n".join(sections)[:HINDSIGHT_CONTEXT_MAX_CHARS]
 
 
+def _retain_with_client(chat_id: str, session_id: str, document_id: str, character_name: str,
+                        content: str, context: str, kind: str, log_message: str) -> bool:
+    """Retain one document via a short-lived Hindsight client; failures are logged, not raised."""
+    client = None
+    try:
+        client = hindsight_client()
+        client.retain(
+            bank_id=hindsight_bank_id(chat_id),
+            content=content,
+            context=context,
+            document_id=document_id,
+            metadata={"source": "sillytavern_telegram_bridge", "session_id": session_id, "character": character_name},
+            tags=hindsight_tags(chat_id, session_id, character_name),
+            retain_async=False,
+        )
+        _record_hindsight_document(chat_id, session_id, document_id, kind)
+        return True
+    except Exception:
+        logging.warning(log_message, chat_id, exc_info=True)
+        return False
+    finally:
+        close_hindsight_client(client)
+
+
 def _retain_session_memory(chat_id: str, session: dict[str, str], character_name: str, conversation: str) -> None:
     session_id = str(session["session_id"])
     with hindsight_session_lock(chat_id, session_id):
@@ -219,23 +243,16 @@ def _retain_session_memory(chat_id: str, session: dict[str, str], character_name
         if not exists:
             return
         document_id = hindsight_conversation_document_id(session_id)
-        client = None
-        try:
-            client = hindsight_client()
-            client.retain(
-                bank_id=hindsight_bank_id(chat_id),
-                content=conversation,
-                context=f"SillyTavern Telegram roleplay session with character {character_name}",
-                document_id=document_id,
-                metadata={"source": "sillytavern_telegram_bridge", "session_id": session_id, "character": character_name},
-                tags=hindsight_tags(chat_id, session_id, character_name),
-                retain_async=False,
-            )
-            _record_hindsight_document(chat_id, session_id, document_id, "conversation")
-        except Exception:
-            logging.warning("Hindsight retain unavailable for chat %s", chat_id, exc_info=True)
-        finally:
-            close_hindsight_client(client)
+        _retain_with_client(
+            chat_id,
+            session_id,
+            document_id,
+            character_name,
+            conversation,
+            f"SillyTavern Telegram roleplay session with character {character_name}",
+            "conversation",
+            "Hindsight retain unavailable for chat %s",
+        )
 
 
 def retain_session_memory(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str]) -> None:
@@ -257,25 +274,16 @@ def remember_fact(db: sqlite3.Connection, chat_id: str, session: dict[str, str],
         if not db.execute("SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (str(chat_id), session_id)).fetchone():
             return False
         document_id = hindsight_explicit_document_id(session_id, fact)
-        client = None
-        try:
-            client = hindsight_client()
-            client.retain(
-                bank_id=hindsight_bank_id(chat_id),
-                content=f"User explicitly stated: {fact.strip()[:4000]}",
-                context=f"Explicit user memory request for character {fields['name']}",
-                document_id=document_id,
-                metadata={"source": "sillytavern_telegram_bridge", "session_id": session_id, "character": fields["name"]},
-                tags=hindsight_tags(chat_id, session_id, fields["name"]),
-                retain_async=False,
-            )
-            _record_hindsight_document(chat_id, session_id, document_id, "explicit")
-            return True
-        except Exception:
-            logging.warning("Hindsight explicit retain unavailable for chat %s", chat_id, exc_info=True)
-            return False
-        finally:
-            close_hindsight_client(client)
+        return _retain_with_client(
+            chat_id,
+            session_id,
+            document_id,
+            fields["name"],
+            f"User explicitly stated: {fact.strip()[:4000]}",
+            f"Explicit user memory request for character {fields['name']}",
+            "explicit",
+            "Hindsight explicit retain unavailable for chat %s",
+        )
 
 
 def handle_memory_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict[str, str], command_text: str) -> None:

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Telegram bridge for the imported SillyTavern character card.
+"""Telegram bridge for SillyTavern character cards.
 
-This keeps Alisha's card data and per-Telegram-user chat history locally,
-then sends the assembled conversation to an OpenAI-compatible backend.
+This keeps the configured character card data and per-Telegram-user chat
+history locally, then sends the assembled conversation to an
+OpenAI-compatible backend.
 """
 from __future__ import annotations
 

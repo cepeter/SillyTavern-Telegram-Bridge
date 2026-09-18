@@ -127,24 +127,55 @@ def _prepare_delivery_recovery(db, token, chat_id, assistant_rowid, operation_id
     _delete_stored_telegram_ids(token, chat_id, payload.get("old_message_ids") or [])
 
 
+def _generate_rendered_reply(db, token, api_key, session, chat_id, messages, query, rag_bundle):
+    """Generate for the session model, append RAG citations, render the session language."""
+    session_id = session["session_id"]
+    send_typing(token, chat_id)
+    settings = get_generation_settings(db, chat_id, session_id)
+    reply = generate_text(
+        api_key,
+        session["model_id"],
+        messages,
+        session_id=f"telegram:{chat_id}:{session_id}",
+        settings=settings,
+    )
+    reply += rag_citation_footer(db, chat_id, query, rag_bundle)
+    return render_session_response(api_key, session, reply, chat_id, settings)
+
+
+def _begin_durable_operation(db, operation_id, kind, deliver_recovered):
+    """Shared phase guard for durable operations.
+
+    Returns True when the caller should run the normal path. Applied operations
+    are skipped, and locally-committed operations are delivered by the
+    caller-supplied hook before finishing the operation.
+    """
+    if operation_id is None:
+        return True
+    phase = operation_phase(db, operation_id)
+    if phase == "applied":
+        return False
+    if phase == "local_committed":
+        deliver_recovered()
+        return False
+    return begin_operation(db, operation_id, kind)
+
+
 def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=None):
     session_id = session["session_id"]
-    if operation_id is not None:
-        phase = operation_phase(db, operation_id)
-        if phase == "applied":
-            return
-        if phase == "local_committed":
-            user_row = _latest_user_row(db, chat_id, session_id)
-            assistant_row = _latest_assistant_row(db, chat_id, session_id)
-            if not user_row or not assistant_row:
-                raise RuntimeError("regen recovery state is incomplete")
-            _prepare_delivery_recovery(db, token, chat_id, assistant_row[0], operation_id)
-            variant = _selected_variant_index(db, chat_id, session_id, user_row[0])
-            send_reply(token, chat_id, f"♻️ Regenerated response (variant {variant})\n\n{assistant_row[1]}", db, session_id, int(assistant_row[0]))
-            _finish_operation(db, operation_id, "regen")
-            return
-        if not begin_operation(db, operation_id, "regen"):
-            return
+
+    def deliver_recovered_regen():
+        user_row = _latest_user_row(db, chat_id, session_id)
+        assistant_row = _latest_assistant_row(db, chat_id, session_id)
+        if not user_row or not assistant_row:
+            raise RuntimeError("regen recovery state is incomplete")
+        _prepare_delivery_recovery(db, token, chat_id, assistant_row[0], operation_id)
+        variant = _selected_variant_index(db, chat_id, session_id, user_row[0])
+        send_reply(token, chat_id, f"♻️ Regenerated response (variant {variant})\n\n{assistant_row[1]}", db, session_id, int(assistant_row[0]))
+        _finish_operation(db, operation_id, "regen")
+
+    if not _begin_durable_operation(db, operation_id, "regen", deliver_recovered_regen):
+        return
 
     rows = db.execute(
         "SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
@@ -166,16 +197,7 @@ def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=N
         session_summary=session_summary_for_prompt(db, chat_id, session),
         rag_context=rag_context_for_prompt(db, chat_id, user_text, rag_bundle),
     )
-    send_typing(token, chat_id)
-    reply = generate_text(
-        api_key,
-        session["model_id"],
-        messages,
-        session_id=f"telegram:{chat_id}:{session_id}",
-        settings=get_generation_settings(db, chat_id, session_id),
-    )
-    reply += rag_citation_footer(db, chat_id, user_text, rag_bundle)
-    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
+    reply = _generate_rendered_reply(db, token, api_key, session, chat_id, messages, user_text, rag_bundle)
     last_user_rowid = int(rows[last_user_index][0])
     old_message_ids = _outgoing_ids_after(db, chat_id, session_id, last_user_rowid)
     _set_operation_payload(db, operation_id, {"old_message_ids": old_message_ids, "user_rowid": last_user_rowid})
@@ -199,20 +221,17 @@ def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=N
 
 def continue_last(db, token, api_key, session, fields, chat_id, operation_id=None):
     session_id = session["session_id"]
-    if operation_id is not None:
-        phase = operation_phase(db, operation_id)
-        if phase == "applied":
-            return
-        if phase == "local_committed":
-            assistant_row = _latest_assistant_row(db, chat_id, session_id)
-            if not assistant_row:
-                raise RuntimeError("continue recovery state is incomplete")
-            _prepare_delivery_recovery(db, token, chat_id, assistant_row[0], operation_id)
-            send_reply(token, chat_id, f"↪️ Continued response\n\n{assistant_row[1]}", db, session_id, int(assistant_row[0]))
-            _finish_operation(db, operation_id, "continue")
-            return
-        if not begin_operation(db, operation_id, "continue"):
-            return
+
+    def deliver_recovered_continue():
+        assistant_row = _latest_assistant_row(db, chat_id, session_id)
+        if not assistant_row:
+            raise RuntimeError("continue recovery state is incomplete")
+        _prepare_delivery_recovery(db, token, chat_id, assistant_row[0], operation_id)
+        send_reply(token, chat_id, f"↪️ Continued response\n\n{assistant_row[1]}", db, session_id, int(assistant_row[0]))
+        _finish_operation(db, operation_id, "continue")
+
+    if not _begin_durable_operation(db, operation_id, "continue", deliver_recovered_continue):
+        return
 
     rows = db.execute(
         "SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
@@ -220,7 +239,7 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
     ).fetchall()
     assistant_row = next((row for row in reversed(rows) if row[1] == "assistant"), None)
     if assistant_row is None:
-        send_text(token, chat_id, "Belum ada response Alisha untuk dilanjutkan.")
+        send_text(token, chat_id, "Belum ada response untuk dilanjutkan.")
         return
     instruction = "Continue the previous assistant response from its exact ending. Do not repeat any existing text. Output only the continuation."
     history_rows = [(row[1], row[2]) for row in rows]
@@ -234,16 +253,7 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
         session_summary=session_summary_for_prompt(db, chat_id, session),
         rag_context=rag_context_for_prompt(db, chat_id, instruction, rag_bundle),
     )
-    send_typing(token, chat_id)
-    reply = generate_text(
-        api_key,
-        session["model_id"],
-        messages,
-        session_id=f"telegram:{chat_id}:{session_id}",
-        settings=get_generation_settings(db, chat_id, session_id),
-    )
-    reply += rag_citation_footer(db, chat_id, instruction, rag_bundle)
-    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
+    reply = _generate_rendered_reply(db, token, api_key, session, chat_id, messages, instruction, rag_bundle)
     combined = assistant_row[2].rstrip() + " " + reply.lstrip()
     old_message_ids = _message_ids_from_rows(
         db.execute("SELECT telegram_message_id,telegram_message_ids FROM messages WHERE rowid=?", (int(assistant_row[0]),)).fetchall()
@@ -269,21 +279,18 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
 
 def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_rowid, new_text, operation_id=None):
     session_id = session["session_id"]
-    if operation_id is not None:
-        phase = operation_phase(db, operation_id)
-        if phase == "applied":
-            return
-        if phase == "local_committed":
-            user_row = _latest_user_row(db, chat_id, session_id)
-            assistant_row = _latest_assistant_row(db, chat_id, session_id)
-            if not user_row or not assistant_row:
-                raise RuntimeError("edit recovery state is incomplete")
-            _prepare_delivery_recovery(db, token, chat_id, assistant_row[0], operation_id)
-            send_reply(token, chat_id, f"✏️ Edited message regenerated.\n\n{assistant_row[1]}", db, session_id, int(assistant_row[0]))
-            _finish_operation(db, operation_id, "edit")
-            return
-        if not begin_operation(db, operation_id, "edit"):
-            return
+
+    def deliver_recovered_edit():
+        user_row = _latest_user_row(db, chat_id, session_id)
+        assistant_row = _latest_assistant_row(db, chat_id, session_id)
+        if not user_row or not assistant_row:
+            raise RuntimeError("edit recovery state is incomplete")
+        _prepare_delivery_recovery(db, token, chat_id, assistant_row[0], operation_id)
+        send_reply(token, chat_id, f"✏️ Edited message regenerated.\n\n{assistant_row[1]}", db, session_id, int(assistant_row[0]))
+        _finish_operation(db, operation_id, "edit")
+
+    if not _begin_durable_operation(db, operation_id, "edit", deliver_recovered_edit):
+        return
 
     rows = db.execute(
         "SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
@@ -306,16 +313,7 @@ def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_ro
         session_summary=session_summary,
         rag_context=rag_context_for_prompt(db, chat_id, new_text, rag_bundle),
     )
-    send_typing(token, chat_id)
-    reply = generate_text(
-        api_key,
-        session["model_id"],
-        messages,
-        session_id=f"telegram:{chat_id}:{session_id}",
-        settings=get_generation_settings(db, chat_id, session_id),
-    )
-    reply += rag_citation_footer(db, chat_id, new_text, rag_bundle)
-    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session_id))
+    reply = _generate_rendered_reply(db, token, api_key, session, chat_id, messages, new_text, rag_bundle)
     old_message_ids = _outgoing_ids_after(db, chat_id, session_id, int(user_rowid))
     _set_operation_payload(db, operation_id, {"old_message_ids": old_message_ids, "user_rowid": int(user_rowid)})
 
@@ -415,11 +413,7 @@ def send_sync_menu(token: str, chat_id: str, db: sqlite3.Connection, session: di
             [{"text": "❌ Close", "callback_data": "sync:close"}],
         ]},
     }
-    method = "sendMessage"
-    if message_id:
-        method = "editMessageText"
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
 def handle_sync_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):

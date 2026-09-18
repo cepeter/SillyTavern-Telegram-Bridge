@@ -1,3 +1,11 @@
+_SESSION_COLUMNS = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
+_SESSION_COLUMN_SQL = ", ".join(_SESSION_COLUMNS)
+
+
+def _session_row_dict(row) -> dict[str, str]:
+    return dict(zip(_SESSION_COLUMNS, row))
+
+
 def _default_session_persona(db: sqlite3.Connection) -> str:
     return default_persona_id()
 
@@ -36,27 +44,25 @@ def _normalize_session_defaults(db: sqlite3.Connection, session: dict[str, str])
 
 
 def load_session(db: sqlite3.Connection, chat_id: str, session_id: str, default_model: str) -> dict[str, str]:
-    row = db.execute("SELECT chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
+    row = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
     if row is None:
         raise ValueError(f"queued session no longer exists: {session_id}")
     get_generation_settings(db, chat_id, session_id)
-    keys = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
-    return _normalize_session_defaults(db, dict(zip(keys, row)))
+    return _normalize_session_defaults(db, _session_row_dict(row))
 
 
 def ensure_session(db: sqlite3.Connection, chat_id: str, default_model: str) -> dict[str, str]:
     active_id = get_meta(db, f"active_session:{chat_id}", "default")
-    row = db.execute("SELECT chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, active_id)).fetchone()
+    row = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, active_id)).fetchone()
     if row is None:
         now = time.time()
         row = (chat_id, active_id, "Default session", DEFAULT_CHARACTER_FILE,
                get_meta(db, "model", default_model), _default_session_persona(db),
                _default_session_world(db), "", "", "auto")
-        db.execute("INSERT OR REPLACE INTO sessions(chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
+        db.execute(f"INSERT OR REPLACE INTO sessions({_SESSION_COLUMN_SQL},created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
         db.commit()
     get_generation_settings(db, chat_id, active_id)
-    keys = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
-    return _normalize_session_defaults(db, dict(zip(keys, row)))
+    return _normalize_session_defaults(db, _session_row_dict(row))
 
 
 def update_session(db: sqlite3.Connection, chat_id: str, session_id: str, operation_id: int | str | None = None, operation_kind: str = "session_update", **values) -> None:
@@ -80,17 +86,16 @@ def create_session(db: sqlite3.Connection, chat_id: str, default_model: str, ses
     row = (chat_id, session_id, title, DEFAULT_CHARACTER_FILE,
            get_meta(db, "model", default_model), _default_session_persona(db),
            _default_session_world(db), "", "", "auto")
-    db.execute("INSERT OR IGNORE INTO sessions(chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
+    db.execute(f"INSERT OR IGNORE INTO sessions({_SESSION_COLUMN_SQL},created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
     set_meta(db, f"active_session:{chat_id}", session_id)
     db.commit()
-    stored = db.execute("SELECT chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
-    return dict(zip(("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language"), stored or row))
+    stored = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
+    return _session_row_dict(stored or row)
 
 
 def list_sessions(db: sqlite3.Connection, chat_id: str) -> list[dict[str, str]]:
-    rows = db.execute("SELECT chat_id,session_id,title,character_file,model_id,persona_id,world_file,author_note,system_prompt,response_language FROM sessions WHERE chat_id=? ORDER BY updated_at DESC", (chat_id,)).fetchall()
-    keys = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
-    return [dict(zip(keys, row)) for row in rows]
+    rows = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? ORDER BY updated_at DESC", (chat_id,)).fetchall()
+    return [_session_row_dict(row) for row in rows]
 
 
 def send_session_delete_menu(token: str, chat_id: str, sessions: list[dict[str, str]], active_id: str, message_id: int | None = None, page: int = 0) -> None:
@@ -102,20 +107,13 @@ def send_session_delete_menu(token: str, chat_id: str, sessions: list[dict[str, 
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "session:back"}, {"text": "❌ Close", "callback_data": "session:cancel"}])
     text = f"Choose an inactive session to delete (page {current_page + 1}/{total_pages}). Session-scoped Hindsight documents are deleted; memories from other sessions remain."
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def send_session_delete_confirm(token: str, chat_id: str, session_id: str, title: str, message_id: int | None = None) -> None:
     token_value = dynamic_callback_token("session", session_id, chat_id)
     payload = {"chat_id": chat_id, "text": f"Delete session '{panel_label(title)}'?\n\nThis removes its SQLite transcript, variants, summary, generation settings, group state, failed turns, session record, and session-scoped Hindsight documents. Memories from other sessions remain. The active session cannot be deleted. Cleanup fails closed if Hindsight is unavailable. This cannot be undone.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "sessiondeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "session:delete"}]]}}
-    method = "editMessageText" if message_id else "sendMessage"
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
 def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None) -> tuple[bool, str]:

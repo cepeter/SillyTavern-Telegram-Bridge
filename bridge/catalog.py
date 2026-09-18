@@ -201,12 +201,8 @@ def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: s
             text += f"\nPage {current_page + 1}/{total_pages}"
         if not is_supported:
             text += "\nCatalog visible; this bridge adapter is not enabled yet."
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
     try:
-        telegram_request(token, method, payload)
+        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
     except RuntimeError as exc:
         if "not modified" in str(exc).casefold():
             logging.info("Panel already shows the requested state")
@@ -219,12 +215,8 @@ def send_provider_health_menu(token: str, chat_id: str, message_id: int | None =
     lines = [f"{name}: {status}" for _provider_id, name, status in checks]
     text = "Provider health\n\n" + ("\n".join(lines) if lines else "No providers configured.")
     markup = {"inline_keyboard": [[{"text": "🔄 Refresh models", "callback_data": "provider:refresh"}], [{"text": "⬅️ Back to providers", "callback_data": "provider:back"}, {"text": "❌ Close", "callback_data": "models:cancel"}]]}
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": markup}
-    if message_id:
-        payload["message_id"] = message_id
     try:
-        telegram_request(token, method, payload)
+        send_panel_message(token, chat_id, text, markup, message_id)
     except RuntimeError as exc:
         if "not modified" in str(exc).casefold():
             logging.info("Panel already shows the requested state")
@@ -247,12 +239,8 @@ def send_world_menu(token: str, chat_id: str, current_world: str, message_id: in
     selected_label = ", ".join(Path(name).stem for name in selected) if selected else "off"
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Active World Info: {selected_label}{page_label}\nTap lorebooks to toggle them:"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
     try:
-        telegram_request(token, method, payload)
+        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
     except RuntimeError as exc:
         if "not modified" in str(exc).casefold():
             logging.info("Panel already shows the requested state")

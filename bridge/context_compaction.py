@@ -173,6 +173,85 @@ def compact_chat_messages(
             [message for message in compacted if not message.get("_drop_for_context")]
         )
 
+    def drop_old_turns(floor: int) -> None:
+        """Mark the oldest removable turns as dropped until budget or the floor."""
+        nonlocal compacted, dropped_history
+        conversation_indices = [
+            index for index, message in enumerate(compacted)
+            if message.get("role") in {"user", "assistant"}
+        ]
+        protected_latest = conversation_indices[-1] if conversation_indices else -1
+        removable = [
+            index for index in conversation_indices
+            if index != protected_latest
+        ]
+        while current_tokens() > budget and len(removable) > floor:
+            index = removable.pop(0)
+            compacted[index]["_drop_for_context"] = True
+            dropped_history += 1
+        compacted = [message for message in compacted if not message.pop("_drop_for_context", False)]
+
+    def shrink_user_tagged_sections(compute_target: bool, fallback_to_last: bool) -> None:
+        """Shrink <untrusted_*> sections in the latest user message."""
+        nonlocal rag_trimmed, memory_trimmed
+        latest = next(
+            (message for message in reversed(compacted) if message.get("role") == "user"),
+            compacted[-1] if fallback_to_last and compacted else None,
+        )
+        if latest is None:
+            return
+        text = _text_content(latest)
+        for tag in ("untrusted_data_bank_references", "untrusted_memory"):
+            if current_tokens() <= budget:
+                break
+            if compute_target:
+                pattern = re.search(
+                    rf"<{tag}>\n?(.*?)\n?</{tag}>",
+                    text,
+                    flags=re.DOTALL,
+                )
+                if not pattern:
+                    continue
+                body_len = len(pattern.group(1))
+                deficit_chars = max(0, (current_tokens() - budget) * 4)
+                target = max(512, body_len - deficit_chars - 256)
+            else:
+                target = 0
+            text, changed = _shrink_tagged_section(text, tag, target)
+            if changed:
+                _replace_text_content(latest, text)
+                if tag == "untrusted_data_bank_references":
+                    rag_trimmed = True
+                else:
+                    memory_trimmed = True
+
+    def shrink_summary(compute_target: bool) -> None:
+        """Shrink the continuity summary section of the system message."""
+        nonlocal summary_trimmed
+        system_message = next(
+            (message for message in compacted if message.get("role") == "system"),
+            None,
+        )
+        if system_message is None:
+            return
+        text = _text_content(system_message)
+        if compute_target:
+            marker = "## Session continuity summary\n"
+            start = text.find(marker)
+            if start < 0:
+                return
+            body_start = start + len(marker)
+            next_section = text.find("\n\n## ", body_start)
+            body_end = len(text) if next_section < 0 else next_section
+            deficit_chars = max(0, (current_tokens() - budget) * 4)
+            target = max(1000, (body_end - body_start) - deficit_chars - 256)
+        else:
+            target = 0
+        text, changed = _shrink_summary_section(text, target)
+        if changed:
+            _replace_text_content(system_message, text)
+            summary_trimmed = True
+
     if original_tokens <= budget:
         return compacted, {
             "budget_tokens": budget,
@@ -187,116 +266,27 @@ def compact_chat_messages(
 
     # Preserve all system messages and the newest non-system message. Drop old
     # user/assistant turns first, keeping a recent conversational floor.
-    conversation_indices = [
-        index for index, message in enumerate(compacted)
-        if message.get("role") in {"user", "assistant"}
-    ]
-    protected_latest = conversation_indices[-1] if conversation_indices else -1
-    removable = [
-        index for index in conversation_indices
-        if index != protected_latest
-    ]
-    keep_floor = max(0, int(min_recent_messages) - 1)
-    while current_tokens() > budget and len(removable) > keep_floor:
-        index = removable.pop(0)
-        compacted[index]["_drop_for_context"] = True
-        dropped_history += 1
-    compacted = [message for message in compacted if not message.pop("_drop_for_context", False)]
+    drop_old_turns(max(0, int(min_recent_messages) - 1))
 
     # Trim untrusted retrieved context before touching continuity summary.
-    if current_tokens() > budget and compacted:
-        latest = next(
-            (message for message in reversed(compacted) if message.get("role") == "user"),
-            compacted[-1],
-        )
-        text = _text_content(latest)
-        for tag, floor in (("untrusted_data_bank_references", 512), ("untrusted_memory", 512)):
-            if current_tokens() <= budget:
-                break
-            pattern = re.search(
-                rf"<{tag}>\n?(.*?)\n?</{tag}>",
-                text,
-                flags=re.DOTALL,
-            )
-            if not pattern:
-                continue
-            body_len = len(pattern.group(1))
-            deficit_chars = max(0, (current_tokens() - budget) * 4)
-            target = max(floor, body_len - deficit_chars - 256)
-            text, changed = _shrink_tagged_section(text, tag, target)
-            if changed:
-                _replace_text_content(latest, text)
-                if tag == "untrusted_data_bank_references":
-                    rag_trimmed = True
-                else:
-                    memory_trimmed = True
+    if current_tokens() > budget:
+        shrink_user_tagged_sections(compute_target=True, fallback_to_last=True)
 
     # If still over budget, allow history to shrink to the latest pair.
     if current_tokens() > budget:
-        conversation_indices = [
-            index for index, message in enumerate(compacted)
-            if message.get("role") in {"user", "assistant"}
-        ]
-        protected_latest = conversation_indices[-1] if conversation_indices else -1
-        removable = [index for index in conversation_indices if index != protected_latest]
-        while current_tokens() > budget and len(removable) > 1:
-            index = removable.pop(0)
-            compacted[index]["_drop_for_context"] = True
-            dropped_history += 1
-        compacted = [message for message in compacted if not message.pop("_drop_for_context", False)]
+        drop_old_turns(1)
 
     # Continuity summary is valuable, so compact it only after history and
     # retrieval context have already been reduced.
     if current_tokens() > budget:
-        system_message = next(
-            (message for message in compacted if message.get("role") == "system"),
-            None,
-        )
-        if system_message is not None:
-            text = _text_content(system_message)
-            marker = "## Session continuity summary\n"
-            start = text.find(marker)
-            if start >= 0:
-                body_start = start + len(marker)
-                next_section = text.find("\n\n## ", body_start)
-                body_end = len(text) if next_section < 0 else next_section
-                body_len = body_end - body_start
-                deficit_chars = max(0, (current_tokens() - budget) * 4)
-                target = max(1000, body_len - deficit_chars - 256)
-                text, changed = _shrink_summary_section(text, target)
-                if changed:
-                    _replace_text_content(system_message, text)
-                    summary_trimmed = True
+        shrink_summary(compute_target=True)
 
     # Exhaust optional retrieved context only if the prompt is still too large.
     if current_tokens() > budget:
-        latest = next(
-            (message for message in reversed(compacted) if message.get("role") == "user"),
-            None,
-        )
-        if latest is not None:
-            text = _text_content(latest)
-            for tag in ("untrusted_data_bank_references", "untrusted_memory"):
-                if current_tokens() <= budget:
-                    break
-                text, changed = _shrink_tagged_section(text, tag, 0)
-                if changed:
-                    _replace_text_content(latest, text)
-                    if tag == "untrusted_data_bank_references":
-                        rag_trimmed = True
-                    else:
-                        memory_trimmed = True
+        shrink_user_tagged_sections(compute_target=False, fallback_to_last=False)
 
     if current_tokens() > budget:
-        system_message = next(
-            (message for message in compacted if message.get("role") == "system"),
-            None,
-        )
-        if system_message is not None:
-            text, changed = _shrink_summary_section(_text_content(system_message), 0)
-            if changed:
-                _replace_text_content(system_message, text)
-                summary_trimmed = True
+        shrink_summary(compute_target=False)
 
     final_tokens = current_tokens()
     return compacted, {
