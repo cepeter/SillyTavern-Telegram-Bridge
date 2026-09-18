@@ -121,13 +121,17 @@ def _ensure_rag_tables(db: sqlite3.Connection) -> None:
         chunk_id INTEGER PRIMARY KEY,
         embedding_namespace TEXT NOT NULL DEFAULT 'legacy',
         dimensions INTEGER NOT NULL,
-        vector_json TEXT NOT NULL
+        vector_json TEXT NOT NULL,
+        vector_signature INTEGER
     )""")
     embedding_columns = {row[1] for row in db.execute("PRAGMA table_info(data_bank_embeddings)").fetchall()}
     if "embedding_namespace" not in embedding_columns:
         db.execute("ALTER TABLE data_bank_embeddings ADD COLUMN embedding_namespace TEXT NOT NULL DEFAULT 'legacy'")
+    if "vector_signature" not in embedding_columns:
+        db.execute("ALTER TABLE data_bank_embeddings ADD COLUMN vector_signature INTEGER")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_chunks_chat_chunk_idx ON data_bank_chunks(chat_id, chunk_id)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_namespace_chunk_idx ON data_bank_embeddings(embedding_namespace, chunk_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_namespace_signature_idx ON data_bank_embeddings(embedding_namespace, vector_signature, chunk_id)")
     db.execute("""CREATE TABLE IF NOT EXISTS rag_embedding_cache (
         cache_key TEXT PRIMARY KEY,
         dimensions INTEGER NOT NULL,
