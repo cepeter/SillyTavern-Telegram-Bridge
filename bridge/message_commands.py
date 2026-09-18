@@ -95,8 +95,6 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
         if group_turn:
             advance_group_turn(db, chat_id, session_id, operation_id=operation_id, commit=False)
         db.commit()
-        if group_turn:
-            db.commit()
     except sqlite3.OperationalError:
         try:
             db.rollback()

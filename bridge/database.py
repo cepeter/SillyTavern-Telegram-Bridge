@@ -11,8 +11,6 @@ def _apply_connection_pragmas(db: sqlite3.Connection, timeout: float = 30.0) -> 
     db.execute("PRAGMA cache_size=-64000")
     db.execute("PRAGMA foreign_keys=ON")
     try:
-        db.execute("PRAGMA journal_size_limit=67108864")
-        db.execute("PRAGMA wal_autocheckpoint=1000")
         db.execute("PRAGMA mmap_size=268435456")
     except sqlite3.OperationalError:
         pass
@@ -252,8 +250,8 @@ def finish_job(db: sqlite3.Connection, job_id: int, state: str, error: str = "")
 def recover_jobs(db: sqlite3.Connection, recover_running: bool = True) -> list[tuple]:
     if recover_running:
         db.execute("UPDATE jobs SET state='queued', updated_at=? WHERE state IN ('running','scheduled')", (time.time(),))
-    # Always bound to 128 to prevent OOM
-    rows = db.execute("SELECT job_id,chat_id,session_id,telegram_message_id,kind,payload_json FROM jobs WHERE state='queued' ORDER BY created_at LIMIT 128").fetchall()
+    limit_clause = "" if recover_running else " LIMIT 128"
+    rows = db.execute("SELECT job_id,chat_id,session_id,telegram_message_id,kind,payload_json FROM jobs WHERE state='queued' ORDER BY created_at" + limit_clause).fetchall()
     db.commit()
     return rows
 
