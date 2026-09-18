@@ -76,9 +76,9 @@ files SillyTavern already uses:
 | Persona avatars | `data/default-user/User Avatars/` |
 | Expression sprites | Tied to the active character |
 
-Persona review and editing happen from `/persona`. The review panel can send
-the full Persona description as a plain Telegram message, so you can copy it
-without truncation — handy when you're tweaking a description on mobile.
+Persona review and editing happen from `/persona`. The description appears in
+Telegram's copyable code block above the edit buttons — handy when you're
+tweaking a description on mobile.
 
 When you swap characters or Personas, the bridge validates everything, checks
 for protected targets, makes a backup, and confirms the change before reporting

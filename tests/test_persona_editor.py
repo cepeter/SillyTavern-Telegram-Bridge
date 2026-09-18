@@ -101,44 +101,6 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertIn("Original description", self.calls[-1][1]["text"])
         self.assertEqual(self.calls[-1][1]["parse_mode"], "HTML")
         self.assertIn("<pre>Original description</pre>", self.calls[-1][1]["text"])
-        self.assertIn("persona:copy_description", [
-            button["callback_data"]
-            for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"]
-            for button in row
-            if "callback_data" in button
-        ])
-
-    def test_copy_description_sends_full_plain_telegram_message(self):
-        rt.update_session(self.db, "chat", self.session["session_id"], persona_id="bridge-user.png")
-        description = "Description " + ("x" * 2388)
-        settings = self._settings()
-        settings["power_user"]["persona_descriptions"]["bridge-user.png"]["description"] = description
-        rt.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(settings), encoding="utf-8")
-        rt._NATIVE_PERSONA_CACHE = {}
-        rt._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        self.session = rt.load_session(self.db, "chat", self.session["session_id"], "provider/model")
-        sent = []
-        original_send_text = rt.send_text
-        rt.send_text = lambda _token, _chat, text: sent.append(text) or [502]
-        answers = []
-        try:
-            handled = rt.handle_persona_callback(
-                self.db,
-                "token",
-                {"id": "cb"},
-                lambda _t, _i, text: answers.append(text),
-                "persona:copy_description",
-                "chat",
-                {"message_id": 77},
-                self.session,
-                "persona-session",
-                None,
-            )
-        finally:
-            rt.send_text = original_send_text
-        self.assertTrue(handled)
-        self.assertEqual(answers, ["Description sent"])
-        self.assertEqual(sent, [description])
 
     def test_delete_refuses_persona_referenced_by_another_chat(self):
         target = rt.upsert_native_persona("shared", "Shared", "Shared description")
