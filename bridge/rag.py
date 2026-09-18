@@ -104,6 +104,11 @@ def embedding_norm(vector: list[float]) -> float:
     return math.sqrt(sum(float(value) * float(value) for value in vector))
 
 
+def _embedding_row(namespace: str, vector: list[float]) -> tuple:
+    """Serialize a vector into the (namespace, dimensions, json, signature, norm) column tuple."""
+    return (namespace, len(vector), json.dumps(vector, separators=(",", ":")), embedding_signature(vector), embedding_norm(vector))
+
+
 def rag_embedding_headers() -> dict[str, str]:
     parsed = urllib.parse.urlparse(RAG_EMBEDDING_URL)
     host = (parsed.hostname or "").casefold()
@@ -118,11 +123,15 @@ def rag_embedding_headers() -> dict[str, str]:
     return headers
 
 
+def _post_embedding_request(payload: dict, timeout: float):
+    request = urllib.request.Request(RAG_EMBEDDING_URL, data=json.dumps(payload).encode("utf-8"), headers=rag_embedding_headers(), method="POST")
+    with strict_urlopen(request, timeout=timeout, allowed_env="SILLYTAVERN_RAG_ALLOWED_HOSTS") as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 def embed_rag_text(text: str) -> list[float] | None:
     try:
-        request = urllib.request.Request(RAG_EMBEDDING_URL, data=json.dumps({"model": RAG_EMBEDDING_MODEL, "input": text[:6000]}).encode("utf-8"), headers=rag_embedding_headers(), method="POST")
-        with strict_urlopen(request, timeout=60, allowed_env="SILLYTAVERN_RAG_ALLOWED_HOSTS") as response:
-            result = json.loads(response.read().decode("utf-8"))
+        result = _post_embedding_request({"model": RAG_EMBEDDING_MODEL, "input": text[:6000]}, 60)
         vector = (result.get("data") or [{}])[0].get("embedding") or []
         if len(vector) != RAG_EMBEDDING_DIMENSIONS:
             logging.warning("Unexpected RAG embedding dimensions: %s", len(vector))
@@ -137,9 +146,7 @@ def embed_rag_batch(texts: list[str]) -> list[list[float] | None]:
     if not texts:
         return []
     try:
-        request = urllib.request.Request(RAG_EMBEDDING_URL, data=json.dumps({"model": RAG_EMBEDDING_MODEL, "input": [text[:6000] for text in texts]}).encode("utf-8"), headers=rag_embedding_headers(), method="POST")
-        with strict_urlopen(request, timeout=120, allowed_env="SILLYTAVERN_RAG_ALLOWED_HOSTS") as response:
-            result = json.loads(response.read().decode("utf-8"))
+        result = _post_embedding_request({"model": RAG_EMBEDDING_MODEL, "input": [text[:6000] for text in texts]}, 120)
         vectors = [None] * len(texts)
         for item in result.get("data") or []:
             index = int(item.get("index", 0))
@@ -261,14 +268,7 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
             db.execute(
                 "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm) "
                 "VALUES(?,?,?,?,?,?)",
-                (
-                    chunk_id,
-                    namespace,
-                    len(vector),
-                    json.dumps(vector, separators=(",", ":")),
-                    embedding_signature(vector),
-                    embedding_norm(vector),
-                ),
+                (chunk_id, *_embedding_row(namespace, vector)),
             )
     db.execute(
         "UPDATE data_bank_documents SET active=0,updated_at=? "
@@ -489,7 +489,7 @@ def reindex_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: 
             vectors = embed_rag_batch([content for _, content in batch])
             for (chunk_id, _content), vector in zip(batch, vectors):
                 if vector:
-                    db.execute("INSERT OR REPLACE INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm) VALUES(?,?,?,?,?,?)", (chunk_id, namespace, len(vector), json.dumps(vector, separators=(",", ":")), embedding_signature(vector), embedding_norm(vector)))
+                    db.execute("INSERT OR REPLACE INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm) VALUES(?,?,?,?,?,?)", (chunk_id, *_embedding_row(namespace, vector)))
                     indexed += 1
     db.commit()
     return total, indexed
