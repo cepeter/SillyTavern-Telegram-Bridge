@@ -47,7 +47,7 @@ HELP_CATEGORIES = {
         ("/voice on|off", "Toggle automatic voice replies. Only dialogue in straight double quotes gets synthesized — narration stays silent."),
         ("/voice_input on|off", "Open transcription, STT model, and language controls."),
         ("/voice_input language", "Open the STT language panel — Auto, a fixed code, or User input."),
-        ("/group", "Open Forum Topic group controls. New group session chains Character and World Info selection."),
+        ("/group", "Open Forum Topic group controls, including invisible Director mode for model-selected speaker and pacing guidance."),
     ],
 }
 
