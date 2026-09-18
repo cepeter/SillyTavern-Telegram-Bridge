@@ -1,9 +1,14 @@
+def _decode_pending_state(raw: str, meta_key: str) -> dict:
+    try:
+        return json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        # Legacy settings_input state stored the raw setting key instead of JSON.
+        return {"key": raw} if meta_key.startswith("settings_input:") else {}
+
+
 def _pending_state(db, meta_key: str, session_id: str, token: str, chat_id: str) -> dict:
     raw = get_meta(db, meta_key, "")
-    try:
-        state = json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        state = {"key": raw} if meta_key.startswith("settings_input:") else {}
+    state = _decode_pending_state(raw, meta_key)
     if state and (state.get("session_id") not in {None, "", session_id} or float(state.get("expires_at", 0) or 0) < time.time()):
         delete_pending_input_prompts(token, chat_id, state)
         set_meta(db, meta_key, "")
@@ -68,11 +73,7 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
 def pending_character_for_session(db, chat_id: str) -> dict | None:
     """Load and validate a character waiting for session assignment."""
     meta_key = f"character_session_input:{chat_id}"
-    raw = get_meta(db, meta_key, "")
-    try:
-        state = json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        state = {}
+    state = _decode_pending_state(get_meta(db, meta_key, ""), meta_key)
     filename = str(state.get("character_file") or "")
     if not state or float(state.get("expires_at", 0) or 0) < time.time() or not safe_character_path(filename):
         if state:
@@ -298,10 +299,7 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
 def send_persona_delete_confirm(token: str, chat_id: str, persona_id: str, message_id: int | None = None) -> None:
     token_value = dynamic_callback_token("persona", persona_id, chat_id)
     payload = {"chat_id": chat_id, "text": f"Delete Persona '{persona_name(persona_id)}'? Native Persona metadata will be removed; the avatar file will be preserved. This cannot be undone from the bridge.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "personadeleteconfirm:" + token_value}], [{"text": "❌ Cancel", "callback_data": "persona:menu"}]]}}
-    method = "editMessageText" if message_id else "sendMessage"
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
 def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
