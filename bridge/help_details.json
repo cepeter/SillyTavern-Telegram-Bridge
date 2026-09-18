@@ -38,6 +38,7 @@
   "/imagine": "Opens prompt input for image generation — but only when you've explicitly configured an image provider. Enter 1–4,000 characters, or use /imagine <prompt> directly. Unconfigured or unsupported providers fail closed. /cancel aborts.",
 
   "/settings": "Opens the generation settings panel for this session. Pick a reasoning level or tap a field to enter your own value for temperature, max tokens, top P, frequency penalty, presence penalty, or stop sequences.",
+  "/taskmodel": "Configures a per-session utility model. Use /taskmodel <provider::model> to route non-dialogue utility work such as summarization to that model, /taskmodel main to inherit the primary session model, or /taskmodel status to inspect the route.",
 
   "/stream on|off": "Opens streaming controls. When streaming is on, you get a live preview that updates as the model generates — the final response replaces it when done.",
 

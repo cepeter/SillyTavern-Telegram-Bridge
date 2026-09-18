@@ -25,6 +25,7 @@ HELP_CATEGORIES = {
     ],
     "generation": [
         ("/settings", "Open this session's generation panel — pick a reasoning level or set your own temperature, tokens, and sampling values."),
+        ("/taskmodel", "Route utility tasks such as session summarization to a per-session model, or follow the main model."),
         ("/stream on|off", "Toggle streaming preview on or off."),
         ("/preset", "Open the preset panel — apply, save, or delete generation setting presets."),
         ("/macro", "Open a panel, then send one message to preview supported SillyTavern macros"),
@@ -446,6 +447,7 @@ def set_bot_commands(token: str) -> None:
                 {"command": "voice", "description": "Open automatic voice panel"},
                 {"command": "voice_input", "description": "Open transcription/model/language panel"},
                 {"command": "settings", "description": "Open generation settings panel"},
+                {"command": "taskmodel", "description": "Route utility tasks to another model"},
                 {"command": "stream", "description": "Open streaming on/off panel"},
                 {"command": "preset", "description": "Open preset use/delete panel"},
                 {"command": "macro", "description": "Preview a macro"},

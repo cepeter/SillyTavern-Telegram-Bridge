@@ -351,7 +351,8 @@ def generate_session_summary(db: sqlite3.Connection, chat_id: str, session: dict
     settings = get_generation_settings(db, chat_id, session["session_id"])
     settings.update({"temperature": 0.2, "max_tokens": SUMMARY_MAX_OUTPUT_TOKENS, "reasoning_budget": 0})
     try:
-        summary = generate_text("", session["model_id"], summary_messages, session_id=f"summary:{chat_id}:{session['session_id']}", settings=settings).strip()[:SUMMARY_MAX_CHARS]
+        summary_model = task_model_for_session(db, chat_id, session, "summary")
+        summary = generate_text("", summary_model, summary_messages, session_id=f"summary:{chat_id}:{session['session_id']}", settings=settings).strip()[:SUMMARY_MAX_CHARS]
     except Exception:
         logging.warning("Session summary generation failed for %s/%s", chat_id, session["session_id"], exc_info=True)
         return existing
