@@ -1,6 +1,6 @@
 {
   "/start": "Checks Persona, World Info, and System Prompt. If all three are enabled, it sends and stores the active character card's first opening message; otherwise it shows their current off status and setup recommendations. Type start as a plain message to show the greeting regardless.",
-  "/greeting": "Opens the active character card's greeting picker. Choose the primary first_mes or one of up to 20 native alternate_greetings; the selected greeting is macro-expanded and stored as an assistant turn.",
+
   "/help": "Opens this guide. Choose a category, then choose a command to view its behavior and available input form.",
   "/status": "Shows the active character, session, model, response language, persona, World Info, memory, RAG, group, and generation state.",
   "/new": "Asks for a 1–80 character name, then creates and activates a separate session. /cancel leaves no empty session behind.",

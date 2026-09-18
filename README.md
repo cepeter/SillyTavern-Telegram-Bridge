@@ -251,7 +251,7 @@ prevents accidental changes.
 
 ```text
 /start              Show the greeting when Persona, World Info, and System Prompt are enabled; otherwise show recommendations
-/greeting           Choose the primary or an alternate character-card opening greeting
+
 /status             Show active card, session, model, memory, RAG, and generation state
 /new                Create and activate a named isolated session
 /reset              Confirm an active-session reset and memory purge

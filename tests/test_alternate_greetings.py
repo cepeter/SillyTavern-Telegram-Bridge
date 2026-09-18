@@ -29,21 +29,18 @@ class AlternateGreetingTests(unittest.TestCase):
         })
         self.assertEqual(rt.greeting_options(fields), ["Primary {{user}}", "Alt one", "Alt two"])
 
-    def test_greeting_menu_lists_primary_and_alternates(self):
-        fields = {"first_mes": "Primary", "alternate_greetings": json.dumps(["Alt one", "Alt two"])}
-        markup = rt.greeting_menu_markup(fields)
-        labels = [row[0]["text"] for row in markup["inline_keyboard"] if row and row[0]["callback_data"].startswith("greeting:") and row[0]["callback_data"] != "greeting:cancel"]
-        self.assertEqual(labels, ["⭐ Greeting 1", "💬 Greeting 2", "💬 Greeting 3"])
-
-    def test_selected_alternate_is_stored_as_assistant_turn(self):
+    def test_first_greeting_can_choose_a_random_alternate(self):
         sent = []
         original_send = rt.send_text
+        original_randrange = rt.random.randrange
         rt.send_text = lambda _token, _chat_id, text: sent.append(text) or [88]
+        rt.random.randrange = lambda _length: 1
         try:
             fields = {"name": "Character", "first_mes": "Primary", "alternate_greetings": json.dumps(["Alt {{user}}"])}
-            self.assertTrue(rt.send_character_greeting(self.db, "token", "chat", fields, self.session["session_id"], "User", 1))
+            self.assertTrue(rt.send_character_greeting(self.db, "token", "chat", fields, self.session["session_id"], "User", None))
         finally:
             rt.send_text = original_send
+            rt.random.randrange = original_randrange
         self.assertEqual(sent, ["Alt User"])
         row = self.db.execute("SELECT role, content FROM messages").fetchone()
         self.assertEqual(tuple(row), ("assistant", "Alt User"))
