@@ -196,9 +196,13 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         chat_id TEXT NOT NULL,
         message_id TEXT NOT NULL,
         session_id TEXT NOT NULL,
+        owner_user_id TEXT NOT NULL DEFAULT '',
         expires_at REAL NOT NULL,
         PRIMARY KEY(chat_id, message_id)
     )""")
+    panel_columns = {row[1] for row in db.execute("PRAGMA table_info(panel_sessions)").fetchall()}
+    if "owner_user_id" not in panel_columns:
+        db.execute("ALTER TABLE panel_sessions ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT ''")
     db.execute("DELETE FROM panel_sessions WHERE expires_at < ?", (time.time(),))
     db.execute("""CREATE TABLE IF NOT EXISTS operations (
         operation_id TEXT PRIMARY KEY,
