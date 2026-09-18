@@ -151,7 +151,7 @@ def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, 
     docs = data_bank_documents(db, chat_id)
     group = group_state(db, chat_id, session["session_id"])
     return (f"Prompt inspector\nCharacter: {fields['name']}\nMessages: {message_count}\n"
-            f"Recent history limit: {MAX_HISTORY_MESSAGES}\nSession summary: {len(summary)} chars (through row {covered_until})\n"
+            f"Context input budget: ~{context_input_budget_tokens()} tokens\nHistory candidates: {context_history_candidate_limit()} messages\nSession summary: {len(summary)} chars (through row {covered_until})\n"
             f"Hindsight: {memory_mode(db, chat_id)} / {memory_scope(db, chat_id)}\n"
             f"Data Bank: {rag_mode(db, chat_id)} / {len(docs)} documents\n"
             f"Group: {'on' if group['enabled'] else 'off'} / mode={group['mode']} / members={len(group['members'])}\n"
