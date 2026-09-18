@@ -52,13 +52,13 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
 
 def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
-    history_rows = db.execute(
+    history_rows = timed_call("history_load", db.execute,
         "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC LIMIT ?",
         (chat_id, session_id, MAX_HISTORY_MESSAGES),
     ).fetchall()
     history_rows = list(reversed(history_rows))
-    rag_bundle = rag_retrieval_bundle(db, chat_id, text)
-    messages = build_chat_messages(session, fields, text, history_rows, memory_context=recall_memory_context(db, chat_id, session, fields, text), session_summary=session_summary_for_prompt(db, chat_id, session), rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle), group_context=group_context)
+    rag_bundle = timed_call("rag_retrieval", rag_retrieval_bundle, db, chat_id, text)
+    messages = timed_call("prompt_assembly", build_chat_messages, session, fields, text, history_rows, memory_context=recall_memory_context(db, chat_id, session, fields, text), session_summary=session_summary_for_prompt(db, chat_id, session), rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle), group_context=group_context)
     send_typing(token, chat_id)
     language = session.get("response_language") or "auto"
     fixed_language = normalize_response_language(language) != "auto"
@@ -80,7 +80,7 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
 
     generation_settings = get_generation_settings(db, chat_id, session_id)
     generation_session_id = f"telegram:{chat_id}:{session_id}"
-    reply = generate_text(api_key, current_model, messages, session_id=generation_session_id, settings=generation_settings, stream_callback=stream_update if stream_message_id else None)
+    reply = timed_call("provider_generation", generate_text, api_key, current_model, messages, session_id=generation_session_id, settings=generation_settings, stream_callback=stream_update if stream_message_id else None)
     reply += rag_citation_footer(db, chat_id, text, rag_bundle)
     reply = render_response_language(api_key, current_model, reply, language, generation_session_id, generation_settings)
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)

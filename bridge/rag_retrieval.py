@@ -9,18 +9,27 @@ from __future__ import annotations
 import math
 import sqlite3
 
+try:
+    import numpy as _numpy
+except ImportError:
+    _numpy = None
+
 
 DEFAULT_SEMANTIC_CANDIDATE_LIMIT = 384
 MAX_SEMANTIC_CANDIDATE_LIMIT = 2048
 DEFAULT_SEMANTIC_SAMPLE_WINDOWS = 12
 
 
-def cosine_similarity(left: list[float], right: list[float]) -> float:
+def cosine_similarity(left: list[float], right: list[float], left_norm: float | None = None, right_norm: float | None = None) -> float:
     if len(left) != len(right) or not left:
         return 0.0
-    denominator = math.sqrt(sum(value * value for value in left)) * math.sqrt(
-        sum(value * value for value in right)
-    )
+    if _numpy is not None:
+        left_array = _numpy.asarray(left, dtype=float)
+        right_array = _numpy.asarray(right, dtype=float)
+        numerator = float(_numpy.dot(left_array, right_array))
+        denominator = float(left_norm or _numpy.linalg.norm(left_array)) * float(right_norm or _numpy.linalg.norm(right_array))
+        return numerator / denominator if denominator else 0.0
+    denominator = float(left_norm or math.sqrt(sum(value * value for value in left))) * float(right_norm or math.sqrt(sum(value * value for value in right)))
     return sum(a * b for a, b in zip(left, right)) / denominator if denominator else 0.0
 
 

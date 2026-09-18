@@ -99,6 +99,10 @@ def rag_embedding_namespace() -> str:
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
 
 
+def embedding_norm(vector: list[float]) -> float:
+    return math.sqrt(sum(float(value) * float(value) for value in vector))
+
+
 def rag_embedding_headers() -> dict[str, str]:
     parsed = urllib.parse.urlparse(RAG_EMBEDDING_URL)
     host = (parsed.hostname or "").casefold()
@@ -186,7 +190,7 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
                 if vector:
                     cache_key = cache_keys[index]
                     vector_cache[cache_key] = vector
-                    db.execute("INSERT OR REPLACE INTO rag_embedding_cache(cache_key,dimensions,vector_json,created_at) VALUES(?,?,?,?)", (cache_key, len(vector), json.dumps(vector, separators=(",", ":")), time.time()))
+                    db.execute("INSERT OR REPLACE INTO rag_embedding_cache(cache_key,dimensions,vector_json,vector_norm,created_at) VALUES(?,?,?,?,?)", (cache_key, len(vector), json.dumps(vector, separators=(",", ":")), embedding_norm(vector), time.time()))
     now = time.time()
     db.execute("INSERT INTO data_bank_documents(chat_id,document_id,filename,byte_size,chunk_count,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", (chat_id, document_id, filename[:255], len(raw), len(chunks), now, now))
     for index, content in enumerate(chunks):
@@ -195,14 +199,14 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
         db.execute("INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)", (content, chat_id, document_id, filename[:255], chunk_id))
         vector = vector_cache.get(cache_keys[index])
         if vector:
-            db.execute("INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json) VALUES(?,?,?,?)", (chunk_id, namespace, len(vector), json.dumps(vector, separators=(",", ":"))))
+            db.execute("INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_norm) VALUES(?,?,?,?,?)", (chunk_id, namespace, len(vector), json.dumps(vector, separators=(",", ":")), embedding_norm(vector)))
     db.commit()
     return "added", len(chunks)
 
 
 def cached_rag_embedding(db: sqlite3.Connection, text: str) -> list[float] | None:
     cache_key = rag_embedding_namespace() + ":query:" + hashlib.sha256(text[:6000].encode("utf-8")).hexdigest()
-    row = db.execute("SELECT vector_json FROM rag_embedding_cache WHERE cache_key=?", (cache_key,)).fetchone()
+    row = db.execute("SELECT vector_json,vector_norm FROM rag_embedding_cache WHERE cache_key=?", (cache_key,)).fetchone()
     if row:
         try:
             vector = json.loads(row[0])
@@ -212,7 +216,7 @@ def cached_rag_embedding(db: sqlite3.Connection, text: str) -> list[float] | Non
             pass
     vector = embed_rag_text(text)
     if vector:
-        db.execute("INSERT OR REPLACE INTO rag_embedding_cache(cache_key,dimensions,vector_json,created_at) VALUES(?,?,?,?)", (cache_key, len(vector), json.dumps(vector, separators=(",", ":")), time.time()))
+        db.execute("INSERT OR REPLACE INTO rag_embedding_cache(cache_key,dimensions,vector_json,vector_norm,created_at) VALUES(?,?,?,?,?)", (cache_key, len(vector), json.dumps(vector, separators=(",", ":")), embedding_norm(vector), time.time()))
         db.commit()
     return vector
 
@@ -231,6 +235,7 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
         candidates[int(chunk_id)] = [str(filename), str(content), str(document_id), 0.35 * lexical_score]
     query_vector = cached_rag_embedding(db, query)
     if query_vector:
+        query_norm = embedding_norm(query_vector)
         namespace = rag_embedding_namespace()
         semantic_ids = semantic_candidate_chunk_ids(
             db,
@@ -242,7 +247,7 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
         if semantic_ids:
             placeholders = ",".join("?" for _ in semantic_ids)
             vector_rows = db.execute(
-                "SELECT e.chunk_id,c.content,d.filename,c.document_id,e.vector_json "
+                "SELECT e.chunk_id,c.content,d.filename,c.document_id,e.vector_json,e.vector_norm "
                 "FROM data_bank_embeddings e "
                 "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
                 "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
@@ -251,9 +256,13 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
             ).fetchall()
         else:
             vector_rows = []
-        for chunk_id, content, filename, document_id, vector_json in vector_rows:
+        for chunk_id, content, filename, document_id, vector_json, vector_norm in vector_rows:
             try:
-                semantic_score = (cosine_similarity(query_vector, json.loads(vector_json)) + 1.0) / 2.0
+                if vector_norm:
+                    score = cosine_similarity(query_vector, json.loads(vector_json), query_norm, float(vector_norm))
+                else:
+                    score = cosine_similarity(query_vector, json.loads(vector_json))
+                semantic_score = (score + 1.0) / 2.0
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
             item = candidates.setdefault(int(chunk_id), [str(filename), str(content), str(document_id), 0.0])

@@ -121,21 +121,26 @@ def _ensure_rag_tables(db: sqlite3.Connection) -> None:
         chunk_id INTEGER PRIMARY KEY,
         embedding_namespace TEXT NOT NULL DEFAULT 'legacy',
         dimensions INTEGER NOT NULL,
-        vector_json TEXT NOT NULL
+        vector_json TEXT NOT NULL,
+        vector_norm REAL
     )""")
     embedding_columns = {row[1] for row in db.execute("PRAGMA table_info(data_bank_embeddings)").fetchall()}
     if "embedding_namespace" not in embedding_columns:
         db.execute("ALTER TABLE data_bank_embeddings ADD COLUMN embedding_namespace TEXT NOT NULL DEFAULT 'legacy'")
+    if "vector_norm" not in embedding_columns:
+        db.execute("ALTER TABLE data_bank_embeddings ADD COLUMN vector_norm REAL")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_chunks_chat_chunk_idx ON data_bank_chunks(chat_id, chunk_id)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_namespace_chunk_idx ON data_bank_embeddings(embedding_namespace, chunk_id)")
     db.execute("""CREATE TABLE IF NOT EXISTS rag_embedding_cache (
         cache_key TEXT PRIMARY KEY,
         dimensions INTEGER NOT NULL,
         vector_json TEXT NOT NULL,
+        vector_norm REAL,
         created_at REAL NOT NULL
     )""")
-
-
+    cache_columns = {row[1] for row in db.execute("PRAGMA table_info(rag_embedding_cache)").fetchall()}
+    if "vector_norm" not in cache_columns:
+        db.execute("ALTER TABLE rag_embedding_cache ADD COLUMN vector_norm REAL")
 
 def _ensure_job_tables(db: sqlite3.Connection) -> None:
     """Create durable update, failed-turn, and job tables and clean old rows."""
