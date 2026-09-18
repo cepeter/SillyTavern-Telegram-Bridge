@@ -219,6 +219,8 @@ def _ensure_job_tables(db: sqlite3.Connection) -> None:
     db.execute("DELETE FROM jobs WHERE state='done' AND updated_at < ?", (time.time() - 30 * 86400,))
     db.execute("DELETE FROM jobs WHERE state='failed' AND updated_at < ?", (time.time() - 90 * 86400,))
     db.execute("DELETE FROM failed_turns WHERE updated_at < ?", (time.time() - 90 * 86400,))
+    if "optimize_database" in globals():
+        optimize_database(db)
 
 
 
@@ -317,6 +319,12 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
 
 def initialize_database_schema(db: sqlite3.Connection) -> None:
     """Create or migrate bridge tables while preserving existing data."""
+    has_tables = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone() is not None
+    if not has_tables:
+        try:
+            db.execute("PRAGMA auto_vacuum = INCREMENTAL")
+        except sqlite3.OperationalError:
+            pass
     _ensure_core_tables(db)
     _ensure_generation_tables(db)
     _ensure_rag_tables(db)

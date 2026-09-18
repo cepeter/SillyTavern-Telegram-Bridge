@@ -39,6 +39,8 @@ def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dic
     if operation_id is not None:
         record_operation(db, operation_id, "reset")
         db.commit()
+    if "optimize_database" in globals():
+        optimize_database(db)
 
 
 def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str, meta_key: str, state: dict, text: str) -> None:
