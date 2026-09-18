@@ -1,15 +1,20 @@
 def _default_session_persona(db: sqlite3.Connection) -> str:
-    configured = str(get_meta(db, "persona_id", "") or "").strip()
-    if configured and get_persona(configured):
-        return configured
     return default_persona_id()
 
 
-def _default_session_world(db: sqlite3.Connection) -> str:
-    configured = str(get_meta(db, "world_file", "") or "").strip()
-    if configured and any(safe_world_path(name) for name in active_world_files(configured)):
-        return configured
+def _native_default_world() -> str:
+    try:
+        settings = json.loads(NATIVE_PERSONA_SETTINGS_FILE.read_text(encoding="utf-8"))
+        selected = (((settings.get("world_info_settings") or {}).get("world_info") or {}).get("globalSelect") or [])
+        if isinstance(selected, list):
+            return encode_world_files([str(name) for name in selected])
+    except (OSError, ValueError, TypeError, AttributeError):
+        logging.warning("Could not read native SillyTavern World Info defaults", exc_info=True)
     return ""
+
+
+def _default_session_world(db: sqlite3.Connection) -> str:
+    return _native_default_world()
 
 
 def _normalize_session_defaults(db: sqlite3.Connection, session: dict[str, str]) -> dict[str, str]:

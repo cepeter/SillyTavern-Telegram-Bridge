@@ -73,7 +73,7 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertEqual(settings["unrelated"], {"keep": True})
 
     def test_default_persona_resolves_only_native_persona(self):
-        self.assertEqual(rt.default_persona_id(), "bridge-user.png")
+        self.assertEqual(rt.default_persona_id(), "")
         self.assertEqual(rt.persona_name(""), "")
 
     def test_edit_name_and_description_updates_native_settings(self):

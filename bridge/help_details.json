@@ -1,5 +1,5 @@
 {
-  "/start": "Sends only the active character card's opening message and stores it as an assistant turn.",
+  "/start": "Explains that Persona, World Info, and System Prompt selection are optional. Type start as a plain message to show the active character card's opening message and store it as an assistant turn.",
   "/help": "Opens this guide. Choose a category, then choose a command to view its behavior and available input form.",
   "/status": "Shows the active character, session, model, response language, persona, World Info, memory, RAG, group, and generation state.",
   "/new": "Asks for a 1–80 character name, then creates and activates a separate session. /cancel leaves no empty session behind.",

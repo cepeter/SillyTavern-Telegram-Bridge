@@ -250,7 +250,7 @@ prevents accidental changes.
 ### Everyday commands
 
 ```text
-/start              Send the character card's opening message
+/start              Explain optional Persona, World Info, and System Prompt setup; type `start` for the greeting
 /status             Show active card, session, model, memory, RAG, and generation state
 /new                Create and activate a named isolated session
 /reset              Confirm an active-session reset and memory purge
@@ -371,7 +371,7 @@ Forum Topic group state, when applicable
 3. Clears the local conversation, variants, failed turns, summary, and data.
 4. The session stays available, now empty.
 5. Does **not** send the character greeting. It sends a short reset-complete
-   confirmation instead. Use `/start` if you want the character's opening message.
+   confirmation instead. Type `start` if you want the character's opening message.
 
 The confirmation text spells out exactly what gets deleted: the conversation,
 Hindsight memories, SQLite session data, and session documents.

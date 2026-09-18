@@ -10,14 +10,17 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         send_help_menu(token, chat_id)
         return True
     if command == "/start":
-        if operation_id is not None and (operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "start")):
+        send_text(token, chat_id, "Persona, World Info, and System Prompt selection are optional. Type `start` to show the character greeting message.")
+        return True
+    if command == "start":
+        if operation_id is not None and (operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "start_greeting")):
             return True
         greeting = replace_macros(fields.get("first_mes") or "", fields, user_name).strip()
         if greeting:
             message_ids = send_text(token, chat_id, greeting)
             db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "assistant", greeting, json.dumps(message_ids), time.time()))
             if operation_id is not None:
-                record_operation(db, operation_id, "start")
+                record_operation(db, operation_id, "start_greeting")
             db.commit()
         return True
     if command == "/help":

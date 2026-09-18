@@ -330,11 +330,13 @@ def main() -> int:
                     continue
                 message_id = int(message.get("message_id"))
                 queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                if not str(text).lstrip().startswith("/") and not group_user_turn_allowed(db, chat_id, queued_session_id, sender):
+                normalized_text = str(text).strip().casefold()
+                is_plain_start = normalized_text == "start"
+                if not str(text).lstrip().startswith("/") and not is_plain_start and not group_user_turn_allowed(db, chat_id, queued_session_id, sender):
                     send_text(token, chat_id, "It is not your turn in manual group mode.")
                     complete_update(db, update_id, offset)
                     continue
-                if is_long_running_command(str(text)):
+                if is_plain_start or is_long_running_command(str(text)):
                     job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "command", {"text": str(text), "model": model, "resolve_active": True})
                     queued = submit_durable_chat_job(db, "command", chat_id, process_message_job, token, api_key, model, fields, chat_id, str(text), message_id, None, job_id)
                     send_text(token, chat_id, "⏳ Command queued." if queued else "⏳ Command saved for execution after restart.")

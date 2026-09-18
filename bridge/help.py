@@ -1,6 +1,6 @@
 HELP_CATEGORIES = {
     "basic": [
-        ("/start", "Send the character card's first message only."),
+        ("/start", "Explain that Persona, World Info, and System Prompt are optional; type start to show the character greeting."),
         ("/help", "Open this help menu; use /help <command> for one command."),
         ("/status", "Show active card, session, model, memory, RAG, group, and generation state."),
         ("/new", "Name, create, and activate a new isolated session."),
@@ -430,7 +430,7 @@ def set_bot_commands(token: str) -> None:
     try:
         telegram_request(token, "setMyCommands", {
             "commands": [
-                {"command": "start", "description": "Send character first message"},
+                {"command": "start", "description": "Show optional setup instructions"},
                 {"command": "help", "description": "Show commands"},
                 {"command": "providers", "description": "Open provider catalog; catalog-only entries are view-only"},
                 {"command": "character", "description": "Open character management panel"},

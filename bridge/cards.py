@@ -167,8 +167,6 @@ def default_persona_id() -> str:
         configured = str((power_user or {}).get("default_persona") or "").strip()
         if configured in personas:
             return configured
-        if len(personas) == 1:
-            return next(iter(personas))
     except Exception:
         logging.warning("Could not resolve the native default Persona", exc_info=True)
     return ""
