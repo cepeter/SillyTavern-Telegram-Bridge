@@ -25,8 +25,8 @@ HELP_CATEGORY_TITLES = {
 }
 
 HELP_CATEGORY_INTROS = {
-    "basic": "Start a conversation, inspect the current session, or manage sessions.",
-    "characters": "Choose the character, persona, lore, system prompt, or reply language used by this session.",
+    "basic": "Start a conversation, check what's active, or manage your sessions.",
+    "characters": "Pick the character, persona, lore, system prompt, or reply language for this session.",
     "generation": "Control how replies are generated, edited, continued, streamed, and retried.",
     "memory_rag": "Manage memory, summaries, and Data Bank search for this chat.",
     "voice_group": "Use voice features and manage multi-character group chats in Forum Topics.",

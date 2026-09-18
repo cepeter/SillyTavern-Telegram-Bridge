@@ -1,43 +1,79 @@
 {
-  "/start": "Checks Persona, World Info, and System Prompt. If all three are enabled, it sends and stores the active character card's first opening message; otherwise it shows their current off status and setup recommendations. Type start as a plain message to show the greeting regardless.",
+  "/start": "Checks that your Persona, World Info, and System Prompt are all turned on. If they are, it sends and stores the character's opening message. If not, it shows you what's off and how to fix it. You can also just type \"start\" as a plain message to get the greeting regardless.",
 
-  "/help": "Opens this guide. Choose a category, then choose a command to view its behavior and available input form.",
-  "/status": "Shows the active character, session, model, response language, persona, World Info, memory, RAG, group, and generation state.",
-  "/new": "Asks for a 1–80 character name, then creates and activates a separate session. /cancel leaves no empty session behind.",
-  "/reset": "Opens confirmation first. Confirming clears the active session conversation, deletes only that session's Hindsight documents, preserves other sessions, and leaves the session empty without sending the character opening greeting.",
-  "/session": "Opens session controls for switching, creating, or deleting inactive sessions. Deletion removes that session's SQLite state and session-scoped Hindsight documents while preserving memories from other sessions; it fails closed when Hindsight is unavailable. New session asks for a validated name first; busy or active sessions cannot be deleted.",
-  "/sync": "Opens session-scoped Live Sync through the local SillyTavern API only; chat-file polling and JSONL transcript transfer are not used. Realtime API toggle performs initial reconciliation before enabling; Sync now runs a one-shot API reconciliation even when background realtime is off; Refresh status only redraws state. Sync-ID mismatch, initial divergence, two-sided edits, or oversized API records stop synchronization instead of choosing a winner. Credentials and application-private state stay separate.",
-  "/update": "Checks the latest GitHub release and shows installed version, latest version, and bounded release notes. If both versions match, it shows Already latest and performs no update, sync, or restart. Otherwise Confirm update runs only with a clean checkout and fast-forwardable origin/main, then synchronizes the live bridge and restarts the service; Cancel performs no update.",
-  "/providers": "Opens the provider/model catalog. Select an adapter-enabled model; catalog-only entries cannot run inference.",
-  "/providers refresh": "Opens the provider panel, where Refresh models updates discoverable provider catalogs.",
-  "/providers health": "Opens the provider panel, where Provider health checks configured endpoints without exposing credentials. Providers without GET /models can use health_check: chat_completion for a bounded streaming chat probe.",
-  "/character": "Opens character selection, refresh, card information, upload guidance, and safe deletion controls. Refresh reloads native card labels and treats an unchanged redraw as success. Native SillyTavern renames rebind stale session filenames only when one unique card identity is proven.",
-  "/persona": "Opens native SillyTavern Persona controls. Choose, create, edit, or disable Persona metadata stored in settings.json and avatars stored in the native User Avatars folder. Delete opens an inactive Persona picker; the active Persona and Personas referenced by another session are protected.",
-  "/world": "Opens World Info selection. Multiple validated JSON lorebooks can be active together.",
-  "/note": "Opens Author's Note controls: Off clears it, and User input consumes the next scoped text message.",
-  "/systemprompt": "Opens the TXT System Prompt picker. The prompt body stays private and is applied during generation.",
-  "/language": "Opens per-session model reply language controls. Auto follows the user's language with no extra rendering request. A fixed language applies a final bounded language-render pass to every normal, image, edit, regenerate, and continue response; streaming preview is disabled so only the final target-language output is shown.",
-  "/expression": "Opens session-scoped character expression controls. Automatic mode classifies the model reply locally and sends a native sprite only when the effective expression changes. Manual mode selects a discovered sprite; neutral or the fixed avatar is used as fallback.",
-  "/imagine": "Opens scoped prompt input for an explicitly enabled OpenAI-compatible Images provider. Enter 1–4,000 characters or use /imagine <prompt>; unsupported or unconfigured providers fail closed. /cancel aborts pending input.",
-  "/settings": "Opens generation settings. Choose reasoning or enter validated values for temperature, token limits, sampling, penalties, and stop sequences.",
-  "/stream on|off": "Opens streaming controls. Streaming edits a temporary preview and sends the complete final response afterward.",
-  "/preset": "Opens preset controls for applying, saving, or deleting validated generation settings.",
-  "/macro": "Opens a panel, then accepts one text message to preview supported SillyTavern macros. Send /cancel to leave without running it.",
-  "/stscript": "Opens the allowlisted STscript panel. Reset opens the normal active-session confirmation and affects only the active session.",
-  "/regen": "Generates a new response variant for the latest user turn.",
-  "/swipe": "Opens stored response variants. Browse them and keep one as the selected response.",
+  "/help": "Opens this guide. Pick a category, then tap a command to see what it does and what it changes.",
+
+  "/status": "Shows you everything about the current session at a glance — active character, session name and ID, model, response language, persona, World Info, memory mode, RAG, group state, and generation settings.",
+
+  "/new": "Creates a fresh isolated session. It asks for a name first (1–80 characters), then switches you to it. Send /cancel if you change your mind — no empty session is left behind.",
+
+  "/reset": "Opens a confirmation panel first. When you confirm, it clears the conversation, deletes only that session's Hindsight documents, and wipes its variants and summary. Other sessions are untouched. The session stays available but empty — it won't send the character greeting afterward. Type \"start\" if you want the opening message.",
+
+  "/session": "Lets you switch between sessions, create new ones, or delete inactive ones. Deleting a session removes its SQLite data and session-scoped Hindsight documents, but only if Hindsight cleanup succeeds — if it can't verify cleanup, it keeps the session rather than leaving orphaned memories. Active or busy sessions can't be deleted.",
+
+  "/sync": "Opens Live API Sync for this session. It talks to SillyTavern's local API — no chat files or JSONL transfers. Toggle realtime to do an initial reconciliation before turning on background sync. Sync now runs a one-shot API reconciliation even when background realtime is off; Refresh status only redraws state. If there's a sync-ID mismatch, initial divergence, two-sided edits, or oversized API records, sync stops instead of guessing. Credentials stay separate from Telegram.",
+
+  "/update": "Checks GitHub for the latest release and shows your installed version, the latest version, and short release notes. If you're already up to date, it says so and does nothing. If an update is available, it opens a confirmation panel — confirm only works with a clean checkout and a fast-forwardable main branch, then it syncs the live bridge and restarts the service. Cancel does nothing.",
+
+  "/providers": "Opens the provider and model catalog. Pick a model that has its adapter enabled — catalog-only entries are view-only and can't run inference.",
+
+  "/providers refresh": "Opens the provider panel, where Refresh models updates the discoverable provider catalogs.",
+
+  "/providers health": "Opens the provider panel, where Provider health checks your configured endpoints without exposing credentials. Providers without a GET /models route can use a bounded streaming chat probe instead.",
+
+  "/character": "Opens the character panel — pick a card, refresh labels, view card info, get upload guidance, or delete a card safely. Refresh reloads native card labels and treats an unchanged redraw as success. If SillyTavern renamed a card, the bridge rebinds stale session references only when it can prove exactly one unique match.",
+
+  "/persona": "Opens native SillyTavern Persona controls. Choose, create, edit, or disable a Persona — all stored in settings.json and the native User Avatars folder. The review panel includes Send description to copy, which sends the full Persona description as a plain Telegram message so you can copy it without truncation. Delete only targets inactive, unreferenced Personas — the active one and any used by other sessions are protected.",
+
+  "/world": "Opens World Info selection. You can activate multiple JSON lorebooks at the same time — they're validated and merged at prompt time.",
+
+  "/note": "Opens the Author's Note panel. Off clears it. User input waits for your next scoped text message and uses it as the note.",
+
+  "/systemprompt": "Opens the native TXT System Prompt picker. The prompt body stays private — it's applied during generation, but menus and /status only show the label.",
+
+  "/language": "Opens per-session reply language controls. Auto follows whatever language you're writing in. A fixed language adds a final render pass to every response so it comes out in that language — streaming preview is disabled in fixed mode so you only see the final output.",
+
+  "/expression": "Opens character expression controls for this session. Automatic mode reads the model's reply, classifies the emotion locally, and sends a native sprite only when the expression actually changes. Manual mode lets you pick a sprite directly. If no matching sprite exists, it falls back to neutral, then the avatar, then text-only.",
+
+  "/imagine": "Opens prompt input for image generation — but only when you've explicitly configured an image provider. Enter 1–4,000 characters, or use /imagine <prompt> directly. Unconfigured or unsupported providers fail closed. /cancel aborts.",
+
+  "/settings": "Opens the generation settings panel for this session. Pick a reasoning level or tap a field to enter your own value for temperature, max tokens, top P, frequency penalty, presence penalty, or stop sequences.",
+
+  "/stream on|off": "Opens streaming controls. When streaming is on, you get a live preview that updates as the model generates — the final response replaces it when done.",
+
+  "/preset": "Opens preset controls. Apply, save, or delete validated generation setting presets — all from the panel.",
+
+  "/macro": "Opens a panel, then waits for one text message to preview supported SillyTavern macros. Send /cancel to leave without running anything.",
+
+  "/stscript": "Opens the allowlisted STscript panel. Only safe bridge actions are exposed — no shell commands, no filesystem access, no network requests. Reset goes through the normal session confirmation flow.",
+
+  "/regen": "Generates a fresh response variant for your latest user turn. The previous variant is kept — use /swipe to browse them.",
+
+  "/swipe": "Opens stored response variants for the latest turn. Browse through them and keep the one you like best.",
+
   "/branch": "Opens the response branch selector for the active session.",
-  "/continue": "Continues the latest assistant response using the current session context. Normal generation automatically requests one bounded continuation when the provider stops at its output-token limit; use /continue only if another segment is still needed.",
-  "/edit": "Opens a panel, then accepts replacement text for the latest user turn. Send /cancel to leave it unchanged.",
-  "/retry": "Retries the latest failed response without creating a duplicate committed assistant turn.",
-  "/prompt": "Shows safe prompt diagnostics such as active character, history, summary, memory, RAG, group, and World Info state.",
-  "/memory": "Opens Hindsight memory mode and session-scoped search controls. Recall is always limited to the active session.",
-  "/remember": "Opens a panel, then accepts one explicit long-term fact for Hindsight. Send /cancel to leave without storing it.",
-  "/summarize": "Regenerates the active session summary from stored transcript content.",
-  "/databank": "Opens Data Bank RAG controls for status, listing, search, removal, and reindexing.",
 
-  "/voice on|off": "Enables or disables automatic voice replies. When enabled, complete dialogue enclosed in straight double quotes from user messages and model replies is synthesized; narration and unquoted text are not spoken.",
-  "/voice_input on|off": "Opens transcription, STT model, and language controls.",
-  "/voice_input language": "Opens STT language controls, including Auto, fixed codes, and scoped User input.",
-  "/group": "Available only inside a Telegram Forum Topic. Opens topic-local group controls; New group session asks for a validated name before opening the Character and World Info wizard."
+  "/continue": "Continues the latest assistant response from where it left off. The bridge also auto-continues once when a provider hits its output token limit — use /continue only if you still want more.",
+
+  "/edit": "Opens a panel, then waits for replacement text for your latest user message. Send /cancel to leave it unchanged. The response is regenerated from the edited text.",
+
+  "/retry": "Retries the latest failed character response. It replays the original message without creating a duplicate committed turn — clean recovery after a crash or timeout.",
+
+  "/prompt": "Shows safe prompt diagnostics — active character, history length, summary, memory, RAG, group, and World Info state. It doesn't dump the full prompt.",
+
+  "/memory": "Opens Hindsight memory controls. You can turn memory on or off and search within the active session. Recall is always session-scoped — it never pulls in memories from other sessions, users, or characters.",
+
+  "/remember": "Opens a panel, then waits for one explicit long-term fact to store in Hindsight. Send /cancel to leave without storing anything.",
+
+  "/summarize": "Regenerates the active session's summary from its stored conversation. Useful after long sessions or when switching models.",
+
+  "/databank": "Opens Data Bank RAG controls — check status, list documents, search, remove, or reindex. Reindex when you change embedding model, dimensions, or revision.",
+
+  "/voice on|off": "Turns automatic voice replies on or off. When on, any dialogue in straight double quotes gets synthesized — from both your messages and character replies. Narration and unquoted text stay silent.",
+
+  "/voice_input on|off": "Opens transcription controls — pick a STT model and choose Auto, a fixed language code, or User input for language.",
+
+  "/voice_input language": "Opens the STT language panel. Auto detects from the audio, a fixed code forces one language, and User input asks you each time.",
+
+  "/group": "Only works inside a Telegram Forum Topic. Opens topic-local group controls — New group session asks for a name, then walks you through picking characters and World Info."
 }
