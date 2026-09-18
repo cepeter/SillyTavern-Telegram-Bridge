@@ -101,8 +101,9 @@ execute the SillyTavern source tree.
 
 ### Media and orchestration
 
-- Quote-driven automatic Edge TTS speaks only model dialogue in straight double
-  quotes; narration and unquoted text are not synthesized.
+- Quote-driven automatic Edge TTS speaks complete dialogue in straight double quotes
+  from both user messages and model replies when voice mode is enabled; narration,
+  action spans, and unquoted text are not synthesized.
 - Local Faster-Whisper handles voice input with configurable model and language.
 - Native expression sprites support automatic local classification, manual choice,
   and off mode. Sprites are sent only when the effective expression changes, with
@@ -423,9 +424,9 @@ I heard something outside.           User dialogue without a marker
 The bridge recognizes single-star spans (`*text*`) and presents them to the
 model as `User action`; the remaining text is presented as `User dialogue`.
 Double-star spans (`**text**`) are preserved literally and are not interpreted
-as actions. Quotation marks do not trigger TTS for user messages; automatic
-voice replies apply only to eligible quoted dialogue in model responses when
-`/voice on` is enabled. The stored user transcript remains unchanged.
+as actions. Quotation marks in a user message trigger a queued voice message when `/voice on`
+  is enabled; they do not change the stored transcript. Automatic voice replies
+  also apply to eligible quoted dialogue in model responses.
 
 ## Characters, Personas, prompts, and World Info
 
@@ -480,8 +481,8 @@ is unchanged.
 
 ### Voice input and output
 
-- `/voice` toggles automatic TTS. Only text inside straight double quotes is
-  synthesized; narration, actions, and unquoted text remain text-only.
+- `/voice` toggles automatic TTS for complete straight-quoted dialogue in both user
+  messages and model replies. Narrative, actions, and unquoted text remain text-only.
 - `/voice_input` configures local Faster-Whisper transcription, the STT model,
   and the language. Language can be Auto, a fixed 2–8 letter code, or scoped
   user input.

@@ -112,6 +112,21 @@ def quoted_speech_from_reply(text: str) -> str:
     return re.sub(r"\s+", " ", " ".join(quoted)).strip()
 
 
+def queue_user_quote_tts(token: str, chat_id: str, text: str, db: sqlite3.Connection, session_id: str, message_id: int | None = None) -> bool:
+    """Queue quoted user dialogue for TTS without changing the transcript."""
+    if get_meta(db, f"voice_mode:{chat_id}", "off") != "tts":
+        return False
+    speech = quoted_speech_from_reply(text)
+    if not speech:
+        return False
+    stable_id = str(message_id) if message_id is not None else hashlib.sha256(f"{session_id}\0{text}".encode("utf-8")).hexdigest()[:24]
+    operation_id = f"user-tts:{chat_id}:{session_id}:{stable_id}"
+    if not submit_background("tts", send_tts, token, chat_id, speech, operation_id):
+        logging.warning("Automatic user-quote TTS dropped for chat %s", chat_id)
+        return False
+    return True
+
+
 def send_reply(token: str, chat_id: str, text: str, db: sqlite3.Connection | None = None, session_id: str | None = None, assistant_rowid: int | None = None) -> None:
     if db is not None and session_id:
         deliver_expression(token, chat_id, text, db, session_id)

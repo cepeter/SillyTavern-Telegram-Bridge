@@ -35,7 +35,7 @@
   "/summarize": "Regenerates the active session summary from stored transcript content.",
   "/databank": "Opens Data Bank RAG controls for status, listing, search, removal, and reindexing.",
 
-  "/voice on|off": "Enables or disables automatic voice replies. When enabled, only model dialogue enclosed in straight double quotes is synthesized; narration and unquoted text are not spoken.",
+  "/voice on|off": "Enables or disables automatic voice replies. When enabled, complete dialogue enclosed in straight double quotes from user messages and model replies is synthesized; narration and unquoted text are not spoken.",
   "/voice_input on|off": "Opens transcription, STT model, and language controls.",
   "/voice_input language": "Opens STT language controls, including Auto, fixed codes, and scoped User input.",
   "/group": "Available only inside a Telegram Forum Topic. Opens topic-local group controls; New group session asks for a validated name before opening the Character and World Info wizard."

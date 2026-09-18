@@ -106,6 +106,7 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
                 telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": stream_message_id, "text": "\u2063", "reply_markup": {"inline_keyboard": []}})
             except Exception:
                 logging.info("Could not hide completed streaming preview", exc_info=True)
+    queue_user_quote_tts(token, chat_id, text, db, session_id, telegram_message_id)
     send_reply(token, chat_id, stored_reply, db, session_id, assistant_rowid)
 
 
