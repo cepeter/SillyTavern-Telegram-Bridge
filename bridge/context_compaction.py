@@ -169,7 +169,9 @@ def compact_chat_messages(
     rag_trimmed = memory_trimmed = summary_trimmed = False
 
     def current_tokens() -> int:
-        return estimate_message_tokens(compacted)
+        return estimate_message_tokens(
+            [message for message in compacted if not message.get("_drop_for_context")]
+        )
 
     if original_tokens <= budget:
         return compacted, {
