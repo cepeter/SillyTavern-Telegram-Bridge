@@ -73,7 +73,7 @@ class SqliteContentionTests(unittest.TestCase):
             ("chat", "900", "session"),
         ).fetchone())
 
-    def test_send_message_retries_one_transient_not_found(self):
+    def test_send_message_retries_transient_not_found(self):
         calls = []
         original_urlopen = rt.urllib.request.urlopen
         original_sleep = rt.time.sleep
@@ -86,7 +86,7 @@ class SqliteContentionTests(unittest.TestCase):
                 return b'{"ok": true, "result": {"message_id": 901}}'
         def fake_urlopen(*_args, **_kwargs):
             calls.append(True)
-            if len(calls) == 1:
+            if len(calls) <= 2:
                 raise rt.urllib.error.HTTPError("https://api.telegram.org", 404, "Not Found", {}, __import__("io").BytesIO(b'{"ok": false, "description": "Not Found"}'))
             return Response()
         rt.urllib.request.urlopen = fake_urlopen
@@ -97,7 +97,7 @@ class SqliteContentionTests(unittest.TestCase):
             rt.urllib.request.urlopen = original_urlopen
             rt.time.sleep = original_sleep
         self.assertEqual(result, {"message_id": 901})
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 3)
 
     def test_enqueue_job_does_not_retry_after_full_timeout(self):
         """Regression: enqueue_job should not catch every OperationalError and retry after 30s busy timeout."""

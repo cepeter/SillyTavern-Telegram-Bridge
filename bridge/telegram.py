@@ -175,7 +175,7 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
         data = json.dumps(request_payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
-    for attempt in range(2 if method == "sendMessage" else 1):
+    for attempt in range(3 if method == "sendMessage" else 1):
         try:
             with urllib.request.urlopen(req, timeout=65) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -184,16 +184,16 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
                 detail = json.loads(exc.read().decode("utf-8")).get("description") or exc.reason
             except (OSError, ValueError, json.JSONDecodeError):
                 detail = exc.reason
-            if method == "sendMessage" and exc.code == 404 and attempt == 0:
-                logging.warning("Telegram sendMessage returned 404; retrying once")
-                time.sleep(0.5)
+            if method == "sendMessage" and exc.code == 404 and attempt < 2:
+                logging.warning("Telegram sendMessage returned 404; retrying (attempt %s/3)", attempt + 2)
+                time.sleep(0.5 * (attempt + 1))
                 continue
             raise RuntimeError(f"Telegram {method} failed: {detail}") from exc
         if not result.get("ok"):
             detail = result.get("description") or "unknown Telegram error"
-            if method == "sendMessage" and detail == "Not Found" and attempt == 0:
-                logging.warning("Telegram sendMessage returned Not Found; retrying once")
-                time.sleep(0.5)
+            if method == "sendMessage" and detail == "Not Found" and attempt < 2:
+                logging.warning("Telegram sendMessage returned Not Found; retrying (attempt %s/3)", attempt + 2)
+                time.sleep(0.5 * (attempt + 1))
                 continue
             raise RuntimeError(f"Telegram {method} failed: {detail}")
         break

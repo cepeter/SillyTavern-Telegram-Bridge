@@ -76,7 +76,14 @@ def process_message_job(token: str, api_key: str, model: str, fields: dict, chat
             record_failed_turn(db, chat_id, message_id, text, model, str(exc), queued_session_id or "")
             if job_id is not None:
                 finish_job(db, job_id, "failed", str(exc))
-            send_text(token, chat_id, "The character backend failed for this message. Use /retry or /status.")
+            if str(text).lstrip().startswith("/"):
+                if "Telegram sendMessage failed" in str(exc):
+                    failure_message = "Telegram could not deliver this command. The character backend was not called; retry the command."
+                else:
+                    failure_message = "The command failed. Use /status for details, then retry the command."
+            else:
+                failure_message = "The character backend failed for this message. Use /retry or /status."
+            send_text(token, chat_id, failure_message)
         finally:
             set_panel_actor_context(None)
             set_db_connection_context(None)
