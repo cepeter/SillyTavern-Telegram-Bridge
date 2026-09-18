@@ -32,6 +32,7 @@ def process_message_job(token: str, api_key: str, model: str, fields: dict, chat
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
+            set_panel_actor_context(job_actor_id(db, job_id))
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 recovery_session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
@@ -58,6 +59,7 @@ def process_message_job(token: str, api_key: str, model: str, fields: dict, chat
                 finish_job(db, job_id, "failed", str(exc))
             send_text(token, chat_id, "The character backend failed for this message. Use /retry or /status.")
         finally:
+            set_panel_actor_context(None)
             db.close()
 
 
@@ -98,6 +100,7 @@ def process_callback_job(token: str, chat_id: str, callback: dict, job_id: int |
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
+            set_panel_actor_context(str((callback.get("from") or {}).get("id", "")))
             if job_id is not None and operation_was_applied(db, job_id):
                 finish_job(db, job_id, "done")
                 return
@@ -112,6 +115,7 @@ def process_callback_job(token: str, chat_id: str, callback: dict, job_id: int |
                 finish_job(db, job_id, "failed", str(exc))
             send_text(token, chat_id, "Callback processing failed; try the command again.")
         finally:
+            set_panel_actor_context(None)
             db.close()
 
 
@@ -267,7 +271,7 @@ def main() -> int:
                     if edited_sender in permitted and edited_chat_id and edited_text:
                         edited_message_id = int(edited_message.get("message_id") or 0)
                         edited_session_id = ensure_session(db, edited_chat_id, model)["session_id"]
-                        job_id = enqueue_job(db, update_id, edited_chat_id, edited_session_id, edited_message_id, "edit", {"text": str(edited_text)[:12000], "model": model})
+                        job_id = enqueue_job(db, update_id, edited_chat_id, edited_session_id, edited_message_id, "edit", {"text": str(edited_text)[:12000], "model": model, "actor_id": edited_sender})
                         submit_durable_chat_job(db, "edit", edited_chat_id, process_edit_job, token, api_key, edited_chat_id, edited_message_id, str(edited_text)[:12000], model, job_id)
                         send_text(token, edited_chat_id, "✏️ Edit queued; previous branch will be preserved until regeneration succeeds.")
                     complete_update(db, update_id, offset)
@@ -292,7 +296,7 @@ def main() -> int:
                 if voice:
                     message_id = int(message.get("message_id"))
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "voice", {"voice": voice, "model": model, "resolve_active": True})
+                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "voice", {"voice": voice, "model": model, "resolve_active": True, "actor_id": sender})
                     queued = submit_durable_chat_job(db, "voice", chat_id, process_voice_job, token, api_key, model, fields, chat_id, voice, message_id, None, job_id)
                     if queued:
                         send_text(token, chat_id, "🎙️ Voice queued for transcription.")
@@ -304,7 +308,7 @@ def main() -> int:
                     largest = photos[-1]
                     message_id = int(message.get("message_id"))
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "image", {"file_id": str(largest.get("file_id", "")), "caption": caption, "file_size": int(largest.get("file_size") or 0), "model": model, "resolve_active": True})
+                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "image", {"file_id": str(largest.get("file_id", "")), "caption": caption, "file_size": int(largest.get("file_size") or 0), "model": model, "resolve_active": True, "actor_id": sender})
                     queued = submit_durable_chat_job(db, "image", chat_id, process_image_job, token, chat_id, str(largest.get("file_id", "")), caption, model, int(largest.get("file_size") or 0), message_id, None, job_id)
                     send_text(token, chat_id, "🖼️ Image queued for analysis." if queued else "🖼️ Image saved for processing after restart.")
                     complete_update(db, update_id, offset)
@@ -312,7 +316,7 @@ def main() -> int:
                 if document and Path(str(document.get("file_name") or "")).suffix.casefold() != ".png" and str(document.get("mime_type") or "").startswith("image/"):
                     message_id = int(message.get("message_id"))
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "image", {"file_id": str(document.get("file_id", "")), "caption": caption, "file_size": int(document.get("file_size") or 0), "model": model, "resolve_active": True})
+                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "image", {"file_id": str(document.get("file_id", "")), "caption": caption, "file_size": int(document.get("file_size") or 0), "model": model, "resolve_active": True, "actor_id": sender})
                     queued = submit_durable_chat_job(db, "image", chat_id, process_image_job, token, chat_id, str(document.get("file_id", "")), caption, model, int(document.get("file_size") or 0), message_id, None, job_id)
                     send_text(token, chat_id, "🖼️ Image queued for analysis." if queued else "🖼️ Image saved for processing after restart.")
                     complete_update(db, update_id, offset)
@@ -320,7 +324,7 @@ def main() -> int:
                 if document:
                     message_id = int(message.get("message_id"))
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "document", {"document": document, "model": model, "resolve_active": True})
+                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "document", {"document": document, "model": model, "resolve_active": True, "actor_id": sender})
                     queued = submit_durable_chat_job(db, "document", chat_id, process_document_job, token, chat_id, document, model, message_id, job_id)
                     send_text(token, chat_id, "📄 Document queued for character-card processing or Data Bank indexing." if queued else "📄 Document saved for processing after restart.")
                     complete_update(db, update_id, offset)
@@ -337,15 +341,15 @@ def main() -> int:
                     complete_update(db, update_id, offset)
                     continue
                 if is_plain_start or is_long_running_command(str(text)):
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "command", {"text": str(text), "model": model, "resolve_active": True})
+                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "command", {"text": str(text), "model": model, "resolve_active": True, "actor_id": sender})
                     queued = submit_durable_chat_job(db, "command", chat_id, process_message_job, token, api_key, model, fields, chat_id, str(text), message_id, None, job_id)
                     send_text(token, chat_id, "⏳ Command queued." if queued else "⏳ Command saved for execution after restart.")
                 elif str(text).lstrip().startswith("/"):
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "command", {"text": str(text), "model": model, "resolve_active": True})
+                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "command", {"text": str(text), "model": model, "resolve_active": True, "actor_id": sender})
                     submit_durable_chat_job(db, "command", chat_id, process_message_job, token, api_key, model, fields, chat_id, str(text), message_id, None, job_id)
                     send_text(token, chat_id, "⏳ Command queued.")
                 else:
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "generation", {"text": str(text), "model": model, "resolve_active": True})
+                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "generation", {"text": str(text), "model": model, "resolve_active": True, "actor_id": sender})
                     queued = submit_durable_chat_job(db, "generation", chat_id, process_message_job, token, api_key, model, fields, chat_id, str(text), message_id, None, job_id)
                     send_text(token, chat_id, "⏳ Message queued for generation." if queued else "⏳ Message saved for generation after restart.")
                 complete_update(db, update_id, offset)
