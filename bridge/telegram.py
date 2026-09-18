@@ -221,7 +221,7 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
 
 def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None) -> None:
     if file_size > IMAGE_MAX_BYTES:
-        send_text(token, chat_id, "Image terlalu besar. Batasnya 8 MB.")
+        send_text(token, chat_id, "Image is too large. The limit is 8 MB.")
         return
     image_bytes = download_telegram_file(token, file_id, IMAGE_MAX_BYTES)
     session = load_session(db, chat_id, queued_session_id, default_model) if queued_session_id else ensure_session(db, chat_id, default_model)
@@ -273,12 +273,12 @@ def prune_character_backups(name: str, keep: int = 10) -> None:
 
 def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, filename: str, raw: bytes) -> None:
     if len(raw) > RAG_MAX_FILE_BYTES:
-        send_text(token, chat_id, "Character card terlalu besar. Batasnya 10 MB.")
+        send_text(token, chat_id, "Character card is too large. The limit is 10 MB.")
         return
     try:
         fields = card_fields(parse_png_chara_bytes(raw))
     except Exception:
-        send_text(token, chat_id, "PNG ini bukan character card SillyTavern yang valid; metadata chara tidak ditemukan.")
+        send_text(token, chat_id, "This PNG is not a valid SillyTavern character card; chara metadata was not found.")
         return
     stem = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in fields["name"]).strip("_") or Path(filename).stem or "character"
     if len(stem.encode("utf-8")) > 80:
@@ -327,10 +327,10 @@ def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, d
             import_character_card(db, token, chat_id, filename, raw)
         return
     if suffix not in RAG_SUPPORTED_SUFFIXES:
-        send_text(token, chat_id, "Format Data Bank tidak didukung. Gunakan PDF, TXT, MD, JSON, YAML, CSV, HTML, XML, atau DOCX.")
+        send_text(token, chat_id, "Unsupported Data Bank format. Use PDF, TXT, MD, JSON, YAML, CSV, HTML, XML, or DOCX.")
         return
     if file_size > RAG_MAX_FILE_BYTES:
-        send_text(token, chat_id, "Data Bank file terlalu besar. Batasnya 10 MB.")
+        send_text(token, chat_id, "Data Bank file is too large. The limit is 10 MB.")
         return
     raw = download_telegram_file(token, str(document.get("file_id")), RAG_MAX_FILE_BYTES)
     status, chunks = add_data_bank_document(db, chat_id, filename, raw)
