@@ -21,6 +21,7 @@ import math
 import os
 import re
 import random
+import signal
 import sqlite3
 import struct
 import subprocess
@@ -170,6 +171,9 @@ _UTILITY_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_
 _GENERATION_LABELS = {"generation", "command", "retry", "regen", "continue", "edit", "summarize"}
 _CHAT_LOCKS: dict[str, threading.Lock] = {}
 _CHAT_LOCKS_GUARD = threading.Lock()
+_BACKGROUND_STATE_LOCK = threading.Lock()
+_BACKGROUND_FUTURES: set[concurrent.futures.Future] = set()
+_BACKGROUND_ACCEPTING = True
 
 
 def chat_job_lock(chat_id: str) -> threading.Lock:
@@ -185,23 +189,64 @@ def _admission_slot(label: str) -> threading.BoundedSemaphore:
     return _GENERATION_SLOTS if label in _GENERATION_LABELS else _UTILITY_SLOTS
 
 
+def background_jobs_accepting() -> bool:
+    with _BACKGROUND_STATE_LOCK:
+        return bool(_BACKGROUND_ACCEPTING)
+
+
+def _submit_tracked_future(label: str, function, *args, **kwargs):
+    with _BACKGROUND_STATE_LOCK:
+        if not _BACKGROUND_ACCEPTING:
+            return None
+        try:
+            future = _executor_for(label).submit(function, *args, **kwargs)
+        except RuntimeError:
+            logging.info("Background executor is shutting down; rejected %s job", label)
+            return None
+        _BACKGROUND_FUTURES.add(future)
+
+    def forget(done):
+        with _BACKGROUND_STATE_LOCK:
+            _BACKGROUND_FUTURES.discard(done)
+
+    future.add_done_callback(forget)
+    return future
+
+
+def drain_background_jobs(timeout: float = 20.0) -> bool:
+    """Wait for already-submitted work without accepting new jobs."""
+    deadline = time.monotonic() + max(0.0, float(timeout))
+    while True:
+        with _BACKGROUND_STATE_LOCK:
+            futures = tuple(_BACKGROUND_FUTURES)
+        if not futures or all(future.done() for future in futures):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        concurrent.futures.wait(futures, timeout=remaining)
+
+
 def submit_background(label: str, function, *args, **kwargs) -> bool:
+    if not background_jobs_accepting():
+        logging.info("Background shutdown in progress; rejected %s job", label)
+        return False
     slot = _admission_slot(label)
     if not slot.acquire(blocking=False):
         logging.warning("Background queue full; dropping %s job", label)
         return False
-    try:
-        future = _executor_for(label).submit(function, *args, **kwargs)
-    except Exception:
+    future = _submit_tracked_future(label, function, *args, **kwargs)
+    if future is None:
         slot.release()
-        logging.error("Could not submit %s job", label, exc_info=True)
         return False
+
     def complete(done):
         slot.release()
         error = done.exception()
         if error:
             logging.error("Background %s job failed: %s", label, error, exc_info=(type(error), error, error.__traceback__))
         _dispatch_waiting_chat_jobs()
+
     future.add_done_callback(complete)
     return True
 
@@ -214,12 +259,30 @@ def register_durable_backlog_dispatcher(callback) -> None:
     _DURABLE_BACKLOG_DISPATCHER = callback
 
 
+def begin_background_shutdown() -> None:
+    """Stop accepting work; durable chat jobs remain recoverable in SQLite."""
+    global _BACKGROUND_ACCEPTING, _DURABLE_BACKLOG_DISPATCHER
+    with _BACKGROUND_STATE_LOCK:
+        _BACKGROUND_ACCEPTING = False
+    _DURABLE_BACKLOG_DISPATCHER = None
+
+
+def shutdown_background_executors(timeout: float = 20.0) -> bool:
+    begin_background_shutdown()
+    drained = drain_background_jobs(timeout)
+    _GENERATION_EXECUTOR.shutdown(wait=drained, cancel_futures=not drained)
+    _UTILITY_EXECUTOR.shutdown(wait=drained, cancel_futures=not drained)
+    return drained
+
+
 _CHAT_QUEUES: dict[str, deque[tuple[str, object, tuple, dict]]] = {}
 _CHAT_ACTIVE: set[str] = set()
 _CHAT_IN_FLIGHT: set[str] = set()
 
 
 def _dispatch_waiting_chat_jobs() -> None:
+    if not background_jobs_accepting():
+        return
     with _CHAT_LOCKS_GUARD:
         chat_ids = list(_CHAT_QUEUES)
     for chat_id in chat_ids:
@@ -232,6 +295,8 @@ def _dispatch_waiting_chat_jobs() -> None:
 
 
 def _start_next_chat_job(chat_id: str) -> None:
+    if not background_jobs_accepting():
+        return
     chat_id = str(chat_id)
     with _CHAT_LOCKS_GUARD:
         if chat_id in _CHAT_IN_FLIGHT:
@@ -246,14 +311,12 @@ def _start_next_chat_job(chat_id: str) -> None:
             return
         label, function, args, kwargs = queue.popleft()
         _CHAT_IN_FLIGHT.add(chat_id)
-    try:
-        future = _executor_for(label).submit(function, *args, **kwargs)
-    except Exception:
+    future = _submit_tracked_future(label, function, *args, **kwargs)
+    if future is None:
         with _CHAT_LOCKS_GUARD:
             _CHAT_IN_FLIGHT.discard(chat_id)
             _CHAT_QUEUES.setdefault(chat_id, deque()).appendleft((label, function, args, kwargs))
         slot.release()
-        logging.error("Could not submit ordered %s job", label, exc_info=True)
         return
     def complete(done):
         slot.release()
@@ -268,6 +331,9 @@ def _start_next_chat_job(chat_id: str) -> None:
 
 
 def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) -> bool:
+    if not background_jobs_accepting():
+        logging.info("Background shutdown in progress; durable %s job remains in SQLite", label)
+        return False
     chat_id = str(chat_id)
     with _CHAT_LOCKS_GUARD:
         if chat_id not in _CHAT_QUEUES and len(_CHAT_QUEUES) >= _BACKGROUND_MAX_SCOPED_QUEUES:
