@@ -153,8 +153,7 @@ def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id:
         if operation_id is not None:
             record_operation(db, operation_id, "session_delete")
         db.commit()
-        if "optimize_database" in globals():
-            optimize_database(db)
+        optimize_database(db)
     return True, "deleted"
 
 

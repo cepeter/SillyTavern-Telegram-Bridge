@@ -674,8 +674,9 @@ internal for isolation and only attached to Telegram payloads when sending.
   messages to the character.
 - **✅ `/stscript` is allowlisted** and cannot execute arbitrary commands.
 - **⚡ SQLite performance and reclamation.** Operations run with WAL mode,
-  synchronous NORMAL, memory temp store, 64 MB cache, and automatic
-  incremental vacuum/optimization to reclaim disk space after large deletions.
+  synchronous NORMAL, memory temp store, and a 64 MB cache; query planner
+  statistics refresh after large deletions, and disk space is reclaimed by a
+  bounded, dedicated maintenance pass at bridge shutdown.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---

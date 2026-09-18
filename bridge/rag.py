@@ -448,8 +448,7 @@ def delete_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: s
         db.execute("DELETE FROM data_bank_chunks WHERE chat_id=? AND document_id=?", (chat_id, document_id))
         db.execute("DELETE FROM data_bank_documents WHERE chat_id=? AND document_id=?", (chat_id, document_id))
     db.commit()
-    if "optimize_database" in globals():
-        optimize_database(db)
+    optimize_database(db)
     return len(documents)
 
 

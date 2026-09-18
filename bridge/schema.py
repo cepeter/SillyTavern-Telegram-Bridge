@@ -219,8 +219,6 @@ def _ensure_job_tables(db: sqlite3.Connection) -> None:
     db.execute("DELETE FROM jobs WHERE state='done' AND updated_at < ?", (time.time() - 30 * 86400,))
     db.execute("DELETE FROM jobs WHERE state='failed' AND updated_at < ?", (time.time() - 90 * 86400,))
     db.execute("DELETE FROM failed_turns WHERE updated_at < ?", (time.time() - 90 * 86400,))
-    if "optimize_database" in globals():
-        optimize_database(db)
 
 
 
