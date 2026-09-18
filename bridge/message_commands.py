@@ -54,7 +54,7 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
 def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
     history_rows = timed_call("history_load", db.execute,
-        "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC LIMIT ?",
+        "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
         (chat_id, session_id, context_history_candidate_limit()),
     ).fetchall()
     history_rows = list(reversed(history_rows))
@@ -86,16 +86,32 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
     reply = render_response_language(api_key, current_model, reply, language, generation_session_id, generation_settings)
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
     now = time.time()
-    db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "user", text, str(telegram_message_id) if telegram_message_id is not None else None, now))
-    assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session_id, "assistant", stored_reply, now + 0.001))
-    assistant_rowid = assistant_cursor.lastrowid
-    if not group_turn:
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "user", text, str(telegram_message_id) if telegram_message_id is not None else None, now))
+        assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session_id, "assistant", stored_reply, now + 0.001))
+        assistant_rowid = assistant_cursor.lastrowid
+        save_response_variant(db, chat_id, session_id, text, stored_reply, commit=False)
+        if group_turn:
+            advance_group_turn(db, chat_id, session_id, operation_id=operation_id, commit=False)
         db.commit()
-    save_response_variant(db, chat_id, session_id, text, stored_reply, commit=not bool(group_turn))
-    if group_turn:
-        advance_group_turn(db, chat_id, session_id, operation_id=operation_id, commit=True)
-    else:
-        db.commit()
+        if group_turn:
+            db.commit()
+    except sqlite3.OperationalError:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "user", text, str(telegram_message_id) if telegram_message_id is not None else None, now))
+        assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session_id, "assistant", stored_reply, now + 0.001))
+        assistant_rowid = assistant_cursor.lastrowid
+        if not group_turn:
+            db.commit()
+        save_response_variant(db, chat_id, session_id, text, stored_reply, commit=not bool(group_turn))
+        if group_turn:
+            advance_group_turn(db, chat_id, session_id, operation_id=operation_id, commit=True)
+        else:
+            db.commit()
     retain_session_memory(db, chat_id, session, fields)
     if telegram_message_id is not None:
         clear_failed_turn(db, chat_id, telegram_message_id)

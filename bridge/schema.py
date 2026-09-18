@@ -40,6 +40,8 @@ def _ensure_core_tables(db: sqlite3.Connection) -> None:
         db.execute("ALTER TABLE sessions ADD COLUMN response_language TEXT NOT NULL DEFAULT 'auto'")
     db.execute("CREATE INDEX IF NOT EXISTS messages_session_idx ON messages(chat_id, session_id, created_at)")
     db.execute("CREATE INDEX IF NOT EXISTS messages_telegram_idx ON messages(chat_id, telegram_message_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS messages_session_created_idx ON messages(chat_id, session_id, created_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS messages_chat_telegram_session_idx ON messages(chat_id, telegram_message_id, session_id)")
     db.execute("""CREATE TABLE IF NOT EXISTS response_variants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_id TEXT NOT NULL,
@@ -95,6 +97,7 @@ def _ensure_generation_tables(db: sqlite3.Connection) -> None:
         PRIMARY KEY(chat_id, session_id, document_id)
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS hindsight_documents_session_idx ON hindsight_documents(chat_id, session_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS hindsight_documents_chat_idx ON hindsight_documents(chat_id, kind)")
 
 
 
@@ -212,6 +215,8 @@ def _ensure_job_tables(db: sqlite3.Connection) -> None:
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS jobs_state_idx ON jobs(state, created_at)")
     db.execute("CREATE INDEX IF NOT EXISTS jobs_chat_idx ON jobs(chat_id, created_at)")
+    db.execute("CREATE INDEX IF NOT EXISTS jobs_state_chat_idx ON jobs(state, chat_id, created_at)")
+    db.execute("CREATE INDEX IF NOT EXISTS jobs_updated_idx ON jobs(updated_at)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_chunks_chat_idx ON data_bank_chunks(chat_id, document_id)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_chunk_idx ON data_bank_embeddings(chunk_id)")
     db.execute("DELETE FROM processed_updates WHERE processed_at < ?", (time.time() - PROCESSED_UPDATE_RETENTION_SECONDS,))
@@ -231,6 +236,7 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         chat_id TEXT NOT NULL DEFAULT '',
         expires_at REAL NOT NULL
     )""")
+    db.execute("CREATE INDEX IF NOT EXISTS callback_tokens_expires_idx ON callback_tokens(expires_at)")
     db.execute("DELETE FROM callback_tokens WHERE expires_at < ?", (time.time(),))
     db.execute("""CREATE TABLE IF NOT EXISTS panel_sessions (
         chat_id TEXT NOT NULL,
@@ -243,6 +249,7 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
     panel_columns = {row[1] for row in db.execute("PRAGMA table_info(panel_sessions)").fetchall()}
     if "owner_user_id" not in panel_columns:
         db.execute("ALTER TABLE panel_sessions ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT ''")
+    db.execute("CREATE INDEX IF NOT EXISTS panel_sessions_expires_idx ON panel_sessions(expires_at)")
     db.execute("DELETE FROM panel_sessions WHERE expires_at < ?", (time.time(),))
     db.execute("""CREATE TABLE IF NOT EXISTS operations (
         operation_id TEXT PRIMARY KEY,
@@ -252,6 +259,7 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         updated_at REAL NOT NULL
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS operations_updated_idx ON operations(updated_at)")
+    db.execute("CREATE INDEX IF NOT EXISTS operations_state_idx ON operations(state, updated_at)")
     db.execute("""CREATE TABLE IF NOT EXISTS sync_bindings (
         chat_id TEXT NOT NULL,
         session_id TEXT NOT NULL,

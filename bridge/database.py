@@ -10,6 +10,12 @@ def _apply_connection_pragmas(db: sqlite3.Connection, timeout: float = 30.0) -> 
     db.execute("PRAGMA temp_store=MEMORY")
     db.execute("PRAGMA cache_size=-64000")
     db.execute("PRAGMA foreign_keys=ON")
+    try:
+        db.execute("PRAGMA journal_size_limit=67108864")
+        db.execute("PRAGMA wal_autocheckpoint=1000")
+        db.execute("PRAGMA mmap_size=268435456")
+    except sqlite3.OperationalError:
+        pass
 
 
 def _load_optional_vector_extension(db: sqlite3.Connection) -> bool:
@@ -188,14 +194,29 @@ def record_operation(db: sqlite3.Connection, operation_id: int | str | None, kin
 
 def enqueue_job(db: sqlite3.Connection, update_id: int, chat_id: str, session_id: str, telegram_message_id: int, kind: str, payload: dict) -> int:
     now = time.time()
-    db.execute("""INSERT OR IGNORE INTO jobs(update_id,chat_id,session_id,telegram_message_id,kind,payload_json,state,attempts,last_error,created_at,updated_at)
-        VALUES(?,?,?,?,?,?, 'queued',0,'',?,?)""", (update_id, chat_id, session_id, str(telegram_message_id), kind, json.dumps(payload, ensure_ascii=False), now, now))
-    row = db.execute("SELECT job_id FROM jobs WHERE update_id=?", (update_id,)).fetchone()
-    if row is None:
-        raise RuntimeError("job handoff failed")
-    db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, now))
-    db.commit()
-    return int(row[0])
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("""INSERT OR IGNORE INTO jobs(update_id,chat_id,session_id,telegram_message_id,kind,payload_json,state,attempts,last_error,created_at,updated_at)
+            VALUES(?,?,?,?,?,?, 'queued',0,'',?,?)""", (update_id, chat_id, session_id, str(telegram_message_id), kind, json.dumps(payload, ensure_ascii=False), now, now))
+        row = db.execute("SELECT job_id FROM jobs WHERE update_id=?", (update_id,)).fetchone()
+        if row is None:
+            raise RuntimeError("job handoff failed")
+        db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, now))
+        db.commit()
+        return int(row[0])
+    except sqlite3.OperationalError:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        db.execute("""INSERT OR IGNORE INTO jobs(update_id,chat_id,session_id,telegram_message_id,kind,payload_json,state,attempts,last_error,created_at,updated_at)
+            VALUES(?,?,?,?,?,?, 'queued',0,'',?,?)""", (update_id, chat_id, session_id, str(telegram_message_id), kind, json.dumps(payload, ensure_ascii=False), now, now))
+        row = db.execute("SELECT job_id FROM jobs WHERE update_id=?", (update_id,)).fetchone()
+        if row is None:
+            raise RuntimeError("job handoff failed")
+        db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, now))
+        db.commit()
+        return int(row[0])
 
 
 def job_actor_id(db: sqlite3.Connection, job_id: int | None) -> str:
@@ -231,8 +252,8 @@ def finish_job(db: sqlite3.Connection, job_id: int, state: str, error: str = "")
 def recover_jobs(db: sqlite3.Connection, recover_running: bool = True) -> list[tuple]:
     if recover_running:
         db.execute("UPDATE jobs SET state='queued', updated_at=? WHERE state IN ('running','scheduled')", (time.time(),))
-    limit_clause = "" if recover_running else " LIMIT 128"
-    rows = db.execute("SELECT job_id,chat_id,session_id,telegram_message_id,kind,payload_json FROM jobs WHERE state='queued' ORDER BY created_at" + limit_clause).fetchall()
+    # Always bound to 128 to prevent OOM
+    rows = db.execute("SELECT job_id,chat_id,session_id,telegram_message_id,kind,payload_json FROM jobs WHERE state='queued' ORDER BY created_at LIMIT 128").fetchall()
     db.commit()
     return rows
 
