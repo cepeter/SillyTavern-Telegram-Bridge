@@ -190,13 +190,14 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
         raise RuntimeError(f"Telegram {method} failed: {detail}")
     if request_payload.get("reply_markup") and method in {"sendMessage", "editMessageText"}:
         bound_session = panel_session_context()
+        bound_owner = panel_actor_context()
         api_result = result.get("result") or {}
         bound_message_id = api_result.get("message_id") if isinstance(api_result, dict) else None
         bound_message_id = bound_message_id or request_payload.get("message_id")
         if bound_session and bound_message_id:
             panel_db = db_connect()
             try:
-                bind_panel_session(panel_db, scoped_chat_id, bound_message_id, bound_session)
+                bind_panel_session(panel_db, scoped_chat_id, bound_message_id, bound_session, bound_owner)
             finally:
                 panel_db.close()
     return result["result"]
