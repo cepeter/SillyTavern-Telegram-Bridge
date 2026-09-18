@@ -1,0 +1,148 @@
+from pathlib import Path
+import tempfile
+import unittest
+
+import bridge.runtime as rt
+
+
+class DirectorGoalsTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.old_db = rt.DB_FILE
+        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+        self.db = rt.db_connect()
+        self.chat_id = "chat|topic:1"
+        self.session = rt.create_session(
+            self.db,
+            self.chat_id,
+            "primary::main",
+            session_id="director-goal",
+            title="Director goal",
+        )
+        rt.set_task_model(self.db, self.chat_id, self.session["session_id"], "utility::director")
+        rt.save_group_state(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            {
+                "title": "Director",
+                "enabled": True,
+                "turn_index": 0,
+                "mode": "director",
+                "forced_speaker": "",
+                "members": ["alice.png", "bob.png"],
+                "turn_user_id": "",
+                "turn_users": [],
+            },
+        )
+
+    def tearDown(self):
+        self.db.close()
+        rt.DB_FILE = self.old_db
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+        self.tmp.cleanup()
+
+    def test_goal_is_session_local_and_bounded(self):
+        value = rt.set_director_goal(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "  Reveal   the hidden door slowly.  ",
+        )
+        self.assertEqual(value, "Reveal the hidden door slowly.")
+        self.assertEqual(
+            rt.get_director_goal(self.db, self.chat_id, self.session["session_id"]),
+            "Reveal the hidden door slowly.",
+        )
+        other = rt.create_session(
+            self.db,
+            self.chat_id,
+            "primary::main",
+            session_id="other",
+            title="Other",
+        )
+        self.assertEqual(rt.get_director_goal(self.db, self.chat_id, other["session_id"]), "")
+
+    def test_director_uses_utility_model_and_receives_hidden_goal(self):
+        rt.set_director_goal(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "Let Bob discover the hidden door without resolving what is behind it.",
+        )
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        calls = []
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Bob","direction":"Bob notices a seam in the wall."}'
+
+        rt.generate_text = fake_generate
+        try:
+            plan = rt.group_director_plan(
+                self.db,
+                "",
+                self.chat_id,
+                self.session,
+                "I look around.",
+            )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(plan[0], "bob.png")
+        self.assertEqual(calls[0][0], "utility::director")
+        joined = "\n".join(str(message["content"]) for message in calls[0][1])
+        self.assertIn("hidden door", joined)
+        self.assertTrue(calls[0][2]["force_non_stream"])
+
+    def test_generation_context_keeps_goal_hidden_but_actionable(self):
+        rt.set_director_goal(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "Increase tension around the unopened letter.",
+        )
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        try:
+            context = rt.group_prompt_context(
+                self.db,
+                self.chat_id,
+                self.session,
+                "alice.png",
+                "Keep the pace measured.",
+            )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+
+        self.assertIn("unopened letter", context)
+        self.assertIn("Never mention", context)
+
+    def test_clearing_goal_removes_it(self):
+        rt.set_director_goal(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "Resolve the argument.",
+        )
+        rt.set_director_goal(self.db, self.chat_id, self.session["session_id"], "")
+        self.assertEqual(
+            rt.get_director_goal(self.db, self.chat_id, self.session["session_id"]),
+            "",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
