@@ -121,5 +121,14 @@ class HelpDrilldownTests(unittest.TestCase):
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertEqual(callbacks, {"sync:realtime", "sync:now", "sync:status", "sync:close"})
 
+    def test_director_goal_and_scene_commands_are_documented(self):
+        commands = {command for entries in rt.HELP_CATEGORIES.values() for command, _summary in entries}
+        self.assertIn("/group goal", commands)
+        self.assertIn("/group goal <objective>", commands)
+        self.assertIn("/scene", commands)
+        self.assertIn("/scene refresh", commands)
+        self.assertIn("1,200 characters", rt.command_detail("/group goal", ""))
+        self.assertIn("utility model", rt.command_detail("/scene refresh", ""))
+
 if __name__ == "__main__":
     unittest.main()

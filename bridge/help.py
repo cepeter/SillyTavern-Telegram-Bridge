@@ -49,6 +49,10 @@ HELP_CATEGORIES = {
         ("/voice_input on|off", "Open transcription, STT model, and language controls."),
         ("/voice_input language", "Open the STT language panel — Auto, a fixed code, or User input."),
         ("/group", "Open Forum Topic group controls, including invisible Director mode for model-selected speaker and pacing guidance."),
+        ("/group goal", "View the hidden, session-local Director objective for this Forum Topic group."),
+        ("/group goal <objective>", "Set or replace the hidden Director objective; it guides speaker choice and scene direction without entering the transcript."),
+        ("/scene", "Show the active session's structured scene state — location, weather, participants, and known facts."),
+        ("/scene refresh", "Rebuild structured scene state with the configured utility model without changing the transcript."),
     ],
 }
 

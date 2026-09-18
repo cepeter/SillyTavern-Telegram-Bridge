@@ -38,6 +38,7 @@ text your characters from anywhere.
 - [🎭 Native SillyTavern data](#-native-sillytavern-data)
 - [🎙️ Voice, images, and documents](#-voice-images-and-documents)
 - [🔄 Live Sync and Forum Topic groups](#-live-sync-and-forum-topic-groups)
+- [🎬 Director goals and scene state](#-director-goals-and-scene-state)
 - [🔒 Reliability, privacy, and safety](#-reliability-privacy-and-safety)
 - [🚀 Run and update](#-run-and-update)
 - [🏗️ Architecture](#-architecture)
@@ -358,6 +359,10 @@ prevents accidental changes.
 | `/databank` | Open Data Bank RAG controls |
 | `/sync` | Open Live API Sync controls |
 | `/group` | Open Forum Topic group controls |
+| `/group goal` | View the hidden Director scene objective |
+| `/group goal <objective>` | Set a session-local hidden objective for Director mode |
+| `/scene` | View structured scene state |
+| `/scene refresh` | Rebuild scene state with the utility model |
 | `/help` | Open the interactive command guide |
 | `/help <command>` | Show detailed behavior for one command |
 | `/update` | Check and, after confirmation, update the bridge |
@@ -651,6 +656,36 @@ session, pick characters and World Info, and choose a turn mode:
 
 Group state changes and generated turns are durable. Topic IDs are kept
 internal for isolation and only attached to Telegram payloads when sending.
+
+---
+
+## 🎬 Director goals and scene state
+
+Director mode can keep a hidden, session-local objective for a Forum Topic group:
+
+```text
+/group goal <objective>   Set or replace the objective
+/group goal               Show the current objective
+/group goal status        Show the current objective
+/group goal clear         Remove it
+```
+
+The objective helps the invisible Director choose the next speaker and guide the
+scene without entering the roleplay transcript or being revealed to the
+characters. The operator can inspect it with `/group goal status`. It is bounded
+to 1,200 characters and applies only while the session is in Director mode.
+
+The bridge also maintains structured scene state — location, weather, participants,
+known facts, and other bounded continuity details — outside the transcript:
+
+```text
+/scene          Show the current structured state
+/scene refresh  Rebuild it with the configured utility model
+/scene clear    Remove it
+```
+
+Scene refresh is a background utility-model task. It is optional, session-scoped,
+and never replaces the original conversation history.
 
 ---
 
