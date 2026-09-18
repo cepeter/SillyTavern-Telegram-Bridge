@@ -136,8 +136,13 @@ def send_reply(token: str, chat_id: str, text: str, db: sqlite3.Connection | Non
         db.commit()
     if db is not None and session_id and get_meta(db, f"voice_mode:{chat_id}", "off") == "tts":
         speech = quoted_speech_from_reply(text)
-        if speech and not submit_background("tts", send_tts, token, chat_id, speech):
-            logging.warning("Automatic TTS dropped for chat %s", chat_id)
+        if speech:
+            operation_id = None
+            if assistant_rowid is not None:
+                speech_hash = hashlib.sha256(speech.encode("utf-8")).hexdigest()[:16]
+                operation_id = f"assistant-tts:{chat_id}:{session_id}:{assistant_rowid}:{speech_hash}"
+            if not submit_background("tts", send_tts, token, chat_id, speech, operation_id):
+                logging.warning("Automatic TTS dropped for chat %s", chat_id)
 
 
 _STT_MODEL_CACHE = {}
@@ -191,6 +196,7 @@ def process_voice_job(token: str, api_key: str, model: str, fields: dict, chat_i
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
+            set_panel_actor_context(job_actor_id(db, job_id))
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 if json.loads(existing[2] or "[]"):
@@ -213,6 +219,7 @@ def process_voice_job(token: str, api_key: str, model: str, fields: dict, chat_i
                 finish_job(db, job_id, "failed", str(exc))
             send_text(token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings.")
         finally:
+            set_panel_actor_context(None)
             db.close()
 
 
