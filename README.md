@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/cepeter/SillyTavern-Telegram-Bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/cepeter/SillyTavern-Telegram-Bridge/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/cepeter/SillyTavern-Telegram-Bridge?display_name=tag)](https://github.com/cepeter/SillyTavern-Telegram-Bridge/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
 > Current release: **v0.2.011**
 
@@ -251,7 +251,7 @@ prevents accidental changes.
 
 ```text
 /start              Show the greeting when Persona, World Info, and System Prompt are enabled; otherwise show recommendations
-/greeting           Choose the primary or an alternate character-card opening greeting
+
 /status             Show active card, session, model, memory, RAG, and generation state
 /new                Create and activate a named isolated session
 /reset              Confirm an active-session reset and memory purge
@@ -660,4 +660,4 @@ bridge/pdf_parser.py            isolated PDF worker for Data Bank
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+GNU General Public License v3.0. See [LICENSE](LICENSE).

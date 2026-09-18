@@ -1,7 +1,7 @@
 HELP_CATEGORIES = {
     "basic": [
         ("/start", "Show the greeting when Persona, World Info, and System Prompt are enabled; otherwise show setup recommendations."),
-        ("/greeting", "Choose the character card's primary or alternate opening greeting."),
+
         ("/help", "Open this help menu; use /help <command> for one command."),
         ("/status", "Show active card, session, model, memory, RAG, group, and generation state."),
         ("/new", "Name, create, and activate a new isolated session."),
@@ -433,7 +433,7 @@ def set_bot_commands(token: str) -> None:
             "commands": [
                 {"command": "start", "description": "Show optional setup instructions"},
                 {"command": "help", "description": "Show commands"},
-                {"command": "greeting", "description": "Choose an opening greeting"},
+
                 {"command": "providers", "description": "Open provider catalog; catalog-only entries are view-only"},
                 {"command": "character", "description": "Open character management panel"},
                 {"command": "session", "description": "Manage sessions; delete inactive only"},

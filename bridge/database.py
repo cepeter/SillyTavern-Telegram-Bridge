@@ -150,9 +150,10 @@ def recover_jobs(db: sqlite3.Connection, recover_running: bool = True) -> list[t
 
 
 def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
-    db.execute("INSERT OR IGNORE INTO generation_settings(chat_id,session_id,temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences) VALUES(?,?,?,?,?,?,?, ?,?)", (chat_id, session_id, GENERATION_DEFAULTS["temperature"], GENERATION_DEFAULTS["max_tokens"], GENERATION_DEFAULTS["top_p"], GENERATION_DEFAULTS["frequency_penalty"], GENERATION_DEFAULTS["presence_penalty"], GENERATION_DEFAULTS["reasoning_budget"], GENERATION_DEFAULTS["stop_sequences"]))
+    inserted = db.execute("INSERT OR IGNORE INTO generation_settings(chat_id,session_id,temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences) VALUES(?,?,?,?,?,?,?, ?,?)", (chat_id, session_id, GENERATION_DEFAULTS["temperature"], GENERATION_DEFAULTS["max_tokens"], GENERATION_DEFAULTS["top_p"], GENERATION_DEFAULTS["frequency_penalty"], GENERATION_DEFAULTS["presence_penalty"], GENERATION_DEFAULTS["reasoning_budget"], GENERATION_DEFAULTS["stop_sequences"]))
     row = db.execute("SELECT temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences FROM generation_settings WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
-    db.commit()
+    if inserted.rowcount:
+        db.commit()
     return dict(zip(("temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty", "reasoning_budget", "stop_sequences"), row))
 
 

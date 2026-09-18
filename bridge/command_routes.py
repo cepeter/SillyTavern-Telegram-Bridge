@@ -13,8 +13,9 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         persona_ready = bool(current_persona)
         world_ready = bool(active_world_files(session.get("world_file") or ""))
         system_prompt_ready = bool(session.get("system_prompt") or "")
+        first_start = db.execute("SELECT 1 FROM messages WHERE chat_id=? AND session_id=? LIMIT 1", (chat_id, session_id)).fetchone() is None
         if persona_ready and world_ready and system_prompt_ready:
-            send_character_greeting(db, token, chat_id, fields, session_id, user_name, 0, operation_id, "start_greeting")
+            send_character_greeting(db, token, chat_id, fields, session_id, user_name, None if first_start else 0, operation_id, "start_greeting")
         else:
             missing = []
             if not persona_ready:
@@ -26,10 +27,8 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
             send_text(token, chat_id, "Setup recommendation — Persona, World Info, and System Prompt are optional. Current unavailable selections: " + ", ".join(missing) + ". Use /persona, /world, or /systemprompt if you want to enable them. Type `start` to show the character greeting message.")
         return True
     if command == "start":
-        send_character_greeting(db, token, chat_id, fields, session_id, user_name, 0, operation_id, "start_greeting")
-        return True
-    if command == "/greeting":
-        send_greeting_menu(token, chat_id, fields)
+        first_start = db.execute("SELECT 1 FROM messages WHERE chat_id=? AND session_id=? LIMIT 1", (chat_id, session_id)).fetchone() is None
+        send_character_greeting(db, token, chat_id, fields, session_id, user_name, None if first_start else 0, operation_id, "start_greeting")
         return True
     if command == "/help":
         send_help_menu(token, chat_id)

@@ -1,7 +1,3 @@
-def handle_greeting_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
-    return handle_greeting_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
-
-
 def handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     """Handle System Prompt selection, disable, and pagination callbacks."""
     if data.startswith("systemprompt:"):
@@ -177,8 +173,6 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(token, callback, data, chat_id)
-    if handle_greeting_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
-        return True
     if handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
     if handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):

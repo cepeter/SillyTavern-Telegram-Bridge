@@ -3,7 +3,7 @@
 This module is loaded into the shared runtime namespace after common.py.
 """
 def read_png_chara(path: Path) -> dict:
-    return parse_png_chara_bytes(path.read_bytes())
+    return cached_png_metadata(path, lambda current: parse_png_chara_bytes(current.read_bytes()))
 
 
 def parse_png_chara_bytes(raw: bytes) -> dict:
@@ -113,7 +113,7 @@ def build_world_info(world_names: str | list[str], context: str, fields: dict[st
         if path is None:
             continue
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = cached_json(path)
             raw_entries = data.get("entries", {})
             entries = list(raw_entries.values()) if isinstance(raw_entries, dict) else list(raw_entries or [])
             lowered = context.casefold()
@@ -467,6 +467,14 @@ def replace_macros(text: str, fields: dict[str, str], user_name: str = DEFAULT_U
 
 
 def build_system_prompt(fields: dict[str, str], user_name: str = DEFAULT_USER_NAME) -> str:
+    source = "\x1f".join(str(fields.get(key) or "") for key in ("system_prompt", "description", "personality", "scenario", "mes_example", "name"))
+    if any(token in source for token in ("{{random", "{{pick", "{{time}}", "{{date}}", "{{weekday}}")):
+        return _build_system_prompt_uncached(fields, user_name)
+    key = hashlib.sha256((source + "\x1f" + user_name).encode("utf-8")).hexdigest()
+    return cached_text("system-prompt:" + key, lambda: _build_system_prompt_uncached(fields, user_name))
+
+
+def _build_system_prompt_uncached(fields: dict[str, str], user_name: str = DEFAULT_USER_NAME) -> str:
     system = fields["system_prompt"] or (
         "Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}. "
         "Stay in character and do not speak for {{user}}."
