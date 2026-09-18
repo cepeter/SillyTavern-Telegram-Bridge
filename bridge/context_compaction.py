@@ -268,6 +268,36 @@ def compact_chat_messages(
                     _replace_text_content(system_message, text)
                     summary_trimmed = True
 
+    # Exhaust optional retrieved context only if the prompt is still too large.
+    if current_tokens() > budget:
+        latest = next(
+            (message for message in reversed(compacted) if message.get("role") == "user"),
+            None,
+        )
+        if latest is not None:
+            text = _text_content(latest)
+            for tag in ("untrusted_data_bank_references", "untrusted_memory"):
+                if current_tokens() <= budget:
+                    break
+                text, changed = _shrink_tagged_section(text, tag, 0)
+                if changed:
+                    _replace_text_content(latest, text)
+                    if tag == "untrusted_data_bank_references":
+                        rag_trimmed = True
+                    else:
+                        memory_trimmed = True
+
+    if current_tokens() > budget:
+        system_message = next(
+            (message for message in compacted if message.get("role") == "system"),
+            None,
+        )
+        if system_message is not None:
+            text, changed = _shrink_summary_section(_text_content(system_message), 0)
+            if changed:
+                _replace_text_content(system_message, text)
+                summary_trimmed = True
+
     final_tokens = current_tokens()
     return compacted, {
         "budget_tokens": budget,
