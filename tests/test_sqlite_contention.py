@@ -73,6 +73,28 @@ class SqliteContentionTests(unittest.TestCase):
             ("chat", "900", "session"),
         ).fetchone())
 
+    def test_enqueue_job_does_not_retry_after_full_timeout(self):
+        """Regression: enqueue_job should not catch every OperationalError and retry after 30s busy timeout."""
+        import inspect
+        source = inspect.getsource(rt.enqueue_job)
+        # Should not have BEGIN IMMEDIATE which would wait 30s on lock before retry
+        self.assertNotIn("BEGIN IMMEDIATE", source, "enqueue_job should not use BEGIN IMMEDIATE to avoid 30s busy timeout retry")
+        # Should not catch every OperationalError and retry with duplicate inserts
+        has_catch_all_retry = "except sqlite3.OperationalError" in source and source.count("INSERT OR IGNORE INTO jobs") > 1
+        self.assertFalse(has_catch_all_retry, "enqueue_job should not have catch-all OperationalError retry")
+
+    def test_generate_and_store_reply_does_not_use_unbounded_fallback(self):
+        """Regression: generate_and_store_reply should not catch every OperationalError with unbounded retry."""
+        # Check that the function does not contain BEGIN IMMEDIATE + catch-all OperationalError pattern
+        import inspect
+        source = inspect.getsource(rt.generate_and_store_reply)
+        # Should not have BEGIN IMMEDIATE that would wait 30s
+        self.assertNotIn("BEGIN IMMEDIATE", source, "generate_and_store_reply should not use BEGIN IMMEDIATE to avoid 30s timeout")
+        # Should not catch every OperationalError and retry
+        # The fixed version should have simple inserts without try/except OperationalError retry loop
+        has_catch_all_retry = "except sqlite3.OperationalError" in source and source.count("INSERT INTO messages") > 2
+        self.assertFalse(has_catch_all_retry, "generate_and_store_reply should not have catch-all OperationalError retry with duplicate inserts")
+
 
 if __name__ == "__main__":
     unittest.main()

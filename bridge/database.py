@@ -10,6 +10,10 @@ def _apply_connection_pragmas(db: sqlite3.Connection, timeout: float = 30.0) -> 
     db.execute("PRAGMA temp_store=MEMORY")
     db.execute("PRAGMA cache_size=-64000")
     db.execute("PRAGMA foreign_keys=ON")
+    try:
+        db.execute("PRAGMA mmap_size=268435456")
+    except sqlite3.OperationalError:
+        pass
 
 
 def _load_optional_vector_extension(db: sqlite3.Connection) -> bool:
