@@ -142,11 +142,19 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         return
     session = reconcile_session_character(db, chat_id, session)
     fields = card_fields_from_file(session["character_file"])
-    group_turn = group_current_speaker(db, chat_id, session, text)
+    director_plan = None
+    if not command.startswith("/"):
+        director_plan = group_director_plan(db, api_key, chat_id, session, text)
+    director_instruction = ""
+    if director_plan:
+        group_turn = (director_plan[0], director_plan[1])
+        director_instruction = director_plan[2]
+    else:
+        group_turn = group_current_speaker(db, chat_id, session, text)
     group_context = ""
     if group_turn:
         fields = card_fields_from_file(group_turn[0])
-        group_context = group_prompt_context(db, chat_id, session, group_turn[0])
+        group_context = group_prompt_context(db, chat_id, session, group_turn[0], director_instruction)
     current_model = session["model_id"] or model
     current_persona = session["persona_id"]
     user_name = persona_name(current_persona) if current_persona else DEFAULT_USER_NAME
