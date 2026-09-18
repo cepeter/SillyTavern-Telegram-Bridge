@@ -201,9 +201,18 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
     if not text:
         raise ValueError("Data Bank file contains no readable text")
     document_id = hashlib.sha256(raw).hexdigest()
-    existing = db.execute("SELECT chunk_count FROM data_bank_documents WHERE chat_id=? AND document_id=?", (chat_id, document_id)).fetchone()
+    existing = db.execute(
+        "SELECT chunk_count FROM data_bank_documents WHERE chat_id=? AND document_id=?",
+        (chat_id, document_id),
+    ).fetchone()
     if existing:
         return "duplicate", int(existing[0])
+    version_row = db.execute(
+        "SELECT COALESCE(MAX(version_number),0) FROM data_bank_documents "
+        "WHERE chat_id=? AND filename=?",
+        (chat_id, filename[:255]),
+    ).fetchone()
+    version_number = int(version_row[0] or 0) + 1
     chunks = split_data_bank_chunks(text)
     namespace = rag_embedding_namespace()
     cache_keys = [namespace + ":content:" + hashlib.sha256(content.encode("utf-8")).hexdigest() for content in chunks]
@@ -226,7 +235,22 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
                     vector_cache[cache_key] = vector
                     db.execute("INSERT OR REPLACE INTO rag_embedding_cache(cache_key,dimensions,vector_json,vector_norm,created_at) VALUES(?,?,?,?,?)", (cache_key, len(vector), json.dumps(vector, separators=(",", ":")), embedding_norm(vector), time.time()))
     now = time.time()
-    db.execute("INSERT INTO data_bank_documents(chat_id,document_id,filename,byte_size,chunk_count,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", (chat_id, document_id, filename[:255], len(raw), len(chunks), now, now))
+    db.execute(
+        "INSERT INTO data_bank_documents("
+        "chat_id,document_id,filename,byte_size,chunk_count,version_number,active,created_at,updated_at"
+        ") VALUES(?,?,?,?,?,?,?,?,?)",
+        (
+            chat_id,
+            document_id,
+            filename[:255],
+            len(raw),
+            len(chunks),
+            version_number,
+            1,
+            now,
+            now,
+        ),
+    )
     for index, content in enumerate(chunks):
         cursor = db.execute("INSERT INTO data_bank_chunks(chat_id,document_id,chunk_index,content) VALUES(?,?,?,?)", (chat_id, document_id, index, content))
         chunk_id = cursor.lastrowid
@@ -245,8 +269,13 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
                     embedding_norm(vector),
                 ),
             )
+    db.execute(
+        "UPDATE data_bank_documents SET active=0,updated_at=? "
+        "WHERE chat_id=? AND filename=? AND document_id<>? AND active=1",
+        (now, chat_id, filename[:255], document_id),
+    )
     db.commit()
-    return "added", len(chunks)
+    return ("versioned" if version_number > 1 else "added"), len(chunks)
 
 
 def cached_rag_embedding(db: sqlite3.Connection, text: str) -> list[float] | None:
@@ -270,11 +299,19 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
     terms = re.findall(r"[^\W_]{2,}", query.casefold(), flags=re.UNICODE)[:12]
     if not terms:
         return []
-    if not db.execute("SELECT 1 FROM data_bank_documents WHERE chat_id=? LIMIT 1", (chat_id,)).fetchone():
+    if not db.execute("SELECT 1 FROM data_bank_documents WHERE chat_id=? AND active=1 LIMIT 1", (chat_id,)).fetchone():
         return []
     candidates = {}
     match = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms)
-    lexical_rows = db.execute("SELECT CAST(f.chunk_id AS INTEGER),f.filename,c.content,c.document_id,bm25(data_bank_fts) FROM data_bank_fts f JOIN data_bank_chunks c ON c.chunk_id=CAST(f.chunk_id AS INTEGER) WHERE f.chat_id=? AND data_bank_fts MATCH ? ORDER BY bm25(data_bank_fts) LIMIT 50", (chat_id, match)).fetchall()
+    lexical_rows = db.execute(
+        "SELECT CAST(f.chunk_id AS INTEGER),f.filename,c.content,c.document_id,bm25(data_bank_fts) "
+        "FROM data_bank_fts f "
+        "JOIN data_bank_chunks c ON c.chunk_id=CAST(f.chunk_id AS INTEGER) "
+        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
+        "WHERE f.chat_id=? AND d.active=1 AND data_bank_fts MATCH ? "
+        "ORDER BY bm25(data_bank_fts) LIMIT 50",
+        (chat_id, match),
+    ).fetchall()
     for rank, (chunk_id, filename, content, document_id, _score) in enumerate(lexical_rows):
         lexical_score = 1.0 / (1.0 + rank)
         candidates[int(chunk_id)] = [str(filename), str(content), str(document_id), 0.35 * lexical_score]
@@ -298,7 +335,7 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
                 "FROM data_bank_embeddings e "
                 "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
                 "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-                f"WHERE c.chat_id=? AND e.embedding_namespace=? AND e.chunk_id IN ({placeholders})",
+                f"WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? AND e.chunk_id IN ({placeholders})",
                 (chat_id, namespace, *semantic_ids),
             ).fetchall()
         else:
@@ -353,7 +390,53 @@ def rag_citation_footer(db: sqlite3.Connection, chat_id: str, query: str, bundle
 
 
 def data_bank_documents(db: sqlite3.Connection, chat_id: str) -> list[tuple[str, str, int, int]]:
-    return db.execute("SELECT document_id,filename,byte_size,chunk_count FROM data_bank_documents WHERE chat_id=? ORDER BY updated_at DESC", (chat_id,)).fetchall()
+    """Return only active document versions used by retrieval."""
+    return db.execute(
+        "SELECT document_id,filename,byte_size,chunk_count FROM data_bank_documents "
+        "WHERE chat_id=? AND active=1 ORDER BY updated_at DESC",
+        (chat_id,),
+    ).fetchall()
+
+
+def data_bank_document_versions(
+    db: sqlite3.Connection,
+    chat_id: str,
+    filename: str,
+) -> list[tuple[str, int, int, int, int]]:
+    return db.execute(
+        "SELECT document_id,version_number,active,byte_size,chunk_count "
+        "FROM data_bank_documents WHERE chat_id=? AND filename=? "
+        "ORDER BY version_number DESC",
+        (chat_id, filename),
+    ).fetchall()
+
+
+def activate_data_bank_version(
+    db: sqlite3.Connection,
+    chat_id: str,
+    filename: str,
+    version_number: int,
+) -> bool:
+    target = db.execute(
+        "SELECT document_id FROM data_bank_documents "
+        "WHERE chat_id=? AND filename=? AND version_number=?",
+        (chat_id, filename, int(version_number)),
+    ).fetchone()
+    if not target:
+        return False
+    now = time.time()
+    db.execute(
+        "UPDATE data_bank_documents SET active=0,updated_at=? "
+        "WHERE chat_id=? AND filename=?",
+        (now, chat_id, filename),
+    )
+    db.execute(
+        "UPDATE data_bank_documents SET active=1,updated_at=? "
+        "WHERE chat_id=? AND document_id=?",
+        (now, chat_id, str(target[0])),
+    )
+    db.commit()
+    return True
 
 
 def delete_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: str) -> int:
@@ -368,15 +451,24 @@ def delete_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: s
 
 
 def rag_embedding_coverage(db: sqlite3.Connection, chat_id: str) -> tuple[int, int]:
-    total = int(db.execute("SELECT COALESCE(SUM(chunk_count),0) FROM data_bank_documents WHERE chat_id=?", (chat_id,)).fetchone()[0])
-    indexed = int(db.execute("SELECT COUNT(*) FROM data_bank_embeddings e JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id WHERE c.chat_id=? AND e.embedding_namespace=?", (chat_id, rag_embedding_namespace())).fetchone()[0])
+    total = int(db.execute(
+        "SELECT COALESCE(SUM(chunk_count),0) FROM data_bank_documents WHERE chat_id=? AND active=1",
+        (chat_id,),
+    ).fetchone()[0])
+    indexed = int(db.execute(
+        "SELECT COUNT(*) FROM data_bank_embeddings e "
+        "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
+        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
+        "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=?",
+        (chat_id, rag_embedding_namespace()),
+    ).fetchone()[0])
     return total, indexed
 
 
 def reindex_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: str | None = None) -> tuple[int, int]:
     namespace = rag_embedding_namespace()
     params = [chat_id]
-    query = "SELECT document_id,filename FROM data_bank_documents WHERE chat_id=?"
+    query = "SELECT document_id,filename FROM data_bank_documents WHERE chat_id=? AND active=1"
     if filename:
         query += " AND filename=?"
         params.append(filename)
