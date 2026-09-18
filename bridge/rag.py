@@ -172,7 +172,8 @@ def backfill_rag_embedding_signatures(
         "SELECT e.chunk_id,e.vector_json "
         "FROM data_bank_embeddings e "
         "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-        "WHERE c.chat_id=? AND e.embedding_namespace=? "
+        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
+        "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? "
         "AND e.vector_signature IS NULL "
         "ORDER BY e.chunk_id LIMIT ?",
         (str(chat_id), str(embedding_namespace), max(0, int(limit))),
@@ -507,6 +508,34 @@ def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, c
         total, indexed = reindex_data_bank_documents(db, chat_id, filename)
         send_text(token, chat_id, f"Data Bank reindex complete: {indexed}/{total} chunks indexed for the current embedding namespace.")
         return
+    if argument == "versions":
+        filename = parts[2].strip() if len(parts) > 2 else ""
+        if not filename:
+            send_text(token, chat_id, "Use /databank versions <filename>.")
+            return
+        versions = data_bank_document_versions(db, chat_id, filename)
+        if not versions:
+            send_text(token, chat_id, f"No Data Bank document named {filename}.")
+            return
+        lines = [
+            f"- v{version_number}{' (active)' if active else ''}: {chunks} chunks, {byte_size} bytes"
+            for _document_id, version_number, active, byte_size, chunks in versions
+        ]
+        send_text(token, chat_id, f"Versions for {filename}:\n" + "\n".join(lines))
+        return
+    if argument == "activate":
+        filename = parts[2].strip() if len(parts) > 2 else ""
+        raw_version = parts[3].strip().casefold().removeprefix("v") if len(parts) > 3 else ""
+        try:
+            version_number = int(raw_version)
+        except ValueError:
+            send_text(token, chat_id, "Use /databank activate <filename> <version>.")
+            return
+        if activate_data_bank_version(db, chat_id, filename, version_number):
+            send_text(token, chat_id, f"Activated {filename} v{version_number}.")
+        else:
+            send_text(token, chat_id, f"Version not found: {filename} v{version_number}.")
+        return
     if argument == "remove":
         filename = parts[2].strip() if len(parts) > 2 else ""
         confirmed = len(parts) > 3 and parts[3].casefold() == "confirm"
@@ -529,4 +558,4 @@ def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, c
         text = "\n\n".join(f"[{filename}]\n{content}" for filename, content, _ in results)
         send_text(token, chat_id, "Data Bank search:\n" + (text[:MAX_TELEGRAM_LENGTH] if text else "No matching chunks found."))
         return
-    send_text(token, chat_id, "Use /databank on, /databank off, /databank list, /databank search <query>, or /databank remove <filename> confirm.")
+    send_text(token, chat_id, "Use /databank on, /databank off, /databank list, /databank search <query>, /databank versions <filename>, /databank activate <filename> <version>, or /databank remove <filename> confirm.")
