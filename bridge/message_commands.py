@@ -54,7 +54,7 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
     """Assemble context, run generation, persist the reply, and deliver it."""
     history_rows = timed_call("history_load", db.execute,
         "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC LIMIT ?",
-        (chat_id, session_id, MAX_HISTORY_MESSAGES),
+        (chat_id, session_id, context_history_candidate_limit()),
     ).fetchall()
     history_rows = list(reversed(history_rows))
     rag_bundle = timed_call("rag_retrieval", rag_retrieval_bundle, db, chat_id, text)
