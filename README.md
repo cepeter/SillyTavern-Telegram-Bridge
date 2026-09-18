@@ -207,6 +207,25 @@ Each provider entry in your private catalog names its own `api_key_env` for
 credentials. **Never put real keys in Git, README files, release assets, or
 Telegram messages.**
 
+### Smart context compaction
+
+Long sessions use a budget-aware prompt planner instead of a fixed recent-history
+cutoff. The bridge considers up to 96 recent transcript messages by default,
+keeps the newest turns, then reduces older history, Data Bank context, Hindsight
+recall, and finally the continuity summary when needed. Character and fixed
+system instructions plus the current user turn are never silently truncated.
+
+The defaults assume a 32k-token context window with 4k reserved for output:
+
+```dotenv
+SILLYTAVERN_CONTEXT_WINDOW_TOKENS=32768
+SILLYTAVERN_CONTEXT_OUTPUT_RESERVE_TOKENS=4096
+SILLYTAVERN_CONTEXT_HISTORY_CANDIDATES=96
+```
+
+Set the context window to match the models you actually use. `/prompt` shows
+the current estimated input budget and history candidate limit.
+
 ### Hindsight and Data Bank
 
 Hindsight is optional. When enabled, point it at your private instance:

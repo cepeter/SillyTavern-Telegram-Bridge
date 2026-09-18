@@ -36,7 +36,7 @@ HELP_CATEGORIES = {
         ("/continue", "Continue the latest assistant response from where it stopped."),
         ("/edit", "Open a panel, then send replacement text for the latest user turn"),
         ("/retry", "Retry the latest failed character response — no duplicate turns."),
-        ("/prompt", "Inspect prompt sections — character, history, memory, RAG, and World Info state — without the full prompt."),
+        ("/prompt", "Inspect prompt sections and smart context budget — history candidates, memory, RAG, and World Info — without the full prompt."),
     ],
     "memory_rag": [
         ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),

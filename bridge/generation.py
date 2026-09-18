@@ -2,6 +2,13 @@ import hashlib
 import re
 import time
 
+from bridge.context_compaction import (
+    compact_chat_messages,
+    context_history_candidate_limit,
+    context_input_budget_tokens,
+    estimate_message_tokens,
+)
+
 
 def anthropic_content(value):
     if isinstance(value, str):
@@ -443,7 +450,25 @@ def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_te
         ]})
     else:
         messages.append({"role": "user", "content": user_content})
-    return messages
+    compacted, stats = compact_chat_messages(messages)
+    if stats["original_tokens"] != stats["final_tokens"]:
+        logging.info(
+            "Context compacted original_tokens=%s final_tokens=%s budget_tokens=%s dropped_history=%s rag_trimmed=%s memory_trimmed=%s summary_trimmed=%s",
+            stats["original_tokens"],
+            stats["final_tokens"],
+            stats["budget_tokens"],
+            stats["dropped_history"],
+            stats["rag_trimmed"],
+            stats["memory_trimmed"],
+            stats["summary_trimmed"],
+        )
+    if stats["over_budget"]:
+        logging.warning(
+            "Fixed prompt context remains over configured budget: estimated_tokens=%s budget_tokens=%s",
+            stats["final_tokens"],
+            stats["budget_tokens"],
+        )
+    return compacted
 
 
 def save_response_variant(db: sqlite3.Connection, chat_id: str, session_id: str, user_content: str, response: str, user_rowid: int | None = None, commit: bool = True) -> int:

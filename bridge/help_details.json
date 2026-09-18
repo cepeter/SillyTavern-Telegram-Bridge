@@ -60,7 +60,7 @@
 
   "/retry": "Retries the latest failed character response. It replays the original message without creating a duplicate committed turn — clean recovery after a crash or timeout.",
 
-  "/prompt": "Shows safe prompt diagnostics — active character, history length, summary, memory, RAG, group, and World Info state. It doesn't dump the full prompt.",
+  "/prompt": "Shows safe prompt diagnostics — active character, smart input-token budget, history candidate count, summary, memory, RAG, group, and World Info state. Long prompts automatically drop oldest history first, then trim retrieved RAG/memory context and finally compact the continuity summary; fixed character/system instructions and the current user turn are preserved.",
 
   "/memory": "Opens Hindsight memory controls. You can turn memory on or off and search within the active session. Recall is always session-scoped — it never pulls in memories from other sessions, users, or characters.",
 
