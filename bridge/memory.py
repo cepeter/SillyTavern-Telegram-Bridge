@@ -1,3 +1,5 @@
+import inspect
+
 def hindsight_bank_id(chat_id: str) -> str:
     return "sillytavern-telegram-" + hashlib.sha256(str(chat_id).encode("utf-8")).hexdigest()[:24]
 
@@ -18,6 +20,36 @@ def hindsight_client():
 
 _HINDSIGHT_SESSION_LOCKS: dict[tuple[str, str], threading.RLock] = {}
 _HINDSIGHT_SESSION_LOCKS_GUARD = threading.Lock()
+
+
+async def _close_hindsight_client_async(client) -> None:
+    """Close any generated Hindsight API clients owned by a wrapper instance."""
+    seen = set()
+    candidates = [
+        getattr(client, "_memory_api", None),
+        getattr(client, "documents", None),
+        getattr(client, "api_client", None),
+    ]
+    for candidate in candidates:
+        api_client = getattr(candidate, "api_client", candidate)
+        if api_client is None or id(api_client) in seen:
+            continue
+        seen.add(id(api_client))
+        close = getattr(api_client, "close", None)
+        if close is None:
+            continue
+        result = close()
+        if inspect.isawaitable(result):
+            await result
+
+
+def close_hindsight_client(client) -> None:
+    if client is None:
+        return
+    try:
+        asyncio.run(_close_hindsight_client_async(client))
+    except Exception:
+        logging.debug("Could not close Hindsight client cleanly", exc_info=True)
 
 
 def hindsight_session_lock(chat_id: str, session_id: str) -> threading.RLock:
@@ -107,9 +139,7 @@ async def _delete_hindsight_session_documents_and_close(client, bank_id: str, se
     try:
         return await _delete_hindsight_session_documents(client, bank_id, session_id, mapped_ids)
     finally:
-        api_client = getattr(client.documents, "api_client", None)
-        if api_client is not None:
-            await api_client.close()
+        await _close_hindsight_client_async(client)
 
 
 def purge_hindsight_session(db: sqlite3.Connection, chat_id: str, session_id: str) -> int:
@@ -146,6 +176,7 @@ def memory_recall_filter(db: sqlite3.Connection, chat_id: str, session: dict[str
 def recall_memory_results(db: sqlite3.Connection, chat_id: str, session: dict[str, str], query: str, character_name: str = "", max_tokens: int = HINDSIGHT_RECALL_MAX_TOKENS):
     if memory_mode(db, chat_id) != "on" or not query.strip():
         return []
+    client = None
     try:
         client = hindsight_client()
         results = client.recall(
@@ -160,6 +191,8 @@ def recall_memory_results(db: sqlite3.Connection, chat_id: str, session: dict[st
     except Exception:
         logging.warning("Hindsight recall unavailable for chat %s", chat_id, exc_info=True)
         return []
+    finally:
+        close_hindsight_client(client)
 
 
 def recall_memory_context(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], query: str) -> str:
@@ -186,6 +219,7 @@ def _retain_session_memory(chat_id: str, session: dict[str, str], character_name
         if not exists:
             return
         document_id = hindsight_conversation_document_id(session_id)
+        client = None
         try:
             client = hindsight_client()
             client.retain(
@@ -200,6 +234,8 @@ def _retain_session_memory(chat_id: str, session: dict[str, str], character_name
             _record_hindsight_document(chat_id, session_id, document_id, "conversation")
         except Exception:
             logging.warning("Hindsight retain unavailable for chat %s", chat_id, exc_info=True)
+        finally:
+            close_hindsight_client(client)
 
 
 def retain_session_memory(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str]) -> None:
@@ -221,6 +257,7 @@ def remember_fact(db: sqlite3.Connection, chat_id: str, session: dict[str, str],
         if not db.execute("SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (str(chat_id), session_id)).fetchone():
             return False
         document_id = hindsight_explicit_document_id(session_id, fact)
+        client = None
         try:
             client = hindsight_client()
             client.retain(
@@ -237,6 +274,8 @@ def remember_fact(db: sqlite3.Connection, chat_id: str, session: dict[str, str],
         except Exception:
             logging.warning("Hindsight explicit retain unavailable for chat %s", chat_id, exc_info=True)
             return False
+        finally:
+            close_hindsight_client(client)
 
 
 def handle_memory_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict[str, str], command_text: str) -> None:
