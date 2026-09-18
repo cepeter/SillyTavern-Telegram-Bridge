@@ -5,6 +5,7 @@ from bridge.rag_retrieval import (
     DEFAULT_SEMANTIC_CANDIDATE_LIMIT,
     MAX_SEMANTIC_CANDIDATE_LIMIT,
     cosine_similarity,
+    embedding_signature,
     semantic_candidate_chunk_ids,
 )
 
@@ -156,6 +157,39 @@ def rag_semantic_candidate_limit() -> int:
     return max(64, min(value, MAX_SEMANTIC_CANDIDATE_LIMIT))
 
 
+def backfill_rag_embedding_signatures(
+    db: sqlite3.Connection,
+    chat_id: str,
+    embedding_namespace: str,
+    limit: int = 512,
+) -> int:
+    """Lazily upgrade legacy embedding rows without blocking startup."""
+    rows = db.execute(
+        "SELECT e.chunk_id,e.vector_json "
+        "FROM data_bank_embeddings e "
+        "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
+        "WHERE c.chat_id=? AND e.embedding_namespace=? "
+        "AND e.vector_signature IS NULL "
+        "ORDER BY e.chunk_id LIMIT ?",
+        (str(chat_id), str(embedding_namespace), max(0, int(limit))),
+    ).fetchall()
+    updated = 0
+    for chunk_id, vector_json in rows:
+        try:
+            vector = [float(value) for value in json.loads(vector_json)]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        db.execute(
+            "UPDATE data_bank_embeddings SET vector_signature=? "
+            "WHERE chunk_id=? AND vector_signature IS NULL",
+            (embedding_signature(vector), int(chunk_id)),
+        )
+        updated += 1
+    if updated:
+        db.commit()
+    return updated
+
+
 def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, raw: bytes) -> tuple[str, int]:
     if len(raw) > RAG_MAX_FILE_BYTES:
         raise ValueError("Data Bank file exceeds 10 MB")
@@ -195,7 +229,17 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
         db.execute("INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)", (content, chat_id, document_id, filename[:255], chunk_id))
         vector = vector_cache.get(cache_keys[index])
         if vector:
-            db.execute("INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json) VALUES(?,?,?,?)", (chunk_id, namespace, len(vector), json.dumps(vector, separators=(",", ":"))))
+            db.execute(
+                "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature) "
+                "VALUES(?,?,?,?,?)",
+                (
+                    chunk_id,
+                    namespace,
+                    len(vector),
+                    json.dumps(vector, separators=(",", ":")),
+                    embedding_signature(vector),
+                ),
+            )
     db.commit()
     return "added", len(chunks)
 
@@ -232,11 +276,13 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
     query_vector = cached_rag_embedding(db, query)
     if query_vector:
         namespace = rag_embedding_namespace()
+        backfill_rag_embedding_signatures(db, chat_id, namespace)
         semantic_ids = semantic_candidate_chunk_ids(
             db,
             chat_id,
             namespace,
             [int(row[0]) for row in lexical_rows],
+            query_signature=embedding_signature(query_vector),
             candidate_limit=rag_semantic_candidate_limit(),
         )
         if semantic_ids:
