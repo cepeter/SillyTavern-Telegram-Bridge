@@ -42,7 +42,7 @@ HELP_CATEGORIES = {
         ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),
         ("/remember", "Open a panel, then send one explicit long-term fact to store in memory."),
         ("/summarize", "Regenerate the active session's summary from its stored conversation."),
-        ("/databank", "Open Data Bank RAG controls — status, list, search, remove, and reindex."),
+        ("/databank", "Open Data Bank RAG controls. Same-name uploads create versions; use versions/activate to inspect or roll back."),
     ],
     "voice_group": [
         ("/voice on|off", "Toggle automatic voice replies. Only dialogue in straight double quotes gets synthesized — narration stays silent."),

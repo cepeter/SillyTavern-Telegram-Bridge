@@ -92,7 +92,8 @@ def semantic_candidate_chunk_ids(
         "SELECT e.chunk_id "
         "FROM data_bank_embeddings e "
         "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-        "WHERE c.chat_id=? AND e.embedding_namespace=? "
+        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
+        "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? "
         "ORDER BY e.chunk_id LIMIT ?",
         (str(chat_id), str(embedding_namespace), candidate_limit + 1),
     ).fetchall()
@@ -143,7 +144,8 @@ def semantic_candidate_chunk_ids(
             "SELECT e.chunk_id,e.vector_signature "
             "FROM data_bank_embeddings e "
             "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-            "WHERE c.chat_id=? AND e.embedding_namespace=? "
+            "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
+            "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? "
             "AND e.vector_signature IS NOT NULL",
             (str(chat_id), str(embedding_namespace)),
         )
@@ -171,7 +173,8 @@ def semantic_candidate_chunk_ids(
         "SELECT e.chunk_id "
         "FROM data_bank_embeddings e "
         "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-        "WHERE c.chat_id=? AND e.embedding_namespace=? "
+        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
+        "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? "
         "ORDER BY e.chunk_id DESC LIMIT 1",
         (str(chat_id), str(embedding_namespace)),
     ).fetchone()

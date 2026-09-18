@@ -336,6 +336,10 @@ def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, d
     status, chunks = add_data_bank_document(db, chat_id, filename, raw)
     if status == "duplicate":
         send_text(token, chat_id, f"Data Bank already contains {filename} ({chunks} chunks).")
+    elif status == "versioned":
+        versions = data_bank_document_versions(db, chat_id, filename)
+        active_version = next((int(row[1]) for row in versions if row[2]), len(versions))
+        send_text(token, chat_id, f"Added {filename} v{active_version} ({chunks} chunks). Previous versions are retained but excluded from RAG.")
     else:
         send_text(token, chat_id, f"Added {filename} to Data Bank ({chunks} chunks). RAG is {rag_mode(db, chat_id)}.")
 

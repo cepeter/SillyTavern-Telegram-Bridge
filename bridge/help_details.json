@@ -68,7 +68,7 @@
 
   "/summarize": "Regenerates the active session's summary from its stored conversation. Useful after long sessions or when switching models.",
 
-  "/databank": "Opens Data Bank RAG controls — check status, list documents, search, remove, or reindex. Reindex when you change embedding model, dimensions, or revision.",
+  "/databank": "Opens Data Bank RAG controls — check status, list documents, search, remove, or reindex. Uploading different content with the same filename creates a new active version while keeping older versions out of retrieval. Use /databank versions <filename> to inspect history and /databank activate <filename> <version> to roll back atomically.",
 
   "/voice on|off": "Turns automatic voice replies on or off. When on, any dialogue in straight double quotes gets synthesized — from both your messages and character replies. Narration and unquoted text stay silent.",
 
