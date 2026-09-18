@@ -50,11 +50,39 @@ class RuntimeLoaderTests(unittest.TestCase):
             namespace = {"__name__": "test_runtime"}
             stages = (
                 RuntimeStage("core", ("one.py",)),
-                RuntimeStage("hardening", ("two.py",), True),
+                RuntimeStage(
+                    "hardening",
+                    ("two.py",),
+                    (("two.py", ("action",)),),
+                ),
             )
             report = load_runtime_namespace(namespace, root, stages)
             self.assertEqual(report[-1]["public_callable_overrides"], ("action",))
             self.assertEqual(namespace["action"](), 2)
+
+
+    def test_override_stage_rejects_non_allowlisted_symbol(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.py").write_text(
+                "def action():\n    return 1\n\ndef extra():\n    return 1\n",
+                encoding="utf-8",
+            )
+            (root / "two.py").write_text(
+                "def action():\n    return 2\n\ndef extra():\n    return 2\n",
+                encoding="utf-8",
+            )
+            namespace = {"__name__": "test_runtime"}
+            stages = (
+                RuntimeStage("core", ("one.py",)),
+                RuntimeStage(
+                    "hardening",
+                    ("two.py",),
+                    (("two.py", ("action",)),),
+                ),
+            )
+            with self.assertRaisesRegex(RuntimeError, "extra"):
+                load_runtime_namespace(namespace, root, stages)
 
 
 if __name__ == "__main__":
