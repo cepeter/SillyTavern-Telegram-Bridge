@@ -6,6 +6,7 @@ small canonical set of durable facts. Extraction runs after persisted turns on
 the background executor and uses the session utility-model route.
 """
 
+import hashlib
 import json
 import logging
 import re
