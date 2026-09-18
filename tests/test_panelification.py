@@ -86,6 +86,22 @@ class PanelificationTests(unittest.TestCase):
             rt.handle_memory_command = old_memory
             rt.handle_group_command = old_group
             rt.handle_macro_command = old_macro
+    def test_world_menu_keeps_bot_token_for_telegram_request(self):
+        old_world_paths = rt.world_file_paths
+        old_active_worlds = rt.active_world_files
+        old_callback_token = rt.dynamic_callback_token
+        rt.world_file_paths = lambda: [Path("lore.json")]
+        rt.active_world_files = lambda _current: []
+        rt.dynamic_callback_token = lambda _kind, _name, _chat: "callback-token"
+        try:
+            rt.send_world_menu("bot-token", "chat", "")
+        finally:
+            rt.world_file_paths = old_world_paths
+            rt.active_world_files = old_active_worlds
+            rt.dynamic_callback_token = old_callback_token
+        self.assertEqual(self.calls[0][0][0], "bot-token")
+        payload = self.calls[0][0][3]
+        self.assertEqual(payload["inline_keyboard"][0][0]["callback_data"], "world:callback-token")
 
 
 if __name__ == "__main__":

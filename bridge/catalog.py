@@ -230,11 +230,11 @@ def send_world_menu(token: str, chat_id: str, current_world: str, message_id: in
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for name, label in page_options:
-        token = dynamic_callback_token("world", name, chat_id)
+        callback_token = dynamic_callback_token("world", name, chat_id)
         mark = "✅ " if name in selected else ""
         rows.append([
-            {"text": mark + panel_label(label), "callback_data": "world:" + token},
-            {"text": "🗑️", "callback_data": "worlddelete:" + token},
+            {"text": mark + panel_label(label), "callback_data": "world:" + callback_token},
+            {"text": "🗑️", "callback_data": "worlddelete:" + callback_token},
         ])
     navigation = panel_navigation("world", current_page, total_pages)
     if navigation:
