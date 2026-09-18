@@ -1,24 +1,23 @@
-"""Load the bridge domain modules into one runtime namespace.
+"""Compatibility facade for the staged bridge runtime.
 
-The domain files are intentionally kept independent of import order: functions
-resolve shared names at call time, while this loader provides one compatibility
-namespace for the existing Telegram handlers.
+Domain files still share one namespace so existing handlers keep their call-time
+late binding semantics. The loader now validates load phases and makes
+intentional recovery/safety overrides explicit and auditable.
 """
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path as _RuntimePath
 
-_MODULES = (
-    "common.py", "cards.py", "schema.py", "database.py", "memory.py", "rag.py", "groups.py",
-    "telegram.py", "persona_delete_panel.py", "language.py", "help_details.py", "help.py", "input_flows.py", "catalog.py", "update.py", "image_generation.py", "expressions.py", "media.py", "generation.py",
-    "commands.py", "command_routes.py", "message_commands.py", "callbacks.py", "panel_callback_routes.py", "main.py",
-    "recovery.py", "sync_core.py", "sync_api.py", "persona_sync.py", "character_identity.py", "session_naming.py", "sync_safety.py", "state_integrity.py",
-    "scheduler_safety.py",
+from bridge.runtime_loader import (
+    DEFAULT_RUNTIME_STAGES as _DEFAULT_RUNTIME_STAGES,
+    load_runtime_namespace as _load_runtime_namespace,
 )
-_BASE = Path(__file__).parent
-for _filename in _MODULES:
-    _path = _BASE / _filename
-    _source = _path.read_text(encoding="utf-8")
-    exec(compile(_source, str(_path), "exec"), globals(), globals())
 
-del _BASE, _MODULES, _filename, _path, _source
+
+RUNTIME_LOAD_REPORT = _load_runtime_namespace(
+    globals(),
+    _RuntimePath(__file__).parent,
+    _DEFAULT_RUNTIME_STAGES,
+)
+
+del _RuntimePath, _DEFAULT_RUNTIME_STAGES, _load_runtime_namespace
