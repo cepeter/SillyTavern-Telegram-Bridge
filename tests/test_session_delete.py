@@ -78,19 +78,22 @@ class SessionDeletionTests(unittest.TestCase):
         self.assertFalse(denied)
         self.assertEqual(reason, "session has active jobs")
 
-    def test_delete_panel_excludes_active_session(self):
+    def test_session_panel_has_inline_delete_actions_and_protects_active_selection(self):
         active = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
         inactive = rt.create_session(self.db, "chat", rt.DEFAULT_MODEL, session_id="inactive")
         calls = []
         original_request = rt.telegram_request
         rt.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
-            rt.send_session_delete_menu("token", "chat", [active, inactive], active["session_id"])
+            rt.send_session_menu("token", "chat", [active, inactive], active["session_id"])
         finally:
             rt.telegram_request = original_request
-        callbacks = {button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row}
-        self.assertTrue(any(value.startswith("sessiondelete:") for value in callbacks))
-        self.assertFalse(any(value.endswith(active["session_id"]) for value in callbacks))
+        rows = calls[0][1]["reply_markup"]["inline_keyboard"]
+        callbacks = [button["callback_data"] for row in rows for button in row]
+        self.assertEqual(sum(value.startswith("sessiondelete:") for value in callbacks), 2)
+        self.assertIn("session:" + active["session_id"], callbacks)
+        self.assertIn("session:" + inactive["session_id"], callbacks)
+        self.assertNotIn("session:delete", callbacks)
 
 
 if __name__ == "__main__":

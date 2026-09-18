@@ -304,7 +304,7 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
             return True
         answer_callback(token, str(callback.get("id", "")), "Session deleted")
         remove_inline_keyboard(token, callback)
-        send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id)
+        send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"))
         return True
     if data.startswith("sessiondelete:"):
         value = data.split(":", 1)[1]

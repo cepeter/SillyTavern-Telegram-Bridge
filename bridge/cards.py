@@ -403,12 +403,16 @@ def send_character_menu(token: str, chat_id: str, current_character: str, messag
     rows = []
     for filename, label in page_options:
         mark = "✅ " if filename == current_character else ""
-        rows.append([{"text": mark + panel_label(label), "callback_data": "character:" + dynamic_callback_token("character", filename, chat_id)}])
+        callback_token = dynamic_callback_token("character", filename, chat_id)
+        rows.append([
+            {"text": mark + panel_label(label), "callback_data": "character:" + callback_token},
+            {"text": "🗑️", "callback_data": "characterdelete:" + callback_token},
+        ])
     navigation = panel_navigation("character", current_page, total_pages)
     if navigation:
         rows.append(navigation)
-    rows.append([{"text": "ℹ️ Info", "callback_data": "character:info"}, {"text": "🗑️ Delete", "callback_data": "character:delete"}])
-    rows.append([{"text": "🔄 Refresh", "callback_data": "character:menu"}, {"text": "📤 Upload", "callback_data": "character:upload"}])
+    rows.append([{"text": "ℹ️ Character info", "callback_data": "character:info"}, {"text": "🔄 Refresh", "callback_data": "character:menu"}])
+    rows.append([{"text": "📤 Upload character card", "callback_data": "character:upload"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "character:cancel"}])
     current_label = current_character
     if safe_character_path(current_character):
@@ -449,7 +453,7 @@ def send_character_delete_menu(token: str, chat_id: str, active_character: str, 
 
 def send_character_delete_confirm(token: str, chat_id: str, filename: str, message_id: int | None = None) -> None:
     token_value = dynamic_callback_token("character", filename, chat_id)
-    payload = {"chat_id": chat_id, "text": f"Delete {Path(filename).stem}? The card file will be removed; verified backups are kept.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "characterdeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "character:delete"}]]}}
+    payload = {"chat_id": chat_id, "text": f"Delete {Path(filename).stem}? The card file will be removed; verified backups are kept.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "characterdeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "character:menu"}]]}}
     send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
@@ -459,11 +463,15 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
     rows = []
     for session_id, label in page_options:
         mark = "✅ " if session_id == current_id else ""
-        rows.append([{"text": mark + label, "callback_data": "session:" + session_id}])
+        delete_token = dynamic_callback_token("session", session_id, chat_id)
+        rows.append([
+            {"text": mark + panel_label(label), "callback_data": "session:" + session_id},
+            {"text": "🗑️", "callback_data": "sessiondelete:" + delete_token},
+        ])
     navigation = panel_navigation("session", current_page, total_pages)
     if navigation:
         rows.append(navigation)
-    rows.append([{"text": "➕ New session", "callback_data": "session:new"}, {"text": "🗑️ Delete session", "callback_data": "session:delete"}])
+    rows.append([{"text": "➕ New session", "callback_data": "session:new"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "session:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current session: {current_id}{page_label}\nChoose a session, create a new one, or delete an inactive session with its session-scoped Hindsight documents."

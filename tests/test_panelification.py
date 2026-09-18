@@ -50,7 +50,27 @@ class PanelificationTests(unittest.TestCase):
             "user",
         )
 
-    def test_read_only_commands_open_panels(self):
+    def test_character_panel_has_inline_delete_actions(self):
+        old_paths = rt.character_card_paths
+        old_display = rt.character_display_name
+        old_callback_token = rt.dynamic_callback_token
+        rt.character_card_paths = lambda: [Path("active.png"), Path("other.png")]
+        rt.character_display_name = lambda path: path.stem
+        rt.dynamic_callback_token = lambda _kind, filename, _chat: "cb-" + filename
+        try:
+            rt.send_character_menu("bot-token", "chat", "active.png")
+        finally:
+            rt.character_card_paths = old_paths
+            rt.character_display_name = old_display
+            rt.dynamic_callback_token = old_callback_token
+        rows = self.calls[0][0][3]["inline_keyboard"]
+        item_rows = rows[:2]
+        self.assertTrue(all(len(row) == 2 for row in item_rows))
+        callbacks = [button["callback_data"] for row in item_rows for button in row]
+        self.assertEqual(sum(value.startswith("characterdelete:") for value in callbacks), 2)
+        self.assertIn("character:cb-active.png", callbacks)
+        self.assertIn("character:cb-other.png", callbacks)
+
         for command, marker in (("/status", "status:character"), ("/prompt", "prompt:budget"), ("/taskmodel", "taskmodel:model:"), ("/summarize", "summary:confirm")):
             self.calls.clear()
             self.assertTrue(self._route(command))
