@@ -11,13 +11,24 @@ class RuntimeLoaderTests(unittest.TestCase):
         stages = {entry["stage"] for entry in rt.RUNTIME_LOAD_REPORT}
         self.assertEqual(
             stages,
-            {"core", "recovery_overrides", "sync_extensions", "safety_overrides"},
+            {
+                "core",
+                "recovery_overrides",
+                "sync_extensions",
+                "native_adapter_overrides",
+                "identity_extensions",
+                "safety_overrides",
+            },
         )
         self.assertTrue(
             any(
                 entry["public_callable_overrides"]
                 for entry in rt.RUNTIME_LOAD_REPORT
-                if entry["stage"] in {"recovery_overrides", "safety_overrides"}
+                if entry["stage"] in {
+                    "recovery_overrides",
+                    "native_adapter_overrides",
+                    "safety_overrides",
+                }
             )
         )
 
