@@ -82,19 +82,11 @@ def send_system_prompt_menu(token: str, chat_id: str, current: str, message_id: 
     labels = dict(system_prompt_choices())
     current_label = labels.get(current_key, "off")
     text = f"System Prompt choice\nCurrent: {current_label}\nChoose a TXT prompt:"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": system_prompt_menu_markup(current, page)}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, system_prompt_menu_markup(current, page), message_id)
 
 
 def send_help_menu(token: str, chat_id: str, category: str | None = None, message_id: int | None = None, command_index: int | None = None, page: int = 0) -> None:
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": help_text(category, command_index, page), "reply_markup": help_markup(category, command_index, page)}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, help_text(category, command_index, page), help_markup(category, command_index, page), message_id)
 
 
 def send_settings_menu(token: str, chat_id: str, db: sqlite3.Connection, session_id: str, message_id: int | None = None) -> None:
@@ -116,31 +108,19 @@ def send_settings_menu(token: str, chat_id: str, db: sqlite3.Connection, session
     current_values = (f"temperature={settings['temperature']}, max_tokens={settings['max_tokens']}, "
                       f"top_p={settings['top_p']}, frequency_penalty={settings['frequency_penalty']}, "
                       f"presence_penalty={settings['presence_penalty']}, stop_sequences={stop_label}")
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Generation settings — current session\nActive reasoning: {current_label} ({current} budget)\nCurrent values: {current_values}\n\nTap a reasoning level below to apply it.\nTap a field to enter its value in the next message. Send /cancel to leave it unchanged.\nFields: temperature, max_tokens, top_p, frequency_penalty, presence_penalty, stop_sequences.", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Generation settings — current session\nActive reasoning: {current_label} ({current} budget)\nCurrent values: {current_values}\n\nTap a reasoning level below to apply it.\nTap a field to enter its value in the next message. Send /cancel to leave it unchanged.\nFields: temperature, max_tokens, top_p, frequency_penalty, presence_penalty, stop_sequences.", {"inline_keyboard": rows}, message_id)
 
 
 def send_stream_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
     current = get_meta(db, f"stream_mode:{chat_id}", "on")
     rows = [[{"text": ("✅ " if current == "on" else "") + "Streaming on", "callback_data": "enum:stream:on"}, {"text": ("✅ " if current == "off" else "") + "Streaming off", "callback_data": "enum:stream:off"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Live response streaming: {current}", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Live response streaming: {current}", {"inline_keyboard": rows}, message_id)
 
 
 def send_voice_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
     current = get_meta(db, f"voice_mode:{chat_id}", "off")
     rows = [[{"text": ("✅ " if current == "tts" else "") + "Voice replies on", "callback_data": "enum:voice:on"}, {"text": ("✅ " if current != "tts" else "") + "Voice replies off", "callback_data": "enum:voice:off"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Automatic voice replies: {'on' if current == 'tts' else 'off'}", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Automatic voice replies: {'on' if current == 'tts' else 'off'}", {"inline_keyboard": rows}, message_id)
 
 
 def send_voice_input_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
@@ -148,11 +128,7 @@ def send_voice_input_menu(token: str, chat_id: str, db: sqlite3.Connection, mess
     model = get_meta(db, f"stt_model:{chat_id}", STT_DEFAULT_MODEL)
     language = normalize_stt_language(get_meta(db, f"stt_language:{chat_id}", "auto"))
     rows = [[{"text": ("✅ " if mode == "on" else "") + "Transcription on", "callback_data": "enum:stt:on"}, {"text": ("✅ " if mode == "off" else "") + "Transcription off", "callback_data": "enum:stt:off"}], [{"text": f"Model: {model}", "callback_data": "enum:stt:model"}], [{"text": f"Language: {stt_language_label(language)}", "callback_data": "enum:stt:language"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Voice input transcription: {mode}\nModel: {model}\nLanguage: {stt_language_label(language)}", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Voice input transcription: {mode}\nModel: {model}\nLanguage: {stt_language_label(language)}", {"inline_keyboard": rows}, message_id)
 
 
 def send_stt_language_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
@@ -168,32 +144,20 @@ def send_stt_language_menu(token: str, chat_id: str, db: sqlite3.Connection, mes
         rows.append(navigation)
     rows.append([{"text": "✏️ User input", "callback_data": "enum:stt:language_input"}])
     rows.append([{"text": "⬅️ Back", "callback_data": "enum:stt:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Choose voice input language (page {current_page + 1}/{total_pages}). Auto detects the language; User input accepts a custom 2–8 letter code.", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Choose voice input language (page {current_page + 1}/{total_pages}). Auto detects the language; User input accepts a custom 2–8 letter code.", {"inline_keyboard": rows}, message_id)
 
 
 def send_stt_model_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
     current = get_meta(db, f"stt_model:{chat_id}", STT_DEFAULT_MODEL)
     rows = [[{"text": ("✅ " if model == current else "") + model, "callback_data": "enum:sttmodel:" + model}] for model in ("tiny", "base", "small")]
     rows.append([{"text": "⬅️ Back", "callback_data": "enum:stt:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": "Choose STT model:", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, "Choose STT model:", {"inline_keyboard": rows}, message_id)
 
 
 def send_memory_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
     mode = memory_mode(db, chat_id)
     rows = [[{"text": ("✅ " if mode == "on" else "") + "Memory on", "callback_data": "enum:memory:on"}, {"text": ("✅ " if mode == "off" else "") + "Memory off", "callback_data": "enum:memory:off"}], [{"text": "🔎 Search memories", "callback_data": "enum:memory:search"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Hindsight memory: {mode}\nScope: active session only (fixed)", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Hindsight memory: {mode}\nScope: active session only (fixed)", {"inline_keyboard": rows}, message_id)
 
 
 def send_preset_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
@@ -210,11 +174,7 @@ def send_preset_menu(token: str, chat_id: str, db: sqlite3.Connection, message_i
     rows.append([{"text": "💾 Save preset", "callback_data": "enum:preset:save"}])
     rows.append([{"text": "🗑️ Delete preset", "callback_data": "enum:presetdelete"}])
     rows.append([{"text": "❌ Close", "callback_data": "enum:close"}])
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Choose a preset to apply (page {current_page + 1}/{total_pages}). Use Save preset for the two-step name input." , "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Choose a preset to apply (page {current_page + 1}/{total_pages}). Use Save preset for the two-step name input." , {"inline_keyboard": rows}, message_id)
 
 
 def send_preset_delete_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
@@ -229,11 +189,7 @@ def send_preset_delete_menu(token: str, chat_id: str, db: sqlite3.Connection, me
             navigation.append({"text": "Next ➡️", "callback_data": f"enum:presetdeletepage:{current_page + 1}"})
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "enum:preset:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": "Choose a preset to delete:", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, "Choose a preset to delete:", {"inline_keyboard": rows}, message_id)
 
 
 def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
@@ -241,11 +197,7 @@ def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message
     docs = data_bank_documents(db, chat_id)
     total_chunks, indexed_chunks = rag_embedding_coverage(db, chat_id)
     rows = [[{"text": ("✅ " if mode == "on" else "") + "RAG on", "callback_data": "enum:rag:on"}, {"text": ("✅ " if mode == "off" else "") + "RAG off", "callback_data": "enum:rag:off"}], [{"text": "List documents", "callback_data": "enum:rag:list"}, {"text": "🔎 Search", "callback_data": "enum:rag:search"}], [{"text": "Remove document", "callback_data": "enum:rag:remove"}], [{"text": "Reindex embeddings", "callback_data": "enum:rag:reindex"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Data Bank RAG: {mode}\nDocuments: {len(docs)}\nEmbedding coverage: {indexed_chunks}/{total_chunks} chunks", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Data Bank RAG: {mode}\nDocuments: {len(docs)}\nEmbedding coverage: {indexed_chunks}/{total_chunks} chunks", {"inline_keyboard": rows}, message_id)
 
 
 def send_databank_remove_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
@@ -261,11 +213,7 @@ def send_databank_remove_menu(token: str, chat_id: str, db: sqlite3.Connection, 
             navigation.append({"text": "Next ➡️", "callback_data": f"enum:ragremovepage:{current_page + 1}"})
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "enum:rag:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": f"Choose a document to remove (page {current_page + 1}/{total_pages}):", "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, f"Choose a document to remove (page {current_page + 1}/{total_pages}):", {"inline_keyboard": rows}, message_id)
 
 
 def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict) -> None:

@@ -8,7 +8,4 @@ def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, mes
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "persona:menu"}, {"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     payload = {"chat_id": chat_id, "text": "Choose an inactive Persona to delete:", "reply_markup": {"inline_keyboard": rows}}
-    method = "editMessageText" if message_id else "sendMessage"
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)

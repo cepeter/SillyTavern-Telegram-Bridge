@@ -362,6 +362,15 @@ def panel_navigation(prefix: str, page: int, total_pages: int) -> list[dict[str,
     return row
 
 
+def send_panel_message(token: str, chat_id: str, text: str, reply_markup: dict, message_id: int | None = None) -> None:
+    """Send a panel message, or edit the existing one in place."""
+    method = "editMessageText" if message_id else "sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "reply_markup": reply_markup}
+    if message_id:
+        payload["message_id"] = message_id
+    telegram_request(token, method, payload)
+
+
 def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0) -> None:
     personas = load_personas()
     options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in list(personas.items())[:CATALOG_MAX_ITEMS]]
@@ -380,11 +389,7 @@ def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id
     rows.append([{"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current Persona: {persona_name(current_persona) if current_persona else 'off'}{page_label}\nChoose a persona:"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def send_character_menu(token: str, chat_id: str, current_character: str, message_id: int | None = None, page: int = 0) -> None:
@@ -405,14 +410,10 @@ def send_character_menu(token: str, chat_id: str, current_character: str, messag
         current_label = card_fields_from_file(current_character)["name"]
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current character: {current_label}{page_label}\nChoose a character card:"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
     try:
-        telegram_request(token, method, payload)
+        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
     except RuntimeError as exc:
-        if method == "editMessageText" and "not modified" in str(exc).casefold():
+        if message_id is not None and "not modified" in str(exc).casefold():
             return
         raise
 
@@ -426,11 +427,7 @@ def send_character_info_menu(token: str, chat_id: str, message_id: int | None = 
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "character:menu"}, {"text": "❌ Close", "callback_data": "character:cancel"}])
     text = f"Choose a character for info (page {current_page + 1}/{total_pages}):"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def send_character_delete_menu(token: str, chat_id: str, active_character: str, message_id: int | None = None, page: int = 0) -> None:
@@ -442,20 +439,13 @@ def send_character_delete_menu(token: str, chat_id: str, active_character: str, 
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "character:menu"}, {"text": "❌ Close", "callback_data": "character:cancel"}])
     text = f"Choose a non-active character to delete (page {current_page + 1}/{total_pages}):"
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def send_character_delete_confirm(token: str, chat_id: str, filename: str, message_id: int | None = None) -> None:
     token_value = dynamic_callback_token("character", filename, chat_id)
     payload = {"chat_id": chat_id, "text": f"Delete {Path(filename).stem}? The card file will be removed; verified backups are kept.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "characterdeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "character:delete"}]]}}
-    method = "editMessageText" if message_id else "sendMessage"
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
 def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], current_id: str, message_id: int | None = None, page: int = 0) -> None:
@@ -472,11 +462,7 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
     rows.append([{"text": "❌ Cancel", "callback_data": "session:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current session: {current_id}{page_label}\nChoose a session, create a new one, or delete an inactive session with its session-scoped Hindsight documents."
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
-    if message_id:
-        payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
 def replace_macros(text: str, fields: dict[str, str], user_name: str = DEFAULT_USER_NAME) -> str:
