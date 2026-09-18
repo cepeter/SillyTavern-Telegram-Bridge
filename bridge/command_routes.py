@@ -142,7 +142,7 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
     if command == "/databank" or command in {"/databank on", "/databank off", "/databank status", "/databank list", "/databank remove"}:
         send_databank_menu(token, chat_id, db)
         return True
-    if command.startswith("/databank search"):
+    if command.startswith("/databank search") or command.startswith("/databank versions") or command.startswith("/databank activate"):
         handle_data_bank_command(db, token, chat_id, stripped)
         return True
     if command.startswith("/databank "):
