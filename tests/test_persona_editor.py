@@ -99,6 +99,8 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertTrue(handled)
         self.assertEqual(answers, ["Review persona"])
         self.assertIn("Original description", self.calls[-1][1]["text"])
+        self.assertEqual(self.calls[-1][1]["parse_mode"], "HTML")
+        self.assertIn("<pre>Original description</pre>", self.calls[-1][1]["text"])
         self.assertIn("persona:copy_description", [
             button["callback_data"]
             for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"]

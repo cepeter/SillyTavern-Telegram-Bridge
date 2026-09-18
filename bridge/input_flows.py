@@ -185,10 +185,13 @@ def send_persona_edit_menu(token: str, chat_id: str, persona_id: str, message_id
     description = str(persona.get("description") or "")
     if len(description) > 1800:
         description = description[:1800] + "…"
+    safe_id = html.escape(str(persona_id))
+    safe_name = html.escape(str(persona.get("name") or persona_id))
+    safe_description = html.escape(description)
     tags = ", ".join(str(tag) for tag in persona.get("tags", [])) or "none"
-    text = (f"Persona information\n\nID: {persona_id}\nName: {persona.get('name') or persona_id}\n"
-            f"Description:\n{description}\n\nTags: {tags}\n\nChoose what to update:")
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": [
+    text = (f"Persona information\n\nID: {safe_id}\nName: {safe_name}\n"
+            f"Description (tap the copy icon):\n<pre>{safe_description}</pre>\n\nTags: {html.escape(tags)}\n\nChoose what to update:")
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "reply_markup": {"inline_keyboard": [
         [{"text": "📋 Send description to copy", "callback_data": "persona:copy_description"}],
         [{"text": "✏️ Edit name", "callback_data": "persona:edit_name"}],
         [{"text": "📝 Edit description", "callback_data": "persona:edit_description"}],

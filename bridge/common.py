@@ -159,6 +159,17 @@ def panel_actor_context() -> str:
     return str(getattr(_PANEL_SESSION_CONTEXT, "user_id", "") or "")
 
 
+_DB_CONNECTION_CONTEXT = threading.local()
+
+
+def set_db_connection_context(db: sqlite3.Connection | None) -> None:
+    _DB_CONNECTION_CONTEXT.connection = db
+
+
+def db_connection_context() -> sqlite3.Connection | None:
+    return getattr(_DB_CONNECTION_CONTEXT, "connection", None)
+
+
 _BACKGROUND_MAX_QUEUED_PER_CHAT = 256
 _BACKGROUND_MAX_SCOPED_QUEUES = 1024
 BACKGROUND_MAX_JOBS = 8

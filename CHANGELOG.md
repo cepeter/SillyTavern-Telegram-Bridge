@@ -2,6 +2,12 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- Translated leftover Indonesian-language user-facing error messages (voice/image/character-card/Data Bank size and format limits) to English for consistency with the rest of the bot's UI copy.
+
 ## [0.2.012] - 2026-09-18
 
 ### Changed

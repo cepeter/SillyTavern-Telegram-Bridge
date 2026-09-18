@@ -38,6 +38,7 @@
   "/imagine": "Opens prompt input for image generation — but only when you've explicitly configured an image provider. Enter 1–4,000 characters, or use /imagine <prompt> directly. Unconfigured or unsupported providers fail closed. /cancel aborts.",
 
   "/settings": "Opens the generation settings panel for this session. Pick a reasoning level or tap a field to enter your own value for temperature, max tokens, top P, frequency penalty, presence penalty, or stop sequences.",
+  "/taskmodel": "Configures a per-session utility model. Use /taskmodel <provider::model> to route non-dialogue utility work such as summarization to that model, /taskmodel main to inherit the primary session model, or /taskmodel status to inspect the route.",
 
   "/stream on|off": "Opens streaming controls. When streaming is on, you get a live preview that updates as the model generates — the final response replaces it when done.",
 
@@ -59,7 +60,7 @@
 
   "/retry": "Retries the latest failed character response. It replays the original message without creating a duplicate committed turn — clean recovery after a crash or timeout.",
 
-  "/prompt": "Shows safe prompt diagnostics — active character, history length, summary, memory, RAG, group, and World Info state. It doesn't dump the full prompt.",
+  "/prompt": "Shows safe prompt diagnostics — active character, smart input-token budget, history candidate count, summary, memory, RAG, group, and World Info state. Long prompts automatically drop oldest history first, then trim retrieved RAG/memory context and finally compact the continuity summary; fixed character/system instructions and the current user turn are preserved.",
 
   "/memory": "Opens Hindsight memory controls. You can turn memory on or off and search within the active session. Recall is always session-scoped — it never pulls in memories from other sessions, users, or characters.",
 
@@ -67,7 +68,7 @@
 
   "/summarize": "Regenerates the active session's summary from its stored conversation. Useful after long sessions or when switching models.",
 
-  "/databank": "Opens Data Bank RAG controls — check status, list documents, search, remove, or reindex. Reindex when you change embedding model, dimensions, or revision.",
+  "/databank": "Opens Data Bank RAG controls — check status, list documents, search, remove, or reindex. Uploading different content with the same filename creates a new active version while keeping older versions out of retrieval. Use /databank versions <filename> to inspect history and /databank activate <filename> <version> to roll back atomically.",
 
   "/voice on|off": "Turns automatic voice replies on or off. When on, any dialogue in straight double quotes gets synthesized — from both your messages and character replies. Narration and unquoted text stay silent.",
 
@@ -75,5 +76,5 @@
 
   "/voice_input language": "Opens the STT language panel. Auto detects from the audio, a fixed code forces one language, and User input asks you each time.",
 
-  "/group": "Only works inside a Telegram Forum Topic. Opens topic-local group controls — New group session asks for a name, then walks you through picking characters and World Info."
+  "/group": "Only works inside a Telegram Forum Topic. Opens topic-local group controls — New group session asks for a name, then walks you through picking characters and World Info. Director mode makes one hidden bounded model call per normal user turn to choose a known speaker and a short pacing/scene direction; that decision is never stored in the transcript and falls back to round-robin if it fails."
 }

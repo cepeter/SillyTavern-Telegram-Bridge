@@ -25,6 +25,7 @@ HELP_CATEGORIES = {
     ],
     "generation": [
         ("/settings", "Open this session's generation panel — pick a reasoning level or set your own temperature, tokens, and sampling values."),
+        ("/taskmodel", "Route utility tasks such as session summarization to a per-session model, or follow the main model."),
         ("/stream on|off", "Toggle streaming preview on or off."),
         ("/preset", "Open the preset panel — apply, save, or delete generation setting presets."),
         ("/macro", "Open a panel, then send one message to preview supported SillyTavern macros"),
@@ -35,19 +36,19 @@ HELP_CATEGORIES = {
         ("/continue", "Continue the latest assistant response from where it stopped."),
         ("/edit", "Open a panel, then send replacement text for the latest user turn"),
         ("/retry", "Retry the latest failed character response — no duplicate turns."),
-        ("/prompt", "Inspect prompt sections — character, history, memory, RAG, and World Info state — without the full prompt."),
+        ("/prompt", "Inspect prompt sections and smart context budget — history candidates, memory, RAG, and World Info — without the full prompt."),
     ],
     "memory_rag": [
         ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),
         ("/remember", "Open a panel, then send one explicit long-term fact to store in memory."),
         ("/summarize", "Regenerate the active session's summary from its stored conversation."),
-        ("/databank", "Open Data Bank RAG controls — status, list, search, remove, and reindex."),
+        ("/databank", "Open Data Bank RAG controls. Same-name uploads create versions; use versions/activate to inspect or roll back."),
     ],
     "voice_group": [
         ("/voice on|off", "Toggle automatic voice replies. Only dialogue in straight double quotes gets synthesized — narration stays silent."),
         ("/voice_input on|off", "Open transcription, STT model, and language controls."),
         ("/voice_input language", "Open the STT language panel — Auto, a fixed code, or User input."),
-        ("/group", "Open Forum Topic group controls. New group session chains Character and World Info selection."),
+        ("/group", "Open Forum Topic group controls, including invisible Director mode for model-selected speaker and pacing guidance."),
     ],
 }
 
@@ -412,6 +413,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
 def process_document_job(token: str, chat_id: str, document: dict, default_model: str, message_id: int | None = None, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
+        set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
@@ -424,6 +426,7 @@ def process_document_job(token: str, chat_id: str, document: dict, default_model
                 finish_job(db, job_id, "failed", str(exc))
             send_text(token, chat_id, "Document import failed. Check the file format and size limits.")
         finally:
+            set_db_connection_context(None)
             db.close()
 
 
@@ -446,6 +449,7 @@ def set_bot_commands(token: str) -> None:
                 {"command": "voice", "description": "Open automatic voice panel"},
                 {"command": "voice_input", "description": "Open transcription/model/language panel"},
                 {"command": "settings", "description": "Open generation settings panel"},
+                {"command": "taskmodel", "description": "Route utility tasks to another model"},
                 {"command": "stream", "description": "Open streaming on/off panel"},
                 {"command": "preset", "description": "Open preset use/delete panel"},
                 {"command": "macro", "description": "Preview a macro"},

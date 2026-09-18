@@ -180,7 +180,7 @@ def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, mode
         return
     file_size = int(voice.get("file_size") or 0)
     if file_size > STT_MAX_BYTES:
-        send_text(token, chat_id, "Voice message terlalu besar. Batasnya 20 MB.")
+        send_text(token, chat_id, "Voice message is too large. The limit is 20 MB.")
         return
     raw = download_telegram_file(token, str(voice.get("file_id", "")), STT_MAX_BYTES)
     suffix = Path(str(voice.get("file_name") or ".ogg")).suffix or ".ogg"
@@ -193,6 +193,7 @@ def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, mode
 def process_voice_job(token: str, api_key: str, model: str, fields: dict, chat_id: str, voice: dict, message_id: int, queued_session_id: str | None = None, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
+        set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
@@ -220,6 +221,7 @@ def process_voice_job(token: str, api_key: str, model: str, fields: dict, chat_i
             send_text(token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings.")
         finally:
             set_panel_actor_context(None)
+            set_db_connection_context(None)
             db.close()
 
 

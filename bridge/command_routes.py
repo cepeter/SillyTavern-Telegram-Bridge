@@ -50,7 +50,8 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         group_labels = group_member_labels(group["members"])
         group_state_text = f"{'on' if group['enabled'] else 'off'} ({', '.join(group_labels) if group_labels else 'none'})"
         expression_mode = get_meta(db, expression_mode_key(chat_id, session_id), "off")
-        send_text(token, chat_id, f"Character: {fields['name']}\nSession: {session.get('title') or session_id} ({session_id})\nStored messages: {count}\nModel: {current_model}\nResponse language: {response_language_label(session.get('response_language') or 'auto')}\nPersona: {persona}\nWorld Info: {world}\nSystem Prompt: {system_prompt_label(session.get('system_prompt'))}\nAuthor's Note: {note_state}\nExpressions: {expression_mode}\nSummary: {summary_state}\nHindsight: {memory_mode(db, chat_id)} ({memory_scope(db, chat_id)})\nData Bank RAG: {rag_mode(db, chat_id)} ({len(rag_docs)} documents)\nGroup chat: {group_state_text}\nGeneration: temperature={generation['temperature']}, max_tokens={generation['max_tokens']}, top_p={generation['top_p']}")
+        utility_model = task_model_for_session(db, chat_id, session, "utility")
+        send_text(token, chat_id, f"Character: {fields['name']}\nSession: {session.get('title') or session_id} ({session_id})\nStored messages: {count}\nModel: {current_model}\nUtility model: {utility_model}\nResponse language: {response_language_label(session.get('response_language') or 'auto')}\nPersona: {persona}\nWorld Info: {world}\nSystem Prompt: {system_prompt_label(session.get('system_prompt'))}\nAuthor's Note: {note_state}\nExpressions: {expression_mode}\nSummary: {summary_state}\nHindsight: {memory_mode(db, chat_id)} ({memory_scope(db, chat_id)})\nData Bank RAG: {rag_mode(db, chat_id)} ({len(rag_docs)} documents)\nGroup chat: {group_state_text}\nGeneration: temperature={generation['temperature']}, max_tokens={generation['max_tokens']}, top_p={generation['top_p']}")
         return True
     if command == "/retry":
         failed = latest_failed_turn(db, chat_id)
@@ -74,6 +75,9 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         except Exception as exc:
             record_failed_turn(db, chat_id, failed_message_id, str(failed[1]), str(failed[2]), str(exc), failed_session_id)
             send_text(token, chat_id, "Retry failed again; the turn remains queued for /retry.")
+        return True
+    if command == "/taskmodel" or command == "/taskmodel status" or command.startswith("/taskmodel "):
+        handle_task_model_command(db, token, chat_id, session, stripped)
         return True
     if command == "/prompt":
         send_text(token, chat_id, prompt_diagnostics(db, chat_id, session, fields))
@@ -142,7 +146,7 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
     if command == "/databank" or command in {"/databank on", "/databank off", "/databank status", "/databank list", "/databank remove"}:
         send_databank_menu(token, chat_id, db)
         return True
-    if command.startswith("/databank search"):
+    if command.startswith("/databank search") or command.startswith("/databank versions") or command.startswith("/databank activate"):
         handle_data_bank_command(db, token, chat_id, stripped)
         return True
     if command.startswith("/databank "):

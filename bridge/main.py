@@ -47,6 +47,7 @@ def validate_startup_credential(model: str) -> None:
 def process_message_job(token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, message_id: int, queued_session_id: str | None = None, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
+        set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
@@ -78,12 +79,14 @@ def process_message_job(token: str, api_key: str, model: str, fields: dict, chat
             send_text(token, chat_id, "The character backend failed for this message. Use /retry or /status.")
         finally:
             set_panel_actor_context(None)
+            set_db_connection_context(None)
             db.close()
 
 
 def process_image_job(token: str, chat_id: str, file_id: str, caption: str, model: str, file_size: int, message_id: int, queued_session_id: str | None = None, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
+        set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
@@ -109,12 +112,14 @@ def process_image_job(token: str, chat_id: str, file_id: str, caption: str, mode
                 finish_job(db, job_id, "failed", str(exc))
             send_text(token, chat_id, "Image processing failed. The selected model may not support vision.")
         finally:
+            set_db_connection_context(None)
             db.close()
 
 
 def process_callback_job(token: str, chat_id: str, callback: dict, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
+        set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
@@ -134,12 +139,14 @@ def process_callback_job(token: str, chat_id: str, callback: dict, job_id: int |
             send_text(token, chat_id, "Callback processing failed; try the command again.")
         finally:
             set_panel_actor_context(None)
+            set_db_connection_context(None)
             db.close()
 
 
 def process_edit_job(token: str, api_key: str, chat_id: str, message_id: int, text: str, default_model: str, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
+        set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
@@ -152,6 +159,7 @@ def process_edit_job(token: str, api_key: str, chat_id: str, message_id: int, te
                 finish_job(db, job_id, "failed", str(exc))
             send_text(token, chat_id, "Native message edit failed; the previous branch was preserved.")
         finally:
+            set_db_connection_context(None)
             db.close()
 
 
