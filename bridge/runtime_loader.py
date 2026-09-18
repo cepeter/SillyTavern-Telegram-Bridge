@@ -34,12 +34,11 @@ DEFAULT_RUNTIME_STAGES = (
         ),
     ),
     RuntimeStage("recovery_overrides", ("recovery.py",), True),
+    RuntimeStage("sync_extensions", ("sync_core.py", "sync_api.py")),
+    RuntimeStage("native_adapter_overrides", ("persona_sync.py",), True),
     RuntimeStage(
-        "sync_extensions",
-        (
-            "sync_core.py", "sync_api.py", "persona_sync.py",
-            "character_identity.py", "session_naming.py",
-        ),
+        "identity_extensions",
+        ("character_identity.py", "session_naming.py"),
     ),
     RuntimeStage(
         "safety_overrides",
