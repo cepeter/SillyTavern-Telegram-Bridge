@@ -175,18 +175,28 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
         data = json.dumps(request_payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
-    try:
-        with urllib.request.urlopen(req, timeout=65) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
+    for attempt in range(2 if method == "sendMessage" else 1):
         try:
-            detail = json.loads(exc.read().decode("utf-8")).get("description") or exc.reason
-        except (OSError, ValueError, json.JSONDecodeError):
-            detail = exc.reason
-        raise RuntimeError(f"Telegram {method} failed: {detail}") from exc
-    if not result.get("ok"):
-        detail = result.get("description") or "unknown Telegram error"
-        raise RuntimeError(f"Telegram {method} failed: {detail}")
+            with urllib.request.urlopen(req, timeout=65) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = json.loads(exc.read().decode("utf-8")).get("description") or exc.reason
+            except (OSError, ValueError, json.JSONDecodeError):
+                detail = exc.reason
+            if method == "sendMessage" and exc.code == 404 and attempt == 0:
+                logging.warning("Telegram sendMessage returned 404; retrying once")
+                time.sleep(0.5)
+                continue
+            raise RuntimeError(f"Telegram {method} failed: {detail}") from exc
+        if not result.get("ok"):
+            detail = result.get("description") or "unknown Telegram error"
+            if method == "sendMessage" and detail == "Not Found" and attempt == 0:
+                logging.warning("Telegram sendMessage returned Not Found; retrying once")
+                time.sleep(0.5)
+                continue
+            raise RuntimeError(f"Telegram {method} failed: {detail}")
+        break
     if request_payload.get("reply_markup") and method in {"sendMessage", "editMessageText"}:
         bound_session = panel_session_context()
         bound_owner = panel_actor_context()

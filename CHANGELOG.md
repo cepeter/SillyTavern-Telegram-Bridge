@@ -2,6 +2,12 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- Retry one transient Telegram `sendMessage` 404 before reporting a command failure, preventing temporary panel-delivery errors from being mislabeled as character-backend failures.
+
 ## [0.2.014] - 2026-09-19
 
 ### Added
