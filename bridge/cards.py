@@ -181,6 +181,17 @@ def persona_name(persona_id: str) -> str:
     return str(persona.get("name") or "") if persona else ""
 
 
+def _prompt_catalog_label(stem: str) -> str:
+    return stem.replace("_", " ").replace("-", " ").title()
+
+
+def _merge_system_prompt_file(result: dict[str, dict[str, str]], path: Path) -> None:
+    if path.suffix.casefold() == ".txt":
+        _merge_system_prompt_text(result, path)
+    else:
+        _merge_system_prompt_json(result, path)
+
+
 def _merge_system_prompt_json(result: dict[str, dict[str, str]], path: Path) -> None:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -188,10 +199,10 @@ def _merge_system_prompt_json(result: dict[str, dict[str, str]], path: Path) -> 
         logging.warning("Could not read System Prompt catalog %s", path, exc_info=True)
         return
     if isinstance(raw, list) and all(isinstance(item, str) for item in raw):
-        result[path.stem] = {"name": path.stem.replace("_", " ").replace("-", " ").title(), "prompt": "\n".join(raw)}
+        result[path.stem] = {"name": _prompt_catalog_label(path.stem), "prompt": "\n".join(raw)}
         return
     if isinstance(raw, str) and raw.strip():
-        result[path.stem] = {"name": path.stem.replace("_", " ").replace("-", " ").title(), "prompt": raw}
+        result[path.stem] = {"name": _prompt_catalog_label(path.stem), "prompt": raw}
         return
     if isinstance(raw, dict):
         prompt = str(raw.get("prompt") or raw.get("content") or "")
@@ -215,18 +226,32 @@ def _merge_system_prompt_text(result: dict[str, dict[str, str]], path: Path) -> 
         logging.warning("Could not read System Prompt text file %s", path, exc_info=True)
         return
     if prompt.strip():
-        result[path.stem] = {"name": path.stem.replace("_", " ").replace("-", " ").title(), "prompt": prompt}
+        result[path.stem] = {"name": _prompt_catalog_label(path.stem), "prompt": prompt}
 
 
 def load_system_prompts() -> dict[str, dict[str, str]]:
     result = {}
     if SYSTEM_PROMPTS_FILE:
-        path = Path(SYSTEM_PROMPTS_FILE)
-        _merge_system_prompt_text(result, path) if path.suffix.casefold() == ".txt" else _merge_system_prompt_json(result, path)
+        _merge_system_prompt_file(result, Path(SYSTEM_PROMPTS_FILE))
     if SYSTEM_PROMPTS_DIR.exists():
         for path in sorted(list(SYSTEM_PROMPTS_DIR.glob("*.json")) + list(SYSTEM_PROMPTS_DIR.glob("*.txt"))):
-            _merge_system_prompt_text(result, path) if path.suffix.casefold() == ".txt" else _merge_system_prompt_json(result, path)
+            _merge_system_prompt_file(result, path)
     return dict(list(result.items())[:CATALOG_MAX_ITEMS])
+
+
+def _use_db_connection(action, error_message: str):
+    """Run action(conn) on the ambient connection, or a short-lived one; log failures."""
+    conn = db_connection_context()
+    owns_connection = conn is None
+    try:
+        conn = conn or db_connect()
+        return action(conn)
+    except Exception:
+        logging.debug(error_message, exc_info=True)
+        return None
+    finally:
+        if owns_connection and conn is not None:
+            conn.close()
 
 
 _CALLBACK_TOKEN_VALUES: dict[str, tuple[str, str, str, float]] = {}
@@ -238,52 +263,43 @@ def dynamic_callback_token(kind: str, value: str, chat_id: str = "", db=None) ->
     token = "t" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
     expires_at = time.time() + _CALLBACK_TOKEN_TTL_SECONDS
     _CALLBACK_TOKEN_VALUES[token] = (str(kind), str(value), str(chat_id), expires_at)
-    token_db = db or db_connection_context()
-    owns_connection = token_db is None
-    try:
-        token_db = token_db or db_connect()
-        token_db.execute("INSERT OR REPLACE INTO callback_tokens(token,kind,value,chat_id,expires_at) VALUES(?,?,?,?,?)", (token, str(kind), str(value), str(chat_id), expires_at))
-        token_db.commit()
-    except Exception:
-        logging.debug("Could not persist callback token", exc_info=True)
-    finally:
-        if owns_connection and token_db is not None:
-            token_db.close()
+    def persist(conn):
+        conn.execute("INSERT OR REPLACE INTO callback_tokens(token,kind,value,chat_id,expires_at) VALUES(?,?,?,?,?)", (token, str(kind), str(value), str(chat_id), expires_at))
+        conn.commit()
+
+    if db is not None:
+        try:
+            persist(db)
+        except Exception:
+            logging.debug("Could not persist callback token", exc_info=True)
+    else:
+        _use_db_connection(persist, "Could not persist callback token")
     return token
 
 
 def resolve_dynamic_callback_token(token: str, kind: str, chat_id: str = "") -> str | None:
     item = _CALLBACK_TOKEN_VALUES.get(str(token))
     if item is None:
-        token_db = db_connection_context()
-        owns_connection = token_db is None
-        try:
-            token_db = token_db or db_connect()
-            row = token_db.execute("SELECT kind,value,chat_id,expires_at FROM callback_tokens WHERE token=?", (str(token),)).fetchone()
+        def load(conn):
+            row = conn.execute("SELECT kind,value,chat_id,expires_at FROM callback_tokens WHERE token=?", (str(token),)).fetchone()
             if row:
-                item = (str(row[0]), str(row[1]), str(row[2]), float(row[3]))
-                _CALLBACK_TOKEN_VALUES[str(token)] = item
-        except Exception:
-            logging.debug("Could not load callback token", exc_info=True)
-        finally:
-            if owns_connection and token_db is not None:
-                token_db.close()
+                found = (str(row[0]), str(row[1]), str(row[2]), float(row[3]))
+                _CALLBACK_TOKEN_VALUES[str(token)] = found
+                return found
+            return None
+
+        item = _use_db_connection(load, "Could not load callback token")
     if item is None:
         return None
     stored_kind, value, stored_chat_id, expires_at = item
     if expires_at < time.time() or stored_kind != str(kind) or (stored_chat_id and stored_chat_id != str(chat_id)):
         _CALLBACK_TOKEN_VALUES.pop(str(token), None)
-        token_db = db_connection_context()
-        owns_connection = token_db is None
-        try:
-            token_db = token_db or db_connect()
-            token_db.execute("DELETE FROM callback_tokens WHERE token=?", (str(token),))
-            token_db.commit()
-        except Exception:
-            logging.debug("Could not remove expired callback token", exc_info=True)
-        finally:
-            if owns_connection and token_db is not None:
-                token_db.close()
+
+        def forget(conn):
+            conn.execute("DELETE FROM callback_tokens WHERE token=?", (str(token),))
+            conn.commit()
+
+        _use_db_connection(forget, "Could not remove expired callback token")
         return None
     return value
 
