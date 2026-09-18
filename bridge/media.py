@@ -180,7 +180,7 @@ def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, mode
         return
     file_size = int(voice.get("file_size") or 0)
     if file_size > STT_MAX_BYTES:
-        send_text(token, chat_id, "Voice message terlalu besar. Batasnya 20 MB.")
+        send_text(token, chat_id, "Voice message is too large. The limit is 20 MB.")
         return
     raw = download_telegram_file(token, str(voice.get("file_id", "")), STT_MAX_BYTES)
     suffix = Path(str(voice.get("file_name") or ".ogg")).suffix or ".ogg"
