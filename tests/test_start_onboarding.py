@@ -41,7 +41,7 @@ class StartOnboardingTests(unittest.TestCase):
             rt.send_text = original
         self.assertTrue(handled)
         self.assertEqual(len(sent), 1)
-        self.assertIn("Persona, World Info, and System Prompt selection are optional", sent[0])
+        self.assertIn("Persona, World Info, and System Prompt are optional", sent[0])
         self.assertIn("Type `start`", sent[0])
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 0)
 
@@ -60,6 +60,28 @@ class StartOnboardingTests(unittest.TestCase):
         self.assertEqual(sent, ["Hello from the character."])
         row = self.db.execute("SELECT role, content FROM messages").fetchone()
         self.assertEqual(tuple(row), ("assistant", "Hello from the character."))
+
+    def test_slash_start_sends_greeting_when_all_setup_is_enabled(self):
+        sent = []
+        original_send = rt.send_text
+        original_greeting = rt.send_character_greeting
+        original_worlds = rt.active_world_files
+        rt.send_text = lambda _token, _chat_id, text: sent.append(text) or []
+        rt.send_character_greeting = lambda *_args, **_kwargs: sent.append("GREETING") or True
+        rt.active_world_files = lambda _value: ["world.json"]
+        ready_session = dict(self.session)
+        ready_session.update({"persona_id": "punto.png", "world_file": "world.json", "system_prompt": "Prompt"})
+        try:
+            handled = rt._handle_basic(
+                self.db, "token", "key", rt.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
+                ready_session, ready_session["session_id"], rt.DEFAULT_MODEL, "punto.png", "User", None,
+            )
+        finally:
+            rt.send_text = original_send
+            rt.send_character_greeting = original_greeting
+            rt.active_world_files = original_worlds
+        self.assertTrue(handled)
+        self.assertEqual(sent, ["GREETING"])
 
 
 if __name__ == "__main__":

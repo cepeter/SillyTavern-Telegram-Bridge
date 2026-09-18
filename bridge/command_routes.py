@@ -10,18 +10,26 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         send_help_menu(token, chat_id)
         return True
     if command == "/start":
-        send_text(token, chat_id, "Persona, World Info, and System Prompt selection are optional. Type `start` to show the character greeting message.")
+        persona_ready = bool(current_persona)
+        world_ready = bool(active_world_files(session.get("world_file") or ""))
+        system_prompt_ready = bool(session.get("system_prompt") or "")
+        if persona_ready and world_ready and system_prompt_ready:
+            send_character_greeting(db, token, chat_id, fields, session_id, user_name, 0, operation_id, "start_greeting")
+        else:
+            missing = []
+            if not persona_ready:
+                missing.append("Persona: off")
+            if not world_ready:
+                missing.append("World Info: off")
+            if not system_prompt_ready:
+                missing.append("System Prompt: off")
+            send_text(token, chat_id, "Setup recommendation — Persona, World Info, and System Prompt are optional. Current unavailable selections: " + ", ".join(missing) + ". Use /persona, /world, or /systemprompt if you want to enable them. Type `start` to show the character greeting message.")
         return True
     if command == "start":
-        if operation_id is not None and (operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "start_greeting")):
-            return True
-        greeting = replace_macros(fields.get("first_mes") or "", fields, user_name).strip()
-        if greeting:
-            message_ids = send_text(token, chat_id, greeting)
-            db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "assistant", greeting, json.dumps(message_ids), time.time()))
-            if operation_id is not None:
-                record_operation(db, operation_id, "start_greeting")
-            db.commit()
+        send_character_greeting(db, token, chat_id, fields, session_id, user_name, 0, operation_id, "start_greeting")
+        return True
+    if command == "/greeting":
+        send_greeting_menu(token, chat_id, fields)
         return True
     if command == "/help":
         send_help_menu(token, chat_id)

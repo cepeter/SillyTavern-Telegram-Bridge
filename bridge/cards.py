@@ -40,6 +40,10 @@ def card_fields(card: dict) -> dict[str, str]:
             fields[key] = fields[key][:remaining]
             remaining = max(0, remaining - len(fields[key]))
     fields["name"] = fields["name"] or "Alisha"
+    alternate = data.get("alternate_greetings") or card.get("alternate_greetings") or []
+    if not isinstance(alternate, list):
+        alternate = []
+    fields["alternate_greetings"] = json.dumps([str(value)[:CARD_FIELD_MAX_CHARS] for value in alternate[:20]], ensure_ascii=False)
     return fields
 
 
