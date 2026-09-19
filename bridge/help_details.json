@@ -3,7 +3,7 @@
 
   "/help": "Opens this guide. Pick a category, then tap a command to see what it does and what it changes.",
 
-  "/status": "Opens a read-only session status panel with buttons for Character, Session, Generation, Memory, Data Bank, Group, and the Prompt inspector. Use /status text for the plain diagnostic output.",
+  "/status": "Shows a formatted read-only session status message directly in Telegram.",
 
   "/new": "Creates a fresh isolated session. It asks for a name first (1–80 characters), then switches you to it. Send /cancel if you change your mind — no empty session is left behind.",
 

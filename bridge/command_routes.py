@@ -31,9 +31,6 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         start_session_name_input(db, token, chat_id, session)
         return True
     if command == "/status":
-        send_status_menu(token, chat_id, db, session, fields, current_model, current_persona)
-        return True
-    if command == "/status text":
         send_text(token, chat_id, status_text(db, chat_id, session, fields, current_model, current_persona))
         return True
     if command == "/retry":

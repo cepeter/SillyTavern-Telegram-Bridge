@@ -3,7 +3,7 @@ HELP_CATEGORIES = {
         ("/start", "Show the character greeting when Persona, World Info, and System Prompt are all enabled; otherwise show what's off and how to fix it."),
 
         ("/help", "Open this guide. Use /help <command> to jump straight to one command."),
-        ("/status", "Open the read-only session status panel. Use /status text for the plain diagnostic message."),
+        ("/status", "Show a formatted read-only session status message in Telegram."),
         ("/new", "Name and create a fresh isolated session, then switch to it."),
         ("/reset", "Open a confirmation panel to clear only the active session and its Hindsight memory. Other sessions stay untouched."),
         ("/session", "Switch between sessions, create new ones, or delete inactive ones — deletion removes session data and its Hindsight documents."),

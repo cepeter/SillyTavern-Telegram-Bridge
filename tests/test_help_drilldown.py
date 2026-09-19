@@ -159,8 +159,6 @@ class HelpDrilldownTests(unittest.TestCase):
         rt.send_panel_message = lambda *args, **kwargs: calls.append((args, kwargs))
         rt.get_model_groups = lambda: {}
         try:
-            rt.send_status_menu("token", "chat", self.db, session, {"name": "Test"}, rt.DEFAULT_MODEL, "")
-            self.assertIn("status:character", str(calls[-1]))
             rt.send_prompt_menu("token", "chat", self.db, session, {"name": "Test"})
             self.assertIn("prompt:budget", str(calls[-1]))
             rt.send_scene_menu("token", "chat", self.db, session)

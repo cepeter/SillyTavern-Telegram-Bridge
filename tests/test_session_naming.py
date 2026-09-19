@@ -44,11 +44,12 @@ class SessionNamingTests(unittest.TestCase):
         original_card = rt.card_fields_from_file
         rt.card_fields_from_file = lambda _filename: {"name": "Test", "post_history_instructions": ""}
         try:
-            rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, {}, "chat", "/status text")
+            rt.process_message(self.db, "token", "key", rt.DEFAULT_MODEL, {}, "chat", "/status")
         finally:
             rt.card_fields_from_file = original_card
-        self.assertIn("Session: Evening Story (default)", self.sent[-1])
-        self.assertIn("System Prompt: off", self.sent[-1])
+        self.assertIn("📊 Session status", self.sent[-1])
+        self.assertIn("🗂️ Session: Evening Story (default)", self.sent[-1])
+        self.assertIn("• System Prompt: off", self.sent[-1])
 
     def test_invalid_name_reprompts_without_creating_session(self):
         rt.start_session_name_input(self.db, "token", "chat", self.session)
