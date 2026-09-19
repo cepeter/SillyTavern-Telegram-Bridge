@@ -115,6 +115,22 @@ class SqliteContentionTests(unittest.TestCase):
         self.assertFalse(persisted)
         self.assertTrue(db.rolled_back)
 
+    def test_finish_job_lock_is_nonfatal_after_successful_delivery(self):
+        class LockedDb:
+            def __init__(self):
+                self.rolled_back = False
+
+            def execute(self, *_args):
+                raise rt.sqlite3.OperationalError("database is locked")
+
+            def rollback(self):
+                self.rolled_back = True
+
+        db = LockedDb()
+        finished = rt.finish_job(db, 7, "done")
+        self.assertFalse(finished)
+        self.assertTrue(db.rolled_back)
+
     def test_enqueue_job_does_not_retry_after_full_timeout(self):
         """Regression: enqueue_job should not catch every OperationalError and retry after 30s busy timeout."""
         import inspect
