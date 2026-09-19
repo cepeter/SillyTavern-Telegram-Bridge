@@ -301,6 +301,57 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertEqual(captured["model"], "injected::model")
         self.assertIs(captured["kwargs"]["services"], self.services)
 
+    def test_retry_propagates_services_to_nested_message(self):
+        captured = {}
+        failed = (
+            42,
+            "failed message",
+            "stored::model",
+            1,
+            "provider failed",
+            "failed-session",
+        )
+        db = self._db_factory()
+        try:
+            with patch.object(
+                rt,
+                "latest_failed_turn",
+                return_value=failed,
+            ), patch.object(
+                rt,
+                "committed_assistant_for_message",
+                return_value=None,
+            ), patch.object(
+                rt,
+                "process_message",
+                side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+            ), patch.object(
+                rt,
+                "clear_failed_turn",
+            ):
+                handled = rt._handle_basic(
+                    db,
+                    "injected-token",
+                    "injected-key",
+                    "injected::model",
+                    {"name": "Mira"},
+                    "chat",
+                    "/retry",
+                    "/retry",
+                    {"session_id": "active-session"},
+                    "active-session",
+                    "injected::model",
+                    "",
+                    "Mira",
+                    None,
+                    services=self.services,
+                )
+        finally:
+            db.close()
+
+        self.assertTrue(handled)
+        self.assertIs(captured["services"], self.services)
+
     def test_recovered_model_override_wins_over_config_default(self):
         captured = {}
 
