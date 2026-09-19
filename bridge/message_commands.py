@@ -94,7 +94,7 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
             db.commit()
         save_response_variant(db, chat_id, session_id, text, stored_reply, commit=not bool(group_turn))
         if group_turn:
-            advance_group_turn(db, chat_id, session_id, operation_id=operation_id, commit=True)
+            advance_group_turn(db, chat_id, session_id, operation_id=operation_id)
         else:
             db.commit()
         return assistant_rowid
