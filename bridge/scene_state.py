@@ -74,7 +74,6 @@ def parse_scene_state(raw: str) -> dict[str, object] | None:
 
 
 def get_scene_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> tuple[dict[str, object], int]:
-    ensure_scene_state_schema(db)
     row = db.execute(
         "SELECT state_json,updated_through_rowid FROM scene_states "
         "WHERE chat_id=? AND session_id=?",
@@ -97,7 +96,6 @@ def scene_state_text(db: sqlite3.Connection, chat_id: str, session_id: str) -> s
 
 
 def clear_scene_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
-    ensure_scene_state_schema(db)
     db.execute(
         "DELETE FROM scene_states WHERE chat_id=? AND session_id=?",
         (str(chat_id), str(session_id)),
@@ -132,7 +130,6 @@ def refresh_scene_state_now(
     character_name: str,
     through_rowid: int | None = None,
 ) -> dict[str, object] | None:
-    ensure_scene_state_schema(db)
     session_id = str(session["session_id"])
     rows = _scene_state_source_rows(db, chat_id, session_id, through_rowid)
     if not rows:
@@ -253,7 +250,6 @@ def queue_scene_state_refresh(
     session: dict[str, str],
     character_name: str,
 ) -> bool:
-    ensure_scene_state_schema(db)
     session_id = str(session["session_id"])
     row = db.execute(
         "SELECT rowid FROM messages WHERE chat_id=? AND session_id=? "
