@@ -105,26 +105,32 @@ def _requeue_worker_boot_failure(job_id: int | None, exc: BaseException) -> None
     logging.error("Durable job %s remains recoverable on restart after DB startup failure", job_id)
 
 
-def submit_durable_chat_job(db, label, chat_id, function, *args):
-    """Guard the only error window outside each worker's existing try/finally.
-
-    Worker bodies already mark ordinary failures as failed.  The exceptional
-    gap was the initial db_connect() call, which happens before those try blocks.
-    If that call hits transient SQLite contention, put the still queued/scheduled
-    durable row back in `queued`; the executor completion callback then invokes
-    the durable backlog dispatcher and retries it.
-    """
-    job_id = int(args[-1]) if args and isinstance(args[-1], int) else None
+def submit_durable_chat_job(
+    db,
+    background,
+    label,
+    chat_id,
+    job_id,
+    function,
+    *args,
+):
+    """Guard the worker boot window while using injected background dispatch."""
 
     @functools.wraps(function)
-    def guarded_worker():
+    def guarded_worker(*worker_args):
         try:
-            return function(*args)
+            return function(*worker_args)
         except BaseException as exc:
-            _requeue_worker_boot_failure(job_id, exc)
+            _requeue_worker_boot_failure(int(job_id), exc)
             raise
 
-    queued = submit_chat_background(label, chat_id, guarded_worker)
-    if queued and job_id is not None:
-        mark_job_scheduled(db, job_id)
+    queued = background.submit_chat(
+        label,
+        chat_id,
+        guarded_worker,
+        *args,
+        int(job_id),
+    )
+    if queued:
+        mark_job_scheduled(db, int(job_id))
     return queued
