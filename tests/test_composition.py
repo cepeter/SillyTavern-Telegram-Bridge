@@ -439,7 +439,7 @@ class RecoveryCompositionTests(unittest.TestCase):
         label, chat_id, function, args = self.submitted[0]
         self.assertEqual(label, "generation")
         self.assertEqual(chat_id, "chat")
-        self.assertIs(function, rt.process_message_job)
+        self.assertIs(inspect.unwrap(function), rt.process_message_job)
         self.assertIs(args[0], self.services)
         self.assertEqual(args[-2], "stored::model")
         self.assertEqual(args[-1], 51)
@@ -504,6 +504,127 @@ class RecoveryCompositionTests(unittest.TestCase):
         self.assertEqual(len(opened), 1)
         self.assertIs(seen[0][1], services)
         self.assertEqual(seen[0][3], {"recover_running": False})
+
+
+class StartupCompositionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.card = root / "mira.png"
+        self.card.write_bytes(b"card")
+        self.config = BridgeConfig(
+            bot_token="token",
+            api_key="key",
+            default_model="provider::model",
+            default_character_file="mira.png",
+            card_file=self.card,
+            db_file=root / "bridge.sqlite3",
+            allowed_users=frozenset({"100"}),
+        )
+        self.requests = []
+        self.services = BridgeServices(
+            config=self.config,
+            db_factory=lambda: rt.db_connect(self.config.db_file),
+            telegram=TelegramRuntime(
+                request=self._request,
+                send_text=lambda *_args, **_kwargs: None,
+            ),
+            background=BackgroundRuntime(
+                submit_chat=lambda *_args, **_kwargs: True,
+                register_backlog_dispatcher=lambda _callback: None,
+                begin_shutdown=lambda: None,
+            ),
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _request(self, token, method, payload=None):
+        self.requests.append((token, method, payload))
+        return {"username": "bridge_bot"}
+
+    def test_run_check_uses_prebuilt_services_without_reloading_environment(self):
+        with patch.object(
+            rt,
+            "load_env_file",
+            side_effect=AssertionError("run_check must not reload env"),
+        ), patch.object(
+            rt,
+            "card_fields",
+            return_value={"name": "Mira"},
+        ), patch.object(
+            rt,
+            "read_png_chara",
+            return_value={},
+        ), patch.object(
+            rt,
+            "phase3_api_configured",
+            return_value=False,
+        ):
+            self.assertEqual(rt.run_check(self.services), 0)
+
+        self.assertEqual(
+            self.requests,
+            [("token", "getMe", None)],
+        )
+
+    def test_signal_handler_captures_injected_shutdown_callable(self):
+        installed = {}
+        calls = []
+
+        def fake_signal(signum, handler):
+            installed[signum] = handler
+
+        with patch.object(rt.signal, "signal", side_effect=fake_signal):
+            rt.install_bridge_signal_handlers(
+                lambda: calls.append("shutdown")
+            )
+
+        handler = installed[rt.signal.SIGTERM]
+        handler(rt.signal.SIGTERM, None)
+        self.assertTrue(rt._SHUTDOWN_EVENT.is_set())
+        self.assertEqual(calls, ["shutdown"])
+        rt._SHUTDOWN_EVENT.clear()
+
+    def test_main_check_builds_services_once_and_passes_same_object(self):
+        parsed = rt.argparse.Namespace(check=True)
+        with patch.object(
+            rt.argparse.ArgumentParser,
+            "parse_args",
+            return_value=parsed,
+        ), patch.object(
+            rt,
+            "load_env_file",
+        ), patch.object(
+            rt,
+            "refresh_phase3_config",
+        ), patch.object(
+            rt,
+            "enforce_runtime_permissions",
+        ), patch.object(
+            rt,
+            "_load_startup_config",
+            return_value=self.config,
+        ) as load_config, patch.object(
+            rt,
+            "_build_startup_services",
+            return_value=self.services,
+        ) as build_services, patch.object(
+            rt,
+            "validate_startup_credential",
+        ), patch.object(
+            rt,
+            "set_bot_commands",
+        ), patch.object(
+            rt,
+            "run_check",
+            return_value=0,
+        ) as run_check:
+            self.assertEqual(rt.main(), 0)
+
+        load_config.assert_called_once()
+        build_services.assert_called_once_with(self.config)
+        run_check.assert_called_once_with(self.services)
 
 
 if __name__ == "__main__":
