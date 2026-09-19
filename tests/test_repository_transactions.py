@@ -1,6 +1,8 @@
+import inspect
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import bridge.runtime as rt
@@ -272,6 +274,137 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
             ("settings-write", "session"),
         ).fetchone()
         self.assertEqual(row, (0.25,))
+
+
+class GroupTransactionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.old_db = rt.DB_FILE
+        rt.DB_FILE = Path(self.tmp.name) / "group.sqlite3"
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+        self.db = rt.db_connect()
+        self.chat_id = "group-chat"
+        self.session_id = "group-session"
+        self.initial = {
+            "title": "Original",
+            "enabled": True,
+            "turn_index": 0,
+            "mode": "round_robin",
+            "forced_speaker": "",
+            "members": ["one.png", "two.png"],
+            "turn_user_id": "",
+            "turn_users": [],
+        }
+        rt.save_group_state(
+            self.db,
+            self.chat_id,
+            self.session_id,
+            self.initial,
+        )
+
+    def tearDown(self):
+        self.db.close()
+        rt.DB_FILE = self.old_db
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+        self.tmp.cleanup()
+
+    def test_group_persistence_helpers_no_longer_expose_commit_flag(self):
+        self.assertNotIn(
+            "commit",
+            inspect.signature(rt.save_group_state).parameters,
+        )
+        self.assertNotIn(
+            "commit",
+            inspect.signature(rt.advance_group_turn).parameters,
+        )
+
+    def test_save_group_state_joins_outer_transaction(self):
+        changed = dict(self.initial)
+        changed["title"] = "Pending"
+
+        self.db.execute("BEGIN")
+        rt.save_group_state(
+            self.db,
+            self.chat_id,
+            self.session_id,
+            changed,
+        )
+        self.assertTrue(self.db.in_transaction)
+        self.db.rollback()
+
+        self.assertEqual(
+            rt.group_state(
+                self.db,
+                self.chat_id,
+                self.session_id,
+            )["title"],
+            "Original",
+        )
+
+    def test_group_state_and_operation_claim_roll_back_together(self):
+        changed = dict(self.initial)
+        changed["title"] = "Must rollback"
+
+        with patch.object(
+            rt,
+            "_repo_mark_group_operation_applied",
+            side_effect=RuntimeError("marker failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "marker failed"):
+                rt.save_group_state(
+                    self.db,
+                    self.chat_id,
+                    self.session_id,
+                    changed,
+                    operation_id="op-atomic",
+                )
+
+        self.assertEqual(
+            rt.group_state(
+                self.db,
+                self.chat_id,
+                self.session_id,
+            )["title"],
+            "Original",
+        )
+        self.assertIsNone(
+            self.db.execute(
+                "SELECT state FROM operations WHERE operation_id=?",
+                ("op-atomic",),
+            ).fetchone()
+        )
+
+    def test_group_state_and_operation_marker_commit_together(self):
+        changed = dict(self.initial)
+        changed["title"] = "Committed"
+
+        self.assertTrue(
+            rt.save_group_state(
+                self.db,
+                self.chat_id,
+                self.session_id,
+                changed,
+                operation_id="op-success",
+            )
+        )
+
+        self.assertEqual(
+            rt.group_state(
+                self.db,
+                self.chat_id,
+                self.session_id,
+            )["title"],
+            "Committed",
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT state FROM operations WHERE operation_id=?",
+                ("op-success",),
+            ).fetchone(),
+            ("applied",),
+        )
 
 
 if __name__ == "__main__":
