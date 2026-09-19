@@ -280,7 +280,7 @@ def main() -> int:
     dispatch_recovered_jobs(db, token, api_key, model, fields)
     offset = int(get_meta(db, "telegram_offset", "0"))
     permitted = allowed_users()
-    logging.info("Bridge started for card=%s model=%s", fields["name"], model)
+    logging.info("Bridge started")
     while not _SHUTDOWN_EVENT.is_set():
         try:
             updates = telegram_request(token, "getUpdates", {"offset": offset, "timeout": 50, "allowed_updates": ["message", "edited_message", "callback_query"]})
