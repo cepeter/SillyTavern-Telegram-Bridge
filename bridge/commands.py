@@ -24,7 +24,7 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
         db.commit()
     save_response_variant(db, chat_id, session["session_id"], stored_text, stored_reply, commit=not bool(group_turn))
     if group_turn:
-        advance_group_turn(db, chat_id, session["session_id"], commit=True)
+        advance_group_turn(db, chat_id, session["session_id"])
     else:
         db.commit()
     retain_session_memory(db, chat_id, session, fields)
