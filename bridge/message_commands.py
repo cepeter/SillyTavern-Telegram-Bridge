@@ -124,7 +124,7 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
     send_reply(token, chat_id, stored_reply, db, session_id, assistant_rowid)
 
 
-def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None) -> None:
+def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None, *, services=None) -> None:
     stripped = text.strip()
     command = stripped.lower()
     command_parts = command.split(None, 1)
@@ -157,8 +157,24 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     session = reconcile_session_character(db, chat_id, session)
     fields = card_fields_from_file(session["character_file"])
     director_plan = None
+    group_director = getattr(services, "group_director", None) if services is not None else None
     if not command.startswith("/"):
-        director_plan = group_director_plan(db, api_key, chat_id, session, text)
+        if group_director is not None:
+            director_plan = group_director.plan(
+                db,
+                api_key,
+                chat_id,
+                session,
+                text,
+            )
+        else:
+            director_plan = group_director_plan(
+                db,
+                api_key,
+                chat_id,
+                session,
+                text,
+            )
     director_instruction = ""
     if director_plan:
         group_turn = (director_plan[0], director_plan[1])
@@ -168,11 +184,42 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     group_context = ""
     if group_turn:
         fields = card_fields_from_file(group_turn[0])
-        group_context = group_prompt_context(db, chat_id, session, group_turn[0], director_instruction)
+        if group_director is not None:
+            group_context = group_director.prompt_context(
+                db,
+                chat_id,
+                session,
+                group_turn[0],
+                director_instruction,
+            )
+        else:
+            group_context = group_prompt_context(
+                db,
+                chat_id,
+                session,
+                group_turn[0],
+                director_instruction,
+            )
     current_model = session["model_id"] or model
     current_persona = session["persona_id"]
     user_name = persona_name(current_persona) if current_persona else DEFAULT_USER_NAME
-    if handle_command_route(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id=operation_id):
+    if handle_command_route(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        session_id,
+        current_model,
+        current_persona,
+        user_name,
+        operation_id=operation_id,
+        services=services,
+    ):
         return
 
 

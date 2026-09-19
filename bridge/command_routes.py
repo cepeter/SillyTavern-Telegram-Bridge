@@ -1,6 +1,6 @@
 from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
 
-def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id):
+def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id, services=None):
     """Handle onboarding, status, retry, and prompt inspection commands."""
     if command.startswith("/help "):
         send_help_command(token, chat_id, stripped)
@@ -52,7 +52,18 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
             return True
         failed_session_id = str(failed[5] or "") or session_id
         try:
-            process_message(db, token, api_key, str(failed[2]), fields, chat_id, str(failed[1]), failed_message_id, queued_session_id=failed_session_id)
+            process_message(
+                db,
+                token,
+                api_key,
+                str(failed[2]),
+                fields,
+                chat_id,
+                str(failed[1]),
+                failed_message_id,
+                queued_session_id=failed_session_id,
+                services=services,
+            )
             clear_failed_turn(db, chat_id, failed_message_id)
         except Exception as exc:
             record_failed_turn(db, chat_id, failed_message_id, str(failed[1]), str(failed[2]), str(exc), failed_session_id)
@@ -243,7 +254,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
     return False
 
 
-def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id=None):
+def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id=None, services=None):
     """Dispatch a normalized slash command without entering normal generation."""
     if _dispatch_extension_command_routes(
         db,
@@ -262,7 +273,23 @@ def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, c
         operation_id=operation_id,
     ):
         return True
-    if _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id):
+    if _handle_basic(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        session_id,
+        current_model,
+        current_persona,
+        user_name,
+        operation_id,
+        services=services,
+    ):
         return True
     if _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id):
         return True

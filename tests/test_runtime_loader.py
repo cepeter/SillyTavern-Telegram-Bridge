@@ -150,6 +150,14 @@ class RuntimeLoaderTests(unittest.TestCase):
         }
         self.assertNotIn("composition.py", loaded_modules)
 
+    def test_group_director_service_is_not_a_runtime_stage(self):
+        loaded_modules = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn("group_director_service.py", loaded_modules)
+
 
     def test_loader_rejects_module_outside_base_directory(self):
         with tempfile.TemporaryDirectory() as directory:
