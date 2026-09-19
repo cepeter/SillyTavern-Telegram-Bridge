@@ -423,5 +423,15 @@ class GroupDirectorTests(unittest.TestCase):
         self.assertIn("keep the letter unopened", context)
 
 
+    def test_groups_module_delegates_director_workflow_to_service(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "groups.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("GroupDirectorService", source)
+        self.assertNotIn("You are an invisible scene director", source)
+        self.assertNotIn("Output strict JSON only", source)
+
+
 if __name__ == "__main__":
     unittest.main()
