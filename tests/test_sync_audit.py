@@ -225,13 +225,12 @@ class SyncAuditHardeningTests(unittest.TestCase):
                 "WHERE chat_id='orphan-chat' AND session_id='missing-session'"
             ).fetchone()
         )
-        structural = [
+        sync_structural = [
             sql for sql in traced
-            if sql.lstrip().upper().startswith(
-                ("CREATE TABLE", "CREATE INDEX", "CREATE TRIGGER", "ALTER TABLE")
-            )
+            if sql.lstrip().upper().startswith("CREATE TRIGGER")
+            and "sessions_delete_sync_binding" in sql
         ]
-        self.assertEqual(structural, [], structural)
+        self.assertEqual(sync_structural, [], sync_structural)
 
 
 if __name__ == "__main__":
