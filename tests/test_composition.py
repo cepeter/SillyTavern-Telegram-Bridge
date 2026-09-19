@@ -627,5 +627,70 @@ class StartupCompositionTests(unittest.TestCase):
         run_check.assert_called_once_with(self.services)
 
 
+class CompositionSourceBoundaryTests(unittest.TestCase):
+    def test_migrated_worker_and_check_sources_do_not_rediscover_environment(self):
+        root = Path(__file__).parents[1] / "bridge"
+        files = {
+            "main.py": (root / "main.py").read_text(encoding="utf-8"),
+            "media.py": (root / "media.py").read_text(encoding="utf-8"),
+            "help.py": (root / "help.py").read_text(encoding="utf-8"),
+        }
+
+        worker_markers = (
+            "def process_message_job",
+            "def process_image_job",
+            "def process_callback_job",
+            "def process_edit_job",
+            "def dispatch_recovered_jobs",
+            "def make_durable_backlog_dispatcher",
+            "def run_check",
+        )
+        for function_marker in worker_markers:
+            start = files["main.py"].index(function_marker)
+            next_def = files["main.py"].find("\ndef ", start + 4)
+            chunk = files["main.py"][
+                start: next_def if next_def >= 0 else None
+            ]
+            self.assertNotIn("os.environ", chunk, function_marker)
+
+        for filename, function_marker in (
+            ("media.py", "def process_voice_job"),
+            ("help.py", "def process_document_job"),
+        ):
+            start = files[filename].index(function_marker)
+            next_def = files[filename].find("\ndef ", start + 4)
+            chunk = files[filename][
+                start: next_def if next_def >= 0 else None
+            ]
+            self.assertNotIn("os.environ", chunk, function_marker)
+
+    def test_composition_module_does_not_import_compatibility_runtime(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "composition.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("bridge.runtime", source)
+        self.assertNotIn("CURRENT_SERVICES", source)
+        self.assertNotIn("get_services(", source)
+        self.assertNotIn("set_services(", source)
+
+    def test_phase5_service_classes_are_not_introduced(self):
+        root = Path(__file__).parents[1] / "bridge"
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in root.glob("*.py")
+        )
+        for forbidden in (
+            "class GroupDirectorService",
+            "class MemoryService",
+            "class PersonaService",
+            "class SyncService",
+            "class JobService",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+
 if __name__ == "__main__":
     unittest.main()
