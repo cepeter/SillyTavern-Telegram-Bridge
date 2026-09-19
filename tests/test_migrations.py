@@ -549,6 +549,59 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
         )
 
 
+    def test_current_schema_without_ledger_adopts_all_versions_without_data_loss(self):
+        for migration in schema.SCHEMA_MIGRATIONS:
+            migration.apply(self.db)
+        self.db.execute(
+            "INSERT INTO messages("
+            "chat_id,session_id,role,content,telegram_message_ids,created_at"
+            ") VALUES('chat','current','user','keep message','[]',1.0)"
+        )
+        self.db.execute(
+            "INSERT INTO scene_states("
+            "chat_id,session_id,state_json,updated_through_rowid,updated_at"
+            ") VALUES('chat','current','{\"location\":\"Cafe\"}',3,1.0)"
+        )
+        self.db.execute(
+            "INSERT INTO director_goals("
+            "chat_id,session_id,goal,updated_at"
+            ") VALUES('chat','current','Keep this goal.',1.0)"
+        )
+        self.db.commit()
+
+        schema.initialize_database_schema(self.db)
+
+        self.assertEqual(
+            self.db.execute(
+                "SELECT version,name FROM schema_migrations ORDER BY version"
+            ).fetchall(),
+            [
+                (1, "core_baseline"),
+                (2, "scene_state"),
+                (3, "director_goals"),
+                (4, "sync_lifecycle_trigger"),
+            ],
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT content FROM messages WHERE session_id='current'"
+            ).fetchone()[0],
+            "keep message",
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT state_json FROM scene_states WHERE session_id='current'"
+            ).fetchone()[0],
+            '{"location":"Cafe"}',
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT goal FROM director_goals WHERE session_id='current'"
+            ).fetchone()[0],
+            "Keep this goal.",
+        )
+
+
 class RequestTimeSchemaRegressionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
