@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 import bridge.runtime as rt
+from bridge import repositories
 
 
 class WriteTransactionTests(unittest.TestCase):
@@ -80,6 +81,131 @@ class WriteTransactionTests(unittest.TestCase):
             [("outer",), ("inner",)],
         )
         self.db.rollback()
+
+
+class RepositoryPrimitiveTests(unittest.TestCase):
+    def setUp(self):
+        self.db = sqlite3.connect(":memory:")
+        self.db.executescript(
+            """
+            CREATE TABLE director_goals(
+                chat_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                PRIMARY KEY(chat_id, session_id)
+            );
+            CREATE TABLE scene_states(
+                chat_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                state_json TEXT NOT NULL DEFAULT '{}',
+                updated_through_rowid INTEGER NOT NULL DEFAULT 0,
+                updated_at REAL NOT NULL,
+                PRIMARY KEY(chat_id, session_id)
+            );
+            CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE group_sessions(
+                chat_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT 'Group chat',
+                enabled INTEGER NOT NULL DEFAULT 0,
+                turn_index INTEGER NOT NULL DEFAULT 0,
+                mode TEXT NOT NULL DEFAULT 'round_robin',
+                forced_speaker TEXT NOT NULL DEFAULT '',
+                members_json TEXT NOT NULL DEFAULT '[]',
+                turn_user_id TEXT NOT NULL DEFAULT '',
+                turn_users_json TEXT NOT NULL DEFAULT '[]',
+                updated_at REAL NOT NULL,
+                PRIMARY KEY(chat_id, session_id)
+            );
+            CREATE TABLE operations(
+                operation_id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                state TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            );
+            """
+        )
+        self.db.commit()
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_repository_reads_do_not_open_transaction(self):
+        traced = []
+        self.db.set_trace_callback(traced.append)
+        try:
+            self.assertEqual(
+                repositories.load_director_goal(self.db, "chat", "session"),
+                "",
+            )
+            self.assertIsNone(
+                repositories.load_scene_state_row(self.db, "chat", "session")
+            )
+            self.assertEqual(
+                repositories.load_meta_value(self.db, "missing", "fallback"),
+                "fallback",
+            )
+            self.assertIsNone(
+                repositories.load_group_state_row(self.db, "chat", "session")
+            )
+        finally:
+            self.db.set_trace_callback(None)
+
+        self.assertFalse(self.db.in_transaction)
+        forbidden = (
+            "INSERT", "UPDATE", "DELETE", "REPLACE",
+            "CREATE", "ALTER", "DROP",
+        )
+        self.assertFalse(
+            any(sql.lstrip().upper().startswith(forbidden) for sql in traced),
+            traced,
+        )
+
+    def test_repository_write_does_not_commit(self):
+        repositories.store_director_goal(
+            self.db, "chat", "session", "goal", 1.0
+        )
+        self.assertTrue(self.db.in_transaction)
+        self.db.rollback()
+        self.assertEqual(
+            repositories.load_director_goal(self.db, "chat", "session"),
+            "",
+        )
+
+    def test_scene_state_upsert_rejects_stale_candidate(self):
+        repositories.upsert_scene_state_if_fresh(
+            self.db, "chat", "session", '{"v":10}', 10, 1.0
+        )
+        self.db.commit()
+
+        accepted = repositories.upsert_scene_state_if_fresh(
+            self.db, "chat", "session", '{"v":9}', 9, 2.0
+        )
+        self.assertFalse(accepted)
+        row = repositories.load_scene_state_row(self.db, "chat", "session")
+        self.assertEqual(row, ('{"v":10}', 10))
+
+    def test_group_operation_claim_allows_retry_but_rejects_applied(self):
+        self.assertTrue(
+            repositories.try_claim_group_operation(
+                self.db, "op-1", "group_state", 1.0
+            )
+        )
+        self.assertTrue(
+            repositories.try_claim_group_operation(
+                self.db, "op-1", "group_state", 2.0
+            )
+        )
+        repositories.mark_group_operation_applied(
+            self.db, "op-1", "group_state", 3.0
+        )
+        self.assertFalse(
+            repositories.try_claim_group_operation(
+                self.db, "op-1", "group_state", 4.0
+            )
+        )
 
 
 if __name__ == "__main__":
