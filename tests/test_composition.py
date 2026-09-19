@@ -473,6 +473,70 @@ class RecoveryCompositionTests(unittest.TestCase):
         self.assertFalse(queued)
         scheduled.assert_not_called()
 
+    def test_transient_worker_boot_requeues_on_injected_database_path(self):
+        job_id = rt.enqueue_job(
+            self.db,
+            901,
+            "chat",
+            "session",
+            901,
+            "generation",
+            {"text": "hello"},
+        )
+        self.assertTrue(rt.mark_job_scheduled(self.db, job_id))
+
+        def fail_connect():
+            raise rt.sqlite3.OperationalError("database is locked")
+
+        failing_services = BridgeServices(
+            config=self.services.config,
+            db_factory=fail_connect,
+            telegram=self.services.telegram,
+            background=self.services.background,
+        )
+
+        def run_immediately(_label, _chat_id, function, *args):
+            function(*args)
+            return True
+
+        background = BackgroundRuntime(
+            submit_chat=run_immediately,
+            register_backlog_dispatcher=lambda _callback: None,
+            begin_shutdown=lambda: None,
+        )
+
+        old_db_file = rt.DB_FILE
+        rt.DB_FILE = Path(self.tmp.name) / "wrong.sqlite3"
+        try:
+            with patch.object(rt.time, "sleep", return_value=None):
+                with self.assertRaisesRegex(
+                    rt.sqlite3.OperationalError,
+                    "database is locked",
+                ):
+                    rt.submit_durable_chat_job(
+                        self.db,
+                        background,
+                        "generation",
+                        "chat",
+                        job_id,
+                        rt.process_message_job,
+                        failing_services,
+                        {"name": "Mira"},
+                        "chat",
+                        "hello",
+                        901,
+                        None,
+                        None,
+                    )
+        finally:
+            rt.DB_FILE = old_db_file
+
+        state = self.db.execute(
+            "SELECT state FROM jobs WHERE job_id=?",
+            (job_id,),
+        ).fetchone()
+        self.assertEqual(state, ("queued",))
+
     def test_backlog_dispatcher_reuses_same_services_instance(self):
         opened = []
         seen = []
