@@ -249,7 +249,17 @@ def process_edit_job(
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
-            edit_telegram_user_message(db, token, api_key, chat_id, message_id, text, model, operation_id=job_id)
+            edit_telegram_user_message(
+                db,
+                token,
+                api_key,
+                chat_id,
+                message_id,
+                text,
+                model,
+                operation_id=job_id,
+                memory_service=services.memory,
+            )
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
