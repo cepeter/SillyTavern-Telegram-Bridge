@@ -344,7 +344,10 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
             self.db.execute(
                 "SELECT version,name FROM schema_migrations ORDER BY version"
             ).fetchall(),
-            [(1, "core_baseline")],
+            [
+                (migration.version, migration.name)
+                for migration in schema.SCHEMA_MIGRATIONS
+            ],
         )
         for table in (
             "messages",
@@ -459,7 +462,7 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
             self.db.execute(
                 "SELECT COUNT(*) FROM schema_migrations"
             ).fetchone()[0],
-            1,
+            len(schema.SCHEMA_MIGRATIONS),
         )
 
     def test_scene_and_director_migrations_create_expected_structures(self):
