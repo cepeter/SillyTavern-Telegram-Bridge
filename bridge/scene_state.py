@@ -23,29 +23,6 @@ _SCENE_STATE_KEYS = ("location", "time", "weather", "participants", "objects", "
 _SCENE_STATE_MAX_TEXT = 5000
 _SCENE_STATE_TRANSCRIPT_MESSAGES = 16
 
-def ensure_scene_state_schema(db: sqlite3.Connection) -> None:
-    db.execute("""CREATE TABLE IF NOT EXISTS scene_states (
-        chat_id TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        state_json TEXT NOT NULL DEFAULT '{}',
-        updated_through_rowid INTEGER NOT NULL DEFAULT 0,
-        updated_at REAL NOT NULL,
-        PRIMARY KEY(chat_id, session_id)
-    )""")
-    db.execute(
-        "CREATE INDEX IF NOT EXISTS scene_states_updated_idx "
-        "ON scene_states(chat_id, session_id, updated_through_rowid)"
-    )
-    db.execute("""CREATE TRIGGER IF NOT EXISTS scene_states_session_delete
-        AFTER DELETE ON sessions
-        BEGIN
-            DELETE FROM scene_states
-            WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
-        END
-    """)
-    db.commit()
-
-
 def _sanitize_scene_value(value, depth: int = 0):
     if depth > 4:
         return None
