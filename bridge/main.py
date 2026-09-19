@@ -9,6 +9,12 @@ from bridge.composition import (
     load_bridge_config as _load_bridge_config_value,
     validate_bridge_config as _validate_bridge_config_value,
 )
+from bridge.extension_registry import (
+    get_director_customization as _get_director_customization_value,
+)
+from bridge.group_director_service import (
+    GroupDirectorService as _GroupDirectorService,
+)
 
 _SHUTDOWN_EVENT = threading.Event()
 
@@ -99,7 +105,19 @@ def process_message_job(
                 if job_id is not None:
                     finish_job(db, job_id, "done")
                 return
-            process_message(db, token, api_key, model, fields, chat_id, text, message_id, queued_session_id=queued_session_id, operation_id=job_id)
+            process_message(
+                db,
+                token,
+                api_key,
+                model,
+                fields,
+                chat_id,
+                text,
+                message_id,
+                queued_session_id=queued_session_id,
+                operation_id=job_id,
+                services=services,
+            )
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
@@ -433,6 +451,16 @@ def _load_startup_config(environ) -> _BridgeConfig:
 def _build_startup_services(
     config: _BridgeConfig,
 ) -> _BridgeServices:
+    group_director = _GroupDirectorService(
+        load_group_state=group_state,
+        safe_character=safe_character_path,
+        member_labels=group_member_labels,
+        card_fields=card_fields_from_file,
+        generation_settings=get_generation_settings,
+        generate_text=generate_text,
+        director_customization=_get_director_customization_value,
+        default_model=config.default_model,
+    )
     return _build_bridge_services_value(
         config,
         db_factory=_partial(db_connect, config.db_file),
@@ -445,6 +473,7 @@ def _build_startup_services(
             register_backlog_dispatcher=register_durable_backlog_dispatcher,
             begin_shutdown=begin_background_shutdown,
         ),
+        group_director=group_director,
     )
 
 
