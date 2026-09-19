@@ -23,7 +23,6 @@ def normalize_director_goal(value: str) -> str:
 
 
 def get_director_goal(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
-    ensure_director_goal_schema(db)
     row = db.execute(
         "SELECT goal FROM director_goals WHERE chat_id=? AND session_id=?",
         (str(chat_id), str(session_id)),
@@ -37,7 +36,6 @@ def set_director_goal(
     session_id: str,
     goal: str,
 ) -> str:
-    ensure_director_goal_schema(db)
     value = normalize_director_goal(goal)
     if not value:
         db.execute(
