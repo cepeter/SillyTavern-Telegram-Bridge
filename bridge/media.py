@@ -39,7 +39,9 @@ def synthesize_voice(text: str, output_path: Path) -> None:
     if not text:
         raise ValueError("TTS text is empty")
     tts_bin = os.environ.get("SILLYTAVERN_TTS_BIN", str(BRIDGE_HOME / "venv" / "bin" / "edge-tts"))
-    voice = os.environ.get("SILLYTAVERN_TTS_VOICE", "id-ID-GadisNeural")
+    voice = os.environ.get("SILLYTAVERN_TTS_VOICE", "").strip()
+    if not voice:
+        raise ValueError("SILLYTAVERN_TTS_VOICE is required for voice output")
     with tempfile.TemporaryDirectory(prefix="st-tts-") as temp_dir:
         mp3 = Path(temp_dir) / "speech.mp3"
         subprocess.run([tts_bin, "--voice", voice, "--text", text, "--write-media", str(mp3)], check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)

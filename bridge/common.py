@@ -69,7 +69,7 @@ MODEL_REFRESH_SECONDS = int(os.environ.get("SILLYTAVERN_MODEL_REFRESH_SECONDS", 
 SILLYTAVERN_DIR = Path(os.environ.get("SILLYTAVERN_DIR", str(BRIDGE_HOME.parent / "SillyTavern")))
 CHARACTER_DIR = Path(os.environ.get("SILLYTAVERN_CHARACTER_DIR", str(SILLYTAVERN_DIR / "data/default-user/characters")))
 CHARACTER_BACKUP_DIR = Path(os.environ.get("SILLYTAVERN_CHARACTER_BACKUP_DIR", str(BRIDGE_HOME / "backups/sillytavern/characters")))
-DEFAULT_CHARACTER_FILE = os.environ.get("SILLYTAVERN_DEFAULT_CHARACTER", "Alisha.png")
+DEFAULT_CHARACTER_FILE = os.environ.get("SILLYTAVERN_DEFAULT_CHARACTER", "").strip()
 CARD_FILE = CHARACTER_DIR / DEFAULT_CHARACTER_FILE
 WORLD_DIR = Path(os.environ.get("SILLYTAVERN_WORLD_DIR", str(SILLYTAVERN_DIR / "data/default-user/worlds")))
 SYSTEM_PROMPTS_DIR = Path(os.environ.get("SILLYTAVERN_SYSTEM_PROMPTS_DIR", str(SILLYTAVERN_DIR / "data/default-user/sysprompt")))
@@ -83,8 +83,8 @@ DB_FILE = BRIDGE_HOME / "scripts" / "sillytavern_telegram.sqlite3"
 PROCESSED_UPDATE_RETENTION_SECONDS = 30 * 86400
 LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
 DEFAULT_ALLOWED_USER = os.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", "")
-DEFAULT_MODEL = os.environ.get("SILLYTAVERN_MODEL", "provider-one::provider-one/model-a")
-DEFAULT_USER_NAME = "User"
+DEFAULT_MODEL = os.environ.get("SILLYTAVERN_MODEL", "").strip()
+DEFAULT_USER_NAME = os.environ.get("SILLYTAVERN_DEFAULT_USER_NAME", "").strip()
 DEFAULT_MAX_TOKENS = 1800
 HINDSIGHT_DEFAULT_URL = "http://127.0.0.1:8890"
 HINDSIGHT_RECALL_MAX_TOKENS = 1200
@@ -122,17 +122,14 @@ GENERATION_DEFAULTS = {
     "reasoning_budget": 0,
     "stop_sequences": "",
 }
-DEFAULT_PROVIDER_URL = "https://api.example.com/v1/chat/completions"
+DEFAULT_PROVIDER_URL = ""
 MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
 PENDING_SETTINGS_TTL_SECONDS = 600
 CATALOG_MAX_ITEMS = 40
 CARD_FIELD_MAX_CHARS = 20000
 CARD_TOTAL_MAX_CHARS = 60000
-MODEL_CHOICES = [
-    ("Provider One · Model A", "provider-one::provider-one/model-a"),
-    ("Provider Two · Model A", "provider-two::provider-two/model-a"),
-]
+MODEL_CHOICES = []
 
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(

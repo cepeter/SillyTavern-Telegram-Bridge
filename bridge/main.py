@@ -223,12 +223,22 @@ def make_durable_backlog_dispatcher(token: str, api_key: str, default_model: str
     return dispatch
 
 
+def _require_runtime_configuration(model: str) -> None:
+    if not DEFAULT_CHARACTER_FILE:
+        raise SystemExit("required SILLYTAVERN_DEFAULT_CHARACTER is missing from .env")
+    if not model:
+        raise SystemExit("required SILLYTAVERN_MODEL is missing from .env")
+    if not CARD_FILE.is_file():
+        raise SystemExit(f"configured default character card does not exist: {CARD_FILE}")
+
+
 def run_check() -> int:
     load_env_file()
     refresh_phase3_config()
     enforce_runtime_permissions()
     token = os.environ.get("SILLYTAVERN_TELEGRAM_BOT_TOKEN", "")
     model = os.environ.get("SILLYTAVERN_MODEL", DEFAULT_MODEL)
+    _require_runtime_configuration(model)
     fields = card_fields(read_png_chara(CARD_FILE))
     if phase3_api_configured():
         try:
@@ -251,6 +261,7 @@ def main() -> int:
     token = os.environ.get("SILLYTAVERN_TELEGRAM_BOT_TOKEN", "")
     api_key = os.environ.get("LLM_API_KEY", "")
     model = os.environ.get("SILLYTAVERN_MODEL", DEFAULT_MODEL)
+    _require_runtime_configuration(model)
     if not token:
         raise SystemExit("required Telegram bot token is missing from .env")
     try:

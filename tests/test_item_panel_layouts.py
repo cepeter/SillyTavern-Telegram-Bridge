@@ -63,6 +63,33 @@ class ItemPanelLayoutTests(unittest.TestCase):
         self.assertTrue(any(value.startswith("enum:ragversions:") for value in callbacks))
         self.assertTrue(any(value.startswith("enum:ragremove:") for value in callbacks))
 
+    def test_character_upload_reports_duplicate_and_new_version(self):
+        root = Path(self.tmp.name)
+        old_character_dir = rt.CHARACTER_DIR
+        old_backup_dir = rt.CHARACTER_BACKUP_DIR
+        old_parse = rt.parse_png_chara_bytes
+        old_fields = rt.card_fields
+        old_send = rt.send_text
+        sent = []
+        rt.CHARACTER_DIR = root / "characters"
+        rt.CHARACTER_BACKUP_DIR = root / "backups"
+        rt.parse_png_chara_bytes = lambda _raw: {"name": "Test Character"}
+        rt.card_fields = lambda _card: {"name": "Test Character"}
+        rt.send_text = lambda _token, _chat, text: sent.append(text) or []
+        try:
+            rt.import_character_card(self.db, "bot", "chat", "one.png", b"one")
+            rt.import_character_card(self.db, "bot", "chat", "one.png", b"one")
+            rt.import_character_card(self.db, "bot", "chat", "one.png", b"two")
+        finally:
+            rt.CHARACTER_DIR = old_character_dir
+            rt.CHARACTER_BACKUP_DIR = old_backup_dir
+            rt.parse_png_chara_bytes = old_parse
+            rt.card_fields = old_fields
+            rt.send_text = old_send
+        self.assertIn("Duplicate character card:", sent[1])
+        self.assertIn("New character-card version installed:", sent[2])
+        self.assertIn("Previous version retained as Test_Character.png", sent[2])
+
     def test_group_rows_remove_members_without_card_delete_callback(self):
         session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
         old_fields = rt.card_fields_from_file

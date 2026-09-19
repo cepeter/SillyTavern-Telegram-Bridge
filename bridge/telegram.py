@@ -293,7 +293,9 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
     if len(stem.encode("utf-8")) > 80:
         stem = stem.encode("utf-8")[:64].decode("utf-8", "ignore").rstrip("_-") + "-" + hashlib.sha256(raw).hexdigest()[:8]
     target = CHARACTER_DIR / f"{stem}.png"
-    if target.exists() and target.read_bytes() != raw:
+    previous_target = target
+    is_new_version = target.exists() and target.read_bytes() != raw
+    if is_new_version:
         target = CHARACTER_DIR / f"{stem}-{hashlib.sha256(raw).hexdigest()[:8]}.png"
     installed_count = sum(1 for path in CHARACTER_DIR.glob("*.png") if path.is_file()) if CHARACTER_DIR.exists() else 0
     if not target.exists() and installed_count >= CATALOG_MAX_ITEMS:
@@ -308,7 +310,7 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
             except OSError:
                 send_text(token, chat_id, "Character card exists, but backup verification failed; no changes made.")
                 return
-            send_text(token, chat_id, f"Character card already installed: {fields['name']}. Backup verified: {backup.name}.")
+            send_text(token, chat_id, f"Duplicate character card: {fields['name']} is already installed as {target.name}. Backup verified: {backup.name}.")
             return
     try:
         backup = verify_character_card_backup(target, raw)
@@ -317,7 +319,10 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
     except OSError:
         send_text(token, chat_id, "Character card backup verification failed; card was not installed.")
         return
-    send_text(token, chat_id, f"Character card imported: {fields['name']} ({target.name}). Backup verified: {backup.name}.")
+    if is_new_version:
+        send_text(token, chat_id, f"New character-card version installed: {fields['name']} ({target.name}). Previous version retained as {previous_target.name}. Backup verified: {backup.name}.")
+    else:
+        send_text(token, chat_id, f"Character card imported: {fields['name']} ({target.name}). Backup verified: {backup.name}.")
 
 
 def _consume_world_upload(db: sqlite3.Connection, chat_id: str) -> bool:
