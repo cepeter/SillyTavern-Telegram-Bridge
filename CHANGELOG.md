@@ -4,6 +4,24 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.017] - 2026-09-19
+
+### Added
+
+- Added an explicit extension registry and Director policy boundary for Group Director customization, with validation and runtime integration.
+- Added regression coverage for Director policy behavior, extension registration, group execution invariants, and SQLite contention.
+
+### Fixed
+
+- Serialized SQLite write transactions to reduce contention between concurrent workers.
+- Prevented successful native message edits from being reported as rollback failures.
+- Preserved Director instruction non-disclosure and behavior-priority semantics across customization and execution.
+
+### Changed
+
+- Made model target selection provider-first and separated story-model selection from utility-model selection.
+- Removed the obsolete standalone release-notes file.
+
 ## [0.2.016] - 2026-09-19
 
 ### Added
