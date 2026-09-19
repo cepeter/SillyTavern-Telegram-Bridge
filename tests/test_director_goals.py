@@ -108,6 +108,49 @@ class DirectorGoalsTests(unittest.TestCase):
         self.assertTrue(calls[0][2]["force_non_stream"])
         self.assertEqual(before, after)
 
+    def test_director_policy_prefers_director_task_model(self):
+        rt.set_task_model(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "utility::fallback",
+            task="utility",
+        )
+        rt.set_task_model(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "director::special",
+            task="director",
+        )
+
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Continue."}'
+
+        rt.generate_text = fake_generate
+        try:
+            rt.group_director_plan(
+                self.db,
+                "",
+                self.chat_id,
+                self.session,
+                "Continue.",
+            )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(calls[0][0], "director::special")
+
     def test_director_policy_falls_back_to_utility_model(self):
         rt.set_task_model(
             self.db,
