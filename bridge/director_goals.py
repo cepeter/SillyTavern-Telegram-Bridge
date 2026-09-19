@@ -88,8 +88,8 @@ def _director_goal_customization(
     hidden_instructions = (
         "Hidden scene objective: " + goal +
         " Advance this objective naturally when appropriate. "
-        "Do not force completion, do not contradict established continuity, "
-        "and never mention that an objective exists."
+        "Do not force completion. Established continuity and believable character behavior "
+        "take priority. Never mention that an objective exists."
     )
     speaker_context = (
         "Hidden scene objective: " + goal +
