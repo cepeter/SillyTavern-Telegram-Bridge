@@ -78,7 +78,21 @@ def _transient_worker_boot_error(exc: BaseException) -> bool:
     return "locked" in text or "busy" in text
 
 
-def _requeue_worker_boot_failure(job_id: int | None, exc: BaseException) -> None:
+def _connection_database_path(db) -> Path | None:
+    try:
+        row = db.execute("PRAGMA database_list").fetchone()
+    except sqlite3.Error:
+        return None
+    if not row or len(row) < 3 or not row[2]:
+        return None
+    return Path(str(row[2])).expanduser().resolve()
+
+
+def _requeue_worker_boot_failure(
+    job_id: int | None,
+    exc: BaseException,
+    database_path: Path | None = None,
+) -> None:
     if job_id is None or not _transient_worker_boot_error(exc):
         return
     last_error = f"worker database startup failed: {exc}"[:1000]
@@ -88,7 +102,10 @@ def _requeue_worker_boot_failure(job_id: int | None, exc: BaseException) -> None
             time.sleep(delay)
         connection = None
         try:
-            connection = _lightweight_db_connect(timeout=10.0)
+            connection = _lightweight_db_connect(
+                database_path,
+                timeout=10.0,
+            )
             connection.execute(
                 "UPDATE jobs SET state='queued', last_error=?, updated_at=? "
                 "WHERE job_id=? AND state IN ('queued','scheduled')",
@@ -115,13 +132,18 @@ def submit_durable_chat_job(
     *args,
 ):
     """Guard the worker boot window while using injected background dispatch."""
+    database_path = _connection_database_path(db)
 
     @functools.wraps(function)
     def guarded_worker(*worker_args):
         try:
             return function(*worker_args)
         except BaseException as exc:
-            _requeue_worker_boot_failure(int(job_id), exc)
+            _requeue_worker_boot_failure(
+                int(job_id),
+                exc,
+                database_path,
+            )
             raise
 
     queued = background.submit_chat(
