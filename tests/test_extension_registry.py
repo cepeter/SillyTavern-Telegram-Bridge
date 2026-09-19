@@ -69,6 +69,84 @@ class ExtensionRegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "command failed"):
                 registry.dispatch_command_routes()
 
+    def test_director_customization_provider_registers_and_returns_value(self):
+        with patch.object(registry, "_DIRECTOR_CUSTOMIZATION_PROVIDER", None):
+            expected = registry.DirectorCustomization(
+                model="utility::director",
+                hidden_instructions="Hidden objective.",
+                max_tokens=220,
+                speaker_context="Hidden scene objective: Hidden objective.",
+            )
+
+            registry.register_director_customization_provider(
+                "director_goals",
+                lambda db, chat_id, session: expected,
+            )
+
+            self.assertEqual(
+                registry.get_director_customization(
+                    None,
+                    "chat",
+                    {"session_id": "session"},
+                ),
+                expected,
+            )
+            self.assertEqual(
+                registry.extension_registry_snapshot()["director_customization"],
+                ("director_goals",),
+            )
+
+    def test_director_customization_provider_rejects_duplicate_registration(self):
+        with patch.object(registry, "_DIRECTOR_CUSTOMIZATION_PROVIDER", None):
+            registry.register_director_customization_provider(
+                "first",
+                lambda db, chat_id, session: None,
+            )
+            with self.assertRaisesRegex(RuntimeError, "already registered"):
+                registry.register_director_customization_provider(
+                    "second",
+                    lambda db, chat_id, session: None,
+                )
+
+    def test_director_customization_provider_failure_returns_none(self):
+        def fail(_db, _chat_id, _session):
+            raise RuntimeError("boom")
+
+        with patch.object(registry, "_DIRECTOR_CUSTOMIZATION_PROVIDER", None):
+            registry.register_director_customization_provider("broken", fail)
+            with self.assertLogs(level="ERROR") as logs:
+                result = registry.get_director_customization(
+                    None,
+                    "chat",
+                    {"session_id": "session"},
+                )
+
+            self.assertIsNone(result)
+            self.assertTrue(
+                any(
+                    "Director customization provider failed: broken" in line
+                    for line in logs.output
+                )
+            )
+
+    def test_reset_extension_registry_clears_director_provider(self):
+        with (
+            patch.dict(registry._COMMAND_ROUTES, clear=True),
+            patch.dict(registry._POST_RETAIN_HOOKS, clear=True),
+            patch.dict(registry._SUMMARY_CONTEXT_HOOKS, clear=True),
+            patch.dict(registry._SUMMARY_CLEAR_HOOKS, clear=True),
+            patch.object(registry, "_DIRECTOR_CUSTOMIZATION_PROVIDER", None),
+        ):
+            registry.register_director_customization_provider(
+                "director_goals",
+                lambda db, chat_id, session: None,
+            )
+            registry.reset_extension_registry()
+            self.assertEqual(
+                registry.extension_registry_snapshot()["director_customization"],
+                (),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
