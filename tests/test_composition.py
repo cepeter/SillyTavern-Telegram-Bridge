@@ -410,6 +410,52 @@ class WorkerInjectionTests(unittest.TestCase):
 
         self.assertEqual(captured["model"], "stored::model")
 
+    def test_image_worker_propagates_injected_memory_service(self):
+        captured = {}
+
+        with patch.object(
+            rt,
+            "committed_assistant_for_message",
+            return_value=None,
+        ), patch.object(
+            rt,
+            "process_telegram_image",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            rt.process_image_job(
+                self.services,
+                "chat",
+                "file-id",
+                "caption",
+                100,
+                55,
+            )
+
+        self.assertIs(
+            captured["memory_service"],
+            self.memory_service,
+        )
+
+    def test_document_worker_propagates_injected_memory_service(self):
+        captured = {}
+
+        with patch.object(
+            rt,
+            "import_telegram_document",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            rt.process_document_job(
+                self.services,
+                "chat",
+                {"file_name": "photo.png"},
+                56,
+            )
+
+        self.assertIs(
+            captured["memory_service"],
+            self.memory_service,
+        )
+
     def test_callback_failure_uses_injected_send_text(self):
         with patch.object(
             rt,
