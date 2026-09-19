@@ -420,23 +420,59 @@ def clear_model_target_selection(db: sqlite3.Connection, chat_id: str, session_i
 
 
 def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
-    inserted = db.execute("INSERT OR IGNORE INTO generation_settings(chat_id,session_id,temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences) VALUES(?,?,?,?,?,?,?, ?,?)", (chat_id, session_id, GENERATION_DEFAULTS["temperature"], GENERATION_DEFAULTS["max_tokens"], GENERATION_DEFAULTS["top_p"], GENERATION_DEFAULTS["frequency_penalty"], GENERATION_DEFAULTS["presence_penalty"], GENERATION_DEFAULTS["reasoning_budget"], GENERATION_DEFAULTS["stop_sequences"]))
-    row = db.execute("SELECT temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences FROM generation_settings WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
-    if inserted.rowcount:
-        db.commit()
-    return dict(zip(("temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty", "reasoning_budget", "stop_sequences"), row))
+    row = db.execute(
+        "SELECT temperature,max_tokens,top_p,frequency_penalty,"
+        "presence_penalty,reasoning_budget,stop_sequences "
+        "FROM generation_settings WHERE chat_id=? AND session_id=?",
+        (chat_id, session_id),
+    ).fetchone()
+    if row is None:
+        return dict(GENERATION_DEFAULTS)
+    return dict(
+        zip(
+            (
+                "temperature",
+                "max_tokens",
+                "top_p",
+                "frequency_penalty",
+                "presence_penalty",
+                "reasoning_budget",
+                "stop_sequences",
+            ),
+            row,
+        )
+    )
 
 
 def update_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str, **values: object) -> dict[str, object]:
-    current = get_generation_settings(db, chat_id, session_id)
     allowed = set(GENERATION_DEFAULTS)
     values = {key: value for key, value in values.items() if key in allowed}
-    if values:
-        assignments = ", ".join(f"{key}=?" for key in values)
-        db.execute(f"UPDATE generation_settings SET {assignments} WHERE chat_id=? AND session_id=?", (*values.values(), chat_id, session_id))
-        db.commit()
-    current.update(values)
-    return current
+    with write_transaction(db):
+        db.execute(
+            "INSERT OR IGNORE INTO generation_settings("
+            "chat_id,session_id,temperature,max_tokens,top_p,"
+            "frequency_penalty,presence_penalty,reasoning_budget,stop_sequences"
+            ") VALUES(?,?,?,?,?,?,?,?,?)",
+            (
+                chat_id,
+                session_id,
+                GENERATION_DEFAULTS["temperature"],
+                GENERATION_DEFAULTS["max_tokens"],
+                GENERATION_DEFAULTS["top_p"],
+                GENERATION_DEFAULTS["frequency_penalty"],
+                GENERATION_DEFAULTS["presence_penalty"],
+                GENERATION_DEFAULTS["reasoning_budget"],
+                GENERATION_DEFAULTS["stop_sequences"],
+            ),
+        )
+        if values:
+            assignments = ", ".join(f"{key}=?" for key in values)
+            db.execute(
+                f"UPDATE generation_settings SET {assignments} "
+                "WHERE chat_id=? AND session_id=?",
+                (*values.values(), chat_id, session_id),
+            )
+    return get_generation_settings(db, chat_id, session_id)
 
 
 def preset_names(db: sqlite3.Connection, chat_id: str) -> list[str]:
