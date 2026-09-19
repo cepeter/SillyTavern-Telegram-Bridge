@@ -215,16 +215,12 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
     ).fetchone()
     if existing:
         return "duplicate", int(existing[0])
-    version_row = db.execute(
-        "SELECT COALESCE(MAX(version_number),0) FROM data_bank_documents "
-        "WHERE chat_id=? AND filename=?",
-        (chat_id, filename[:255]),
-    ).fetchone()
-    version_number = int(version_row[0] or 0) + 1
+
     chunks = split_data_bank_chunks(text)
     namespace = rag_embedding_namespace()
     cache_keys = [namespace + ":content:" + hashlib.sha256(content.encode("utf-8")).hexdigest() for content in chunks]
     vector_cache = {}
+    pending_cache_rows = []
     for offset in range(0, len(chunks), 32):
         batch_keys = cache_keys[offset:offset + 32]
         placeholders = ",".join("?" for _ in batch_keys)
@@ -236,46 +232,79 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
         missing = [(index, chunks[index]) for index, cache_key in enumerate(cache_keys[offset:offset + 32], start=offset) if cache_key not in vector_cache]
         for batch_start in range(0, len(missing), 32):
             selected = missing[batch_start:batch_start + 32]
+            # Embedding may involve external model/network work. Do it before
+            # opening the short SQLite write transaction below.
             vectors = embed_rag_batch([item[1] for item in selected])
             for (index, _), vector in zip(selected, vectors):
                 if vector:
                     cache_key = cache_keys[index]
                     vector_cache[cache_key] = vector
-                    db.execute("INSERT OR REPLACE INTO rag_embedding_cache(cache_key,dimensions,vector_json,vector_norm,created_at) VALUES(?,?,?,?,?)", (cache_key, len(vector), json.dumps(vector, separators=(",", ":")), embedding_norm(vector), time.time()))
+                    pending_cache_rows.append(
+                        (
+                            cache_key,
+                            len(vector),
+                            json.dumps(vector, separators=(",", ":")),
+                            embedding_norm(vector),
+                        )
+                    )
+
     now = time.time()
-    db.execute(
-        "INSERT INTO data_bank_documents("
-        "chat_id,document_id,filename,byte_size,chunk_count,version_number,active,created_at,updated_at"
-        ") VALUES(?,?,?,?,?,?,?,?,?)",
-        (
-            chat_id,
-            document_id,
-            filename[:255],
-            len(raw),
-            len(chunks),
-            version_number,
-            1,
-            now,
-            now,
-        ),
-    )
-    for index, content in enumerate(chunks):
-        cursor = db.execute("INSERT INTO data_bank_chunks(chat_id,document_id,chunk_index,content) VALUES(?,?,?,?)", (chat_id, document_id, index, content))
-        chunk_id = cursor.lastrowid
-        db.execute("INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)", (content, chat_id, document_id, filename[:255], chunk_id))
-        vector = vector_cache.get(cache_keys[index])
-        if vector:
-            db.execute(
-                "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm) "
-                "VALUES(?,?,?,?,?,?)",
-                (chunk_id, *_embedding_row(namespace, vector)),
+    with write_transaction(db):
+        # Re-check after external embedding work so a concurrent importer that
+        # won the race is observed without creating duplicate document rows.
+        existing = db.execute(
+            "SELECT chunk_count FROM data_bank_documents WHERE chat_id=? AND document_id=?",
+            (chat_id, document_id),
+        ).fetchone()
+        if existing:
+            return "duplicate", int(existing[0])
+
+        version_row = db.execute(
+            "SELECT COALESCE(MAX(version_number),0) FROM data_bank_documents "
+            "WHERE chat_id=? AND filename=?",
+            (chat_id, filename[:255]),
+        ).fetchone()
+        version_number = int(version_row[0] or 0) + 1
+
+        if pending_cache_rows:
+            db.executemany(
+                "INSERT OR REPLACE INTO rag_embedding_cache("
+                "cache_key,dimensions,vector_json,vector_norm,created_at"
+                ") VALUES(?,?,?,?,?)",
+                [(*row, now) for row in pending_cache_rows],
             )
-    db.execute(
-        "UPDATE data_bank_documents SET active=0,updated_at=? "
-        "WHERE chat_id=? AND filename=? AND document_id<>? AND active=1",
-        (now, chat_id, filename[:255], document_id),
-    )
-    db.commit()
+        db.execute(
+            "INSERT INTO data_bank_documents("
+            "chat_id,document_id,filename,byte_size,chunk_count,version_number,active,created_at,updated_at"
+            ") VALUES(?,?,?,?,?,?,?,?,?)",
+            (
+                chat_id,
+                document_id,
+                filename[:255],
+                len(raw),
+                len(chunks),
+                version_number,
+                1,
+                now,
+                now,
+            ),
+        )
+        for index, content in enumerate(chunks):
+            cursor = db.execute("INSERT INTO data_bank_chunks(chat_id,document_id,chunk_index,content) VALUES(?,?,?,?)", (chat_id, document_id, index, content))
+            chunk_id = cursor.lastrowid
+            db.execute("INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)", (content, chat_id, document_id, filename[:255], chunk_id))
+            vector = vector_cache.get(cache_keys[index])
+            if vector:
+                db.execute(
+                    "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm) "
+                    "VALUES(?,?,?,?,?,?)",
+                    (chunk_id, *_embedding_row(namespace, vector)),
+                )
+        db.execute(
+            "UPDATE data_bank_documents SET active=0,updated_at=? "
+            "WHERE chat_id=? AND filename=? AND document_id<>? AND active=1",
+            (now, chat_id, filename[:255], document_id),
+        )
     return ("versioned" if version_number > 1 else "added"), len(chunks)
 
 
@@ -486,12 +515,22 @@ def reindex_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: 
                 missing.append((int(chunk_id), str(content)))
         for offset in range(0, len(missing), 32):
             batch = missing[offset:offset + 32]
+            # Keep the potentially slow embedding call outside the write lock.
             vectors = embed_rag_batch([content for _, content in batch])
-            for (chunk_id, _content), vector in zip(batch, vectors):
-                if vector:
-                    db.execute("INSERT OR REPLACE INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm) VALUES(?,?,?,?,?,?)", (chunk_id, *_embedding_row(namespace, vector)))
-                    indexed += 1
-    db.commit()
+            rows_to_store = [
+                (chunk_id, *_embedding_row(namespace, vector))
+                for (chunk_id, _content), vector in zip(batch, vectors)
+                if vector
+            ]
+            if rows_to_store:
+                with write_transaction(db):
+                    db.executemany(
+                        "INSERT OR REPLACE INTO data_bank_embeddings("
+                        "chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm"
+                        ") VALUES(?,?,?,?,?,?)",
+                        rows_to_store,
+                    )
+                indexed += len(rows_to_store)
     return total, indexed
 
 

@@ -352,13 +352,27 @@ def phase3_sync_poll(db: sqlite3.Connection) -> None:
 
 
 def _phase3_worker_loop() -> None:
-    while not _PHASE3_STOP_EVENT.wait(PHASE3_SYNC_INTERVAL_SECONDS):
-        db = db_connect()
-        try:
-            phase3_sync_poll(db)
-        except Exception:
-            logging.warning("Phase 3 realtime sync worker failed", exc_info=True)
-        finally:
+    db = None
+    try:
+        while not _PHASE3_STOP_EVENT.wait(PHASE3_SYNC_INTERVAL_SECONDS):
+            try:
+                if db is None:
+                    db = db_connect()
+                phase3_sync_poll(db)
+            except Exception as exc:
+                if db is not None and db.in_transaction:
+                    try:
+                        db.rollback()
+                    except sqlite3.Error:
+                        logging.debug("Could not rollback realtime sync transaction", exc_info=True)
+                # A SQLite-level failure may leave the handle unsuitable for
+                # reuse. Close it and let the next interval reconnect.
+                if db is not None and isinstance(exc, sqlite3.Error):
+                    db.close()
+                    db = None
+                logging.warning("Phase 3 realtime sync worker failed", exc_info=True)
+    finally:
+        if db is not None:
             db.close()
 
 
