@@ -203,7 +203,23 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     current_model = session["model_id"] or model
     current_persona = session["persona_id"]
     user_name = persona_name(current_persona) if current_persona else DEFAULT_USER_NAME
-    if handle_command_route(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id=operation_id):
+    if handle_command_route(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        session_id,
+        current_model,
+        current_persona,
+        user_name,
+        operation_id=operation_id,
+        services=services,
+    ):
         return
 
 
