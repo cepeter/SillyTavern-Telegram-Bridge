@@ -80,7 +80,7 @@ The prompt-context replacement is only a decorator, but the planner replacement 
 
 - a hidden scene objective
 - Director task-model routing
-- small settings changes
+- a larger Director token budget
 - slightly different instructions
 
 This creates two problems.
@@ -152,7 +152,7 @@ The exact implementation may use a dataclass, TypedDict, or equivalent typed str
 DirectorCustomization(
     model: str | None,
     hidden_instructions: str,
-    settings: dict[str, object],
+    max_tokens: int | None,
     speaker_context: str,
 )
 ```
@@ -223,7 +223,7 @@ If returned:
 
 - use `customization.model` when non-empty
 - append `hidden_instructions` in the dedicated hidden-policy section
-- merge only approved settings keys from `customization.settings`
+- use `customization.max_tokens` when provided
 - leave `speaker_context` for `group_prompt_context()`
 
 ### 8.5 Generate and parse
@@ -289,13 +289,15 @@ If a goal exists, it contributes text equivalent in meaning to:
 
 The base Director invariants remain owned by `groups.py`.
 
-### Settings
+### Token budget
 
-The policy may retain the current Director Goals-specific bounded settings change, including the existing token limit if still required by the implementation.
+The base Director planner currently uses `max_tokens=180`, while Director Goals uses `max_tokens=220`.
 
-Only an explicit allowlist of Director-safe generation settings should be mergeable.
+To preserve behavior without creating a generic settings injection surface, the policy may provide only an optional `max_tokens` override. For Director Goals this is `220`.
 
-PR #28 should not create a generic arbitrary settings injection mechanism.
+Temperature, reasoning budget, stop sequences, and all other generation settings remain owned by `groups.py` in PR #28.
+
+If a future policy has a demonstrated need to customize another setting, the interface can be extended explicitly at that time.
 
 ### Speaker context
 
