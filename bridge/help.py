@@ -485,7 +485,15 @@ def process_document_job(
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
-            import_telegram_document(db, token, chat_id, document, model, telegram_message_id=message_id)
+            import_telegram_document(
+                db,
+                token,
+                chat_id,
+                document,
+                model,
+                telegram_message_id=message_id,
+                memory_service=services.memory,
+            )
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
