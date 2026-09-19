@@ -6,3 +6,4 @@ Pre-flight: Task 2 produces SCHEMA_MIGRATIONS/initialize_database_schema consume
 Pre-flight: Tasks 3-4 extend the same ordered SCHEMA_MIGRATIONS tuple; Task 5 consumes the final 001-004 registry — interfaces match.
 Ruling: use isolated remote feature branch plus temporary tracked ledger instead of local git worktree — harness exposes repository writes through GitHub only; ledger and plan will be removed before PR readiness — cost if wrong: branch isolation remains equivalent, but scratch history is visible until cleanup.
 Task 1: complete (commits 992cfd0..82f8475, RED CI #173: missing bridge.migrations; GREEN CI #174: full workflow success)
+Task 2: complete (commits e784602..92a1d05, RED CI #176: schema.py direct-import NameError; GREEN CI #177: full workflow success)
