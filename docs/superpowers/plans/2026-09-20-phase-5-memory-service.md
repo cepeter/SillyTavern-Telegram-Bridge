@@ -94,7 +94,26 @@
 - [ ] Use service context/retain with legacy fallbacks.
 - [ ] Verify recovery and state-integrity tests GREEN.
 
-### Task 5: Runtime boundary and full verification
+### Task 5: Image generation boundary
+
+**Files:**
+- Modify: `bridge/commands.py`
+- Modify: `bridge/telegram.py`
+- Modify: `bridge/main.py`
+- Modify: `bridge/help.py`
+- Modify: focused memory/composition tests.
+
+**Interfaces:**
+- Consumes: `services.memory` from image/document workers.
+- Produces: service-backed prompt context and retention for photo and PNG-as-image generation.
+
+- [x] Add failing tests for the image worker, document worker, Telegram adapters, and image generation owner.
+- [x] Verify RED on all five missing service boundaries.
+- [x] Propagate the optional service through image/document adapters.
+- [x] Use service context/retain in `process_image_message()` with legacy fallback.
+- [x] Verify full CI GREEN.
+
+### Task 6: Runtime boundary and full verification
 
 **Files:**
 - Modify: `tests/test_runtime_loader.py`
