@@ -23,7 +23,11 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_connection_pragmas_on_primary_and_lightweight_connect(self):
-        for conn in (self.db, rt._lightweight_db_connect(timeout=15.0)):
+        worker = rt._lightweight_db_connect(timeout=15.0)
+        for conn, expected_cache_kib in (
+            (self.db, rt._DB_PRIMARY_CACHE_KIB),
+            (worker, rt._DB_WORKER_CACHE_KIB),
+        ):
             try:
                 synchronous = conn.execute("PRAGMA synchronous").fetchone()[0]
                 temp_store = conn.execute("PRAGMA temp_store").fetchone()[0]
@@ -33,13 +37,14 @@ class DatabaseOptimizationTests(unittest.TestCase):
 
                 self.assertEqual(synchronous, 1)  # NORMAL
                 self.assertEqual(temp_store, 2)  # MEMORY
-                self.assertEqual(cache_size, -64000)  # 64MB
+                self.assertEqual(cache_size, -expected_cache_kib)
                 self.assertEqual(foreign_keys, 1)
                 self.assertGreaterEqual(busy_timeout, 15000)
             finally:
-                if conn is not self.db:
+                if conn is worker:
                     conn.close()
         self.assertEqual(self.db.execute("PRAGMA journal_mode").fetchone()[0].casefold(), "wal")
+        self.assertLess(rt._DB_WORKER_CACHE_KIB, rt._DB_PRIMARY_CACHE_KIB)
 
     def test_lightweight_connect_does_not_negotiate_journal_mode(self):
         # Worker startup must stay connection-local: a brand-new database file
@@ -117,6 +122,49 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.assertFalse(reclaimed)
         # A full VACUUM would have reclaimed every free page.
         self.assertGreater(self.db.execute("PRAGMA freelist_count").fetchone()[0], 0)
+
+    def test_phase3_worker_reuses_connection_between_polls(self):
+        class FakeStopEvent:
+            def __init__(self):
+                self.calls = 0
+
+            def wait(self, _timeout):
+                self.calls += 1
+                return self.calls >= 3
+
+        class FakeDb:
+            def __init__(self):
+                self.in_transaction = False
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        original_event = rt._PHASE3_STOP_EVENT
+        original_connect = rt.db_connect
+        original_poll = rt.phase3_sync_poll
+        stop_event = FakeStopEvent()
+        connections = []
+        polls = []
+
+        def connect():
+            connection = FakeDb()
+            connections.append(connection)
+            return connection
+
+        rt._PHASE3_STOP_EVENT = stop_event
+        rt.db_connect = connect
+        rt.phase3_sync_poll = lambda db: polls.append(db)
+        try:
+            rt._phase3_worker_loop()
+        finally:
+            rt._PHASE3_STOP_EVENT = original_event
+            rt.db_connect = original_connect
+            rt.phase3_sync_poll = original_poll
+
+        self.assertEqual(len(connections), 1)
+        self.assertEqual(polls, [connections[0], connections[0]])
+        self.assertTrue(connections[0].closed)
 
     def test_load_optional_vector_extension_safe(self):
         loaded = rt._load_optional_vector_extension(self.db)
