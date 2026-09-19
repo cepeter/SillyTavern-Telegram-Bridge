@@ -9,6 +9,7 @@ from unittest.mock import patch
 import bridge.runtime as rt
 
 from bridge.group_director_service import GroupDirectorService
+from bridge.memory_service import MemoryService
 
 from bridge.composition import (
     BackgroundRuntime,
@@ -84,16 +85,25 @@ class CompositionConfigTests(unittest.TestCase):
             register_backlog_dispatcher=lambda _callback: None,
             begin_shutdown=lambda: None,
         )
+        memory = MemoryService(
+            recall_context=lambda *_args, **_kwargs: "",
+            summary_for_prompt=lambda *_args, **_kwargs: "",
+            summary_state=lambda *_args, **_kwargs: ("", 0),
+            retain_session=lambda *_args, **_kwargs: None,
+            purge_session_memory=lambda *_args, **_kwargs: 0,
+        )
         services = build_bridge_services(
             config,
             db_factory=lambda: sqlite3.connect(":memory:"),
             telegram=telegram,
             background=background,
+            memory=memory,
         )
 
         self.assertIs(services.config, config)
         self.assertIs(services.telegram, telegram)
         self.assertIs(services.background, background)
+        self.assertIs(services.memory, memory)
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
 
@@ -712,6 +722,14 @@ class StartupCompositionTests(unittest.TestCase):
             GroupDirectorService,
         )
 
+    def test_startup_builds_memory_service(self):
+        services = rt._build_startup_services(self.config)
+
+        self.assertIsInstance(
+            services.memory,
+            MemoryService,
+        )
+
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = rt.argparse.Namespace(check=True)
         with patch.object(
@@ -801,15 +819,15 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("get_services(", source)
         self.assertNotIn("set_services(", source)
 
-    def test_phase5_group_director_service_is_the_only_extracted_service(self):
+    def test_phase5_group_director_and_memory_are_the_only_extracted_services(self):
         root = Path(__file__).parents[1] / "bridge"
         source = "\n".join(
             path.read_text(encoding="utf-8")
             for path in root.glob("*.py")
         )
         self.assertIn("class GroupDirectorService", source)
+        self.assertIn("class MemoryService", source)
         for forbidden in (
-            "class MemoryService",
             "class PersonaService",
             "class SyncService",
             "class JobService",
