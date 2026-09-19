@@ -12,6 +12,11 @@ import logging
 import re
 import time
 
+from bridge.repositories import (
+    load_meta_value as _repo_load_meta_value,
+    store_meta_value as _repo_store_meta_value,
+)
+
 from bridge.extension_registry import (
     register_command_route as _register_command_route,
     register_post_retain_hook as _register_post_retain_hook,
@@ -83,7 +88,11 @@ def get_curated_memory_state(
     chat_id: str,
     session_id: str,
 ) -> tuple[list[dict[str, object]], int]:
-    raw = get_meta(db, memory_curator_key(chat_id, session_id), "")
+    raw = _repo_load_meta_value(
+        db,
+        memory_curator_key(chat_id, session_id),
+        "",
+    )
     if not raw:
         return [], 0
     try:
@@ -201,23 +210,24 @@ def curate_memory_now(
         logging.info("Memory curator returned invalid JSON for %s/%s", chat_id, session_id)
         return existing or None
 
-    _current_items, current_covered = get_curated_memory_state(db, chat_id, session_id)
-    if current_covered > target_rowid:
-        return _current_items
-
     payload = {
         "items": items,
         "through_rowid": target_rowid,
         "updated_at": time.time(),
     }
-    def write_curated_memory():
-        db.execute(
-            "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
-            (memory_curator_key(chat_id, session_id), json.dumps(payload, ensure_ascii=False, sort_keys=True)),
+    with write_transaction(db):
+        _current_items, current_covered = get_curated_memory_state(
+            db,
+            chat_id,
+            session_id,
         )
-        db.commit()
-
-    run_write_txn(db, write_curated_memory)
+        if current_covered > target_rowid:
+            return _current_items
+        _repo_store_meta_value(
+            db,
+            memory_curator_key(chat_id, session_id),
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        )
 
     if memory_mode(db, chat_id) == "on":
         content = "Curated durable memories:\n" + (
