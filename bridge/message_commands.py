@@ -51,7 +51,7 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
     set_meta(db, meta_key, json.dumps(state))
 
 
-def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None) -> None:
+def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service=None) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
     history_rows = timed_call("history_load", db.execute,
         "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
@@ -59,7 +59,30 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
     ).fetchall()
     history_rows = list(reversed(history_rows))
     rag_bundle = timed_call("rag_retrieval", rag_retrieval_bundle, db, chat_id, text)
-    messages = timed_call("prompt_assembly", build_chat_messages, session, fields, text, history_rows, memory_context=recall_memory_context(db, chat_id, session, fields, text), session_summary=session_summary_for_prompt(db, chat_id, session), rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle), group_context=group_context)
+    if memory_service is not None:
+        memory_prompt = memory_service.prompt_context(
+            db,
+            chat_id,
+            session,
+            fields,
+            text,
+        )
+        memory_context = memory_prompt.recall
+        session_summary = memory_prompt.summary
+    else:
+        memory_context = recall_memory_context(
+            db,
+            chat_id,
+            session,
+            fields,
+            text,
+        )
+        session_summary = session_summary_for_prompt(
+            db,
+            chat_id,
+            session,
+        )
+    messages = timed_call("prompt_assembly", build_chat_messages, session, fields, text, history_rows, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle), group_context=group_context)
     send_typing(token, chat_id)
     language = session.get("response_language") or "auto"
     fixed_language = normalize_response_language(language) != "auto"
@@ -109,7 +132,10 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
             return assistant_rowid
 
     assistant_rowid = run_write_txn(db, persist_turn)
-    retain_session_memory(db, chat_id, session, fields)
+    if memory_service is not None:
+        memory_service.retain(db, chat_id, session, fields)
+    else:
+        retain_session_memory(db, chat_id, session, fields)
     if telegram_message_id is not None:
         clear_failed_turn(db, chat_id, telegram_message_id)
     if stream_message_id:
@@ -158,6 +184,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     fields = card_fields_from_file(session["character_file"])
     director_plan = None
     group_director = getattr(services, "group_director", None) if services is not None else None
+    memory_service = getattr(services, "memory", None) if services is not None else None
     if not command.startswith("/"):
         if group_director is not None:
             director_plan = group_director.plan(
@@ -223,4 +250,19 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         return
 
 
-    generate_and_store_reply(db, token, api_key, fields, chat_id, text, session, session_id, current_model, group_turn, group_context, telegram_message_id, operation_id)
+    generate_and_store_reply(
+        db,
+        token,
+        api_key,
+        fields,
+        chat_id,
+        text,
+        session,
+        session_id,
+        current_model,
+        group_turn,
+        group_context,
+        telegram_message_id,
+        operation_id,
+        memory_service=memory_service,
+    )
