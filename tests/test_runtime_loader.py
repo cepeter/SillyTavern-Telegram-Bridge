@@ -6,7 +6,7 @@ from unittest.mock import patch
 import bridge.runtime as rt
 import bridge.extension_registry as extension_registry
 from bridge.extension_registry import extension_registry_snapshot
-from bridge.runtime_loader import RuntimeStage, load_runtime_namespace
+from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES, RuntimeStage, load_runtime_namespace
 
 
 class RuntimeLoaderTests(unittest.TestCase):
@@ -37,7 +37,7 @@ class RuntimeLoaderTests(unittest.TestCase):
         by_module = {entry["module"]: entry["public_callable_overrides"] for entry in rt.RUNTIME_LOAD_REPORT}
         self.assertEqual(by_module["scene_state.py"], ())
         self.assertEqual(by_module["memory_curator.py"], ())
-        self.assertEqual(by_module["director_goals.py"], ("group_director_plan", "group_prompt_context"))
+        self.assertEqual(by_module["director_goals.py"], ())
 
         extensions = extension_registry_snapshot()
         self.assertEqual(
@@ -47,14 +47,25 @@ class RuntimeLoaderTests(unittest.TestCase):
         self.assertEqual(extensions["post_retain"], ("scene_state", "memory_curator"))
         self.assertEqual(extensions["summary_context"], ("scene_state",))
         self.assertEqual(extensions["summary_clear"], ("scene_state",))
+        self.assertEqual(
+            extensions["director_customization"],
+            ("director_goals",),
+        )
+
+    def test_director_goals_not_allowlisted_for_public_callable_overrides(self):
+        safety = next(stage for stage in DEFAULT_RUNTIME_STAGES if stage.name == "safety_overrides")
+        self.assertEqual(safety.allowed_overrides_for("director_goals.py"), frozenset())
 
     def test_runtime_reload_resets_extension_registry_deterministically(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "one.py").write_text(
-                "from bridge.extension_registry import register_command_route\n"
+                "from bridge.extension_registry import "
+                "register_command_route, register_director_customization_provider\n"
                 "def route_one(*args, **kwargs):\n    return False\n"
-                'register_command_route("first", route_one)\n',
+                "def director_policy(db, chat_id, session):\n    return None\n"
+                'register_command_route("first", route_one)\n'
+                'register_director_customization_provider("policy", director_policy)\n',
                 encoding="utf-8",
             )
             (root / "two.py").write_text(
@@ -69,6 +80,7 @@ class RuntimeLoaderTests(unittest.TestCase):
                 patch.dict(extension_registry._POST_RETAIN_HOOKS, clear=True),
                 patch.dict(extension_registry._SUMMARY_CONTEXT_HOOKS, clear=True),
                 patch.dict(extension_registry._SUMMARY_CLEAR_HOOKS, clear=True),
+                patch.object(extension_registry, "_DIRECTOR_CUSTOMIZATION_PROVIDER", None),
             ):
                 load_runtime_namespace({"__name__": "runtime_one"}, root, stages)
                 first = extension_registry_snapshot()
@@ -77,6 +89,7 @@ class RuntimeLoaderTests(unittest.TestCase):
 
                 self.assertEqual(first, second)
                 self.assertEqual(first["command_routes"], ("first", "second"))
+                self.assertEqual(first["director_customization"], ("policy",))
 
     def test_core_stage_rejects_silent_public_callable_override(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -105,7 +118,6 @@ class RuntimeLoaderTests(unittest.TestCase):
             report = load_runtime_namespace(namespace, root, stages, reset_extensions=False)
             self.assertEqual(report[-1]["public_callable_overrides"], ("action",))
             self.assertEqual(namespace["action"](), 2)
-
 
     def test_override_stage_rejects_non_allowlisted_symbol(self):
         with tempfile.TemporaryDirectory() as directory:
