@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import sqlite3
 
+from bridge.group_director_service import GroupDirectorService
+
 
 @dataclass(frozen=True)
 class BridgeConfig:
@@ -37,6 +39,7 @@ class BridgeServices:
     db_factory: Callable[[], sqlite3.Connection]
     telegram: TelegramRuntime
     background: BackgroundRuntime
+    group_director: GroupDirectorService | None = None
 
 
 def load_bridge_config(
@@ -91,10 +94,12 @@ def build_bridge_services(
     db_factory: Callable[[], sqlite3.Connection],
     telegram: TelegramRuntime,
     background: BackgroundRuntime,
+    group_director: GroupDirectorService | None = None,
 ) -> BridgeServices:
     return BridgeServices(
         config=config,
         db_factory=db_factory,
         telegram=telegram,
         background=background,
+        group_director=group_director,
     )
