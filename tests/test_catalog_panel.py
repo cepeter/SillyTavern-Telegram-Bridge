@@ -66,13 +66,13 @@ class CatalogPanelTests(unittest.TestCase):
         original_request = rt.telegram_request
         rt.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {"message_id": 1}
         try:
-            rt.send_model_target_menu("token", "chat", "provider::model", "main::model", "utility::model")
+            rt.send_model_target_menu("token", "chat", "main::model", "utility::model")
         finally:
             rt.telegram_request = original_request
         callbacks = [button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row]
-        self.assertTrue(any(value.startswith("modeltarget:story:") for value in callbacks))
-        self.assertTrue(any(value.startswith("modeltarget:utility:") for value in callbacks))
-        self.assertIn("Where should this model be used?", calls[0][1]["text"])
+        self.assertIn("modeltarget:story", callbacks)
+        self.assertIn("modeltarget:utility", callbacks)
+        self.assertIn("Where should the next selected model be used?", calls[0][1]["text"])
 
     def test_model_panel_treats_not_modified_as_success(self):
         original_groups = rt.get_model_groups

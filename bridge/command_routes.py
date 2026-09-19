@@ -214,7 +214,7 @@ def _handle_entities(db, token, model, fields, chat_id, command, session, sessio
         send_world_menu(token, chat_id, session["world_file"])
         return True
     if command in {"/providers", "/providers health", "/providers refresh"}:
-        send_model_menu(token, chat_id, current_model)
+        send_model_target_menu(token, chat_id, current_model, task_model_for_session(db, chat_id, session, "utility"))
         return True
     if command.startswith("/providers "):
         send_text(token, chat_id, "Unknown /providers action. Use /providers, /providers health, or /providers refresh.")

@@ -279,6 +279,33 @@ def set_task_model(
 
 
 
+def model_target_selection_key(chat_id: str, session_id: str) -> str:
+    return f"model_target_selection:{chat_id}:{session_id}"
+
+
+def set_model_target_selection(db: sqlite3.Connection, chat_id: str, session_id: str, target: str) -> None:
+    if target not in {"story", "utility"}:
+        raise ValueError("invalid model target")
+    set_meta(db, model_target_selection_key(chat_id, session_id), json.dumps({"target": target, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}))
+
+
+def get_model_target_selection(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
+    raw = get_meta(db, model_target_selection_key(chat_id, session_id), "")
+    try:
+        state = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return ""
+    if float(state.get("expires_at", 0)) < time.time():
+        set_meta(db, model_target_selection_key(chat_id, session_id), "")
+        return ""
+    target = str(state.get("target") or "")
+    return target if target in {"story", "utility"} else ""
+
+
+def clear_model_target_selection(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
+    set_meta(db, model_target_selection_key(chat_id, session_id), "")
+
+
 def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
     inserted = db.execute("INSERT OR IGNORE INTO generation_settings(chat_id,session_id,temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences) VALUES(?,?,?,?,?,?,?, ?,?)", (chat_id, session_id, GENERATION_DEFAULTS["temperature"], GENERATION_DEFAULTS["max_tokens"], GENERATION_DEFAULTS["top_p"], GENERATION_DEFAULTS["frequency_penalty"], GENERATION_DEFAULTS["presence_penalty"], GENERATION_DEFAULTS["reasoning_budget"], GENERATION_DEFAULTS["stop_sequences"]))
     row = db.execute("SELECT temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences FROM generation_settings WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()

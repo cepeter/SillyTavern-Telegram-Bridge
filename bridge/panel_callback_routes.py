@@ -503,21 +503,13 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
         send_text(token, chat_id, f"Provider '{provider_id}' is visible in the bridge catalog, but its adapter is not enabled yet.")
         return True
     if data.startswith("modeltarget:"):
-        parts = data.split(":", 2)
-        target = parts[1]
-        model = resolve_dynamic_callback_token(parts[2], "model_target", chat_id) or ""
-        if target not in {"story", "utility"} or not model:
-            answer_callback(token, str(callback.get("id", "")), "Model choice expired")
+        target = data.split(":", 1)[1]
+        if target not in {"story", "utility"}:
+            answer_callback(token, str(callback.get("id", "")), "Model target invalid")
             return True
-        if target == "story":
-            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="model_select", model_id=model)
-            message = f"Story model updated: {model}"
-        else:
-            set_task_model(db, chat_id, session_id, model, "utility")
-            message = f"Utility model updated: {model}"
-        answer_callback(token, str(callback.get("id", "")), "Model updated")
-        send_text(token, chat_id, message)
-        send_model_menu(token, chat_id, model if target == "story" else session["model_id"] or DEFAULT_MODEL, message_id=message_id)
+        set_model_target_selection(db, chat_id, session_id, target)
+        answer_callback(token, str(callback.get("id", "")), "Target selected")
+        send_model_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id)
         return True
     if not data.startswith("model:"):
         return False
@@ -525,7 +517,19 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
     if not model:
         answer_callback(token, str(callback.get("id", "")), "Model choice expired")
         return True
-    utility_model = task_model_for_session(db, chat_id, session, "utility")
-    answer_callback(token, str(callback.get("id", "")), "Choose model target")
-    send_model_target_menu(token, chat_id, model, session["model_id"] or DEFAULT_MODEL, utility_model, message_id)
+    target = get_model_target_selection(db, chat_id, session_id)
+    if not target:
+        answer_callback(token, str(callback.get("id", "")), "Choose Story or Utility first")
+        send_model_target_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, task_model_for_session(db, chat_id, session, "utility"), message_id)
+        return True
+    if target == "story":
+        update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="model_select", model_id=model)
+        message = f"Story model updated: {model}"
+    else:
+        set_task_model(db, chat_id, session_id, model, "utility")
+        message = f"Utility model updated: {model}"
+    clear_model_target_selection(db, chat_id, session_id)
+    answer_callback(token, str(callback.get("id", "")), "Model updated")
+    send_text(token, chat_id, message)
+    send_model_target_menu(token, chat_id, model if target == "story" else session["model_id"] or DEFAULT_MODEL, task_model_for_session(db, chat_id, session, "utility"), message_id)
     return True
