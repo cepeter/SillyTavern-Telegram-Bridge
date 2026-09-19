@@ -11,6 +11,12 @@ import logging
 import re
 import time
 
+from bridge.repositories import (
+    delete_scene_state as _repo_delete_scene_state,
+    load_scene_state_row as _repo_load_scene_state_row,
+    upsert_scene_state_if_fresh as _repo_upsert_scene_state_if_fresh,
+)
+
 from bridge.extension_registry import (
     register_command_route as _register_command_route,
     register_post_retain_hook as _register_post_retain_hook,
@@ -74,18 +80,15 @@ def parse_scene_state(raw: str) -> dict[str, object] | None:
 
 
 def get_scene_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> tuple[dict[str, object], int]:
-    row = db.execute(
-        "SELECT state_json,updated_through_rowid FROM scene_states "
-        "WHERE chat_id=? AND session_id=?",
-        (str(chat_id), str(session_id)),
-    ).fetchone()
-    if not row:
+    row = _repo_load_scene_state_row(db, chat_id, session_id)
+    if row is None:
         return {}, 0
+    raw_state, rowid = row
     try:
-        state = json.loads(str(row[0] or "{}"))
+        state = json.loads(raw_state)
     except json.JSONDecodeError:
         state = {}
-    return (state if isinstance(state, dict) else {}, int(row[1] or 0))
+    return (state if isinstance(state, dict) else {}, rowid)
 
 
 def scene_state_text(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
@@ -96,11 +99,8 @@ def scene_state_text(db: sqlite3.Connection, chat_id: str, session_id: str) -> s
 
 
 def clear_scene_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
-    db.execute(
-        "DELETE FROM scene_states WHERE chat_id=? AND session_id=?",
-        (str(chat_id), str(session_id)),
-    )
-    db.commit()
+    with write_transaction(db):
+        _repo_delete_scene_state(db, chat_id, session_id)
 
 
 def _scene_state_source_rows(
@@ -191,29 +191,23 @@ def refresh_scene_state_now(
         logging.info("Scene-state extractor returned no valid state for %s/%s", chat_id, session_id)
         return existing or None
 
-    current = db.execute(
-        "SELECT updated_through_rowid FROM scene_states WHERE chat_id=? AND session_id=?",
-        (str(chat_id), session_id),
-    ).fetchone()
-    if current and int(current[0] or 0) > target_rowid:
-        return get_scene_state(db, chat_id, session_id)[0]
-
-    def write_state():
-        db.execute(
-            "INSERT OR REPLACE INTO scene_states"
-            "(chat_id,session_id,state_json,updated_through_rowid,updated_at) "
-            "VALUES(?,?,?,?,?)",
-            (
-                str(chat_id),
-                session_id,
-                json.dumps(state, ensure_ascii=False, sort_keys=True),
-                target_rowid,
-                time.time(),
-            ),
+    state_json = json.dumps(state, ensure_ascii=False, sort_keys=True)
+    with write_transaction(db):
+        accepted = _repo_upsert_scene_state_if_fresh(
+            db,
+            chat_id,
+            session_id,
+            state_json,
+            target_rowid,
+            time.time(),
         )
-        db.commit()
-
-    run_write_txn(db, write_state)
+        if not accepted:
+            current_state, _current_rowid = get_scene_state(
+                db,
+                chat_id,
+                session_id,
+            )
+            return current_state or None
     return state
 
 
