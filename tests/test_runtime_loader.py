@@ -151,5 +151,23 @@ class RuntimeLoaderTests(unittest.TestCase):
         self.assertNotIn("composition.py", loaded_modules)
 
 
+    def test_loader_rejects_module_outside_base_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outside = root.parent / "outside_runtime_loader_test.py"
+            outside.write_text("value = 1\n", encoding="utf-8")
+            try:
+                stages = (RuntimeStage("core", ("../outside_runtime_loader_test.py",)),)
+                with self.assertRaisesRegex(RuntimeError, "outside runtime base directory"):
+                    load_runtime_namespace(
+                        {"__name__": "test_runtime"},
+                        root,
+                        stages,
+                        reset_extensions=False,
+                    )
+            finally:
+                outside.unlink(missing_ok=True)
+
+
 if __name__ == "__main__":
     unittest.main()
