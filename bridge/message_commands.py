@@ -164,6 +164,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
     session_id = session["session_id"]
     set_panel_session_context(session_id)
+    memory_service = getattr(services, "memory", None) if services is not None else None
     if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
         committed = db.execute("SELECT rowid,content FROM messages WHERE chat_id=? AND session_id=? AND role='assistant' ORDER BY rowid DESC LIMIT 1", (chat_id, session_id)).fetchone()
         if committed:
@@ -175,7 +176,17 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     if command == "/reset":
         send_reset_confirmation_menu(token, chat_id)
         return
-    if handle_pending_input(db, token, chat_id, session, stripped, api_key=api_key, fields=fields, operation_id=operation_id):
+    if handle_pending_input(
+        db,
+        token,
+        chat_id,
+        session,
+        stripped,
+        api_key=api_key,
+        fields=fields,
+        operation_id=operation_id,
+        memory_service=memory_service,
+    ):
         return
     if command == "/session":
         send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id)
@@ -184,7 +195,6 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     fields = card_fields_from_file(session["character_file"])
     director_plan = None
     group_director = getattr(services, "group_director", None) if services is not None else None
-    memory_service = getattr(services, "memory", None) if services is not None else None
     if not command.startswith("/"):
         if group_director is not None:
             director_plan = group_director.plan(
