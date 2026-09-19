@@ -174,7 +174,18 @@ def process_image_job(
                 if job_id is not None:
                     finish_job(db, job_id, "done")
                 return
-            process_telegram_image(db, token, chat_id, file_id, caption, model, file_size, message_id, queued_session_id=queued_session_id)
+            process_telegram_image(
+                db,
+                token,
+                chat_id,
+                file_id,
+                caption,
+                model,
+                file_size,
+                message_id,
+                queued_session_id=queued_session_id,
+                memory_service=services.memory,
+            )
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
