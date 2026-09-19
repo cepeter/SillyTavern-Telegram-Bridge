@@ -488,6 +488,195 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
 
         self.assertIs(captured["memory_service"], memory)
 
+    def test_image_message_uses_injected_memory_service(self):
+        calls = []
+        captured = {}
+
+        class FakeMemory:
+            def prompt_context(
+                self,
+                db,
+                chat_id,
+                session,
+                fields,
+                query,
+                **kwargs,
+            ):
+                calls.append(("context", query))
+                return MemoryPromptContext(
+                    recall="image recall",
+                    summary="image summary",
+                )
+
+            def retain(self, db, chat_id, session, fields):
+                calls.append(("retain", session["session_id"]))
+
+        def legacy_called(*_args, **_kwargs):
+            raise AssertionError("legacy memory global must not run")
+
+        def build_messages(
+            session,
+            fields,
+            text,
+            history_rows,
+            **kwargs,
+        ):
+            captured.update(kwargs)
+            return [{"role": "user", "content": text}]
+
+        with patch.object(
+            rt,
+            "group_current_speaker",
+            return_value=None,
+        ), patch.object(
+            rt,
+            "recall_memory_context",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "session_summary_for_prompt",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "retain_session_memory",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "rag_retrieval_bundle",
+            return_value={},
+        ), patch.object(
+            rt,
+            "rag_context_for_prompt",
+            return_value="",
+        ), patch.object(
+            rt,
+            "build_chat_messages",
+            side_effect=build_messages,
+        ), patch.object(
+            rt,
+            "send_typing",
+        ), patch.object(
+            rt,
+            "get_generation_settings",
+            return_value={},
+        ), patch.object(
+            rt,
+            "generate_text",
+            return_value="image reply",
+        ), patch.object(
+            rt,
+            "rag_citation_footer",
+            return_value="",
+        ), patch.object(
+            rt,
+            "render_session_response",
+            side_effect=lambda _key, _session, reply, *_args: reply,
+        ), patch.object(
+            rt,
+            "save_response_variant",
+            return_value=1,
+        ), patch.object(
+            rt,
+            "send_reply",
+        ):
+            rt.process_image_message(
+                self.db,
+                "token",
+                "key",
+                self.session,
+                self.fields,
+                "chat",
+                "describe this",
+                b"image-bytes",
+                memory_service=FakeMemory(),
+            )
+
+        self.assertEqual(captured["memory_context"], "image recall")
+        self.assertEqual(captured["session_summary"], "image summary")
+        self.assertEqual(calls, [
+            ("context", "describe this"),
+            ("retain", self.session["session_id"]),
+        ])
+
+    def test_telegram_image_adapter_propagates_memory_service(self):
+        memory = object()
+        captured = {}
+
+        with patch.object(
+            rt,
+            "download_telegram_file",
+            return_value=b"image",
+        ), patch.object(
+            rt,
+            "ensure_session",
+            return_value=self.session,
+        ), patch.object(
+            rt,
+            "card_fields_from_file",
+            return_value=self.fields,
+        ), patch.object(
+            rt,
+            "process_image_message",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            rt.process_telegram_image(
+                self.db,
+                "token",
+                "chat",
+                "file-id",
+                "caption",
+                "provider::model",
+                memory_service=memory,
+            )
+
+        self.assertIs(captured["memory_service"], memory)
+
+    def test_png_document_adapter_propagates_memory_service(self):
+        memory = object()
+        captured = {}
+        document = {
+            "file_name": "photo.png",
+            "file_id": "file-id",
+            "file_size": 5,
+            "caption": "caption",
+        }
+
+        with patch.object(
+            rt,
+            "_consume_world_upload",
+            return_value=False,
+        ), patch.object(
+            rt,
+            "download_telegram_file",
+            return_value=b"not-a-card",
+        ), patch.object(
+            rt,
+            "parse_png_chara_bytes",
+            side_effect=ValueError("not card"),
+        ), patch.object(
+            rt,
+            "ensure_session",
+            return_value=self.session,
+        ), patch.object(
+            rt,
+            "card_fields_from_file",
+            return_value=self.fields,
+        ), patch.object(
+            rt,
+            "process_image_message",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            rt.import_telegram_document(
+                self.db,
+                "token",
+                "chat",
+                document,
+                "provider::model",
+                memory_service=memory,
+            )
+
+        self.assertIs(captured["memory_service"], memory)
+
 
 if __name__ == "__main__":
     unittest.main()
