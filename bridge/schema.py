@@ -370,8 +370,55 @@ def _migration_001_core_baseline(db: sqlite3.Connection) -> None:
     _ensure_panel_tables(db)
 
 
+def _migration_002_scene_state(db: sqlite3.Connection) -> None:
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS scene_states (
+            chat_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            state_json TEXT NOT NULL DEFAULT '{}',
+            updated_through_rowid INTEGER NOT NULL DEFAULT 0,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY(chat_id, session_id)
+        )"""
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS scene_states_updated_idx "
+        "ON scene_states(chat_id, session_id, updated_through_rowid)"
+    )
+    db.execute(
+        """CREATE TRIGGER IF NOT EXISTS scene_states_session_delete
+        AFTER DELETE ON sessions
+        BEGIN
+            DELETE FROM scene_states
+            WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
+        END"""
+    )
+
+
+def _migration_003_director_goals(db: sqlite3.Connection) -> None:
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS director_goals (
+            chat_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            goal TEXT NOT NULL,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY(chat_id, session_id)
+        )"""
+    )
+    db.execute(
+        """CREATE TRIGGER IF NOT EXISTS director_goals_session_delete
+        AFTER DELETE ON sessions
+        BEGIN
+            DELETE FROM director_goals
+            WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
+        END"""
+    )
+
+
 SCHEMA_MIGRATIONS = (
     _Migration(1, "core_baseline", _migration_001_core_baseline),
+    _Migration(2, "scene_state", _migration_002_scene_state),
+    _Migration(3, "director_goals", _migration_003_director_goals),
 )
 
 
