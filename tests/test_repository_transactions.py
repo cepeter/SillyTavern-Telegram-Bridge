@@ -208,5 +208,71 @@ class RepositoryPrimitiveTests(unittest.TestCase):
         )
 
 
+class GenerationSettingsTransactionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.old_db = rt.DB_FILE
+        rt.DB_FILE = Path(self.tmp.name) / "settings.sqlite3"
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+        self.db = rt.db_connect()
+
+    def tearDown(self):
+        self.db.close()
+        rt.DB_FILE = self.old_db
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+        self.tmp.cleanup()
+
+    def test_get_generation_settings_returns_defaults_without_inserting(self):
+        chat_id = "settings-pure"
+        session_id = "missing-row"
+
+        traced = []
+        self.db.set_trace_callback(traced.append)
+        try:
+            settings = rt.get_generation_settings(
+                self.db,
+                chat_id,
+                session_id,
+            )
+        finally:
+            self.db.set_trace_callback(None)
+
+        self.assertEqual(settings, dict(rt.GENERATION_DEFAULTS))
+        self.assertIsNone(
+            self.db.execute(
+                "SELECT 1 FROM generation_settings "
+                "WHERE chat_id=? AND session_id=?",
+                (chat_id, session_id),
+            ).fetchone()
+        )
+        self.assertFalse(self.db.in_transaction)
+        self.assertFalse(
+            any(
+                sql.lstrip().upper().startswith(
+                    ("INSERT", "UPDATE", "DELETE", "REPLACE")
+                )
+                for sql in traced
+            ),
+            traced,
+        )
+
+    def test_update_generation_settings_materializes_row_explicitly(self):
+        updated = rt.update_generation_settings(
+            self.db,
+            "settings-write",
+            "session",
+            temperature=0.25,
+        )
+        self.assertEqual(updated["temperature"], 0.25)
+        row = self.db.execute(
+            "SELECT temperature FROM generation_settings "
+            "WHERE chat_id=? AND session_id=?",
+            ("settings-write", "session"),
+        ).fetchone()
+        self.assertEqual(row, (0.25,))
+
+
 if __name__ == "__main__":
     unittest.main()
