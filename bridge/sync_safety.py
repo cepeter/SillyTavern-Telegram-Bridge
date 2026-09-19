@@ -12,7 +12,7 @@ _SYNC_POLL_ATTEMPT_LIMIT = 32
 
 
 def initialize_database_schema(db: sqlite3.Connection) -> None:
-    """Install sync lifecycle cleanup after the normal schema migration."""
+    """Run normal migrations, then remove orphaned sync bindings."""
     _ORIGINAL_SYNC_INITIALIZE_DATABASE_SCHEMA(db)
     db.execute(
         "DELETE FROM sync_bindings "
@@ -20,15 +20,6 @@ def initialize_database_schema(db: sqlite3.Connection) -> None:
         "SELECT 1 FROM sessions "
         "WHERE sessions.chat_id=sync_bindings.chat_id "
         "AND sessions.session_id=sync_bindings.session_id)"
-    )
-    db.execute(
-        """CREATE TRIGGER IF NOT EXISTS sessions_delete_sync_binding
-        AFTER DELETE ON sessions
-        FOR EACH ROW
-        BEGIN
-            DELETE FROM sync_bindings
-            WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
-        END"""
     )
     db.commit()
 

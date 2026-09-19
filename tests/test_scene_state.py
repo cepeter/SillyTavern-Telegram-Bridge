@@ -85,7 +85,6 @@ class SceneStateEngineTests(unittest.TestCase):
 
     def test_clear_session_summary_also_clears_scene_state(self):
         self._add_turn()
-        rt.ensure_scene_state_schema(self.db)
         self.db.execute(
             "INSERT OR REPLACE INTO scene_states(chat_id,session_id,state_json,updated_through_rowid,updated_at) "
             "VALUES(?,?,?,?,?)",

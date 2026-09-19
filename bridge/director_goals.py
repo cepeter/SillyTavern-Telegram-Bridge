@@ -18,30 +18,11 @@ from bridge.extension_registry import (
 _DIRECTOR_GOAL_MAX_CHARS = 1200
 
 
-def ensure_director_goal_schema(db: sqlite3.Connection) -> None:
-    db.execute("""CREATE TABLE IF NOT EXISTS director_goals (
-        chat_id TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        goal TEXT NOT NULL,
-        updated_at REAL NOT NULL,
-        PRIMARY KEY(chat_id, session_id)
-    )""")
-    db.execute("""CREATE TRIGGER IF NOT EXISTS director_goals_session_delete
-        AFTER DELETE ON sessions
-        BEGIN
-            DELETE FROM director_goals
-            WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
-        END
-    """)
-    db.commit()
-
-
 def normalize_director_goal(value: str) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()[:_DIRECTOR_GOAL_MAX_CHARS]
 
 
 def get_director_goal(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
-    ensure_director_goal_schema(db)
     row = db.execute(
         "SELECT goal FROM director_goals WHERE chat_id=? AND session_id=?",
         (str(chat_id), str(session_id)),
@@ -55,7 +36,6 @@ def set_director_goal(
     session_id: str,
     goal: str,
 ) -> str:
-    ensure_director_goal_schema(db)
     value = normalize_director_goal(goal)
     if not value:
         db.execute(

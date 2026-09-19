@@ -23,29 +23,6 @@ _SCENE_STATE_KEYS = ("location", "time", "weather", "participants", "objects", "
 _SCENE_STATE_MAX_TEXT = 5000
 _SCENE_STATE_TRANSCRIPT_MESSAGES = 16
 
-def ensure_scene_state_schema(db: sqlite3.Connection) -> None:
-    db.execute("""CREATE TABLE IF NOT EXISTS scene_states (
-        chat_id TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        state_json TEXT NOT NULL DEFAULT '{}',
-        updated_through_rowid INTEGER NOT NULL DEFAULT 0,
-        updated_at REAL NOT NULL,
-        PRIMARY KEY(chat_id, session_id)
-    )""")
-    db.execute(
-        "CREATE INDEX IF NOT EXISTS scene_states_updated_idx "
-        "ON scene_states(chat_id, session_id, updated_through_rowid)"
-    )
-    db.execute("""CREATE TRIGGER IF NOT EXISTS scene_states_session_delete
-        AFTER DELETE ON sessions
-        BEGIN
-            DELETE FROM scene_states
-            WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
-        END
-    """)
-    db.commit()
-
-
 def _sanitize_scene_value(value, depth: int = 0):
     if depth > 4:
         return None
@@ -97,7 +74,6 @@ def parse_scene_state(raw: str) -> dict[str, object] | None:
 
 
 def get_scene_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> tuple[dict[str, object], int]:
-    ensure_scene_state_schema(db)
     row = db.execute(
         "SELECT state_json,updated_through_rowid FROM scene_states "
         "WHERE chat_id=? AND session_id=?",
@@ -120,7 +96,6 @@ def scene_state_text(db: sqlite3.Connection, chat_id: str, session_id: str) -> s
 
 
 def clear_scene_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
-    ensure_scene_state_schema(db)
     db.execute(
         "DELETE FROM scene_states WHERE chat_id=? AND session_id=?",
         (str(chat_id), str(session_id)),
@@ -155,7 +130,6 @@ def refresh_scene_state_now(
     character_name: str,
     through_rowid: int | None = None,
 ) -> dict[str, object] | None:
-    ensure_scene_state_schema(db)
     session_id = str(session["session_id"])
     rows = _scene_state_source_rows(db, chat_id, session_id, through_rowid)
     if not rows:
@@ -276,7 +250,6 @@ def queue_scene_state_refresh(
     session: dict[str, str],
     character_name: str,
 ) -> bool:
-    ensure_scene_state_schema(db)
     session_id = str(session["session_id"])
     row = db.execute(
         "SELECT rowid FROM messages WHERE chat_id=? AND session_id=? "
