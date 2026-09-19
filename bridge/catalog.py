@@ -176,7 +176,7 @@ def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: s
                 navigation.append({"text": "Next ➡️", "callback_data": f"models:providers:{current_page + 1}"})
             rows.append(navigation)
         rows.append([{"text": "🩺 Provider health", "callback_data": "provider:health"}, {"text": "🔄 Refresh models", "callback_data": "provider:refresh"}])
-        rows.append([{"text": "❌ Cancel", "callback_data": "models:cancel"}])
+        rows.append([{"text": "⬅️ Back to target", "callback_data": "models:target"}, {"text": "❌ Cancel", "callback_data": "models:cancel"}])
         text = f"Current model: {current_model}\nBridge provider catalog (page {current_page + 1}/{total_pages}):"
     else:
         label, models, is_supported = groups.get(provider_id, (provider_id, [], False))

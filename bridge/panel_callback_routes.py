@@ -471,6 +471,10 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
         answer_callback(token, str(callback.get("id", "")), "Page")
         send_model_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, provider_id, message_id, page)
         return True
+    if data == "models:target":
+        answer_callback(token, str(callback.get("id", "")), "Back to target")
+        send_model_target_menu(token, chat_id, session["model_id"] or DEFAULT_MODEL, task_model_for_session(db, chat_id, session, "utility"), message_id)
+        return True
     if data == "models:cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
         remove_inline_keyboard(token, callback)
