@@ -85,6 +85,21 @@ class WriteTransactionTests(unittest.TestCase):
         self.db.rollback()
 
 
+class RepositorySourceInvariantTests(unittest.TestCase):
+    def test_repository_module_contains_no_transaction_ownership_calls(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "repositories.py"
+        ).read_text(encoding="utf-8")
+        for forbidden in (
+            ".commit(",
+            ".rollback(",
+            "run_write_txn(",
+            "write_transaction(",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+
 class RepositoryPrimitiveTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
