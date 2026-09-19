@@ -172,10 +172,15 @@ def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: floa
     return reclaimed
 
 
-def db_connect() -> sqlite3.Connection:
-    """Open the configured SQLite database and initialize its schema."""
-    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB_FILE, timeout=30, factory=_SerializedSQLiteConnection)
+def db_connect(database_path: Path | None = None) -> sqlite3.Connection:
+    """Open a SQLite database and initialize its schema."""
+    path = Path(database_path) if database_path is not None else DB_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(
+        path,
+        timeout=30,
+        factory=_SerializedSQLiteConnection,
+    )
     _apply_connection_pragmas(db, timeout=30.0)
     # One-time database-level setup, on the schema-init connection only and
     # never on per-worker lightweight connections. auto_vacuum must precede

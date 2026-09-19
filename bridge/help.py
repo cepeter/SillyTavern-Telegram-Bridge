@@ -1,3 +1,5 @@
+from bridge.composition import BridgeServices as _BridgeServices
+
 HELP_CATEGORIES = {
     "basic": [
         ("/start", "Show the character greeting when Persona, World Info, and System Prompt are all enabled; otherwise show what's off and how to fix it."),
@@ -467,21 +469,30 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
 
 
 
-def process_document_job(token: str, chat_id: str, document: dict, default_model: str, message_id: int | None = None, job_id: int | None = None) -> None:
+def process_document_job(
+    services: _BridgeServices,
+    chat_id: str,
+    document: dict,
+    message_id: int | None = None,
+    model_override: str | None = None,
+    job_id: int | None = None,
+) -> None:
+    token = services.config.bot_token
+    model = model_override or services.config.default_model
     with chat_job_lock(chat_id):
-        db = db_connect()
+        db = services.db_factory()
         set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
-            import_telegram_document(db, token, chat_id, document, default_model, telegram_message_id=message_id)
+            import_telegram_document(db, token, chat_id, document, model, telegram_message_id=message_id)
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
             logging.error("Document job failed: %s", exc, exc_info=True)
             if job_id is not None:
                 finish_job(db, job_id, "failed", str(exc))
-            send_text(token, chat_id, "Document import failed. Check the file format and size limits.")
+            services.telegram.send_text(token, chat_id, "Document import failed. Check the file format and size limits.")
         finally:
             set_db_connection_context(None)
             db.close()
