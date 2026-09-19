@@ -194,6 +194,13 @@ def complete_update(db: sqlite3.Connection, update_id: int, offset: int) -> None
     run_write_txn(db, write)
 
 
+def restore_poll_offset(db: sqlite3.Connection, fallback: int) -> int:
+    try:
+        return int(get_meta(db, "telegram_offset", str(fallback)) or fallback)
+    except (TypeError, ValueError, sqlite3.Error):
+        return int(fallback)
+
+
 def submit_durable_chat_job(db: sqlite3.Connection, label: str, chat_id: str, function, *args) -> bool:
     queued = submit_chat_background(label, chat_id, function, *args)
     if queued and args and isinstance(args[-1], int):
@@ -300,11 +307,13 @@ def main() -> int:
     offset = int(get_meta(db, "telegram_offset", "0"))
     permitted = allowed_users()
     logging.info("Bridge started")
+    last_safe_offset = offset
     while not _SHUTDOWN_EVENT.is_set():
         try:
             updates = telegram_request(token, "getUpdates", {"offset": offset, "timeout": 50, "allowed_updates": ["message", "edited_message", "callback_query"]})
             for update in updates:
                 update_id = int(update["update_id"])
+                last_safe_offset = offset
                 offset = max(offset, update_id + 1)
                 if db.execute("SELECT 1 FROM processed_updates WHERE update_id=?", (update_id,)).fetchone():
                     complete_update(db, update_id, offset)
@@ -446,6 +455,7 @@ def main() -> int:
         except Exception as exc:
             if _SHUTDOWN_EVENT.is_set():
                 break
+            offset = restore_poll_offset(db, last_safe_offset)
             logging.error("Polling error: %s", exc, exc_info=True)
             _SHUTDOWN_EVENT.wait(5)
 

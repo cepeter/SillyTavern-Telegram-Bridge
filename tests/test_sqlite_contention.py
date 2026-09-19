@@ -38,7 +38,11 @@ class SqliteContentionTests(unittest.TestCase):
             rt._DB_SCHEMA_READY = self.old_schema_ready
         self.tmp.cleanup()
 
-    def test_shared_write_mutex_serializes_transactions(self):
+    def test_failed_poll_update_restores_durable_offset(self):
+        rt.set_meta(self.db, "telegram_offset", "100")
+        self.assertEqual(rt.restore_poll_offset(self.db, 101), 100)
+        self.assertEqual(rt.restore_poll_offset(self.db, 100), 100)
+
         active = 0
         maximum = 0
         guard = threading.Lock()
