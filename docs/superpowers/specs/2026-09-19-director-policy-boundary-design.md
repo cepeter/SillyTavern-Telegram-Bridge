@@ -4,6 +4,8 @@ Date: 2026-09-19
 Status: Proposed for implementation after review
 Repository: `punzer4-code/SillyTavern-Telegram-Bridge`
 Target implementation: PR #28
+Parent architecture: `docs/superpowers/specs/2026-09-19-runtime-architecture-migration-design.md`
+Migration phase: Phase 1
 
 ## 1. Purpose
 
