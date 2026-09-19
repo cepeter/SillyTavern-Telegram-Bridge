@@ -74,17 +74,17 @@ def regenerate_edited_turn(db: sqlite3.Connection, token: str, api_key: str, ses
         db.commit()
 
 
-def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None) -> None:
+def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, memory_service=None) -> None:
     session_id = session["session_id"]
     rows = db.execute("SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session_id)).fetchall()
     last_user = next((row for row in reversed(rows) if row[1] == "user"), None)
     if last_user is None:
         send_text(token, chat_id, "Belum ada pesan user untuk diedit.")
         return
-    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(last_user[0]), new_text, operation_id=operation_id)
+    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(last_user[0]), new_text, operation_id=operation_id, memory_service=memory_service)
 
 
-def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None) -> None:
+def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, memory_service=None) -> None:
     session = ensure_session(db, chat_id, default_model)
     fields = card_fields_from_file(session["character_file"])
     row = db.execute("SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND telegram_message_id=? ORDER BY rowid DESC LIMIT 1", (chat_id, str(message_id))).fetchone()
@@ -94,7 +94,7 @@ def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str,
     if not new_text.strip():
         send_text(token, chat_id, "Edited message cannot be empty.")
         return
-    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(row[0]), new_text.strip()[:12000], operation_id=operation_id)
+    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(row[0]), new_text.strip()[:12000], operation_id=operation_id, memory_service=memory_service)
 
 
 def send_stscript_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
