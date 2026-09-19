@@ -354,11 +354,25 @@ def group_director_plan(
     hidden_instructions = ""
     max_tokens = 180
     if customization is not None:
-        if customization.model:
-            model = customization.model
+        candidate_model = customization.model
+        if isinstance(candidate_model, str):
+            normalized_model = candidate_model.strip()
+            if (
+                normalized_model
+                and len(normalized_model) <= 200
+                and not any(ch.isspace() for ch in normalized_model)
+            ):
+                model = normalized_model
+
         hidden_instructions = str(customization.hidden_instructions or "").strip()
+
         if customization.max_tokens is not None:
-            max_tokens = int(customization.max_tokens)
+            try:
+                requested_max_tokens = int(customization.max_tokens)
+            except (TypeError, ValueError):
+                requested_max_tokens = None
+            if requested_max_tokens is not None:
+                max_tokens = min(max(requested_max_tokens, 1), 16000)
 
     policy_block = (
         "\nHidden Director policy:\n" + hidden_instructions
