@@ -142,6 +142,14 @@ class RuntimeLoaderTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "extra"):
                 load_runtime_namespace(namespace, root, stages, reset_extensions=False)
 
+    def test_composition_module_is_not_a_runtime_stage(self):
+        loaded_modules = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn("composition.py", loaded_modules)
+
 
 if __name__ == "__main__":
     unittest.main()
