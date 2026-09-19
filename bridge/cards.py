@@ -408,9 +408,12 @@ def send_character_menu(token: str, chat_id: str, current_character: str, messag
     for filename, label in page_options:
         mark = "✅ " if filename == current_character else ""
         callback_token = dynamic_callback_token("character", filename, chat_id)
+        card_path = safe_character_path(filename)
+        protected = filename == current_character or filename == DEFAULT_CHARACTER_FILE or (card_path is not None and card_path.resolve() == CARD_FILE.resolve())
+        action = {"text": "🔒", "callback_data": "character:protected"} if protected else {"text": "🗑️", "callback_data": "characterdelete:" + callback_token}
         rows.append([
             {"text": mark + panel_label(label), "callback_data": "character:" + callback_token},
-            {"text": "🗑️", "callback_data": "characterdelete:" + callback_token},
+            action,
         ])
     navigation = panel_navigation("character", current_page, total_pages)
     if navigation:
@@ -468,9 +471,10 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
     for session_id, label in page_options:
         mark = "✅ " if session_id == current_id else ""
         delete_token = dynamic_callback_token("session", session_id, chat_id)
+        action = {"text": "🔒", "callback_data": "session:protected"} if session_id == current_id else {"text": "🗑️", "callback_data": "sessiondelete:" + delete_token}
         rows.append([
             {"text": mark + panel_label(label), "callback_data": "session:" + session_id},
-            {"text": "🗑️", "callback_data": "sessiondelete:" + delete_token},
+            action,
         ])
     navigation = panel_navigation("session", current_page, total_pages)
     if navigation:

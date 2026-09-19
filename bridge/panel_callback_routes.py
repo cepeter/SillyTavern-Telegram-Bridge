@@ -194,6 +194,11 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
 
 def handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     """Handle character selection, info, upload, and deletion callbacks."""
+    message_id = message.get("message_id")
+    if data == "character:protected":
+        answer_callback(token, str(callback.get("id", "")), "Active/default character is protected")
+        send_character_menu(token, chat_id, session["character_file"], message_id)
+        return True
     if data == "character:menu":
         answer_callback(token, str(callback.get("id", "")), "Refreshed")
         send_character_menu(token, chat_id, session["character_file"], message.get("message_id"))
@@ -243,6 +248,7 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
         if not path or filename == session["character_file"] or is_default or references:
             reason = "active/default/referenced character" if path else "character not found"
             answer_callback(token, str(callback.get("id", "")), f"Deletion refused: {reason}")
+            send_character_menu(token, chat_id, session["character_file"], message_id)
             return True
         try:
             verify_character_card_backup(path, path.read_bytes())
@@ -292,6 +298,10 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
 
 def handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     """Handle session selection, creation, and deletion callbacks."""
+    if data == "session:protected":
+        answer_callback(token, str(callback.get("id", "")), "Active session is protected")
+        send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"))
+        return True
     if data.startswith("sessiondeleteconfirm:"):
         target_session_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "session", chat_id) or ""
         target = next((item for item in list_sessions(db, chat_id) if item["session_id"] == target_session_id), None)

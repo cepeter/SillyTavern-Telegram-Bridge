@@ -90,7 +90,8 @@ class SessionDeletionTests(unittest.TestCase):
             rt.telegram_request = original_request
         rows = calls[0][1]["reply_markup"]["inline_keyboard"]
         callbacks = [button["callback_data"] for row in rows for button in row]
-        self.assertEqual(sum(value.startswith("sessiondelete:") for value in callbacks), 2)
+        self.assertEqual(sum(value.startswith("sessiondelete:") for value in callbacks), 1)
+        self.assertIn("session:protected", callbacks)
         self.assertIn("session:" + active["session_id"], callbacks)
         self.assertIn("session:" + inactive["session_id"], callbacks)
         self.assertNotIn("session:delete", callbacks)

@@ -67,7 +67,8 @@ class PanelificationTests(unittest.TestCase):
         item_rows = rows[:2]
         self.assertTrue(all(len(row) == 2 for row in item_rows))
         callbacks = [button["callback_data"] for row in item_rows for button in row]
-        self.assertEqual(sum(value.startswith("characterdelete:") for value in callbacks), 2)
+        self.assertEqual(sum(value.startswith("characterdelete:") for value in callbacks), 1)
+        self.assertIn("character:protected", callbacks)
         self.assertIn("character:cb-active.png", callbacks)
         self.assertIn("character:cb-other.png", callbacks)
 
