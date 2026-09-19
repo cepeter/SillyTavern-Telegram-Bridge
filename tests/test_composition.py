@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import bridge.runtime as rt
 
+from bridge.group_director_service import GroupDirectorService
+
 from bridge.composition import (
     BackgroundRuntime,
     BridgeConfig,
@@ -297,6 +299,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertEqual(captured["token"], "injected-token")
         self.assertEqual(captured["api_key"], "injected-key")
         self.assertEqual(captured["model"], "injected::model")
+        self.assertIs(captured["kwargs"]["services"], self.services)
 
     def test_recovered_model_override_wins_over_config_default(self):
         captured = {}
@@ -650,6 +653,14 @@ class StartupCompositionTests(unittest.TestCase):
         self.assertEqual(calls, ["shutdown"])
         rt._SHUTDOWN_EVENT.clear()
 
+    def test_startup_builds_group_director_service(self):
+        services = rt._build_startup_services(self.config)
+
+        self.assertIsInstance(
+            services.group_director,
+            GroupDirectorService,
+        )
+
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = rt.argparse.Namespace(check=True)
         with patch.object(
@@ -739,14 +750,14 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("get_services(", source)
         self.assertNotIn("set_services(", source)
 
-    def test_phase5_service_classes_are_not_introduced(self):
+    def test_phase5_group_director_service_is_the_only_extracted_service(self):
         root = Path(__file__).parents[1] / "bridge"
         source = "\n".join(
             path.read_text(encoding="utf-8")
             for path in root.glob("*.py")
         )
+        self.assertIn("class GroupDirectorService", source)
         for forbidden in (
-            "class GroupDirectorService",
             "class MemoryService",
             "class PersonaService",
             "class SyncService",
