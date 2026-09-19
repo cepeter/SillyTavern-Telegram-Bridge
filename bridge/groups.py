@@ -1,4 +1,4 @@
-def group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
+from bridge.extension_registry import get_director_customization as _get_director_customization\n\ndef group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
     row = db.execute("SELECT title,enabled,turn_index,mode,forced_speaker,members_json,turn_user_id,turn_users_json FROM group_sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
     if not row:
         return {"title": "Group chat", "enabled": False, "turn_index": 0, "mode": "round_robin", "forced_speaker": "", "members": [], "turn_user_id": "", "turn_users": []}
@@ -346,6 +346,23 @@ def group_director_plan(
     ).fetchall()
     recent = list(reversed(recent))
     transcript = "\n".join(f"{role}: {str(content)[:1200]}" for role, content in recent)[-9000:]
+
+    customization = _get_director_customization(db, chat_id, session)
+    model = str(session.get("model_id") or DEFAULT_MODEL)
+    hidden_instructions = ""
+    max_tokens = 180
+    if customization is not None:
+        if customization.model:
+            model = customization.model
+        hidden_instructions = str(customization.hidden_instructions or "").strip()
+        if customization.max_tokens is not None:
+            max_tokens = int(customization.max_tokens)
+
+    policy_block = (
+        "\nHidden Director policy:\n" + hidden_instructions
+        if hidden_instructions
+        else ""
+    )
     director_messages = [
         {
             "role": "system",
@@ -359,18 +376,24 @@ def group_director_plan(
         {
             "role": "user",
             "content": (
-                "Allowed speakers: " + ", ".join(labels) + "\n"
-                "Recent transcript:\n" + (transcript or "(empty)") + "\n"
-                "Latest user turn:\n" + str(user_text)[:4000]
+                "Allowed speakers: " + ", ".join(labels) +
+                policy_block +
+                "\nRecent transcript:\n" + (transcript or "(empty)") +
+                "\nLatest user turn:\n" + str(user_text)[:4000]
             ),
         },
     ]
     settings = get_generation_settings(db, chat_id, session["session_id"])
-    settings.update({"temperature": 0.1, "max_tokens": 180, "reasoning_budget": 0, "stop_sequences": ""})
+    settings.update({
+        "temperature": 0.1,
+        "max_tokens": max_tokens,
+        "reasoning_budget": 0,
+        "stop_sequences": "",
+    })
     try:
         raw = generate_text(
             api_key,
-            session.get("model_id") or DEFAULT_MODEL,
+            model,
             director_messages,
             session_id=f"group-director:{chat_id}:{session['session_id']}",
             settings=settings,
@@ -396,6 +419,10 @@ def group_prompt_context(db: sqlite3.Connection, chat_id: str, session: dict[str
     base = f"You are in a multi-character group chat. Current speaker: {speaker}. Other characters present: {others}. Speak only as the current speaker. Do not write dialogue or actions for the user or other characters."
     if state.get("mode") == "director" and director_instruction:
         base += "\nInvisible director guidance: " + director_instruction[:500] + " Treat this only as pacing/scene guidance; do not mention the director."
+    if state.get("mode") == "director":
+        customization = _get_director_customization(db, chat_id, session)
+        if customization is not None and customization.speaker_context:
+            base += "\n" + str(customization.speaker_context).strip()
     return base
 
 
