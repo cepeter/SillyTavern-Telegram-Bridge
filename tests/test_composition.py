@@ -4,6 +4,8 @@ import sqlite3
 import tempfile
 import unittest
 
+import bridge.runtime as rt
+
 from bridge.composition import (
     BackgroundRuntime,
     BridgeConfig,
@@ -128,6 +130,60 @@ class CompositionConfigTests(unittest.TestCase):
             db_file=self.db_file,
         )
         self.assertIsNone(validate_bridge_config(config))
+
+
+class DatabaseFactoryPathTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.old_db_file = rt.DB_FILE
+        self.old_ready = rt._DB_SCHEMA_READY
+
+    def tearDown(self):
+        rt.DB_FILE = self.old_db_file
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = self.old_ready
+            if hasattr(rt, "_DB_SCHEMA_READY_PATHS"):
+                rt._DB_SCHEMA_READY_PATHS.clear()
+        self.tmp.cleanup()
+
+    def test_explicit_database_paths_initialize_independently(self):
+        default_path = self.root / "default.sqlite3"
+        explicit_a = self.root / "a.sqlite3"
+        explicit_b = self.root / "b.sqlite3"
+        rt.DB_FILE = default_path
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+            if hasattr(rt, "_DB_SCHEMA_READY_PATHS"):
+                rt._DB_SCHEMA_READY_PATHS.clear()
+
+        default_db = rt.db_connect()
+        default_db.close()
+
+        a = rt.db_connect(explicit_a)
+        a.execute(
+            "INSERT OR REPLACE INTO meta(key,value) VALUES('which','a')"
+        )
+        a.commit()
+        a.close()
+
+        b = rt.db_connect(explicit_b)
+        self.assertIsNone(
+            b.execute(
+                "SELECT value FROM meta WHERE key='which'"
+            ).fetchone()
+        )
+        b.close()
+
+        self.assertTrue(explicit_a.is_file())
+        self.assertTrue(explicit_b.is_file())
+
+    def test_explicit_factory_does_not_mutate_global_db_file(self):
+        original = rt.DB_FILE
+        explicit = self.root / "factory.sqlite3"
+        db = rt.db_connect(explicit)
+        db.close()
+        self.assertEqual(rt.DB_FILE, original)
 
 
 if __name__ == "__main__":
