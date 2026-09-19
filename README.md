@@ -331,8 +331,6 @@ prevents accidental changes.
 | Command | What it does |
 |---|---|
 | `/settings` | Configure reasoning and generation values |
-| `/taskmodel` | Choose the utility task model from a panel |
-| `/taskmodel <provider::model>` | Set a utility model directly |
 | `/stream` | Toggle streaming preview |
 | `/preset` | Use, save, or delete a generation preset |
 | `/prompt` | Open the read-only prompt inspector panel |

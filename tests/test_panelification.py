@@ -72,7 +72,7 @@ class PanelificationTests(unittest.TestCase):
         self.assertIn("character:cb-active.png", callbacks)
         self.assertIn("character:cb-other.png", callbacks)
 
-        for command, marker in (("/prompt", "prompt:budget"), ("/taskmodel", "taskmodel:model:"), ("/summarize", "summary:confirm")):
+        for command, marker in (("/prompt", "prompt:budget"), ("/summarize", "summary:confirm")):
             self.calls.clear()
             self.assertTrue(self._route(command))
             self.assertIn(marker, str(self.calls[-1]))

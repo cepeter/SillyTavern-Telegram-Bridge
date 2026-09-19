@@ -166,8 +166,6 @@ class HelpDrilldownTests(unittest.TestCase):
             rt.set_director_goal(self.db, "chat", session["session_id"], "Reveal the door")
             rt.send_director_goal_menu("token", "chat", self.db, session)
             self.assertIn("goal:set", str(calls[-1]))
-            rt.send_task_model_menu("token", "chat", self.db, session)
-            self.assertIn("taskmodel:model:", str(calls[-1]))
             rt.send_curated_memory_menu("token", "chat", self.db, session)
             self.assertIn("curated:refresh", str(calls[-1]))
         finally:

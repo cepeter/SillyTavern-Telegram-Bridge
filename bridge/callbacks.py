@@ -32,7 +32,7 @@ def discard_panel_binding(db: sqlite3.Connection, chat_id: str, message_id: int 
 
 
 def is_session_scoped_panel_callback(data: str) -> bool:
-    return data.startswith(("character", "persona", "session", "world", "systemprompt", "language", "note", "reset", "sync", "status:", "prompt:", "scene:", "taskmodel:", "goal:", "curated:", "summary:", "swipe:", "expression:", "update:", "models", "provider", "model", "group", "groupchars", "groupmode", "enum:settings", "enum:preset", "enum:rag", "enum:stt"))
+    return data.startswith(("character", "persona", "session", "world", "systemprompt", "language", "note", "reset", "sync", "status:", "prompt:", "scene:", "goal:", "curated:", "summary:", "swipe:", "expression:", "update:", "models", "provider", "model", "group", "groupchars", "groupmode", "enum:settings", "enum:preset", "enum:rag", "enum:stt"))
 
 
 def process_callback(db: sqlite3.Connection, token: str, callback: dict, operation_id: int | None = None) -> None:

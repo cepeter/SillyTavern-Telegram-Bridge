@@ -278,35 +278,6 @@ def set_task_model(
     return value
 
 
-def handle_task_model_command(
-    db: sqlite3.Connection,
-    token: str,
-    chat_id: str,
-    session: dict[str, str],
-    command_text: str,
-) -> None:
-    """Configure the active session's utility model used by non-dialogue tasks."""
-    parts = str(command_text or "").split(None, 1)
-    session_id = str(session["session_id"])
-    current = task_model_for_session(db, chat_id, session, "utility")
-    configured = get_meta(db, task_model_key(chat_id, session_id, "utility"), "").strip()
-    if len(parts) == 1 or parts[1].casefold() == "status":
-        mode = configured or "follow main model"
-        send_text(
-            token,
-            chat_id,
-            f"Task model routing\nMain model: {session.get('model_id') or DEFAULT_MODEL}\nUtility model: {mode}\nEffective utility model: {current}\n\nUse /taskmodel <provider::model> or /taskmodel main.",
-        )
-        return
-    requested = parts[1].strip()
-    try:
-        value = set_task_model(db, chat_id, session_id, requested, "utility")
-    except ValueError as exc:
-        send_text(token, chat_id, f"Task model unchanged: {exc}.")
-        return
-    effective = value or str(session.get("model_id") or DEFAULT_MODEL)
-    send_text(token, chat_id, f"Utility task model set to: {effective}" + (" (follows main model)." if not value else "."))
-
 
 def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
     inserted = db.execute("INSERT OR IGNORE INTO generation_settings(chat_id,session_id,temperature,max_tokens,top_p,frequency_penalty,presence_penalty,reasoning_budget,stop_sequences) VALUES(?,?,?,?,?,?,?, ?,?)", (chat_id, session_id, GENERATION_DEFAULTS["temperature"], GENERATION_DEFAULTS["max_tokens"], GENERATION_DEFAULTS["top_p"], GENERATION_DEFAULTS["frequency_penalty"], GENERATION_DEFAULTS["presence_penalty"], GENERATION_DEFAULTS["reasoning_budget"], GENERATION_DEFAULTS["stop_sequences"]))

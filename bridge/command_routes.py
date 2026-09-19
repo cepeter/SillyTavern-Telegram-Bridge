@@ -56,12 +56,6 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
             record_failed_turn(db, chat_id, failed_message_id, str(failed[1]), str(failed[2]), str(exc), failed_session_id)
             send_text(token, chat_id, "Retry failed again; the turn remains queued for /retry.")
         return True
-    if command == "/taskmodel" or command == "/taskmodel status":
-        send_task_model_menu(token, chat_id, db, session)
-        return True
-    if command.startswith("/taskmodel "):
-        handle_task_model_command(db, token, chat_id, session, stripped)
-        return True
     if command == "/prompt":
         send_prompt_menu(token, chat_id, db, session, fields)
         return True
