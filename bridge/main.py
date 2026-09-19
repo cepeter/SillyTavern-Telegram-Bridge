@@ -1,3 +1,5 @@
+from bridge.composition import BridgeServices as _BridgeServices
+
 _SHUTDOWN_EVENT = threading.Event()
 
 
@@ -44,9 +46,21 @@ def validate_startup_credential(model: str) -> None:
         raise RuntimeError(f"required provider credential is missing; set one of: {', '.join(key_envs)}")
 
 
-def process_message_job(token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, message_id: int, queued_session_id: str | None = None, job_id: int | None = None) -> None:
+def process_message_job(
+    services: _BridgeServices,
+    fields: dict,
+    chat_id: str,
+    text: str,
+    message_id: int,
+    queued_session_id: str | None = None,
+    model_override: str | None = None,
+    job_id: int | None = None,
+) -> None:
+    token = services.config.bot_token
+    api_key = services.config.api_key
+    model = model_override or services.config.default_model
     with chat_job_lock(chat_id):
-        db = db_connect()
+        db = services.db_factory()
         set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
@@ -83,16 +97,28 @@ def process_message_job(token: str, api_key: str, model: str, fields: dict, chat
                     failure_message = "The command failed. Use /status for details, then retry the command."
             else:
                 failure_message = "The character backend failed for this message. Use /retry or /status."
-            send_text(token, chat_id, failure_message)
+            services.telegram.send_text(token, chat_id, failure_message)
         finally:
             set_panel_actor_context(None)
             set_db_connection_context(None)
             db.close()
 
 
-def process_image_job(token: str, chat_id: str, file_id: str, caption: str, model: str, file_size: int, message_id: int, queued_session_id: str | None = None, job_id: int | None = None) -> None:
+def process_image_job(
+    services: _BridgeServices,
+    chat_id: str,
+    file_id: str,
+    caption: str,
+    file_size: int,
+    message_id: int,
+    queued_session_id: str | None = None,
+    model_override: str | None = None,
+    job_id: int | None = None,
+) -> None:
+    token = services.config.bot_token
+    model = model_override or services.config.default_model
     with chat_job_lock(chat_id):
-        db = db_connect()
+        db = services.db_factory()
         set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
@@ -117,15 +143,21 @@ def process_image_job(token: str, chat_id: str, file_id: str, caption: str, mode
             logging.error("Background image processing failed: %s", exc, exc_info=True)
             if job_id is not None:
                 finish_job(db, job_id, "failed", str(exc))
-            send_text(token, chat_id, "Image processing failed. The selected model may not support vision.")
+            services.telegram.send_text(token, chat_id, "Image processing failed. The selected model may not support vision.")
         finally:
             set_db_connection_context(None)
             db.close()
 
 
-def process_callback_job(token: str, chat_id: str, callback: dict, job_id: int | None = None) -> None:
+def process_callback_job(
+    services: _BridgeServices,
+    chat_id: str,
+    callback: dict,
+    job_id: int | None = None,
+) -> None:
+    token = services.config.bot_token
     with chat_job_lock(chat_id):
-        db = db_connect()
+        db = services.db_factory()
         set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
@@ -145,7 +177,7 @@ def process_callback_job(token: str, chat_id: str, callback: dict, job_id: int |
             logging.error("Background callback processing failed: %s", exc, exc_info=True)
             if job_id is not None:
                 finish_job(db, job_id, "failed", str(exc))
-            send_text(token, chat_id, "Callback processing failed; try the command again.")
+            services.telegram.send_text(token, chat_id, "Callback processing failed; try the command again.")
         finally:
             set_panel_actor_context(None)
             set_db_connection_context(None)
@@ -162,14 +194,24 @@ def native_edit_committed_after_failure(db: sqlite3.Connection, job_id: int | No
         return False
 
 
-def process_edit_job(token: str, api_key: str, chat_id: str, message_id: int, text: str, default_model: str, job_id: int | None = None) -> None:
+def process_edit_job(
+    services: _BridgeServices,
+    chat_id: str,
+    message_id: int,
+    text: str,
+    model_override: str | None = None,
+    job_id: int | None = None,
+) -> None:
+    token = services.config.bot_token
+    api_key = services.config.api_key
+    model = model_override or services.config.default_model
     with chat_job_lock(chat_id):
-        db = db_connect()
+        db = services.db_factory()
         set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
-            edit_telegram_user_message(db, token, api_key, chat_id, message_id, text, default_model, operation_id=job_id)
+            edit_telegram_user_message(db, token, api_key, chat_id, message_id, text, model, operation_id=job_id)
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
@@ -181,7 +223,7 @@ def process_edit_job(token: str, api_key: str, chat_id: str, message_id: int, te
                 return
             if job_id is not None:
                 finish_job(db, job_id, "failed", str(exc))
-            send_text(token, chat_id, "Native message edit failed; the previous branch was preserved.")
+            services.telegram.send_text(token, chat_id, "Native message edit failed; the previous branch was preserved.")
         finally:
             set_db_connection_context(None)
             db.close()
