@@ -25,7 +25,7 @@ import random
 import signal
 import sqlite3
 import struct
-import subprocess
+import subprocess  # nosec B404 - shared runtime modules use fixed local subprocess arguments
 import tempfile
 import threading
 import time

@@ -22,7 +22,7 @@ def send_character_greeting(db: sqlite3.Connection, token: str, chat_id: str, fi
     options = greeting_options(fields)
     if not options:
         return False
-    selected_index = random.randrange(len(options)) if index is None else int(index)
+    selected_index = random.randrange(len(options)) if index is None else int(index)  # nosec B311 - greeting choice is not security-sensitive
     if selected_index < 0 or selected_index >= len(options):
         return False
     greeting = replace_macros(options[selected_index], fields, user_name).strip()

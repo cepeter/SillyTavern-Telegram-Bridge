@@ -147,7 +147,8 @@ def load_runtime_namespace(
                 raise RuntimeError(f"runtime module is missing: {path}")
             before = dict(namespace)
             source = path.read_text(encoding="utf-8")
-            exec(compile(source, str(path), "exec"), namespace, namespace)
+            # Sources are repository-controlled and path-confined before execution.
+            exec(compile(source, str(path), "exec"), namespace, namespace)  # nosec B102
             overrides = _public_callable_overrides(before, namespace)
             allowed = stage.allowed_overrides_for(filename)
             unexpected = tuple(name for name in overrides if name not in allowed)

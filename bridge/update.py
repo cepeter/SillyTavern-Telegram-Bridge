@@ -3,7 +3,8 @@
 import json
 import os
 import re
-import subprocess
+import shutil
+import subprocess  # nosec B404 - update commands are fixed-argv and resolved to absolute paths
 import urllib.request
 from pathlib import Path
 
@@ -27,6 +28,20 @@ def _resolve_update_repo_dir() -> Path:
 
 
 UPDATE_REPO_DIR = _resolve_update_repo_dir()
+
+
+def _resolve_command(name: str) -> str:
+    """Resolve an update executable instead of trusting PATH at launch."""
+    resolved = shutil.which(name)
+    if not resolved:
+        raise OSError(f"required update executable is unavailable: {name}")
+    return resolved
+
+
+def _run_command(arguments: list[str], **kwargs):
+    """Run a fixed-argv update command with an absolute executable path."""
+    command = [_resolve_command(arguments[0]), *arguments[1:]]
+    return subprocess.run(command, **kwargs)  # nosec B603 - fixed argv, no shell
 
 
 def _changelog_version(path: Path) -> str:
@@ -62,7 +77,7 @@ def installed_bridge_has_unreleased() -> bool:
 
 def latest_bridge_release() -> tuple[str, str]:
     request = urllib.request.Request(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest", headers={"Accept": "application/vnd.github+json", "User-Agent": "SillyTavernTelegramBridge"})
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with urllib.request.urlopen(request, timeout=20) as response:  # nosec B310 - fixed HTTPS GitHub API endpoint
         payload = json.loads(response.read().decode("utf-8"))
     tag = str(payload.get("tag_name") or "unknown")
     return tag.removeprefix("v"), str(payload.get("body") or "No release notes.")[:2000]
@@ -102,13 +117,13 @@ def _run_update() -> str:
             return f"Already latest (v{current}); local unreleased changes were not overwritten."
         return f"Already latest (v{current}); no update was performed."
     if not _is_bridge_checkout(UPDATE_REPO_DIR):
-        return f"Update refused: source checkout not found at {UPDATE_REPO_DIR}. Set SILLYTAVERN_BRIDGE_SOURCE_DIR."
-    if subprocess.run(["git", "status", "--porcelain"], cwd=UPDATE_REPO_DIR, capture_output=True, text=True, timeout=20).stdout.strip():
+        return f"Update refused: source checkout not found at {UPDATE_REPO_DIR}. Set SILLYTAVERN_BRIDGE_SOURCE_DIR."  # nosec B608 - diagnostic text only
+    if _run_command(["git", "status", "--porcelain"], cwd=UPDATE_REPO_DIR, capture_output=True, text=True, timeout=20).stdout.strip():
         return "Update refused: local repository has uncommitted changes."
     release_ref = f"v{latest}"
     fetched_ref = f"refs/bridge-release/{release_ref}"
     try:
-        subprocess.run(
+        _run_command(
             [
                 "git",
                 "fetch",
@@ -123,7 +138,7 @@ def _run_update() -> str:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
-        subprocess.run(
+        _run_command(
             ["git", "merge", "--ff-only", fetched_ref],
             cwd=UPDATE_REPO_DIR,
             check=True,
@@ -136,10 +151,10 @@ def _run_update() -> str:
         detail = re.sub(r"(https?://)[^/@\s]+@", r"\1***@", detail)
         return f"Update refused: git {' '.join(exc.cmd[1:])} failed (exit {exc.returncode}{': ' + detail if detail else ''})."
     UPDATE_LIVE_DIR.joinpath("bridge").mkdir(parents=True, exist_ok=True)
-    subprocess.run(["rsync", "-a", "--delete", f"{UPDATE_REPO_DIR}/bridge/", f"{UPDATE_LIVE_DIR}/bridge/"], check=True, timeout=120)
-    subprocess.run(["cp", str(UPDATE_REPO_DIR / "sillytavern_telegram_bridge.py"), str(UPDATE_LIVE_DIR / "sillytavern_telegram_bridge.py")], check=True, timeout=20)
-    subprocess.run(["cp", str(UPDATE_REPO_DIR / "CHANGELOG.md"), str(UPDATE_LIVE_DIR / "CHANGELOG.md")], check=True, timeout=20)
-    subprocess.run(["systemctl", "--user", "restart", "sillytavern-telegram.service"], check=True, timeout=120)
+    _run_command(["rsync", "-a", "--delete", f"{UPDATE_REPO_DIR}/bridge/", f"{UPDATE_LIVE_DIR}/bridge/"], check=True, timeout=120)
+    _run_command(["cp", str(UPDATE_REPO_DIR / "sillytavern_telegram_bridge.py"), str(UPDATE_LIVE_DIR / "sillytavern_telegram_bridge.py")], check=True, timeout=20)
+    _run_command(["cp", str(UPDATE_REPO_DIR / "CHANGELOG.md"), str(UPDATE_LIVE_DIR / "CHANGELOG.md")], check=True, timeout=20)
+    _run_command(["systemctl", "--user", "restart", "sillytavern-telegram.service"], check=True, timeout=120)
     return f"Bridge updated to v{installed_bridge_version()} and restarted."
 
 

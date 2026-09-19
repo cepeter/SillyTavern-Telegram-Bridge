@@ -354,7 +354,7 @@ def parse_group_director_decision(raw: str, member_files: list[str]) -> tuple[st
         try:
             aliases[str(card_fields_from_file(filename)["name"]).casefold()] = filename
         except Exception:
-            pass
+            logging.debug("Could not read group character alias", exc_info=True)
     speaker_file = aliases.get(speaker_value)
     return (speaker_file, direction) if speaker_file else None
 

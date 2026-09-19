@@ -115,7 +115,7 @@ def _scene_state_source_rows(
         where += " AND rowid<=?"
         params.append(int(through_rowid))
     rows = db.execute(
-        "SELECT rowid,role,content FROM messages WHERE " + where +
+        "SELECT rowid,role,content FROM messages WHERE " + where +  # nosec B608 - where is built from fixed predicates and parameters
         " ORDER BY created_at DESC,rowid DESC LIMIT ?",
         (*params, _SCENE_STATE_TRANSCRIPT_MESSAGES),
     ).fetchall()

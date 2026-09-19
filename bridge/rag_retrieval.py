@@ -112,14 +112,14 @@ def semantic_candidate_chunk_ids(
     lexical = tuple(dict.fromkeys(int(value) for value in lexical_chunk_ids if value is not None))
     if lexical:
         placeholders = ",".join("?" for _ in lexical)
-        rows = db.execute(
+        rows = db.execute(  # nosec B608 - placeholders are generated from parameter count
             "SELECT DISTINCT n.chunk_id, ABS(n.chunk_index-hit.chunk_index) AS distance "
             "FROM data_bank_chunks hit "
             "JOIN data_bank_chunks n "
             "  ON n.chat_id=hit.chat_id AND n.document_id=hit.document_id "
             "JOIN data_bank_embeddings e "
             "  ON e.chunk_id=n.chunk_id AND e.embedding_namespace=? "
-            f"WHERE hit.chat_id=? AND hit.chunk_id IN ({placeholders}) "
+            f"WHERE hit.chat_id=? AND hit.chunk_id IN ({placeholders}) "  # nosec B608 - placeholders are generated from parameter count
             "  AND n.chunk_index BETWEEN hit.chunk_index-? AND hit.chunk_index+? "
             "ORDER BY distance, n.chunk_id LIMIT ?",
             (

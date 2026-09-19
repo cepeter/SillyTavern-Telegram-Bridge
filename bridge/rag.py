@@ -1,4 +1,4 @@
-import subprocess
+import subprocess  # nosec B404 - PDF worker uses sys.executable and fixed arguments
 import sys
 
 from bridge.rag_retrieval import (
@@ -13,7 +13,7 @@ from bridge.rag_retrieval import (
 def extract_pdf_data_bank_text(raw: bytes) -> str:
     parser = Path(__file__).with_name("pdf_parser.py")
     try:
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603 - sys.executable, fixed parser path, no shell
             [
                 sys.executable,
                 "-I",
@@ -228,7 +228,7 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
     for offset in range(0, len(chunks), 32):
         batch_keys = cache_keys[offset:offset + 32]
         placeholders = ",".join("?" for _ in batch_keys)
-        for cache_key, vector_json in db.execute(f"SELECT cache_key,vector_json FROM rag_embedding_cache WHERE cache_key IN ({placeholders})", batch_keys).fetchall():
+        for cache_key, vector_json in db.execute(f"SELECT cache_key,vector_json FROM rag_embedding_cache WHERE cache_key IN ({placeholders})", batch_keys).fetchall():  # nosec B608 - placeholders are generated from parameter count
             try:
                 vector_cache[cache_key] = json.loads(vector_json)
             except json.JSONDecodeError:
@@ -331,12 +331,12 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
         )
         if semantic_ids:
             placeholders = ",".join("?" for _ in semantic_ids)
-            vector_rows = db.execute(
+            vector_rows = db.execute(  # nosec B608 - query text is fixed; values remain bound parameters
                 "SELECT e.chunk_id,c.content,d.filename,c.document_id,e.vector_json,e.vector_norm "
                 "FROM data_bank_embeddings e "
                 "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
                 "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-                f"WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? AND e.chunk_id IN ({placeholders})",
+                f"WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? AND e.chunk_id IN ({placeholders})",  # nosec B608 - placeholders are generated from parameter count
                 (chat_id, namespace, *semantic_ids),
             ).fetchall()
         else:

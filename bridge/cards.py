@@ -493,7 +493,7 @@ def replace_macros(text: str, fields: dict[str, str], user_name: str = DEFAULT_U
                 .replace("<BOT>", fields["name"]))
     def pick_macro(match):
         choices = [item for item in match.group(1).split("::") if item]
-        return random.choice(choices) if choices else ""
+        return random.choice(choices) if choices else ""  # nosec B311 - macro selection is not security-sensitive
     result = re.sub(r"\{\{(?:random|pick)::([^}]+)\}\}", pick_macro, result)
     now = time.localtime()
     return (result.replace("{{time}}", time.strftime("%H:%M", now))

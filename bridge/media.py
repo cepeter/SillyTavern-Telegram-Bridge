@@ -1,4 +1,18 @@
+import os
+from pathlib import Path
+import shutil
+import subprocess  # nosec B404 - fixed local media tools, never shell-executed
+
 from bridge.composition import BridgeServices as _BridgeServices
+
+
+def _resolve_media_command(configured: str, label: str) -> str:
+    """Resolve a configured media tool to an existing executable."""
+    candidate = Path(configured).expanduser()
+    resolved = str(candidate) if candidate.is_absolute() else shutil.which(configured)
+    if not resolved or not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
+        raise OSError(f"required {label} executable is unavailable: {configured}")
+    return resolved
 
 def remove_inline_keyboard(token: str, callback: dict) -> None:
     message = callback.get("message") or callback
@@ -28,7 +42,7 @@ def send_voice(token: str, chat_id: str, path: Path, caption: str = "") -> bool:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(request, timeout=120) as response:  # nosec B310 - fixed HTTPS Telegram endpoint
             result = json.loads(response.read().decode("utf-8"))
         return bool(result.get("ok"))
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
@@ -40,14 +54,18 @@ def synthesize_voice(text: str, output_path: Path) -> None:
     text = str(text).strip()[:TTS_MAX_CHARS]
     if not text:
         raise ValueError("TTS text is empty")
-    tts_bin = os.environ.get("SILLYTAVERN_TTS_BIN", str(BRIDGE_HOME / "venv" / "bin" / "edge-tts"))
+    tts_bin = _resolve_media_command(
+        os.environ.get("SILLYTAVERN_TTS_BIN", str(BRIDGE_HOME / "venv" / "bin" / "edge-tts")),
+        "TTS",
+    )
     voice = os.environ.get("SILLYTAVERN_TTS_VOICE", "").strip()
     if not voice:
         raise ValueError("SILLYTAVERN_TTS_VOICE is required for voice output")
     with tempfile.TemporaryDirectory(prefix="st-tts-") as temp_dir:
         mp3 = Path(temp_dir) / "speech.mp3"
-        subprocess.run([tts_bin, "--voice", voice, "--text", text, "--write-media", str(mp3)], check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3), "-c:a", "libopus", "-b:a", "48k", str(output_path)], check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        subprocess.run([tts_bin, "--voice", voice, "--text", text, "--write-media", str(mp3)], check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)  # nosec B603 - absolute configured executable, fixed argv, no shell
+        ffmpeg_bin = _resolve_media_command("ffmpeg", "ffmpeg")
+        subprocess.run([ffmpeg_bin, "-y", "-loglevel", "error", "-i", str(mp3), "-c:a", "libopus", "-b:a", "48k", str(output_path)], check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)  # nosec B603 - absolute executable, fixed argv, no shell
 
 
 def send_tts(token: str, chat_id: str, text: str, operation_id: int | str | None = None) -> bool:

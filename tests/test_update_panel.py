@@ -140,9 +140,13 @@ class UpdatePanelTests(unittest.TestCase):
                 rt.UPDATE_REPO_DIR = old_repo
 
         fetched_ref = "refs/bridge-release/v0.0.2"
+        git_bin = rt._resolve_command("git")
+        rsync_bin = rt._resolve_command("rsync")
+        cp_bin = rt._resolve_command("cp")
+        systemctl_bin = rt._resolve_command("systemctl")
         self.assertIn(
             [
-                "git",
+                git_bin,
                 "fetch",
                 "--force",
                 "--no-tags",
@@ -151,7 +155,11 @@ class UpdatePanelTests(unittest.TestCase):
             ],
             calls,
         )
-        self.assertIn(["git", "merge", "--ff-only", fetched_ref], calls)
+        self.assertIn([git_bin, "merge", "--ff-only", fetched_ref], calls)
+        self.assertIn([rsync_bin, "-a", "--delete", f"{repo}/bridge/", f"{live}/bridge/"], calls)
+        self.assertIn([cp_bin, str(repo / "sillytavern_telegram_bridge.py"), str(live / "sillytavern_telegram_bridge.py")], calls)
+        self.assertIn([cp_bin, str(repo / "CHANGELOG.md"), str(live / "CHANGELOG.md")], calls)
+        self.assertIn([systemctl_bin, "--user", "restart", "sillytavern-telegram.service"], calls)
         self.assertNotIn(["git", "fetch", "origin", "main"], calls)
         self.assertNotIn(["git", "merge", "--ff-only", "origin/main"], calls)
 

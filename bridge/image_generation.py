@@ -110,7 +110,7 @@ def _multipart_photo(token: str, chat_id: str, raw: bytes, caption: str) -> None
     chunks.append(f"--{boundary}--\r\n".encode())
     body = b"".join(chunks)
     request = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendPhoto", data=body, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
-    response = json.loads(urllib.request.urlopen(request, timeout=60).read().decode("utf-8"))
+    response = json.loads(urllib.request.urlopen(request, timeout=60).read().decode("utf-8"))  # nosec B310 - fixed HTTPS Telegram endpoint
     if not response.get("ok"):
         raise RuntimeError("Telegram rejected generated image delivery")
 

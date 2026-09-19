@@ -15,7 +15,7 @@ import urllib.request
 
 PHASE3_SYNC_API_URL = ""
 PHASE3_SYNC_API_HANDLE = ""
-PHASE3_SYNC_API_PASSWORD = ""
+PHASE3_SYNC_API_PASSWORD = None
 PHASE3_SYNC_INTERVAL_SECONDS = 2.0
 PHASE3_SYNC_TIMEOUT_SECONDS = 10
 _PHASE3_ALLOWED_PATHS = {"/csrf-token", "/api/users/login", "/api/ping", "/api/chats/get", "/api/chats/save", "/api/chats/group/get", "/api/chats/group/save", "/api/settings/get", "/api/settings/save"}
@@ -42,7 +42,7 @@ def refresh_phase3_config() -> None:
     global PHASE3_SYNC_INTERVAL_SECONDS, PHASE3_SYNC_TIMEOUT_SECONDS, _PHASE3_CLIENT
     PHASE3_SYNC_API_URL = os.environ.get("SILLYTAVERN_SYNC_API_URL", "").strip().rstrip("/")
     PHASE3_SYNC_API_HANDLE = os.environ.get("SILLYTAVERN_SYNC_API_HANDLE", "").strip()
-    PHASE3_SYNC_API_PASSWORD = os.environ.get("SILLYTAVERN_SYNC_API_PASSWORD", "")
+    PHASE3_SYNC_API_PASSWORD = os.environ.get("SILLYTAVERN_SYNC_API_PASSWORD")
     PHASE3_SYNC_INTERVAL_SECONDS = _bounded_number(os.environ.get("SILLYTAVERN_SYNC_API_INTERVAL_SECONDS", "2"), 2.0, 1.0, 30.0, float)
     PHASE3_SYNC_TIMEOUT_SECONDS = _bounded_number(os.environ.get("SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS", "10"), 10, 2, 30, int)
     _PHASE3_CLIENT = None
@@ -68,13 +68,13 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 class SillyTavernApiClient:
     """Use SillyTavern's supported chat routes with cookie and CSRF state."""
 
-    def __init__(self, base_url: str, handle: str = "", password: str = ""):
+    def __init__(self, base_url: str, handle: str = "", password: str | None = None):
         self.base_url = validate_phase3_api_url(base_url)
         self.handle = str(handle or "")
         self.password = str(password or "")
         self.cookies = CookieJar()
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(self.cookies), _NoRedirect())
-        self.csrf_token = ""
+        self.csrf_token: str | None = None
         self.authenticated = False
         self.lock = threading.RLock()
 

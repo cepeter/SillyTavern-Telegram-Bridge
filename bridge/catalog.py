@@ -286,7 +286,7 @@ def install_world_info_document(filename: str, raw: bytes) -> Path:
         try:
             temporary.close()
         except Exception:
-            pass
+            logging.debug("Could not close temporary provider catalog file", exc_info=True)
         Path(temporary.name).unlink(missing_ok=True)
         raise
     return target

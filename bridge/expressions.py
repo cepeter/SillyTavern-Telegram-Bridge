@@ -93,7 +93,7 @@ def _send_expression_photo(token: str, chat_id: str, path: Path) -> bool:
     chunks.append(f"--{boundary}--\r\n".encode())
     request = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendPhoto", data=b"".join(chunks), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(request, timeout=120) as response:  # nosec B310 - fixed HTTPS Telegram endpoint
             return bool(json.loads(response.read().decode("utf-8")).get("ok"))
     except (OSError, ValueError, json.JSONDecodeError):
         logging.error("Expression image upload failed", exc_info=True)

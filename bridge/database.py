@@ -122,7 +122,7 @@ def _load_optional_vector_extension(db: sqlite3.Connection) -> bool:
         try:
             db.enable_load_extension(False)
         except Exception:
-            pass
+            logging.debug("Could not disable SQLite extension loading", exc_info=True)
 
 
 def optimize_database(db: sqlite3.Connection) -> None:
@@ -354,7 +354,7 @@ def recover_jobs(db: sqlite3.Connection, recover_running: bool = True) -> list[t
     if recover_running:
         db.execute("UPDATE jobs SET state='queued', updated_at=? WHERE state IN ('running','scheduled')", (time.time(),))
     limit_clause = "" if recover_running else " LIMIT 128"
-    rows = db.execute("SELECT job_id,chat_id,session_id,telegram_message_id,kind,payload_json FROM jobs WHERE state='queued' ORDER BY created_at" + limit_clause).fetchall()
+    rows = db.execute("SELECT job_id,chat_id,session_id,telegram_message_id,kind,payload_json FROM jobs WHERE state='queued' ORDER BY created_at" + limit_clause).fetchall()  # nosec B608 - suffix is an internal constant
     db.commit()
     return rows
 
@@ -473,7 +473,7 @@ def update_generation_settings(db: sqlite3.Connection, chat_id: str, session_id:
         if values:
             assignments = ", ".join(f"{key}=?" for key in values)
             db.execute(
-                f"UPDATE generation_settings SET {assignments} "
+                f"UPDATE generation_settings SET {assignments} "  # nosec B608 - assignments are filtered against GENERATION_DEFAULTS
                 "WHERE chat_id=? AND session_id=?",
                 (*values.values(), chat_id, session_id),
             )

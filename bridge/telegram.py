@@ -37,14 +37,14 @@ def _normalize_session_defaults(db: sqlite3.Connection, session: dict[str, str])
         changes["world_file"] = replacement_world
     if changes:
         assignments = ", ".join(f"{key}=?" for key in changes)
-        db.execute(f"UPDATE sessions SET {assignments}, updated_at=? WHERE chat_id=? AND session_id=?", (*changes.values(), time.time(), session["chat_id"], session["session_id"]))
+        db.execute(f"UPDATE sessions SET {assignments}, updated_at=? WHERE chat_id=? AND session_id=?", (*changes.values(), time.time(), session["chat_id"], session["session_id"]))  # nosec B608 - assignments are allowlisted session columns
         db.commit()
         session.update(changes)
     return session
 
 
 def load_session(db: sqlite3.Connection, chat_id: str, session_id: str, default_model: str) -> dict[str, str]:
-    row = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
+    row = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()  # nosec B608 - column list is a fixed module constant
     if row is None:
         raise ValueError(f"queued session no longer exists: {session_id}")
     get_generation_settings(db, chat_id, session_id)
@@ -53,7 +53,7 @@ def load_session(db: sqlite3.Connection, chat_id: str, session_id: str, default_
 
 def ensure_session(db: sqlite3.Connection, chat_id: str, default_model: str) -> dict[str, str]:
     active_id = get_meta(db, f"active_session:{chat_id}", "default")
-    row = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, active_id)).fetchone()
+    row = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, active_id)).fetchone()  # nosec B608 - column list is a fixed module constant
     if row is None:
         now = time.time()
         row = (chat_id, active_id, "Default session", DEFAULT_CHARACTER_FILE,
@@ -75,7 +75,7 @@ def update_session(db: sqlite3.Connection, chat_id: str, session_id: str, operat
     assignments = ", ".join(f"{key}=?" for key in values)
     params = list(values.values()) + [time.time(), chat_id, session_id]
     def write():
-        db.execute(f"UPDATE sessions SET {assignments}, updated_at=? WHERE chat_id=? AND session_id=?", params)
+        db.execute(f"UPDATE sessions SET {assignments}, updated_at=? WHERE chat_id=? AND session_id=?", params)  # nosec B608 - assignments are allowlisted session columns
         record_operation(db, operation_id, operation_kind)
         db.commit()
     run_write_txn(db, write)
@@ -93,12 +93,12 @@ def create_session(db: sqlite3.Connection, chat_id: str, default_model: str, ses
         set_meta(db, f"active_session:{chat_id}", session_id)
         db.commit()
     run_write_txn(db, write)
-    stored = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
+    stored = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()  # nosec B608 - column list is a fixed module constant
     return _session_row_dict(stored or row)
 
 
 def list_sessions(db: sqlite3.Connection, chat_id: str) -> list[dict[str, str]]:
-    rows = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? ORDER BY updated_at DESC", (chat_id,)).fetchall()
+    rows = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? ORDER BY updated_at DESC", (chat_id,)).fetchall()  # nosec B608 - column list is a fixed module constant
     return [_session_row_dict(row) for row in rows]
 
 
@@ -181,7 +181,7 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
     req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
     for attempt in range(3 if method == "sendMessage" else 1):
         try:
-            with urllib.request.urlopen(req, timeout=65) as response:
+            with urllib.request.urlopen(req, timeout=65) as response:  # nosec B310 - fixed HTTPS Telegram endpoint
                 result = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             try:
@@ -225,7 +225,7 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     if not file_path:
         raise ValueError("Telegram did not return a file path")
     url = f"https://api.telegram.org/file/bot{token}/{file_path}"
-    with urllib.request.urlopen(urllib.request.Request(url), timeout=120) as response:
+    with urllib.request.urlopen(urllib.request.Request(url), timeout=120) as response:  # nosec B310 - Telegram file URL is built from the fixed HTTPS API host
         raw = response.read(max_bytes + 1)
     if len(raw) > max_bytes:
         raise ValueError(f"Telegram file exceeds {max_bytes // (1024 * 1024)} MB")
