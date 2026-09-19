@@ -13,11 +13,11 @@ Extract the conversation-memory application workflow from the compatibility runt
 
 The service becomes the canonical application owner of:
 
-- assembling memory context for model prompts,
+- assembling memory context for text and image model prompts,
 - combining Hindsight recall with continuity summaries,
 - suppressing a stale summary when regenerating an edited turn already covered by that summary,
-- requesting post-turn memory retention,
-- purging remote/session memory through the currently active guarded backend.
+- requesting post-turn memory retention for text, recovery, and image generation,
+- exposing session-memory purge through the currently active guarded backend.
 
 The existing staged memory functions remain transitional backend and compatibility collaborators.
 
@@ -135,15 +135,21 @@ Because `_build_startup_services()` executes after staged runtime composition ha
 
 No global `CURRENT_SERVICES`, getter, setter, or equivalent locator is introduced.
 
-## 7. Message workflow
+## 7. Message and image workflows
 
 `process_message(..., services=services)` already carries the explicit service graph.
 
-Phase 5B makes the ordinary generation path use `services.memory` when present for:
+Phase 5B makes the ordinary text generation path use `services.memory` when present for:
 
 - prompt memory context,
 - continuity summary,
 - post-persist retention.
+
+Image generation follows the same service boundary. The image worker passes
+`services.memory` through the Telegram image/document adapters into
+`process_image_message()`, which uses the service for prompt context and
+post-persist retention. Direct legacy image callers retain the existing
+shared-runtime fallback.
 
 Direct legacy callers with no injected service keep the current calls to `recall_memory_context`, `session_summary_for_prompt`, and `retain_session_memory`.
 
@@ -167,7 +173,12 @@ Active-session reset keeps its existing durable phase ordering.
 
 Where an injected memory service is available, the purge step may delegate through `MemoryService.purge_session()`; local transcript/summary deletion and operation-phase transitions remain in the reset workflow because they are part of the durable reset transaction rather than the remote memory backend.
 
-If wiring reset through the service would require changing callback/service propagation in this slice, the existing guarded purge call remains a compatibility path; behavior must not be weakened.
+The current callback pipeline does not yet carry `BridgeServices` into reset
+and inactive-session deletion. Expanding that pipeline belongs with later
+callback/service extraction, so both workflows intentionally retain the
+existing guarded `purge_hindsight_session` compatibility path in Phase 5B.
+`MemoryService.purge_session()` establishes the application boundary without
+weakening those durable cleanup semantics.
 
 ## 10. Runtime-loader relationship
 
@@ -197,6 +208,7 @@ Add composition/integration tests proving:
 - startup constructs `MemoryService`,
 - production message generation uses the injected service,
 - recovery generation uses the injected service,
+- photo and PNG-as-image generation use the injected service,
 - direct legacy callers remain supported,
 - `memory_service.py` is not a runtime stage,
 - Phase 5 still has no `PersonaService`, `SyncService`, or `JobService`.
