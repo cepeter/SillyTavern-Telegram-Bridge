@@ -19,6 +19,15 @@ def normalize_session_title(value: str) -> str:
     return title
 
 
+def _is_cancel_input(value: str) -> bool:
+    text = " ".join(str(value or "").split()).casefold()
+    if text in {"/cancel", "cancel"}:
+        return True
+    if " " not in text and text.startswith("/cancel@"):
+        return bool(text.split("@", 1)[1])
+    return False
+
+
 def _clear_conflicting_inputs(db, token: str, chat_id: str) -> None:
     for prefix in _SESSION_PENDING_PREFIXES:
         key = f"{prefix}:{chat_id}"
@@ -65,7 +74,7 @@ def _cancel_session_name_input(db, token: str, chat_id: str, state: dict) -> Non
 def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, str], stripped: str, state: dict, operation_id: int | None) -> bool:
     """Validate the title, then atomically create and activate the requested session."""
     meta_key = f"session_name_input:{chat_id}"
-    if stripped.casefold() in {"/cancel", "cancel"}:
+    if _is_cancel_input(stripped):
         _cancel_session_name_input(db, token, chat_id, state)
         send_text(token, chat_id, "New session cancelled.")
         return True

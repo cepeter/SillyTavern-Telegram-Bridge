@@ -65,6 +65,12 @@ class SessionNamingTests(unittest.TestCase):
         self.assertEqual(len(rt.list_sessions(self.db, "chat")), 1)
         self.assertEqual(rt.get_meta(self.db, "character_session_input:chat", ""), "")
 
+    def test_cancel_with_bot_mention_leaves_no_empty_session(self):
+        rt.start_session_name_input(self.db, "token", "chat|topic:7", self.session, kind="group")
+        self.assertTrue(rt.handle_pending_input(self.db, "token", "chat|topic:7", self.session, "/cancel@SillyTavernPunzmeBot", operation_id=47))
+        self.assertEqual(rt.get_meta(self.db, "session_name_input:chat|topic:7", ""), "")
+        self.assertIn("New session cancelled.", self.sent[-1])
+
     def test_character_chain_applies_character_after_name(self):
         rt.set_meta(self.db, "character_session_input:chat", json.dumps({"character_file": "Chosen.png", "character_name": "Chosen", "expires_at": rt.time.time() + 600}))
         rt.start_session_name_input(self.db, "token", "chat", self.session)
