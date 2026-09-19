@@ -391,6 +391,148 @@ class GroupTransactionTests(unittest.TestCase):
             ).fetchone()
         )
 
+    def _assert_group_reply_transaction_committed(self):
+        self.assertFalse(self.db.in_transaction)
+        observer = sqlite3.connect(rt.DB_FILE)
+        try:
+            self.assertEqual(
+                observer.execute(
+                    "SELECT COUNT(*) FROM messages "
+                    "WHERE chat_id=? AND session_id=?",
+                    (self.chat_id, self.session_id),
+                ).fetchone()[0],
+                2,
+            )
+            self.assertEqual(
+                observer.execute(
+                    "SELECT COUNT(*) FROM response_variants "
+                    "WHERE chat_id=? AND session_id=?",
+                    (self.chat_id, self.session_id),
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                observer.execute(
+                    "SELECT turn_index FROM group_sessions "
+                    "WHERE chat_id=? AND session_id=?",
+                    (self.chat_id, self.session_id),
+                ).fetchone(),
+                (1,),
+            )
+        finally:
+            observer.close()
+
+    def test_group_text_reply_use_case_commits_compound_transaction(self):
+        rt.set_meta(
+            self.db,
+            f"stream_mode:{self.chat_id}",
+            "off",
+        )
+        group_turn = (
+            "one.png",
+            rt.group_state(self.db, self.chat_id, self.session_id),
+        )
+        session = {
+            "session_id": self.session_id,
+            "response_language": "auto",
+        }
+        fields = {"name": "One"}
+
+        with patch.object(
+            rt, "rag_retrieval_bundle", return_value={}
+        ), patch.object(
+            rt, "build_chat_messages", return_value=[]
+        ), patch.object(
+            rt, "recall_memory_context", return_value=""
+        ), patch.object(
+            rt, "session_summary_for_prompt", return_value=""
+        ), patch.object(
+            rt, "rag_context_for_prompt", return_value=""
+        ), patch.object(
+            rt, "send_typing", return_value=None
+        ), patch.object(
+            rt, "generate_text", return_value="Reply"
+        ), patch.object(
+            rt, "rag_citation_footer", return_value=""
+        ), patch.object(
+            rt, "render_response_language", return_value="Reply"
+        ), patch.object(
+            rt, "retain_session_memory", return_value=None
+        ), patch.object(
+            rt, "queue_user_quote_tts", return_value=None
+        ), patch.object(
+            rt, "send_reply", return_value=None
+        ):
+            rt.generate_and_store_reply(
+                self.db,
+                "token",
+                "key",
+                fields,
+                self.chat_id,
+                "hello",
+                session,
+                self.session_id,
+                "primary::main",
+                group_turn,
+                "",
+                None,
+                None,
+            )
+
+        self._assert_group_reply_transaction_committed()
+
+    def test_group_image_reply_use_case_commits_compound_transaction(self):
+        group_turn = (
+            "one.png",
+            rt.group_state(self.db, self.chat_id, self.session_id),
+        )
+        session = {
+            "session_id": self.session_id,
+            "model_id": "primary::main",
+        }
+
+        with patch.object(
+            rt, "group_current_speaker", return_value=group_turn
+        ), patch.object(
+            rt, "card_fields_from_file", return_value={"name": "One"}
+        ), patch.object(
+            rt, "group_prompt_context", return_value=""
+        ), patch.object(
+            rt, "rag_retrieval_bundle", return_value={}
+        ), patch.object(
+            rt, "build_chat_messages", return_value=[]
+        ), patch.object(
+            rt, "recall_memory_context", return_value=""
+        ), patch.object(
+            rt, "session_summary_for_prompt", return_value=""
+        ), patch.object(
+            rt, "rag_context_for_prompt", return_value=""
+        ), patch.object(
+            rt, "send_typing", return_value=None
+        ), patch.object(
+            rt, "generate_text", return_value="Reply"
+        ), patch.object(
+            rt, "rag_citation_footer", return_value=""
+        ), patch.object(
+            rt, "render_session_response", return_value="Reply"
+        ), patch.object(
+            rt, "retain_session_memory", return_value=None
+        ), patch.object(
+            rt, "send_reply", return_value=None
+        ):
+            rt.process_image_message(
+                self.db,
+                "token",
+                "key",
+                session,
+                {"name": "One"},
+                self.chat_id,
+                "caption",
+                b"image",
+            )
+
+        self._assert_group_reply_transaction_committed()
+
     def test_group_state_and_operation_marker_commit_together(self):
         changed = dict(self.initial)
         changed["title"] = "Committed"
