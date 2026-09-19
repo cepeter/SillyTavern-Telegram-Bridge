@@ -1,3 +1,5 @@
+from bridge.composition import BridgeServices as _BridgeServices
+
 def remove_inline_keyboard(token: str, callback: dict) -> None:
     message = callback.get("message") or callback
     chat_id = str((message.get("chat") or {}).get("id", ""))
@@ -210,9 +212,21 @@ def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, mode
     process_message(db, token, api_key, model, fields, chat_id, transcript, message_id, queued_session_id=queued_session_id)
 
 
-def process_voice_job(token: str, api_key: str, model: str, fields: dict, chat_id: str, voice: dict, message_id: int, queued_session_id: str | None = None, job_id: int | None = None) -> None:
+def process_voice_job(
+    services: _BridgeServices,
+    fields: dict,
+    chat_id: str,
+    voice: dict,
+    message_id: int,
+    queued_session_id: str | None = None,
+    model_override: str | None = None,
+    job_id: int | None = None,
+) -> None:
+    token = services.config.bot_token
+    api_key = services.config.api_key
+    model = model_override or services.config.default_model
     with chat_job_lock(chat_id):
-        db = db_connect()
+        db = services.db_factory()
         set_db_connection_context(db)
         try:
             if job_id is not None and not mark_job_running(db, job_id):
@@ -238,7 +252,7 @@ def process_voice_job(token: str, api_key: str, model: str, fields: dict, chat_i
             logging.error("Voice job failed: %s", exc, exc_info=True)
             if job_id is not None:
                 finish_job(db, job_id, "failed", str(exc))
-            send_text(token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings.")
+            services.telegram.send_text(token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings.")
         finally:
             set_panel_actor_context(None)
             set_db_connection_context(None)

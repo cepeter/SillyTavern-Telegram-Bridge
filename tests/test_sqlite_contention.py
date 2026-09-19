@@ -243,6 +243,18 @@ class SqliteContentionTests(unittest.TestCase):
         has_catch_all_retry = "except sqlite3.OperationalError" in source and source.count("INSERT INTO messages") > 2
         self.assertFalse(has_catch_all_retry, "generate_and_store_reply should not have catch-all OperationalError retry with duplicate inserts")
 
+    def test_explicit_path_workers_still_use_serialized_connection(self):
+        path = Path(self.tmp.name) / "explicit-worker.sqlite3"
+        db = rt.db_connect(path)
+        try:
+            self.assertIsInstance(db, rt._SerializedSQLiteConnection)
+            self.assertEqual(
+                db.execute("PRAGMA journal_mode").fetchone()[0].lower(),
+                "wal",
+            )
+        finally:
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
