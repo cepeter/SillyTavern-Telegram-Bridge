@@ -127,10 +127,16 @@ def load_runtime_namespace(
     namespace: MutableMapping[str, object],
     base_dir: Path,
     stages: tuple[RuntimeStage, ...] = DEFAULT_RUNTIME_STAGES,
+    reset_extensions: bool = True,
 ) -> tuple[dict[str, object], ...]:
-    """Execute runtime modules in validated stages and return an override report."""
+    """Execute runtime modules in validated stages and return an override report.
+
+    Normal runtime loads reset extension registrations first. Isolated loader
+    validation can opt out so it does not mutate an already-running registry.
+    """
     _validate_stages(stages)
-    _reset_extension_registry()
+    if reset_extensions:
+        _reset_extension_registry()
     report = []
     for stage in stages:
         for filename in stage.modules:

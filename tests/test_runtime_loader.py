@@ -86,7 +86,7 @@ class RuntimeLoaderTests(unittest.TestCase):
             namespace = {"__name__": "test_runtime"}
             stages = (RuntimeStage("core", ("one.py", "two.py")),)
             with self.assertRaisesRegex(RuntimeError, "unexpectedly overrides"):
-                load_runtime_namespace(namespace, root, stages)
+                load_runtime_namespace(namespace, root, stages, reset_extensions=False)
 
     def test_override_stage_records_declared_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -102,7 +102,7 @@ class RuntimeLoaderTests(unittest.TestCase):
                     (("two.py", ("action",)),),
                 ),
             )
-            report = load_runtime_namespace(namespace, root, stages)
+            report = load_runtime_namespace(namespace, root, stages, reset_extensions=False)
             self.assertEqual(report[-1]["public_callable_overrides"], ("action",))
             self.assertEqual(namespace["action"](), 2)
 
@@ -128,7 +128,7 @@ class RuntimeLoaderTests(unittest.TestCase):
                 ),
             )
             with self.assertRaisesRegex(RuntimeError, "extra"):
-                load_runtime_namespace(namespace, root, stages)
+                load_runtime_namespace(namespace, root, stages, reset_extensions=False)
 
 
 if __name__ == "__main__":
