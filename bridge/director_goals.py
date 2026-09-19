@@ -18,24 +18,6 @@ from bridge.extension_registry import (
 _DIRECTOR_GOAL_MAX_CHARS = 1200
 
 
-def ensure_director_goal_schema(db: sqlite3.Connection) -> None:
-    db.execute("""CREATE TABLE IF NOT EXISTS director_goals (
-        chat_id TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        goal TEXT NOT NULL,
-        updated_at REAL NOT NULL,
-        PRIMARY KEY(chat_id, session_id)
-    )""")
-    db.execute("""CREATE TRIGGER IF NOT EXISTS director_goals_session_delete
-        AFTER DELETE ON sessions
-        BEGIN
-            DELETE FROM director_goals
-            WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
-        END
-    """)
-    db.commit()
-
-
 def normalize_director_goal(value: str) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()[:_DIRECTOR_GOAL_MAX_CHARS]
 
