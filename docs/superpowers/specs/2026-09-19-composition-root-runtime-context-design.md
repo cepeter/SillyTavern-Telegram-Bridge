@@ -342,7 +342,7 @@ class BackgroundRuntime:
     begin_shutdown: Callable[[], None]
 ```
 
-If shutdown ownership is cleaner left in the compatibility layer after implementation exploration, `begin_shutdown` may remain outside this dataclass, but the spec preference is to include root lifecycle operations here because they are process-level infrastructure.
+`begin_shutdown` is part of `BackgroundRuntime`. Signal-handler installation captures that callable explicitly; Phase 4 must not fall back to discovering it through a global services registry.
 
 Do not include domain/job-storage functions such as `enqueue_job`, `finish_job`, or `recover_jobs`; those are application persistence behavior and remain Phase 5 candidates.
 
@@ -403,14 +403,20 @@ services = BridgeServices(
 )
 ```
 
-The exact builder may be a helper such as:
+Provide an explicit builder:
 
 ```python
-def build_bridge_services(config: BridgeConfig, ...) -> BridgeServices:
+def build_bridge_services(
+    config: BridgeConfig,
+    *,
+    db_factory: Callable[[], sqlite3.Connection],
+    telegram: TelegramRuntime,
+    background: BackgroundRuntime,
+) -> BridgeServices:
     ...
 ```
 
-but it must receive transitional compatibility implementations explicitly. `bridge/composition.py` must not import or inspect the shared runtime namespace to discover them.
+The builder must receive transitional compatibility implementations explicitly. `bridge/composition.py` must not import or inspect the shared runtime namespace to discover them.
 
 ## 13. Database Factory
 
@@ -426,7 +432,7 @@ rather than direct `db_connect()`.
 
 ### 13.2 Explicit database path
 
-To support a real factory without mutating `DB_FILE`, Phase 4 may extend:
+To support a real factory without mutating `DB_FILE`, Phase 4 **will** extend:
 
 ```python
 db_connect()
@@ -453,7 +459,7 @@ def make_database_factory(path: Path):
     return lambda: db_connect(path)
 ```
 
-If implementation reveals schema-init state keyed only to global `DB_FILE`, that state must be made path-safe before using explicit paths. It is not acceptable for an injected test database to accidentally reuse initialization state from another database.
+Before the factory is used, schema-initialization state must be verified to be safe across multiple database paths. Any readiness/cache state currently shared across paths must be keyed by resolved database path or removed. An injected test database must never reuse initialization state from another database.
 
 ### 13.3 Compatibility
 
@@ -609,7 +615,7 @@ def main() -> int:
     return run_bridge(services, fields)
 ```
 
-The exact helper split may differ, but modified functions should become smaller, not gain another nested layer around the existing monolith.
+Phase 4 must extract at least these focused helpers from `main()`: configuration construction/validation and service construction. The poll/update loop may remain in `main.py`, but `main()` itself must not retain inline dependency construction.
 
 ### 17.2 Poll loop
 
@@ -623,13 +629,20 @@ services.telegram.request(
 )
 ```
 
-and:
+The durable-job wrapper becomes explicit about background submission:
 
 ```python
-services.background.submit_chat(...)
+submit_durable_chat_job(
+    db,
+    services.background,
+    label,
+    chat_id,
+    worker,
+    *args,
+)
 ```
 
-through the existing durable-job wrapper as applicable.
+and calls `services.background.submit_chat` internally. It must no longer discover `submit_chat_background` globally.
 
 ### 17.3 Allowed users
 
@@ -1026,7 +1039,7 @@ Phase 4 is complete when all of the following are true:
 13. Repeated token/API/model positional bundles are removed from migrated worker signatures.
 14. Workers open DB connections through `services.db_factory`.
 15. Message worker uses config values from services.
-16. Image worker uses config values from services where applicable.
+16. Image worker obtains its bot token and default model from services rather than positional startup arguments.
 17. Callback worker uses root Telegram failure delivery from services.
 18. Edit worker uses config values from services.
 19. Voice/document workers follow the same rule if they currently carry repeated startup values.
