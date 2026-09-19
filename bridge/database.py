@@ -2,6 +2,10 @@ from contextlib import contextmanager as _contextmanager
 
 _DB_WRITE_LOCK = globals().get("_DB_WRITE_LOCK") or threading.RLock()
 _WRITE_SQL_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
+_DB_PRIMARY_CACHE_KIB = 64000
+_DB_WORKER_CACHE_KIB = 16000
+_DB_PRIMARY_MMAP_BYTES = 268435456
+_DB_WORKER_MMAP_BYTES = 67108864
 
 
 class _SerializedSQLiteConnection(sqlite3.Connection):
@@ -85,20 +89,30 @@ def write_transaction(db: sqlite3.Connection):
             db.commit()
 
 
-def _apply_connection_pragmas(db: sqlite3.Connection, timeout: float = 30.0) -> None:
+def _apply_connection_pragmas(
+    db: sqlite3.Connection,
+    timeout: float = 30.0,
+    *,
+    cache_kib: int = _DB_PRIMARY_CACHE_KIB,
+    mmap_bytes: int = _DB_PRIMARY_MMAP_BYTES,
+) -> None:
     """Apply connection-local pragmas for latency, caching, and safety.
 
     Safe to run on every connection: these settings affect only the current
-    handle and never negotiate database-wide state or a write lock.
+    handle and never negotiate database-wide state or a write lock. Long-lived
+    primary handles use the larger defaults; short-lived worker handles may
+    request smaller cache/mmap budgets.
     """
     timeout_ms = int(max(1.0, float(timeout)) * 1000)
+    cache_kib = max(1024, int(cache_kib))
+    mmap_bytes = max(0, int(mmap_bytes))
     db.execute(f"PRAGMA busy_timeout={timeout_ms}")
     db.execute("PRAGMA synchronous=NORMAL")
     db.execute("PRAGMA temp_store=MEMORY")
-    db.execute("PRAGMA cache_size=-64000")
+    db.execute(f"PRAGMA cache_size=-{cache_kib}")
     db.execute("PRAGMA foreign_keys=ON")
     try:
-        db.execute("PRAGMA mmap_size=268435456")
+        db.execute(f"PRAGMA mmap_size={mmap_bytes}")
     except sqlite3.OperationalError:
         pass
 
