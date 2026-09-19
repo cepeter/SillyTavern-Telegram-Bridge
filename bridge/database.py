@@ -227,9 +227,20 @@ def mark_job_running(db: sqlite3.Connection, job_id: int) -> bool:
     return cursor.rowcount == 1
 
 
-def finish_job(db: sqlite3.Connection, job_id: int, state: str, error: str = "") -> None:
-    db.execute("UPDATE jobs SET state=?, last_error=?, updated_at=? WHERE job_id=?", (state, error[:1000], time.time(), job_id))
-    db.commit()
+def finish_job(db: sqlite3.Connection, job_id: int, state: str, error: str = "") -> bool:
+    try:
+        db.execute("UPDATE jobs SET state=?, last_error=?, updated_at=? WHERE job_id=?", (state, error[:1000], time.time(), job_id))
+        db.commit()
+        return True
+    except sqlite3.OperationalError as exc:
+        if "locked" not in str(exc).casefold() and "busy" not in str(exc).casefold():
+            raise
+        try:
+            db.rollback()
+        except sqlite3.Error:
+            logging.debug("Could not rollback locked job transition", exc_info=True)
+        logging.warning("Could not persist job %s transition to %s: %s", job_id, state, exc)
+        return False
 
 
 def recover_jobs(db: sqlite3.Connection, recover_running: bool = True) -> list[tuple]:
