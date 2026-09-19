@@ -9,12 +9,13 @@ import logging
 import re
 import time
 
+from bridge.extension_registry import register_command_route as _register_command_route
+
 
 _DIRECTOR_GOAL_MAX_CHARS = 1200
 
 _ORIGINAL_GROUP_DIRECTOR_PLAN_GOALS = group_director_plan
 _ORIGINAL_GROUP_PROMPT_CONTEXT_GOALS = group_prompt_context
-_ORIGINAL_HANDLE_COMMAND_ROUTE_GOALS = handle_command_route
 
 
 def ensure_director_goal_schema(db: sqlite3.Connection) -> None:
@@ -211,7 +212,7 @@ def handle_director_goal_command(
     )
 
 
-def handle_command_route(
+def _director_goal_command_route(
     db,
     token,
     api_key,
@@ -230,19 +231,7 @@ def handle_command_route(
     if command == "/group goal" or command.startswith("/group goal "):
         handle_director_goal_command(db, token, chat_id, session, stripped)
         return True
-    return _ORIGINAL_HANDLE_COMMAND_ROUTE_GOALS(
-        db,
-        token,
-        api_key,
-        model,
-        fields,
-        chat_id,
-        stripped,
-        command,
-        session,
-        session_id,
-        current_model,
-        current_persona,
-        user_name,
-        operation_id=operation_id,
-    )
+    return False
+
+
+_register_command_route("director_goals", _director_goal_command_route)

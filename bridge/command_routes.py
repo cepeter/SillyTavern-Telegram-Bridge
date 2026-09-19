@@ -1,3 +1,5 @@
+from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
+
 def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id):
     """Handle onboarding, status, retry, and prompt inspection commands."""
     if command.startswith("/help "):
@@ -243,6 +245,23 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
 
 def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id=None):
     """Dispatch a normalized slash command without entering normal generation."""
+    if _dispatch_extension_command_routes(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        session_id,
+        current_model,
+        current_persona,
+        user_name,
+        operation_id=operation_id,
+    ):
+        return True
     if _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id):
         return True
     if _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id):

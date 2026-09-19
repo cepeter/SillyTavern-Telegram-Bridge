@@ -3,6 +3,7 @@ import tempfile
 import unittest
 
 import bridge.runtime as rt
+from bridge.extension_registry import extension_registry_snapshot
 from bridge.runtime_loader import RuntimeStage, load_runtime_namespace
 
 
@@ -31,6 +32,19 @@ class RuntimeLoaderTests(unittest.TestCase):
                 }
             )
         )
+        by_module = {entry["module"]: entry["public_callable_overrides"] for entry in rt.RUNTIME_LOAD_REPORT}
+        self.assertEqual(by_module["scene_state.py"], ())
+        self.assertEqual(by_module["memory_curator.py"], ())
+        self.assertEqual(by_module["director_goals.py"], ("group_director_plan", "group_prompt_context"))
+
+        extensions = extension_registry_snapshot()
+        self.assertEqual(
+            extensions["command_routes"],
+            ("scene_state", "director_goals", "memory_curator"),
+        )
+        self.assertEqual(extensions["post_retain"], ("scene_state", "memory_curator"))
+        self.assertEqual(extensions["summary_context"], ("scene_state",))
+        self.assertEqual(extensions["summary_clear"], ("scene_state",))
 
     def test_core_stage_rejects_silent_public_callable_override(self):
         with tempfile.TemporaryDirectory() as directory:

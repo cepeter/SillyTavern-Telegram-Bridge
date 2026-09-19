@@ -12,14 +12,15 @@ import logging
 import re
 import time
 
+from bridge.extension_registry import (
+    register_command_route as _register_command_route,
+    register_post_retain_hook as _register_post_retain_hook,
+)
+
 
 _MEMORY_CURATOR_MAX_ITEMS = 24
 _MEMORY_CURATOR_TRANSCRIPT_MESSAGES = 20
 _MEMORY_CURATOR_MIN_NEW_MESSAGES = 4
-
-_ORIGINAL_RETAIN_SESSION_MEMORY_CURATOR = retain_session_memory
-_ORIGINAL_HANDLE_COMMAND_ROUTE_CURATOR = handle_command_route
-
 
 def memory_curator_key(chat_id: str, session_id: str) -> str:
     return f"memory_curator:{chat_id}:{session_id}"
@@ -300,13 +301,12 @@ def queue_memory_curator(
     return True
 
 
-def retain_session_memory(
+def _memory_curator_post_retain(
     db: sqlite3.Connection,
     chat_id: str,
     session: dict[str, str],
     fields: dict[str, str],
 ) -> None:
-    _ORIGINAL_RETAIN_SESSION_MEMORY_CURATOR(db, chat_id, session, fields)
     try:
         queue_memory_curator(db, chat_id, session, str(fields.get("name") or "unknown"))
     except Exception:
@@ -348,7 +348,7 @@ def handle_curated_memory_command(
     send_text(token, chat_id, "Use /memory curated or /memory curated refresh.")
 
 
-def handle_command_route(
+def _memory_curator_command_route(
     db,
     token,
     api_key,
@@ -367,19 +367,8 @@ def handle_command_route(
     if command == "/memory curated" or command.startswith("/memory curated "):
         handle_curated_memory_command(db, token, api_key, chat_id, session, fields, command)
         return True
-    return _ORIGINAL_HANDLE_COMMAND_ROUTE_CURATOR(
-        db,
-        token,
-        api_key,
-        model,
-        fields,
-        chat_id,
-        stripped,
-        command,
-        session,
-        session_id,
-        current_model,
-        current_persona,
-        user_name,
-        operation_id=operation_id,
-    )
+    return False
+
+
+_register_post_retain_hook("memory_curator", _memory_curator_post_retain)
+_register_command_route("memory_curator", _memory_curator_command_route)
