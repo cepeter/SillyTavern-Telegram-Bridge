@@ -137,9 +137,12 @@ def load_runtime_namespace(
     if reset_extensions:
         _reset_extension_registry()
     report = []
+    runtime_root = base_dir.resolve()
     for stage in stages:
         for filename in stage.modules:
-            path = base_dir / filename
+            path = (runtime_root / filename).resolve()
+            if not path.is_relative_to(runtime_root):
+                raise RuntimeError(f"runtime module is outside runtime base directory: {filename}")
             if not path.is_file():
                 raise RuntimeError(f"runtime module is missing: {path}")
             before = dict(namespace)
