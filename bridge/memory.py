@@ -1,5 +1,10 @@
 import inspect
 
+from bridge.extension_registry import (
+    apply_summary_context_hooks as _apply_summary_context_hooks,
+    run_summary_clear_hooks as _run_summary_clear_hooks,
+)
+
 def hindsight_bank_id(chat_id: str) -> str:
     return "sillytavern-telegram-" + hashlib.sha256(str(chat_id).encode("utf-8")).hexdigest()[:24]
 
@@ -323,6 +328,7 @@ def get_session_summary(db: sqlite3.Connection, chat_id: str, session_id: str) -
 def clear_session_summary(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
     db.execute("DELETE FROM session_summaries WHERE chat_id=? AND session_id=?", (chat_id, session_id))
     db.commit()
+    _run_summary_clear_hooks(db, chat_id, session_id)
 
 
 def transcript_for_summary(rows: list[tuple[int, str, str, float]]) -> str:
@@ -376,4 +382,4 @@ def session_summary_for_prompt(db: sqlite3.Connection, chat_id: str, session: di
     count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0]
     if count >= SUMMARY_TRIGGER_MESSAGES:
         summary = generate_session_summary(db, chat_id, session)
-    return summary
+    return _apply_summary_context_hooks(summary, db, chat_id, session)

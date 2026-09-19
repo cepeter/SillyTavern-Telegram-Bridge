@@ -6,6 +6,9 @@ Hindsight retention from restoring a stale session snapshot after newer local
 state or a session-memory purge.
 """
 
+from bridge.extension_registry import run_post_retain_hooks as _run_post_retain_hooks
+
+
 _ORIGINAL_UPSERT_NATIVE_PERSONA = upsert_native_persona
 _ORIGINAL_DELETE_NATIVE_PERSONA = delete_native_persona
 _ORIGINAL_APPLY_SYNC_SNAPSHOT = apply_sync_snapshot
@@ -137,25 +140,24 @@ def _retain_session_memory(
 
 
 def retain_session_memory(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str]) -> None:
-    """Queue retention with a transcript fingerprint and purge epoch."""
-    if memory_mode(db, chat_id) != "on":
-        return
-    conversation, snapshot_hash = _hindsight_conversation_snapshot(
-        db, chat_id, session["session_id"]
-    )
-    if not conversation:
-        return
-    snapshot_epoch = _hindsight_memory_epoch(db, chat_id, session["session_id"])
-    submit_background(
-        "hindsight_retain",
-        _retain_session_memory,
-        chat_id,
-        dict(session),
-        fields["name"],
-        conversation,
-        snapshot_hash,
-        snapshot_epoch,
-    )
+    """Queue guarded Hindsight retention, then run explicit post-retain hooks."""
+    if memory_mode(db, chat_id) == "on":
+        conversation, snapshot_hash = _hindsight_conversation_snapshot(
+            db, chat_id, session["session_id"]
+        )
+        if conversation:
+            snapshot_epoch = _hindsight_memory_epoch(db, chat_id, session["session_id"])
+            submit_background(
+                "hindsight_retain",
+                _retain_session_memory,
+                chat_id,
+                dict(session),
+                fields["name"],
+                conversation,
+                snapshot_hash,
+                snapshot_epoch,
+            )
+    _run_post_retain_hooks(db, chat_id, session, fields)
 
 
 def purge_hindsight_session(db: sqlite3.Connection, chat_id: str, session_id: str) -> int:

@@ -11,16 +11,17 @@ import logging
 import re
 import time
 
+from bridge.extension_registry import (
+    register_command_route as _register_command_route,
+    register_post_retain_hook as _register_post_retain_hook,
+    register_summary_clear_hook as _register_summary_clear_hook,
+    register_summary_context_hook as _register_summary_context_hook,
+)
+
 
 _SCENE_STATE_KEYS = ("location", "time", "weather", "participants", "objects", "facts", "goals")
 _SCENE_STATE_MAX_TEXT = 5000
 _SCENE_STATE_TRANSCRIPT_MESSAGES = 16
-
-_ORIGINAL_RETAIN_SESSION_MEMORY_SCENE = retain_session_memory
-_ORIGINAL_SESSION_SUMMARY_FOR_PROMPT_SCENE = session_summary_for_prompt
-_ORIGINAL_CLEAR_SESSION_SUMMARY_SCENE = clear_session_summary
-_ORIGINAL_HANDLE_COMMAND_ROUTE_SCENE = handle_command_route
-
 
 def ensure_scene_state_schema(db: sqlite3.Connection) -> None:
     db.execute("""CREATE TABLE IF NOT EXISTS scene_states (
@@ -296,25 +297,24 @@ def queue_scene_state_refresh(
     return True
 
 
-def retain_session_memory(
+def _scene_state_post_retain(
     db: sqlite3.Connection,
     chat_id: str,
     session: dict[str, str],
     fields: dict[str, str],
 ) -> None:
-    _ORIGINAL_RETAIN_SESSION_MEMORY_SCENE(db, chat_id, session, fields)
     try:
         queue_scene_state_refresh(db, chat_id, session, str(fields.get("name") or "unknown"))
     except Exception:
         logging.warning("Could not queue scene-state refresh for %s/%s", chat_id, session.get("session_id"), exc_info=True)
 
 
-def session_summary_for_prompt(
+def _scene_state_summary_context(
+    summary: str,
     db: sqlite3.Connection,
     chat_id: str,
     session: dict[str, str],
 ) -> str:
-    summary = _ORIGINAL_SESSION_SUMMARY_FOR_PROMPT_SCENE(db, chat_id, session)
     state = scene_state_text(db, chat_id, session["session_id"])
     if not state:
         return summary
@@ -325,8 +325,7 @@ def session_summary_for_prompt(
     return (summary + "\n\n" + scene_block).strip() if summary else scene_block
 
 
-def clear_session_summary(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
-    _ORIGINAL_CLEAR_SESSION_SUMMARY_SCENE(db, chat_id, session_id)
+def _scene_state_summary_clear(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
     clear_scene_state(db, chat_id, session_id)
 
 
@@ -366,7 +365,7 @@ def handle_scene_command(
     send_text(token, chat_id, "Use /scene, /scene status, /scene refresh, or /scene clear.")
 
 
-def handle_command_route(
+def _scene_state_command_route(
     db,
     token,
     api_key,
@@ -385,19 +384,10 @@ def handle_command_route(
     if command == "/scene" or command.startswith("/scene "):
         handle_scene_command(db, token, api_key, chat_id, session, fields, command)
         return True
-    return _ORIGINAL_HANDLE_COMMAND_ROUTE_SCENE(
-        db,
-        token,
-        api_key,
-        model,
-        fields,
-        chat_id,
-        stripped,
-        command,
-        session,
-        session_id,
-        current_model,
-        current_persona,
-        user_name,
-        operation_id=operation_id,
-    )
+    return False
+
+
+_register_post_retain_hook("scene_state", _scene_state_post_retain)
+_register_summary_context_hook("scene_state", _scene_state_summary_context)
+_register_summary_clear_hook("scene_state", _scene_state_summary_clear)
+_register_command_route("scene_state", _scene_state_command_route)

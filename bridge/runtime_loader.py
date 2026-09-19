@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import MutableMapping
 
+from bridge.extension_registry import reset_extension_registry as _reset_extension_registry
+
 
 @dataclass(frozen=True)
 class RuntimeStage:
@@ -80,9 +82,7 @@ DEFAULT_RUNTIME_STAGES = (
                 ),
             ),
             ("scheduler_safety.py", ("db_connect", "recover_jobs", "submit_durable_chat_job")),
-            ("scene_state.py", ("clear_session_summary", "handle_command_route", "retain_session_memory", "session_summary_for_prompt")),
-            ("director_goals.py", ("group_director_plan", "group_prompt_context", "handle_command_route")),
-            ("memory_curator.py", ("handle_command_route", "retain_session_memory")),
+            ("director_goals.py", ("group_director_plan", "group_prompt_context")),
         ),
     ),
 )
@@ -127,9 +127,16 @@ def load_runtime_namespace(
     namespace: MutableMapping[str, object],
     base_dir: Path,
     stages: tuple[RuntimeStage, ...] = DEFAULT_RUNTIME_STAGES,
+    reset_extensions: bool = True,
 ) -> tuple[dict[str, object], ...]:
-    """Execute runtime modules in validated stages and return an override report."""
+    """Execute runtime modules in validated stages and return an override report.
+
+    Normal runtime loads reset extension registrations first. Isolated loader
+    validation can opt out so it does not mutate an already-running registry.
+    """
     _validate_stages(stages)
+    if reset_extensions:
+        _reset_extension_registry()
     report = []
     for stage in stages:
         for filename in stage.modules:

@@ -759,13 +759,16 @@ and restarts the service.
 The bridge keeps a shared runtime namespace for compatibility, but loading is
 split into validated stages. Core modules cannot silently replace public
 callables; recovery and safety overrides are explicitly declared and reported.
-Pure retrieval helpers are already moving to normal imports. Here are the main
-boundaries (not an exhaustive list):
+New cross-cutting feature composition uses an explicit extension registry instead
+of late function replacement. Scene State, Director Goals, and Memory Curator now
+register command routes and memory/summary hooks directly. Pure retrieval helpers
+are also moving to normal imports. Here are the main boundaries (not exhaustive):
 
 ```text
 sillytavern_telegram_bridge.py  launcher
 bridge/runtime.py               compatibility runtime facade
 bridge/runtime_loader.py        validated load stages and override reporting
+bridge/extension_registry.py     explicit command and memory/summary extension hooks
 bridge/common.py                configuration, queues, permissions
 bridge/cards.py                 cards, Persona display, prompts, World Info
 bridge/database.py              sessions and generation settings
