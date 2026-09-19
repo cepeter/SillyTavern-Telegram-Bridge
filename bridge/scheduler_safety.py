@@ -29,7 +29,12 @@ def _lightweight_db_connect(
     # and optional extension setup happen once in db_connect(), and repeating
     # database-wide negotiation here reintroduces the writer contention this
     # module exists to prevent.
-    _apply_connection_pragmas(connection, timeout=timeout)
+    _apply_connection_pragmas(
+        connection,
+        timeout=timeout,
+        cache_kib=_DB_WORKER_CACHE_KIB,
+        mmap_bytes=_DB_WORKER_MMAP_BYTES,
+    )
     return connection
 
 
