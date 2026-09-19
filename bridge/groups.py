@@ -1,7 +1,13 @@
 from bridge.extension_registry import get_director_customization as _get_director_customization
+from bridge.repositories import (
+    load_group_state_row as _repo_load_group_state_row,
+    mark_group_operation_applied as _repo_mark_group_operation_applied,
+    store_group_state_row as _repo_store_group_state_row,
+    try_claim_group_operation as _repo_try_claim_group_operation,
+)
 
 def group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
-    row = db.execute("SELECT title,enabled,turn_index,mode,forced_speaker,members_json,turn_user_id,turn_users_json FROM group_sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
+    row = _repo_load_group_state_row(db, chat_id, session_id)
     if not row:
         return {"title": "Group chat", "enabled": False, "turn_index": 0, "mode": "round_robin", "forced_speaker": "", "members": [], "turn_user_id": "", "turn_users": []}
     try:
@@ -248,19 +254,42 @@ def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str
         send_group_mode_menu(db, token, chat_id, session, message_id)
 
 
-def save_group_state(db: sqlite3.Connection, chat_id: str, session_id: str, state: dict[str, object], operation_id: int | str | None = None, commit: bool = True) -> bool:
-    if not begin_operation(db, operation_id, "group_state"):
-        return False
-    def write_group_state():
-        db.execute("INSERT OR REPLACE INTO group_sessions(chat_id,session_id,title,enabled,turn_index,mode,forced_speaker,members_json,turn_user_id,turn_users_json,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (chat_id, session_id, str(state.get("title") or "Group chat"), int(bool(state.get("enabled"))), int(state.get("turn_index") or 0), str(state.get("mode") or "round_robin"), str(state.get("forced_speaker") or ""), json.dumps(state.get("members") or [], ensure_ascii=False), str(state.get("turn_user_id") or ""), json.dumps(state.get("turn_users") or [], ensure_ascii=False), time.time()))
-        record_operation(db, operation_id, "group_state")
-        if commit:
-            db.commit()
-
-    if commit:
-        run_write_txn(db, write_group_state)
-    else:
-        write_group_state()
+def save_group_state(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+    state: dict[str, object],
+    operation_id: int | str | None = None,
+) -> bool:
+    now = time.time()
+    with write_transaction(db):
+        if not _repo_try_claim_group_operation(
+            db,
+            operation_id,
+            "group_state",
+            now,
+        ):
+            return False
+        _repo_store_group_state_row(
+            db,
+            chat_id,
+            session_id,
+            str(state.get("title") or "Group chat"),
+            bool(state.get("enabled")),
+            int(state.get("turn_index") or 0),
+            str(state.get("mode") or "round_robin"),
+            str(state.get("forced_speaker") or ""),
+            json.dumps(state.get("members") or [], ensure_ascii=False),
+            str(state.get("turn_user_id") or ""),
+            json.dumps(state.get("turn_users") or [], ensure_ascii=False),
+            now,
+        )
+        _repo_mark_group_operation_applied(
+            db,
+            operation_id,
+            "group_state",
+            now,
+        )
     return True
 
 
@@ -449,14 +478,19 @@ def group_prompt_context(db: sqlite3.Connection, chat_id: str, session: dict[str
     return base
 
 
-def advance_group_turn(db: sqlite3.Connection, chat_id: str, session_id: str, operation_id: int | str | None = None, commit: bool = True) -> None:
+def advance_group_turn(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+    operation_id: int | str | None = None,
+) -> None:
     state = group_state(db, chat_id, session_id)
     if not state["enabled"] or len(state["members"]) < 2:
         return
     state["forced_speaker"] = ""
     if state.get("mode") != "manual":
         state["turn_index"] = int(state["turn_index"]) + 1
-    save_group_state(db, chat_id, session_id, state, operation_id, commit=commit)
+    save_group_state(db, chat_id, session_id, state, operation_id)
 
 
 def handle_group_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], command_text: str, operation_id: int | str | None = None) -> None:
