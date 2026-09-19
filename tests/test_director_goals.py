@@ -104,6 +104,7 @@ class DirectorGoalsTests(unittest.TestCase):
         self.assertEqual(calls[0][0], "utility::director")
         joined = "\n".join(str(message["content"]) for message in calls[0][1])
         self.assertIn("hidden door", joined)
+        self.assertIn("believable character behavior", joined)
         self.assertTrue(calls[0][2]["force_non_stream"])
         self.assertEqual(before, after)
 
