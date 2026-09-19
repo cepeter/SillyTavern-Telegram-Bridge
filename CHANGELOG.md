@@ -4,9 +4,23 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.015] - 2026-09-19
+
+### Added
+
+- Added World-style per-item panels for Persona, Preset, Data Bank document, and Group character management.
+- Added confirmation before deleting Presets and removing Data Bank documents.
+- Added confirmation before removing a character from a Group without deleting the native character card.
+- Added regression coverage for the managed item-panel layouts.
+
 ### Fixed
 
-- Retry one transient Telegram `sendMessage` 404 before reporting a command failure, preventing temporary panel-delivery errors from being mislabeled as character-backend failures.
+- Fixed Telegram World panel delivery by preserving the bot token while generating per-item callback tokens.
+- Retried one transient Telegram `sendMessage` 404 before reporting a command failure.
+
+### Changed
+
+- Session and Character panels now show select and delete actions on each item row, with in-place refresh after deletion.
 
 ## [0.2.014] - 2026-09-19
 
