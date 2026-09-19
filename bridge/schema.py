@@ -1,3 +1,14 @@
+import sqlite3
+import time
+
+from bridge.common import (
+    PROCESSED_UPDATE_RETENTION_SECONDS as _PROCESSED_UPDATE_RETENTION_SECONDS,
+)
+from bridge.migrations import (
+    Migration as _Migration,
+    run_migrations as _run_migrations,
+)
+
 def _ensure_core_tables(db: sqlite3.Connection) -> None:
     """Create metadata, messages, sessions, and response variant tables."""
     db.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -219,11 +230,6 @@ def _ensure_job_tables(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS jobs_updated_idx ON jobs(updated_at)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_chunks_chat_idx ON data_bank_chunks(chat_id, document_id)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_chunk_idx ON data_bank_embeddings(chunk_id)")
-    db.execute("DELETE FROM processed_updates WHERE processed_at < ?", (time.time() - PROCESSED_UPDATE_RETENTION_SECONDS,))
-    db.execute("DELETE FROM rag_embedding_cache WHERE created_at < ?", (time.time() - 30 * 86400,))
-    db.execute("DELETE FROM jobs WHERE state='done' AND updated_at < ?", (time.time() - 30 * 86400,))
-    db.execute("DELETE FROM jobs WHERE state='failed' AND updated_at < ?", (time.time() - 90 * 86400,))
-    db.execute("DELETE FROM failed_turns WHERE updated_at < ?", (time.time() - 90 * 86400,))
 
 
 
@@ -237,7 +243,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         expires_at REAL NOT NULL
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS callback_tokens_expires_idx ON callback_tokens(expires_at)")
-    db.execute("DELETE FROM callback_tokens WHERE expires_at < ?", (time.time(),))
     db.execute("""CREATE TABLE IF NOT EXISTS panel_sessions (
         chat_id TEXT NOT NULL,
         message_id TEXT NOT NULL,
@@ -250,7 +255,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
     if "owner_user_id" not in panel_columns:
         db.execute("ALTER TABLE panel_sessions ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT ''")
     db.execute("CREATE INDEX IF NOT EXISTS panel_sessions_expires_idx ON panel_sessions(expires_at)")
-    db.execute("DELETE FROM panel_sessions WHERE expires_at < ?", (time.time(),))
     db.execute("""CREATE TABLE IF NOT EXISTS operations (
         operation_id TEXT PRIMARY KEY,
         kind TEXT NOT NULL,
@@ -288,7 +292,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         if column not in sync_columns:
             db.execute(f"ALTER TABLE sync_bindings ADD COLUMN {column} {definition}")
     db.execute("CREATE INDEX IF NOT EXISTS sync_bindings_realtime_idx ON sync_bindings(realtime_enabled, realtime_next_retry_at)")
-    db.execute("DELETE FROM operations WHERE updated_at < ?", (time.time() - 90 * 86400,))
     db.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS data_bank_fts USING fts5(
         content,
         chat_id UNINDEXED,
@@ -323,17 +326,57 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
 
 
 
-def initialize_database_schema(db: sqlite3.Connection) -> None:
-    """Create or migrate bridge tables while preserving existing data."""
-    has_tables = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone() is not None
-    if not has_tables:
-        try:
-            db.execute("PRAGMA auto_vacuum = INCREMENTAL")
-        except sqlite3.OperationalError:
-            pass
+def _run_startup_database_cleanup(db: sqlite3.Connection) -> None:
+    now = time.time()
+    db.execute(
+        "DELETE FROM processed_updates WHERE processed_at < ?",
+        (now - _PROCESSED_UPDATE_RETENTION_SECONDS,),
+    )
+    db.execute(
+        "DELETE FROM rag_embedding_cache WHERE created_at < ?",
+        (now - 30 * 86400,),
+    )
+    db.execute(
+        "DELETE FROM jobs WHERE state='done' AND updated_at < ?",
+        (now - 30 * 86400,),
+    )
+    db.execute(
+        "DELETE FROM jobs WHERE state='failed' AND updated_at < ?",
+        (now - 90 * 86400,),
+    )
+    db.execute(
+        "DELETE FROM failed_turns WHERE updated_at < ?",
+        (now - 90 * 86400,),
+    )
+    db.execute(
+        "DELETE FROM callback_tokens WHERE expires_at < ?",
+        (now,),
+    )
+    db.execute(
+        "DELETE FROM panel_sessions WHERE expires_at < ?",
+        (now,),
+    )
+    db.execute(
+        "DELETE FROM operations WHERE updated_at < ?",
+        (now - 90 * 86400,),
+    )
+
+
+def _migration_001_core_baseline(db: sqlite3.Connection) -> None:
     _ensure_core_tables(db)
     _ensure_generation_tables(db)
     _ensure_rag_tables(db)
     _ensure_job_tables(db)
     _ensure_panel_tables(db)
+
+
+SCHEMA_MIGRATIONS = (
+    _Migration(1, "core_baseline", _migration_001_core_baseline),
+)
+
+
+def initialize_database_schema(db: sqlite3.Connection) -> None:
+    """Apply structural migrations, then run recurring startup cleanup."""
+    _run_migrations(db, SCHEMA_MIGRATIONS)
+    _run_startup_database_cleanup(db)
     db.commit()
