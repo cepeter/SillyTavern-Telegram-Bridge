@@ -415,10 +415,29 @@ def _migration_003_director_goals(db: sqlite3.Connection) -> None:
     )
 
 
+def _migration_004_sync_lifecycle_trigger(
+    db: sqlite3.Connection,
+) -> None:
+    db.execute(
+        """CREATE TRIGGER IF NOT EXISTS sessions_delete_sync_binding
+        AFTER DELETE ON sessions
+        FOR EACH ROW
+        BEGIN
+            DELETE FROM sync_bindings
+            WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
+        END"""
+    )
+
+
 SCHEMA_MIGRATIONS = (
     _Migration(1, "core_baseline", _migration_001_core_baseline),
     _Migration(2, "scene_state", _migration_002_scene_state),
     _Migration(3, "director_goals", _migration_003_director_goals),
+    _Migration(
+        4,
+        "sync_lifecycle_trigger",
+        _migration_004_sync_lifecycle_trigger,
+    ),
 )
 
 
