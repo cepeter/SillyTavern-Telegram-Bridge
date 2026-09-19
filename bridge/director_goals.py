@@ -8,6 +8,12 @@ call and the bounded group speaker prompt only while director mode is active.
 import re
 import time
 
+from bridge.repositories import (
+    delete_director_goal as _repo_delete_director_goal,
+    load_director_goal as _repo_load_director_goal,
+    store_director_goal as _repo_store_director_goal,
+)
+
 from bridge.extension_registry import (
     DirectorCustomization as _DirectorCustomization,
     register_command_route as _register_command_route,
@@ -23,11 +29,7 @@ def normalize_director_goal(value: str) -> str:
 
 
 def get_director_goal(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
-    row = db.execute(
-        "SELECT goal FROM director_goals WHERE chat_id=? AND session_id=?",
-        (str(chat_id), str(session_id)),
-    ).fetchone()
-    return str(row[0]) if row else ""
+    return _repo_load_director_goal(db, chat_id, session_id)
 
 
 def set_director_goal(
@@ -37,18 +39,17 @@ def set_director_goal(
     goal: str,
 ) -> str:
     value = normalize_director_goal(goal)
-    if not value:
-        db.execute(
-            "DELETE FROM director_goals WHERE chat_id=? AND session_id=?",
-            (str(chat_id), str(session_id)),
-        )
-    else:
-        db.execute(
-            "INSERT OR REPLACE INTO director_goals(chat_id,session_id,goal,updated_at) "
-            "VALUES(?,?,?,?)",
-            (str(chat_id), str(session_id), value, time.time()),
-        )
-    db.commit()
+    with write_transaction(db):
+        if value:
+            _repo_store_director_goal(
+                db,
+                chat_id,
+                session_id,
+                value,
+                time.time(),
+            )
+        else:
+            _repo_delete_director_goal(db, chat_id, session_id)
     return value
 
 

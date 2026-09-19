@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import bridge.runtime as rt
 
@@ -65,11 +66,21 @@ class MemoryCuratorTests(unittest.TestCase):
         retained = []
         old_generate = rt.generate_text
         old_retain = rt._retain_with_client
-        rt.generate_text = lambda _key, model, _messages, **_kwargs: seen_models.append(model) or (
-            '{"memories":[{"key":"family.sister","text":"The user\'s sister is Hana.",'
-            '"kind":"relationship","confidence":0.95}]}'
-        )
-        rt._retain_with_client = lambda *args, **kwargs: retained.append((args, kwargs)) or True
+        def fake_generate(_key, model, _messages, **_kwargs):
+            self.assertFalse(self.db.in_transaction)
+            seen_models.append(model)
+            return (
+                '{"memories":[{"key":"family.sister","text":"The user\'s sister is Hana.",'
+                '"kind":"relationship","confidence":0.95}]}'
+            )
+
+        def fake_retain(*args, **kwargs):
+            self.assertFalse(self.db.in_transaction)
+            retained.append((args, kwargs))
+            return True
+
+        rt.generate_text = fake_generate
+        rt._retain_with_client = fake_retain
         try:
             items = rt.curate_memory_now(
                 self.db, "", "chat", self.session, "Mira"
@@ -99,6 +110,59 @@ class MemoryCuratorTests(unittest.TestCase):
             rt.submit_background = old_submit
 
         self.assertIn("memory_curator", queued)
+
+    def test_stale_race_rechecks_inside_transaction_and_skips_retain(self):
+        self._add_turn()
+        target_rowid = 2
+        initial_raw = rt.json.dumps({"items": [], "through_rowid": 0})
+        newer_items = [
+            {
+                "kind": "fact",
+                "key": "newer",
+                "text": "Newer fact",
+                "confidence": 1.0,
+            }
+        ]
+        newer_raw = rt.json.dumps(
+            {
+                "items": newer_items,
+                "through_rowid": target_rowid + 1,
+            }
+        )
+
+        def fake_generate(_key, _model, _messages, **_kwargs):
+            self.assertFalse(self.db.in_transaction)
+            return (
+                '{"memories":[{"kind":"fact","key":"older",'
+                '"text":"Older fact","confidence":1.0}]}'
+            )
+
+        with patch.object(
+            rt,
+            "_repo_load_meta_value",
+            side_effect=[initial_raw, newer_raw],
+        ), patch.object(
+            rt,
+            "_repo_store_meta_value",
+        ) as store_meta, patch.object(
+            rt,
+            "_retain_with_client",
+        ) as retain, patch.object(
+            rt,
+            "generate_text",
+            side_effect=fake_generate,
+        ):
+            items = rt.curate_memory_now(
+                self.db,
+                "",
+                "chat",
+                self.session,
+                "Mira",
+            )
+
+        self.assertEqual(items, newer_items)
+        store_meta.assert_not_called()
+        retain.assert_not_called()
 
     def test_stale_target_does_not_regenerate_or_replace_newer_curated_state(self):
         self._add_turn()

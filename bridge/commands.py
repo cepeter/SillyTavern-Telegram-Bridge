@@ -17,16 +17,20 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
     reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session["session_id"]))
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
     stored_text = f"[Image input] {caption}"
-    db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session["session_id"], "user", stored_text, str(telegram_message_id) if telegram_message_id is not None else None, time.time()))
-    assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session["session_id"], "assistant", stored_reply, time.time()))
-    assistant_rowid = assistant_cursor.lastrowid
-    if not group_turn:
-        db.commit()
-    save_response_variant(db, chat_id, session["session_id"], stored_text, stored_reply, commit=not bool(group_turn))
-    if group_turn:
-        advance_group_turn(db, chat_id, session["session_id"], commit=True)
-    else:
-        db.commit()
+    with write_transaction(db):
+        db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session["session_id"], "user", stored_text, str(telegram_message_id) if telegram_message_id is not None else None, time.time()))
+        assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session["session_id"], "assistant", stored_reply, time.time()))
+        assistant_rowid = assistant_cursor.lastrowid
+        save_response_variant(
+            db,
+            chat_id,
+            session["session_id"],
+            stored_text,
+            stored_reply,
+            commit=False,
+        )
+        if group_turn:
+            advance_group_turn(db, chat_id, session["session_id"])
     retain_session_memory(db, chat_id, session, fields)
     send_reply(token, chat_id, stored_reply, db, session["session_id"], assistant_rowid)
 

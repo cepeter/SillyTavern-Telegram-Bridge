@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import bridge.runtime as rt
 
@@ -82,6 +83,90 @@ class SceneStateEngineTests(unittest.TestCase):
             rt.submit_background = original_submit
 
         self.assertTrue(any(name == "scene_state_refresh" for name, _fn, _args in queued))
+
+    def test_clear_scene_state_joins_outer_transaction(self):
+        self.db.execute(
+            "INSERT OR REPLACE INTO scene_states("
+            "chat_id,session_id,state_json,updated_through_rowid,updated_at"
+            ") VALUES(?,?,?,?,?)",
+            (
+                "chat",
+                self.session["session_id"],
+                '{"location":"Station"}',
+                2,
+                rt.time.time(),
+            ),
+        )
+        self.db.commit()
+
+        self.db.execute("BEGIN")
+        rt.clear_scene_state(
+            self.db,
+            "chat",
+            self.session["session_id"],
+        )
+        self.assertTrue(self.db.in_transaction)
+        self.db.rollback()
+
+        state, covered = rt.get_scene_state(
+            self.db,
+            "chat",
+            self.session["session_id"],
+        )
+        self.assertEqual(state, {"location": "Station"})
+        self.assertEqual(covered, 2)
+
+    def test_refresh_uses_atomic_repository_stale_guard_outside_model_call(self):
+        self._add_turn()
+        calls = []
+
+        def fake_generate(_key, _model, _messages, **_kwargs):
+            self.assertFalse(self.db.in_transaction)
+            calls.append("generate")
+            return '{"location":"Candidate station"}'
+
+        def reject_stale(
+            db,
+            chat_id,
+            session_id,
+            state_json,
+            through_rowid,
+            updated_at,
+        ):
+            self.assertTrue(db.in_transaction)
+            self.assertEqual((chat_id, session_id), ("chat", self.session["session_id"]))
+            self.assertIn("Candidate station", state_json)
+            self.assertEqual(through_rowid, 2)
+            self.assertGreater(updated_at, 0)
+            calls.append("upsert")
+            return False
+
+        with patch.object(
+            rt,
+            "_repo_load_scene_state_row",
+            side_effect=[
+                None,
+                ('{"location":"Newer station"}', 3),
+            ],
+        ), patch.object(
+            rt,
+            "_repo_upsert_scene_state_if_fresh",
+            side_effect=reject_stale,
+        ), patch.object(
+            rt,
+            "generate_text",
+            side_effect=fake_generate,
+        ):
+            state = rt.refresh_scene_state_now(
+                self.db,
+                "",
+                "chat",
+                self.session,
+                "Mira",
+            )
+
+        self.assertEqual(calls, ["generate", "upsert"])
+        self.assertEqual(state, {"location": "Newer station"})
 
     def test_clear_session_summary_also_clears_scene_state(self):
         self._add_turn()
