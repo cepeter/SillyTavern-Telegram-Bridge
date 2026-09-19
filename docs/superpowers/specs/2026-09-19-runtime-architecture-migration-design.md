@@ -2,15 +2,15 @@
 
 Date: 2026-09-19
 Status: Master architecture target; implementation is decomposed into independently mergeable phases
-Repository: `punzer4-code/SillyTavern-Telegram-Bridge`
-Baseline: post-the merged extension-registry refactor architecture
+Repository: `cepeter/SillyTavern-Telegram-Bridge`
+Baseline: post-PR-#27 extension-registry architecture
 Phase 1 design: `docs/superpowers/specs/2026-09-19-director-policy-boundary-design.md`
 
 ## 1. Purpose
 
 This document defines the long-term architecture target for the SillyTavern Telegram Bridge and the migration program used to reach it without a big-bang rewrite.
 
-the merged extension-registry refactor established explicit extension hooks for several newer cross-cutting features. The codebase still relies on a compatibility runtime that executes modules into one shared namespace, selected late overrides for recovery and safety behavior, global runtime state, mixed schema/runtime initialization, and helper functions that often own their own commits.
+The merged extension-registry refactor established explicit extension hooks for several newer cross-cutting features. The codebase still relies on a compatibility runtime that executes modules into one shared namespace, selected late overrides for recovery and safety behavior, global runtime state, mixed schema/runtime initialization, and helper functions that often own their own commits.
 
 The migration must remove those architectural constraints while preserving the reliability properties already present in the application.
 
@@ -81,7 +81,7 @@ The remaining safety/recovery layers include late replacement of behavior such a
 - database/job scheduling helpers
 - Group Director policy
 
-the merged extension-registry refactor removed late override composition for Scene State and Memory Curator and moved several cross-cutting behaviors into explicit registries.
+The merged extension-registry refactor removed late override composition for Scene State and Memory Curator and moved several cross-cutting behaviors into explicit registries.
 
 That registry is useful as a migration boundary, but it is not the intended final application architecture.
 
@@ -271,7 +271,7 @@ injected service/adapter
 remove compatibility layer
 ```
 
-The compatibility registry introduced in the merged extension-registry refactor is intentionally temporary. It provides deterministic extension boundaries while the composition root does not yet exist.
+The compatibility registry introduced in The merged extension-registry refactor is intentionally temporary. It provides deterministic extension boundaries while the composition root does not yet exist.
 
 ## 9. Migration invariants
 
