@@ -224,19 +224,22 @@ def refresh_scene_state_now(
     if current and int(current[0] or 0) > target_rowid:
         return get_scene_state(db, chat_id, session_id)[0]
 
-    db.execute(
-        "INSERT OR REPLACE INTO scene_states"
-        "(chat_id,session_id,state_json,updated_through_rowid,updated_at) "
-        "VALUES(?,?,?,?,?)",
-        (
-            str(chat_id),
-            session_id,
-            json.dumps(state, ensure_ascii=False, sort_keys=True),
-            target_rowid,
-            time.time(),
-        ),
-    )
-    db.commit()
+    def write_state():
+        db.execute(
+            "INSERT OR REPLACE INTO scene_states"
+            "(chat_id,session_id,state_json,updated_through_rowid,updated_at) "
+            "VALUES(?,?,?,?,?)",
+            (
+                str(chat_id),
+                session_id,
+                json.dumps(state, ensure_ascii=False, sort_keys=True),
+                target_rowid,
+                time.time(),
+            ),
+        )
+        db.commit()
+
+    run_write_txn(db, write_state)
     return state
 
 

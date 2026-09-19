@@ -81,11 +81,13 @@ def hindsight_explicit_document_id(session_id: str, fact: str) -> str:
 def _record_hindsight_document(chat_id: str, session_id: str, document_id: str, kind: str) -> None:
     mapping_db = db_connect()
     try:
-        mapping_db.execute(
-            "INSERT OR REPLACE INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
-            (str(chat_id), str(session_id), str(document_id), str(kind), time.time()),
-        )
-        mapping_db.commit()
+        def write_mapping():
+            mapping_db.execute(
+                "INSERT OR REPLACE INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
+                (str(chat_id), str(session_id), str(document_id), str(kind), time.time()),
+            )
+            mapping_db.commit()
+        run_write_txn(mapping_db, write_mapping)
     finally:
         mapping_db.close()
 

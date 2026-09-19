@@ -237,13 +237,17 @@ def _phase3_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], 
 
 
 def _phase3_reset_failures(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
-    db.execute("UPDATE sync_bindings SET realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE chat_id=? AND session_id=?", (chat_id, session_id))
-    db.commit()
+    def write():
+        db.execute("UPDATE sync_bindings SET realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE chat_id=? AND session_id=?", (chat_id, session_id))
+        db.commit()
+    run_write_txn(db, write)
 
 
 def _phase3_disable(db: sqlite3.Connection, chat_id: str, session_id: str, error: str) -> None:
-    db.execute("UPDATE sync_bindings SET realtime_enabled=0,last_error=?,realtime_next_retry_at=0 WHERE chat_id=? AND session_id=?", (error[:1000], chat_id, session_id))
-    db.commit()
+    def write():
+        db.execute("UPDATE sync_bindings SET realtime_enabled=0,last_error=?,realtime_next_retry_at=0 WHERE chat_id=? AND session_id=?", (error[:1000], chat_id, session_id))
+        db.commit()
+    run_write_txn(db, write)
 
 
 def phase3_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
@@ -308,8 +312,10 @@ def phase3_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: str
         return f"realtime API unavailable: {exc}"
     if result in _PHASE3_STOP_RESULTS:
         return result
-    db.execute("UPDATE sync_bindings SET realtime_enabled=1,realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE chat_id=? AND session_id=?", (chat_id, session_id))
-    db.commit()
+    def mark_enabled():
+        db.execute("UPDATE sync_bindings SET realtime_enabled=1,realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE chat_id=? AND session_id=?", (chat_id, session_id))
+        db.commit()
+    run_write_txn(db, mark_enabled)
     return "realtime API sync enabled; " + result
 
 
@@ -332,13 +338,17 @@ def phase3_sync_poll(db: sqlite3.Connection) -> None:
                 _phase3_disable(db, str(chat_id), str(session_id), str(exc))
                 continue
             delay = min(60.0, PHASE3_SYNC_INTERVAL_SECONDS * (2 ** min(count, 5)))
-            db.execute("UPDATE sync_bindings SET realtime_failures=?,realtime_next_retry_at=?,last_error=? WHERE chat_id=? AND session_id=?", (count, time.time() + delay, str(exc)[:1000], chat_id, session_id))
-            db.commit()
+            def write_retry():
+                db.execute("UPDATE sync_bindings SET realtime_failures=?,realtime_next_retry_at=?,last_error=? WHERE chat_id=? AND session_id=?", (count, time.time() + delay, str(exc)[:1000], chat_id, session_id))
+                db.commit()
+            run_write_txn(db, write_retry)
         except Exception as exc:
             logging.warning("Phase 3 binding failed for session %s", session_id, exc_info=True)
             count = int(failures or 0) + 1
-            db.execute("UPDATE sync_bindings SET realtime_failures=?,realtime_next_retry_at=?,last_error=? WHERE chat_id=? AND session_id=?", (count, time.time() + min(60.0, PHASE3_SYNC_INTERVAL_SECONDS * 2), "unexpected Phase 3 binding failure", chat_id, session_id))
-            db.commit()
+            def write_unexpected():
+                db.execute("UPDATE sync_bindings SET realtime_failures=?,realtime_next_retry_at=?,last_error=? WHERE chat_id=? AND session_id=?", (count, time.time() + min(60.0, PHASE3_SYNC_INTERVAL_SECONDS * 2), "unexpected Phase 3 binding failure", chat_id, session_id))
+                db.commit()
+            run_write_txn(db, write_unexpected)
 
 
 def _phase3_worker_loop() -> None:

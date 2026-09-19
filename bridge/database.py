@@ -1,3 +1,13 @@
+_DB_WRITE_LOCK = threading.RLock()
+
+
+def run_write_txn(db: sqlite3.Connection, operation):
+    """Serialize a short SQLite write transaction within this bridge process."""
+    del db
+    with _DB_WRITE_LOCK:
+        return operation()
+
+
 def _apply_connection_pragmas(db: sqlite3.Connection, timeout: float = 30.0) -> None:
     """Apply connection-local pragmas for latency, caching, and safety.
 
@@ -107,14 +117,18 @@ def get_meta(db: sqlite3.Connection, key: str, default: str = "") -> str:
 
 
 def set_meta(db: sqlite3.Connection, key: str, value: str) -> None:
-    db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)", (key, value))
-    db.commit()
+    def write():
+        db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)", (key, value))
+        db.commit()
+    run_write_txn(db, write)
 
 
 def record_failed_turn(db: sqlite3.Connection, chat_id: str, telegram_message_id: int, text: str, model: str, error: str, session_id: str = "") -> None:
-    now = time.time()
-    db.execute("INSERT INTO failed_turns(chat_id,telegram_message_id,text,model,session_id,attempts,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,telegram_message_id) DO UPDATE SET session_id=excluded.session_id,attempts=attempts+1,last_error=excluded.last_error,updated_at=excluded.updated_at", (chat_id, str(telegram_message_id), text[:12000], model[:200], session_id[:200], 1, error[:1000], now, now))
-    db.commit()
+    def write():
+        now = time.time()
+        db.execute("INSERT INTO failed_turns(chat_id,telegram_message_id,text,model,session_id,attempts,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,telegram_message_id) DO UPDATE SET session_id=excluded.session_id,attempts=attempts+1,last_error=excluded.last_error,updated_at=excluded.updated_at", (chat_id, str(telegram_message_id), text[:12000], model[:200], session_id[:200], 1, error[:1000], now, now))
+        db.commit()
+    run_write_txn(db, write)
 
 
 def latest_failed_turn(db: sqlite3.Connection, chat_id: str):
@@ -122,8 +136,10 @@ def latest_failed_turn(db: sqlite3.Connection, chat_id: str):
 
 
 def clear_failed_turn(db: sqlite3.Connection, chat_id: str, telegram_message_id: int | str) -> None:
-    db.execute("DELETE FROM failed_turns WHERE chat_id=? AND telegram_message_id=?", (chat_id, str(telegram_message_id)))
-    db.commit()
+    def write():
+        db.execute("DELETE FROM failed_turns WHERE chat_id=? AND telegram_message_id=?", (chat_id, str(telegram_message_id)))
+        db.commit()
+    run_write_txn(db, write)
 
 
 def committed_assistant_for_message(db: sqlite3.Connection, chat_id: str, telegram_message_id: int | str):
@@ -191,15 +207,17 @@ def record_operation(db: sqlite3.Connection, operation_id: int | str | None, kin
 
 
 def enqueue_job(db: sqlite3.Connection, update_id: int, chat_id: str, session_id: str, telegram_message_id: int, kind: str, payload: dict) -> int:
-    now = time.time()
-    db.execute("""INSERT OR IGNORE INTO jobs(update_id,chat_id,session_id,telegram_message_id,kind,payload_json,state,attempts,last_error,created_at,updated_at)
-        VALUES(?,?,?,?,?,?, 'queued',0,'',?,?)""", (update_id, chat_id, session_id, str(telegram_message_id), kind, json.dumps(payload, ensure_ascii=False), now, now))
-    row = db.execute("SELECT job_id FROM jobs WHERE update_id=?", (update_id,)).fetchone()
-    if row is None:
-        raise RuntimeError("job handoff failed")
-    db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, now))
-    db.commit()
-    return int(row[0])
+    def write():
+        now = time.time()
+        db.execute("""INSERT OR IGNORE INTO jobs(update_id,chat_id,session_id,telegram_message_id,kind,payload_json,state,attempts,last_error,created_at,updated_at)
+            VALUES(?,?,?,?,?,?, 'queued',0,'',?,?)""", (update_id, chat_id, session_id, str(telegram_message_id), kind, json.dumps(payload, ensure_ascii=False), now, now))
+        row = db.execute("SELECT job_id FROM jobs WHERE update_id=?", (update_id,)).fetchone()
+        if row is None:
+            raise RuntimeError("job handoff failed")
+        db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, now))
+        db.commit()
+        return int(row[0])
+    return run_write_txn(db, write)
 
 
 def job_actor_id(db: sqlite3.Connection, job_id: int | None) -> str:
@@ -216,22 +234,28 @@ def job_actor_id(db: sqlite3.Connection, job_id: int | None) -> str:
 
 
 def mark_job_scheduled(db: sqlite3.Connection, job_id: int) -> bool:
-    cursor = db.execute("UPDATE jobs SET state='scheduled', updated_at=? WHERE job_id=? AND state='queued'", (time.time(), job_id))
-    db.commit()
-    return cursor.rowcount == 1
+    def write():
+        cursor = db.execute("UPDATE jobs SET state='scheduled', updated_at=? WHERE job_id=? AND state='queued'", (time.time(), job_id))
+        db.commit()
+        return cursor.rowcount == 1
+    return run_write_txn(db, write)
 
 
 def mark_job_running(db: sqlite3.Connection, job_id: int) -> bool:
-    cursor = db.execute("UPDATE jobs SET state='running', attempts=attempts+1, updated_at=? WHERE job_id=? AND state IN ('queued','scheduled')", (time.time(), job_id))
-    db.commit()
-    return cursor.rowcount == 1
+    def write():
+        cursor = db.execute("UPDATE jobs SET state='running', attempts=attempts+1, updated_at=? WHERE job_id=? AND state IN ('queued','scheduled')", (time.time(), job_id))
+        db.commit()
+        return cursor.rowcount == 1
+    return run_write_txn(db, write)
 
 
 def finish_job(db: sqlite3.Connection, job_id: int, state: str, error: str = "") -> bool:
     try:
-        db.execute("UPDATE jobs SET state=?, last_error=?, updated_at=? WHERE job_id=?", (state, error[:1000], time.time(), job_id))
-        db.commit()
-        return True
+        def write():
+            db.execute("UPDATE jobs SET state=?, last_error=?, updated_at=? WHERE job_id=?", (state, error[:1000], time.time(), job_id))
+            db.commit()
+            return True
+        return run_write_txn(db, write)
     except sqlite3.OperationalError as exc:
         if "locked" not in str(exc).casefold() and "busy" not in str(exc).casefold():
             raise

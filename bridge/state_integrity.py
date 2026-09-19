@@ -164,16 +164,18 @@ def purge_hindsight_session(db: sqlite3.Connection, chat_id: str, session_id: st
     """Invalidate queued retains only after a successful remote session purge."""
     with hindsight_session_lock(chat_id, session_id):
         deleted = _ORIGINAL_PURGE_HINDSIGHT_SESSION(db, chat_id, session_id)
-        db.execute(
-            "DELETE FROM hindsight_documents WHERE chat_id=? AND session_id=?",
-            (str(chat_id), str(session_id)),
-        )
-        next_epoch = _hindsight_memory_epoch(db, chat_id, session_id) + 1
-        db.execute(
-            "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
-            (_hindsight_epoch_key(chat_id, session_id), str(next_epoch)),
-        )
-        db.commit()
+        def write_purge_state():
+            db.execute(
+                "DELETE FROM hindsight_documents WHERE chat_id=? AND session_id=?",
+                (str(chat_id), session_id),
+            )
+            next_epoch = _hindsight_memory_epoch(db, chat_id, session_id) + 1
+            db.execute(
+                "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
+                (_hindsight_epoch_key(chat_id, session_id), str(next_epoch)),
+            )
+            db.commit()
+        run_write_txn(db, write_purge_state)
         return deleted
 
 

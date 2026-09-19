@@ -85,17 +85,21 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
     reply += rag_citation_footer(db, chat_id, text, rag_bundle)
     reply = render_response_language(api_key, current_model, reply, language, generation_session_id, generation_settings)
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
-    now = time.time()
-    db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "user", text, str(telegram_message_id) if telegram_message_id is not None else None, now))
-    assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session_id, "assistant", stored_reply, now + 0.001))
-    assistant_rowid = assistant_cursor.lastrowid
-    if not group_turn:
-        db.commit()
-    save_response_variant(db, chat_id, session_id, text, stored_reply, commit=not bool(group_turn))
-    if group_turn:
-        advance_group_turn(db, chat_id, session_id, operation_id=operation_id, commit=True)
-    else:
-        db.commit()
+    def persist_turn():
+        now = time.time()
+        db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "user", text, str(telegram_message_id) if telegram_message_id is not None else None, now))
+        assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session_id, "assistant", stored_reply, now + 0.001))
+        assistant_rowid = assistant_cursor.lastrowid
+        if not group_turn:
+            db.commit()
+        save_response_variant(db, chat_id, session_id, text, stored_reply, commit=not bool(group_turn))
+        if group_turn:
+            advance_group_turn(db, chat_id, session_id, operation_id=operation_id, commit=True)
+        else:
+            db.commit()
+        return assistant_rowid
+
+    assistant_rowid = run_write_txn(db, persist_turn)
     retain_session_memory(db, chat_id, session, fields)
     if telegram_message_id is not None:
         clear_failed_turn(db, chat_id, telegram_message_id)

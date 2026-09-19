@@ -136,8 +136,10 @@ def process_callback_job(token: str, chat_id: str, callback: dict, job_id: int |
                 return
             process_callback(db, token, callback, operation_id=job_id)
             if job_id is not None:
-                record_operation(db, job_id, "callback")
-                db.commit()
+                def write_callback_operation():
+                    record_operation(db, job_id, "callback")
+                    db.commit()
+                run_write_txn(db, write_callback_operation)
                 finish_job(db, job_id, "done")
         except Exception as exc:
             logging.error("Background callback processing failed: %s", exc, exc_info=True)
@@ -186,8 +188,10 @@ def process_edit_job(token: str, api_key: str, chat_id: str, message_id: int, te
 
 
 def complete_update(db: sqlite3.Connection, update_id: int, offset: int) -> None:
-    db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, time.time()))
-    set_meta(db, "telegram_offset", str(offset))
+    def write():
+        db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, time.time()))
+        set_meta(db, "telegram_offset", str(offset))
+    run_write_txn(db, write)
 
 
 def submit_durable_chat_job(db: sqlite3.Connection, label: str, chat_id: str, function, *args) -> bool:

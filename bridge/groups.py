@@ -249,10 +249,16 @@ def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str
 def save_group_state(db: sqlite3.Connection, chat_id: str, session_id: str, state: dict[str, object], operation_id: int | str | None = None, commit: bool = True) -> bool:
     if not begin_operation(db, operation_id, "group_state"):
         return False
-    db.execute("INSERT OR REPLACE INTO group_sessions(chat_id,session_id,title,enabled,turn_index,mode,forced_speaker,members_json,turn_user_id,turn_users_json,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (chat_id, session_id, str(state.get("title") or "Group chat"), int(bool(state.get("enabled"))), int(state.get("turn_index") or 0), str(state.get("mode") or "round_robin"), str(state.get("forced_speaker") or ""), json.dumps(state.get("members") or [], ensure_ascii=False), str(state.get("turn_user_id") or ""), json.dumps(state.get("turn_users") or [], ensure_ascii=False), time.time()))
-    record_operation(db, operation_id, "group_state")
+    def write_group_state():
+        db.execute("INSERT OR REPLACE INTO group_sessions(chat_id,session_id,title,enabled,turn_index,mode,forced_speaker,members_json,turn_user_id,turn_users_json,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (chat_id, session_id, str(state.get("title") or "Group chat"), int(bool(state.get("enabled"))), int(state.get("turn_index") or 0), str(state.get("mode") or "round_robin"), str(state.get("forced_speaker") or ""), json.dumps(state.get("members") or [], ensure_ascii=False), str(state.get("turn_user_id") or ""), json.dumps(state.get("turn_users") or [], ensure_ascii=False), time.time()))
+        record_operation(db, operation_id, "group_state")
+        if commit:
+            db.commit()
+
     if commit:
-        db.commit()
+        run_write_txn(db, write_group_state)
+    else:
+        write_group_state()
     return True
 
 

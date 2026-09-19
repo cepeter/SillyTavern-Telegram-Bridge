@@ -210,11 +210,14 @@ def curate_memory_now(
         "through_rowid": target_rowid,
         "updated_at": time.time(),
     }
-    db.execute(
-        "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
-        (memory_curator_key(chat_id, session_id), json.dumps(payload, ensure_ascii=False, sort_keys=True)),
-    )
-    db.commit()
+    def write_curated_memory():
+        db.execute(
+            "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
+            (memory_curator_key(chat_id, session_id), json.dumps(payload, ensure_ascii=False, sort_keys=True)),
+        )
+        db.commit()
+
+    run_write_txn(db, write_curated_memory)
 
     if memory_mode(db, chat_id) == "on":
         content = "Curated durable memories:\n" + (

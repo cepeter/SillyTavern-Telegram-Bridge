@@ -132,9 +132,11 @@ def queue_user_quote_tts(token: str, chat_id: str, text: str, db: sqlite3.Connec
 def persist_assistant_delivery_ids(db: sqlite3.Connection, assistant_rowid: int, message_ids: list[int]) -> bool:
     """Persist Telegram delivery metadata without misreporting a sent reply as generation failure."""
     try:
-        db.execute("UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid))
-        db.commit()
-        return True
+        def write():
+            db.execute("UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid))
+            db.commit()
+            return True
+        return run_write_txn(db, write)
     except sqlite3.OperationalError as exc:
         if "locked" not in str(exc).casefold() and "busy" not in str(exc).casefold():
             raise

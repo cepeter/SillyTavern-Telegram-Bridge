@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 import tempfile
+import threading
+import time
 import unittest
 
 import bridge.runtime as rt
@@ -36,7 +38,32 @@ class SqliteContentionTests(unittest.TestCase):
             rt._DB_SCHEMA_READY = self.old_schema_ready
         self.tmp.cleanup()
 
-    def test_callback_token_reuses_job_connection(self):
+    def test_shared_write_mutex_serializes_transactions(self):
+        active = 0
+        maximum = 0
+        guard = threading.Lock()
+        barrier = threading.Barrier(2)
+
+        def transaction():
+            nonlocal active, maximum
+            with guard:
+                active += 1
+                maximum = max(maximum, active)
+            time.sleep(0.01)
+            with guard:
+                active -= 1
+
+        def invoke():
+            barrier.wait()
+            rt.run_write_txn(self.db, transaction)
+
+        threads = [threading.Thread(target=invoke) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(maximum, 1)
+
         original_connect = rt.db_connect
         rt.db_connect = lambda: (_ for _ in ()).throw(AssertionError("opened nested SQLite connection"))
         try:
@@ -44,6 +71,30 @@ class SqliteContentionTests(unittest.TestCase):
         finally:
             rt.db_connect = original_connect
         self.assertIsNotNone(self.db.execute("SELECT 1 FROM callback_tokens WHERE token=?", (token,)).fetchone())
+
+    def test_job_writers_from_separate_connections_do_not_lock_each_other(self):
+        barrier = threading.Barrier(2)
+        errors = []
+        old_connect = rt.db_connect
+
+        def worker(index):
+            db = old_connect()
+            try:
+                barrier.wait()
+                job_id = rt.enqueue_job(db, 100 + index, "chat", "session", 100 + index, "generation", {"text": "x"})
+                rt.finish_job(db, job_id, "done")
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                db.close()
+
+        threads = [threading.Thread(target=worker, args=(index,)) for index in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM jobs WHERE update_id>=100").fetchone()[0], 2)
 
     def test_panel_binding_reuses_job_connection(self):
         calls = []

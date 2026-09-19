@@ -17,13 +17,18 @@ def begin_operation(db, operation_id, kind):
     """Persist the prepared marker immediately; never keep a writer lock over I/O."""
     if operation_id is None:
         return True
-    now = time.time()
-    cursor = db.execute(
-        "INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?, 'in_progress',?,?)",
-        (str(operation_id), kind, now, now),
-    )
-    if cursor.rowcount == 1:
-        db.commit()
+    def write():
+        now = time.time()
+        cursor = db.execute(
+            "INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?, 'in_progress',?,?)",
+            (str(operation_id), kind, now, now),
+        )
+        if cursor.rowcount == 1:
+            db.commit()
+            return True
+        return False
+    inserted = run_write_txn(db, write)
+    if inserted:
         return True
     return not operation_was_applied(db, operation_id)
 
@@ -35,11 +40,13 @@ def _operation_payload_key(operation_id):
 def _set_operation_payload(db, operation_id, payload):
     if operation_id is None:
         return
-    db.execute(
-        "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
-        (_operation_payload_key(operation_id), json.dumps(payload, separators=(",", ":"))),
-    )
-    db.commit()
+    def write():
+        db.execute(
+            "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
+            (_operation_payload_key(operation_id), json.dumps(payload, separators=(",", ":"))),
+        )
+        db.commit()
+    run_write_txn(db, write)
 
 
 def _get_operation_payload(db, operation_id):
@@ -58,9 +65,11 @@ def _get_operation_payload(db, operation_id):
 def _finish_operation(db, operation_id, kind):
     if operation_id is None:
         return
-    record_operation(db, operation_id, kind)
-    db.execute("DELETE FROM meta WHERE key=?", (_operation_payload_key(operation_id),))
-    db.commit()
+    def write():
+        record_operation(db, operation_id, kind)
+        db.execute("DELETE FROM meta WHERE key=?", (_operation_payload_key(operation_id),))
+        db.commit()
+    run_write_txn(db, write)
 
 
 def _message_ids_from_rows(rows):
@@ -202,16 +211,20 @@ def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=N
     old_message_ids = _outgoing_ids_after(db, chat_id, session_id, last_user_rowid)
     _set_operation_payload(db, operation_id, {"old_message_ids": old_message_ids, "user_rowid": last_user_rowid})
 
-    db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?", (chat_id, session_id, last_user_rowid))
-    assistant_cursor = db.execute(
-        "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
-        (chat_id, session_id, "assistant", reply, time.time()),
-    )
-    assistant_rowid = int(assistant_cursor.lastrowid)
-    variant = save_response_variant(db, chat_id, session_id, user_text, reply, user_rowid=last_user_rowid, commit=False)
-    if operation_id is not None:
-        set_operation_phase(db, operation_id, "regen", "local_committed")
-    db.commit()
+    def persist_regeneration():
+        db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?", (chat_id, session_id, last_user_rowid))
+        assistant_cursor = db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
+            (chat_id, session_id, "assistant", reply, time.time()),
+        )
+        assistant_rowid = int(assistant_cursor.lastrowid)
+        variant = save_response_variant(db, chat_id, session_id, user_text, reply, user_rowid=last_user_rowid, commit=False)
+        if operation_id is not None:
+            set_operation_phase(db, operation_id, "regen", "local_committed")
+        db.commit()
+        return assistant_rowid, variant
+
+    assistant_rowid, variant = run_write_txn(db, persist_regeneration)
 
     _delete_stored_telegram_ids(token, chat_id, old_message_ids)
     retain_session_memory(db, chat_id, session, fields)
@@ -260,16 +273,19 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
     )
     _set_operation_payload(db, operation_id, {"old_message_ids": old_message_ids, "assistant_rowid": int(assistant_row[0])})
 
-    db.execute("UPDATE messages SET content=? WHERE rowid=?", (combined, assistant_row[0]))
-    user_row = next((row for row in reversed(rows) if row[1] == "user" and row[0] < assistant_row[0]), None)
-    if user_row:
-        db.execute(
-            "UPDATE response_variants SET response=? WHERE chat_id=? AND session_id=? AND user_rowid=? AND selected=1",
-            (combined, chat_id, session_id, int(user_row[0])),
-        )
-    if operation_id is not None:
-        set_operation_phase(db, operation_id, "continue", "local_committed")
-    db.commit()
+    def persist_continuation():
+        db.execute("UPDATE messages SET content=? WHERE rowid=?", (combined, assistant_row[0]))
+        user_row = next((row for row in reversed(rows) if row[1] == "user" and row[0] < assistant_row[0]), None)
+        if user_row:
+            db.execute(
+                "UPDATE response_variants SET response=? WHERE chat_id=? AND session_id=? AND user_rowid=? AND selected=1",
+                (combined, chat_id, session_id, int(user_row[0])),
+            )
+        if operation_id is not None:
+            set_operation_phase(db, operation_id, "continue", "local_committed")
+        db.commit()
+
+    run_write_txn(db, persist_continuation)
 
     _prepare_delivery_recovery(db, token, chat_id, assistant_row[0], operation_id)
     retain_session_memory(db, chat_id, session, fields)
@@ -317,20 +333,24 @@ def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_ro
     old_message_ids = _outgoing_ids_after(db, chat_id, session_id, int(user_rowid))
     _set_operation_payload(db, operation_id, {"old_message_ids": old_message_ids, "user_rowid": int(user_rowid)})
 
-    # Keep summary invalidation, transcript mutation, selected variant, and the
-    # local_committed marker in one SQLite transaction.
-    db.execute("DELETE FROM session_summaries WHERE chat_id=? AND session_id=?", (chat_id, session_id))
-    db.execute("UPDATE messages SET content=? WHERE rowid=?", (new_text, int(user_rowid)))
-    db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?", (chat_id, session_id, int(user_rowid)))
-    assistant_cursor = db.execute(
-        "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
-        (chat_id, session_id, "assistant", reply, time.time()),
-    )
-    assistant_rowid = int(assistant_cursor.lastrowid)
-    save_response_variant(db, chat_id, session_id, new_text, reply, user_rowid=int(user_rowid), commit=False)
-    if operation_id is not None:
-        set_operation_phase(db, operation_id, "edit", "local_committed")
-    db.commit()
+    def persist_edit():
+        # Keep summary invalidation, transcript mutation, selected variant, and
+        # the local_committed marker in one short SQLite transaction.
+        db.execute("DELETE FROM session_summaries WHERE chat_id=? AND session_id=?", (chat_id, session_id))
+        db.execute("UPDATE messages SET content=? WHERE rowid=?", (new_text, int(user_rowid)))
+        db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?", (chat_id, session_id, int(user_rowid)))
+        assistant_cursor = db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
+            (chat_id, session_id, "assistant", reply, time.time()),
+        )
+        assistant_rowid = int(assistant_cursor.lastrowid)
+        save_response_variant(db, chat_id, session_id, new_text, reply, user_rowid=int(user_rowid), commit=False)
+        if operation_id is not None:
+            set_operation_phase(db, operation_id, "edit", "local_committed")
+        db.commit()
+        return assistant_rowid
+
+    assistant_rowid = run_write_txn(db, persist_edit)
 
     _delete_stored_telegram_ids(token, chat_id, old_message_ids)
     retain_session_memory(db, chat_id, session, fields)

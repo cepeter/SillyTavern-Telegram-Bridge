@@ -74,9 +74,11 @@ def update_session(db: sqlite3.Connection, chat_id: str, session_id: str, operat
         return
     assignments = ", ".join(f"{key}=?" for key in values)
     params = list(values.values()) + [time.time(), chat_id, session_id]
-    db.execute(f"UPDATE sessions SET {assignments}, updated_at=? WHERE chat_id=? AND session_id=?", params)
-    record_operation(db, operation_id, operation_kind)
-    db.commit()
+    def write():
+        db.execute(f"UPDATE sessions SET {assignments}, updated_at=? WHERE chat_id=? AND session_id=?", params)
+        record_operation(db, operation_id, operation_kind)
+        db.commit()
+    run_write_txn(db, write)
 
 
 def create_session(db: sqlite3.Connection, chat_id: str, default_model: str, session_id: str | None = None, title: str = "New session") -> dict[str, str]:
@@ -86,9 +88,11 @@ def create_session(db: sqlite3.Connection, chat_id: str, default_model: str, ses
     row = (chat_id, session_id, title, DEFAULT_CHARACTER_FILE,
            get_meta(db, "model", default_model), _default_session_persona(db),
            _default_session_world(db), "", "", "auto")
-    db.execute(f"INSERT OR IGNORE INTO sessions({_SESSION_COLUMN_SQL},created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
-    set_meta(db, f"active_session:{chat_id}", session_id)
-    db.commit()
+    def write():
+        db.execute(f"INSERT OR IGNORE INTO sessions({_SESSION_COLUMN_SQL},created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (*row, now, now))
+        set_meta(db, f"active_session:{chat_id}", session_id)
+        db.commit()
+    run_write_txn(db, write)
     stored = db.execute(f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
     return _session_row_dict(stored or row)
 
