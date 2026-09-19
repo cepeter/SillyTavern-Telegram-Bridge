@@ -294,6 +294,25 @@ class DirectorGoalsTests(unittest.TestCase):
         self.assertIn("unopened letter", context)
         self.assertIn("Never mention", context)
 
+    def test_set_director_goal_joins_outer_transaction(self):
+        self.db.execute("BEGIN")
+        rt.set_director_goal(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "Hold tension.",
+        )
+        self.assertTrue(self.db.in_transaction)
+        self.db.rollback()
+        self.assertEqual(
+            rt.get_director_goal(
+                self.db,
+                self.chat_id,
+                self.session["session_id"],
+            ),
+            "",
+        )
+
     def test_clearing_goal_removes_it(self):
         rt.set_director_goal(
             self.db,
