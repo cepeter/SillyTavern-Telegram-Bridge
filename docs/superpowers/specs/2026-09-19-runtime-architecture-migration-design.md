@@ -271,7 +271,7 @@ injected service/adapter
 remove compatibility layer
 ```
 
-The compatibility registry introduced in The merged extension-registry refactor is intentionally temporary. It provides deterministic extension boundaries while the composition root does not yet exist.
+The compatibility registry introduced in the merged extension-registry refactor is intentionally temporary. It provides deterministic extension boundaries while the composition root does not yet exist.
 
 ## 9. Migration invariants
 
