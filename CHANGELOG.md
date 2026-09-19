@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Reduced SQLite contention by keeping RAG embedding work outside write transactions, reusing the realtime sync worker connection, and using a smaller page-cache budget for lightweight worker connections.
+
 ## [0.2.017] - 2026-09-19
 
 ### Added
