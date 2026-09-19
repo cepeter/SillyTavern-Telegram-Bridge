@@ -3,7 +3,7 @@
 Date: 2026-09-19
 Status: Proposed for implementation after review
 Repository: `punzer4-code/SillyTavern-Telegram-Bridge`
-Target implementation: PR #28
+Target implementation: Phase 1 implementation PR (number assigned when opened)
 Parent architecture: `docs/superpowers/specs/2026-09-19-runtime-architecture-migration-design.md`
 Migration phase: Phase 1
 
@@ -23,7 +23,7 @@ This is an incremental migration step toward explicit service composition and de
 
 ## 2. Goals
 
-PR #28 must:
+Phase 1 implementation must:
 
 - remove the remaining public callable overrides from `director_goals.py`
 - keep one canonical Group Director execution path in `groups.py`
@@ -38,7 +38,7 @@ PR #28 must:
 
 ## 3. Non-goals
 
-PR #28 will not:
+Phase 1 implementation will not:
 
 - redesign Director prompting for quality
 - change Group modes or user-visible commands
@@ -140,7 +140,7 @@ Director policy is different. A second provider would immediately create conflic
 
 There is currently one policy consumer: Director Goals.
 
-Therefore PR #28 uses exactly one named Director customization provider. A second registration is rejected.
+Therefore Phase 1 implementation uses exactly one named Director customization provider. A second registration is rejected.
 
 If a real second policy use case appears later, composition semantics can be designed from concrete requirements instead of guessed now.
 
@@ -180,7 +180,7 @@ This boundary is deliberate. Policy may customize Director behavior, but Groups 
 
 ## 8. Core Director ownership
 
-After PR #28, `groups.py` owns exactly one `group_director_plan()`.
+After Phase 1 implementation, `groups.py` owns exactly one `group_director_plan()`.
 
 Its flow is:
 
@@ -297,7 +297,7 @@ The base Director planner currently uses `max_tokens=180`, while Director Goals 
 
 To preserve behavior without creating a generic settings injection surface, the policy may provide only an optional `max_tokens` override. For Director Goals this is `220`.
 
-Temperature, reasoning budget, stop sequences, and all other generation settings remain owned by `groups.py` in PR #28.
+Temperature, reasoning budget, stop sequences, and all other generation settings remain owned by `groups.py` in Phase 1 implementation.
 
 If a future policy has a demonstrated need to customize another setting, the interface can be extended explicitly at that time.
 
@@ -449,7 +449,7 @@ director_service = GroupDirectorService(
 
 At that point the global registry lookup disappears.
 
-PR #28 should choose names and responsibilities that map cleanly to that future interface.
+Phase 1 implementation should choose names and responsibilities that map cleanly to that future interface.
 
 The long-term architecture remains:
 
@@ -463,7 +463,7 @@ Domain policies / ports
 Infrastructure adapters
 ```
 
-PR #28 establishes the policy boundary but does not introduce the full service layer yet.
+Phase 1 implementation establishes the policy boundary but does not introduce the full service layer yet.
 
 ## 15. Files expected to change
 
@@ -518,7 +518,7 @@ Implementation is not complete unless tests demonstrate all of the following.
 
 ## 17. Acceptance criteria
 
-PR #28 is acceptable when:
+Phase 1 implementation is acceptable when:
 
 1. `director_goals.py` contains no captured `_ORIGINAL_GROUP_DIRECTOR_PLAN_GOALS`
 2. `director_goals.py` contains no captured `_ORIGINAL_GROUP_PROMPT_CONTEXT_GOALS`
@@ -549,7 +549,7 @@ The selected design deliberately creates a boundary that can later be injected i
 
 ## 19. Follow-on architecture sequence
 
-After PR #28, the recommended sequence is:
+After Phase 1 implementation, the recommended sequence is:
 
 ### PR #29 — Versioned schema migrations
 
