@@ -209,6 +209,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.opened = 0
         self.sent = []
         self.global_sent = []
+        self.memory_service = object()
 
         config = BridgeConfig(
             bot_token="injected-token",
@@ -231,6 +232,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 register_backlog_dispatcher=lambda _callback: None,
                 begin_shutdown=lambda: None,
             ),
+            memory=self.memory_service,
         )
 
     def tearDown(self):
@@ -310,6 +312,29 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertEqual(captured["api_key"], "injected-key")
         self.assertEqual(captured["model"], "injected::model")
         self.assertIs(captured["kwargs"]["services"], self.services)
+
+    def test_edit_worker_propagates_injected_memory_service(self):
+        captured = {}
+
+        def fake_edit(*args, **kwargs):
+            captured.update(kwargs)
+
+        with patch.object(
+            rt,
+            "edit_telegram_user_message",
+            side_effect=fake_edit,
+        ):
+            rt.process_edit_job(
+                self.services,
+                "chat",
+                77,
+                "edited text",
+            )
+
+        self.assertIs(
+            captured["memory_service"],
+            self.memory_service,
+        )
 
     def test_retry_propagates_services_to_nested_message(self):
         captured = {}
