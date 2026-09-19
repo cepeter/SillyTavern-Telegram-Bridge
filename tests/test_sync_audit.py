@@ -205,5 +205,34 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
 
 
+    def test_sync_startup_cleanup_removes_orphan_without_structural_ddl(self):
+        self.db.execute(
+            "INSERT INTO sync_bindings(chat_id,session_id,sync_id) "
+            "VALUES('orphan-chat','missing-session','stb-orphan')"
+        )
+        self.db.commit()
+
+        traced = []
+        self.db.set_trace_callback(traced.append)
+        try:
+            rt.initialize_database_schema(self.db)
+        finally:
+            self.db.set_trace_callback(None)
+
+        self.assertIsNone(
+            self.db.execute(
+                "SELECT 1 FROM sync_bindings "
+                "WHERE chat_id='orphan-chat' AND session_id='missing-session'"
+            ).fetchone()
+        )
+        structural = [
+            sql for sql in traced
+            if sql.lstrip().upper().startswith(
+                ("CREATE TABLE", "CREATE INDEX", "CREATE TRIGGER", "ALTER TABLE")
+            )
+        ]
+        self.assertEqual(structural, [], structural)
+
+
 if __name__ == "__main__":
     unittest.main()
