@@ -20,11 +20,18 @@ def send_group_menu(db: sqlite3.Connection, token: str, chat_id: str, session: d
     if state.get("forced_speaker") in state["members"]:
         current = group_member_labels([state["forced_speaker"]])[0]
     user_turn = "open" if state["mode"] == "manual" and not state.get("turn_user_id") else "assigned" if state["mode"] == "manual" else "not used"
-    rows = [
-        [{"text": "➕ Add character", "callback_data": "group:add"}, {"text": "➖ Remove character", "callback_data": "group:remove"}],
-        [{"text": "🎙️ Choose speaker", "callback_data": "group:speak"}, {"text": "⚙️ Mode", "callback_data": "group:mode"}],
+    rows = []
+    for filename, label in zip(state["members"], labels):
+        callback_token = dynamic_callback_token("group_character", filename, chat_id)
+        rows.append([
+            {"text": "🎙️ " + panel_label(label), "callback_data": "groupchars:speak:" + callback_token},
+            {"text": "🗑️", "callback_data": "groupremove:" + callback_token},
+        ])
+    rows.extend([
+        [{"text": "➕ Add character", "callback_data": "group:add"}, {"text": "🎙️ Choose speaker", "callback_data": "group:speak"}],
+        [{"text": "⚙️ Mode", "callback_data": "group:mode"}],
         [{"text": "✅ Enable", "callback_data": "group:on"}, {"text": "🚫 Disable", "callback_data": "group:off"}],
-    ]
+    ])
     if state["mode"] == "manual":
         rows.append([{"text": "🙋 Claim turn", "callback_data": "group:claim"}, {"text": "➡️ Pass user turn", "callback_data": "group:pass"}])
     if parse_topic_scope(chat_id)[1] is not None:
@@ -184,6 +191,12 @@ def send_group_mode_menu(db: sqlite3.Connection, token: str, chat_id: str, sessi
     send_panel_message(token, chat_id, f"Current group mode: {state['mode']}\nChoose a mode:", {"inline_keyboard": rows}, message_id)
 
 
+def send_group_remove_confirm(token: str, chat_id: str, filename: str, message_id: int | None = None) -> None:
+    callback_token = dynamic_callback_token("group_character", filename, chat_id)
+    markup = {"inline_keyboard": [[{"text": "✅ Remove from group", "callback_data": "groupremoveconfirm:" + callback_token}, {"text": "❌ Cancel", "callback_data": "group:menu"}]]}
+    send_panel_message(token, chat_id, f"Remove '{Path(filename).stem}' from this group? The native character card will not be deleted.", markup, message_id)
+
+
 def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict, operation_id: int | str | None = None, sender_id: str = "") -> None:
     message_id = message.get("message_id")
     if data == "group:new_session":
@@ -207,12 +220,26 @@ def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str
         send_group_menu(db, token, chat_id, session, message_id)
     elif data == "group:close":
         remove_inline_keyboard(token, {"message": message})
+    elif data.startswith("groupremoveconfirm:"):
+        filename = resolve_dynamic_callback_token(data.split(":", 1)[1], "group_character", chat_id) or ""
+        state = group_state(db, chat_id, session["session_id"])
+        if filename in state["members"]:
+            handle_group_command(db, token, chat_id, session, f"/group remove {filename}", operation_id)
+        send_group_menu(db, token, chat_id, session, message_id)
+    elif data.startswith("groupremove:"):
+        filename = resolve_dynamic_callback_token(data.split(":", 1)[1], "group_character", chat_id) or ""
+        if filename in group_state(db, chat_id, session["session_id"])["members"]:
+            send_group_remove_confirm(token, chat_id, filename, message_id)
+        else:
+            send_group_menu(db, token, chat_id, session, message_id)
     elif data.startswith("groupchars:page:"):
         _, _, action, page = data.split(":", 3)
         send_group_character_menu(db, token, chat_id, session, action, message_id, int(page))
     elif data.startswith("groupchars:"):
-        _, action, filename = data.split(":", 2)
-        handle_group_command(db, token, chat_id, session, f"/group {action} {filename}", operation_id)
+        _, action, callback_token = data.split(":", 2)
+        filename = resolve_dynamic_callback_token(callback_token, "group_character", chat_id) or ""
+        if filename:
+            handle_group_command(db, token, chat_id, session, f"/group {action} {filename}", operation_id)
         send_group_menu(db, token, chat_id, session, message_id)
     elif data.startswith("groupmode:"):
         handle_group_command(db, token, chat_id, session, f"/group mode {data.split(':', 1)[1]}", operation_id)

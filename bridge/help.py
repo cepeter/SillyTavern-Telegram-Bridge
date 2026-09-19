@@ -168,7 +168,13 @@ def send_memory_menu(token: str, chat_id: str, db: sqlite3.Connection, message_i
 def send_preset_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
     options = preset_names(db, chat_id)
     page_options, current_page, total_pages = panel_page(options, page)
-    rows = [[{"text": panel_label(name), "callback_data": "enum:presetuse:" + dynamic_callback_token("preset", name, chat_id)}] for name in page_options]
+    rows = []
+    for name in page_options:
+        callback_token = dynamic_callback_token("preset", name, chat_id)
+        rows.append([
+            {"text": "📋 " + panel_label(name), "callback_data": "enum:presetuse:" + callback_token},
+            {"text": "🗑️", "callback_data": "enum:presetdel:" + callback_token},
+        ])
     if total_pages > 1:
         navigation = []
         if current_page > 0:
@@ -177,9 +183,14 @@ def send_preset_menu(token: str, chat_id: str, db: sqlite3.Connection, message_i
             navigation.append({"text": "Next ➡️", "callback_data": f"enum:presetpage:{current_page + 1}"})
         rows.append(navigation)
     rows.append([{"text": "💾 Save preset", "callback_data": "enum:preset:save"}])
-    rows.append([{"text": "🗑️ Delete preset", "callback_data": "enum:presetdelete"}])
     rows.append([{"text": "❌ Close", "callback_data": "enum:close"}])
     send_panel_message(token, chat_id, f"Choose a preset to apply (page {current_page + 1}/{total_pages}). Use Save preset for the two-step name input." , {"inline_keyboard": rows}, message_id)
+
+
+def send_preset_delete_confirm(token: str, chat_id: str, name: str, message_id: int | None = None) -> None:
+    callback_token = dynamic_callback_token("preset", name, chat_id)
+    markup = {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "enum:presetdelconfirm:" + callback_token}, {"text": "❌ Cancel", "callback_data": "enum:preset:back"}]]}
+    send_panel_message(token, chat_id, f"Delete preset '{panel_label(name)}'? This cannot be undone.", markup, message_id)
 
 
 def send_preset_delete_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
@@ -197,12 +208,46 @@ def send_preset_delete_menu(token: str, chat_id: str, db: sqlite3.Connection, me
     send_panel_message(token, chat_id, "Choose a preset to delete:", {"inline_keyboard": rows}, message_id)
 
 
-def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
+def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
     mode = rag_mode(db, chat_id)
     docs = data_bank_documents(db, chat_id)
     total_chunks, indexed_chunks = rag_embedding_coverage(db, chat_id)
-    rows = [[{"text": ("✅ " if mode == "on" else "") + "RAG on", "callback_data": "enum:rag:on"}, {"text": ("✅ " if mode == "off" else "") + "RAG off", "callback_data": "enum:rag:off"}], [{"text": "List documents", "callback_data": "enum:rag:list"}, {"text": "🔎 Search", "callback_data": "enum:rag:search"}], [{"text": "Document versions", "callback_data": "enum:rag:versions"}], [{"text": "Remove document", "callback_data": "enum:rag:remove"}], [{"text": "Reindex embeddings", "callback_data": "enum:rag:reindex"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    send_panel_message(token, chat_id, f"Data Bank RAG: {mode}\nDocuments: {len(docs)}\nEmbedding coverage: {indexed_chunks}/{total_chunks} chunks", {"inline_keyboard": rows}, message_id)
+    options = []
+    seen = set()
+    for row in docs:
+        name = str(row[1])
+        if name not in seen:
+            seen.add(name)
+            options.append(name)
+    page_options, current_page, total_pages = panel_page(options, page)
+    rows = []
+    for name in page_options:
+        callback_token = dynamic_callback_token("rag_document", name, chat_id)
+        rows.append([
+            {"text": "📄 " + panel_label(name), "callback_data": "enum:ragversions:" + callback_token},
+            {"text": "🗑️", "callback_data": "enum:ragremove:" + callback_token},
+        ])
+    if total_pages > 1:
+        navigation = []
+        if current_page > 0:
+            navigation.append({"text": "⬅️ Previous", "callback_data": f"enum:ragpage:{current_page - 1}"})
+        if current_page < total_pages - 1:
+            navigation.append({"text": "Next ➡️", "callback_data": f"enum:ragpage:{current_page + 1}"})
+        rows.append(navigation)
+    rows.append([{"text": ("✅ " if mode == "on" else "") + "RAG on", "callback_data": "enum:rag:on"}])
+    rows.append([{"text": ("✅ " if mode == "off" else "") + "RAG off", "callback_data": "enum:rag:off"}])
+    rows.extend([
+        [{"text": "🔎 Search", "callback_data": "enum:rag:search"}, {"text": "📚 Versions", "callback_data": "enum:rag:versions"}],
+        [{"text": "🔄 Reindex embeddings", "callback_data": "enum:rag:reindex"}],
+        [{"text": "❌ Close", "callback_data": "enum:close"}],
+    ])
+    send_panel_message(token, chat_id, f"Data Bank RAG: {mode}\nDocuments: {len(options)}\nEmbedding coverage: {indexed_chunks}/{total_chunks}", {"inline_keyboard": rows}, message_id)
+
+
+def send_databank_remove_confirm(token: str, chat_id: str, filename: str, message_id: int | None = None) -> None:
+    callback_token = dynamic_callback_token("rag_document", filename, chat_id)
+    markup = {"inline_keyboard": [[{"text": "✅ Confirm remove", "callback_data": "enum:ragremoveconfirm:" + callback_token}, {"text": "❌ Cancel", "callback_data": "enum:rag:back"}]]}
+    send_panel_message(token, chat_id, f"Remove all Data Bank versions named '{panel_label(filename)}'? Indexed chunks will also be removed. This cannot be undone.", markup, message_id)
 
 
 def send_databank_versions_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, filename: str | None = None, page: int = 0) -> None:
@@ -361,9 +406,16 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
     elif data.startswith("enum:presetuse:"):
         apply_preset_action(db, token, chat_id, session["session_id"], "use", resolve_dynamic_callback_token(parts[2], "preset", chat_id) or "")
         send_preset_menu(token, chat_id, db, message_id)
+    elif data.startswith("enum:presetdelconfirm:"):
+        name = resolve_dynamic_callback_token(parts[2], "preset", chat_id) or ""
+        apply_preset_action(db, token, chat_id, session["session_id"], "delete", name)
+        send_preset_menu(token, chat_id, db, message_id)
     elif data.startswith("enum:presetdel:"):
-        apply_preset_action(db, token, chat_id, session["session_id"], "delete", resolve_dynamic_callback_token(parts[2], "preset", chat_id) or "")
-        send_preset_delete_menu(token, chat_id, db, message_id)
+        name = resolve_dynamic_callback_token(parts[2], "preset", chat_id) or ""
+        if name:
+            send_preset_delete_confirm(token, chat_id, name, message_id)
+        else:
+            send_preset_menu(token, chat_id, db, message_id)
     elif data == "enum:rag:search":
         start_text_action_input(db, token, chat_id, session["session_id"], "databank_search", "Send a query to search the active Data Bank.", {"message": message})
     elif data == "enum:rag:versions":
@@ -389,9 +441,19 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         send_databank_menu(token, chat_id, db, message_id)
     elif data.startswith("enum:ragremovepage:"):
         send_databank_remove_menu(token, chat_id, db, message_id, int(parts[2]))
-    elif data.startswith("enum:ragremove:"):
-        handle_data_bank_command(db, token, chat_id, "/databank remove " + (resolve_dynamic_callback_token(parts[2], "rag_document", chat_id) or "") + " confirm")
+    elif data.startswith("enum:ragpage:"):
+        send_databank_menu(token, chat_id, db, message_id, int(parts[2]))
+    elif data.startswith("enum:ragremoveconfirm:"):
+        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id) or ""
+        if filename:
+            handle_data_bank_command(db, token, chat_id, "/databank remove " + filename + " confirm")
         send_databank_menu(token, chat_id, db, message_id)
+    elif data.startswith("enum:ragremove:"):
+        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id) or ""
+        if filename:
+            send_databank_remove_confirm(token, chat_id, filename, message_id)
+        else:
+            send_databank_menu(token, chat_id, db, message_id)
     elif data == "enum:rag:reindex":
         total, indexed = reindex_data_bank_documents(db, chat_id)
         send_text(token, chat_id, f"Data Bank reindex complete: {indexed}/{total} chunks indexed.")
