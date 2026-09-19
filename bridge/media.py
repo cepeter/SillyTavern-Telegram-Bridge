@@ -129,13 +129,29 @@ def queue_user_quote_tts(token: str, chat_id: str, text: str, db: sqlite3.Connec
     return True
 
 
+def persist_assistant_delivery_ids(db: sqlite3.Connection, assistant_rowid: int, message_ids: list[int]) -> bool:
+    """Persist Telegram delivery metadata without misreporting a sent reply as generation failure."""
+    try:
+        db.execute("UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid))
+        db.commit()
+        return True
+    except sqlite3.OperationalError as exc:
+        if "locked" not in str(exc).casefold() and "busy" not in str(exc).casefold():
+            raise
+        try:
+            db.rollback()
+        except sqlite3.Error:
+            logging.debug("Could not rollback locked delivery metadata transaction", exc_info=True)
+        logging.warning("Reply delivered but Telegram message IDs could not be recorded: %s", exc)
+        return False
+
+
 def send_reply(token: str, chat_id: str, text: str, db: sqlite3.Connection | None = None, session_id: str | None = None, assistant_rowid: int | None = None) -> None:
     if db is not None and session_id:
         deliver_expression(token, chat_id, text, db, session_id)
     message_ids = send_text(token, chat_id, text)
     if db is not None and assistant_rowid is not None:
-        db.execute("UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid))
-        db.commit()
+        persist_assistant_delivery_ids(db, assistant_rowid, message_ids)
     if db is not None and session_id and get_meta(db, f"voice_mode:{chat_id}", "off") == "tts":
         speech = quoted_speech_from_reply(text)
         if speech:

@@ -99,6 +99,22 @@ class SqliteContentionTests(unittest.TestCase):
         self.assertEqual(result, {"message_id": 901})
         self.assertEqual(len(calls), 3)
 
+    def test_delivery_metadata_lock_does_not_turn_sent_reply_into_backend_failure(self):
+        class LockedDb:
+            def __init__(self):
+                self.rolled_back = False
+
+            def execute(self, *_args):
+                raise rt.sqlite3.OperationalError("database is locked")
+
+            def rollback(self):
+                self.rolled_back = True
+
+        db = LockedDb()
+        persisted = rt.persist_assistant_delivery_ids(db, 42, [900])
+        self.assertFalse(persisted)
+        self.assertTrue(db.rolled_back)
+
     def test_enqueue_job_does_not_retry_after_full_timeout(self):
         """Regression: enqueue_job should not catch every OperationalError and retry after 30s busy timeout."""
         import inspect
