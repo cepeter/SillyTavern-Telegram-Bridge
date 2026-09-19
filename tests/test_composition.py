@@ -1,8 +1,10 @@
 from dataclasses import FrozenInstanceError
+import inspect
 from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import bridge.runtime as rt
 
@@ -184,6 +186,166 @@ class DatabaseFactoryPathTests(unittest.TestCase):
         db = rt.db_connect(explicit)
         db.close()
         self.assertEqual(rt.DB_FILE, original)
+
+
+class WorkerInjectionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tmp.name) / "workers.sqlite3"
+        self.db = rt.db_connect(self.db_path)
+        self.db.close()
+        self.opened = 0
+        self.sent = []
+        self.global_sent = []
+
+        config = BridgeConfig(
+            bot_token="injected-token",
+            api_key="injected-key",
+            default_model="injected::model",
+            default_character_file="mira.png",
+            card_file=Path(self.tmp.name) / "mira.png",
+            db_file=self.db_path,
+            allowed_users=frozenset({"100"}),
+        )
+        self.services = BridgeServices(
+            config=config,
+            db_factory=self._db_factory,
+            telegram=TelegramRuntime(
+                request=lambda *_args, **_kwargs: {},
+                send_text=lambda *args, **_kwargs: self.sent.append(args),
+            ),
+            background=BackgroundRuntime(
+                submit_chat=lambda *_args, **_kwargs: True,
+                register_backlog_dispatcher=lambda _callback: None,
+                begin_shutdown=lambda: None,
+            ),
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _db_factory(self):
+        self.opened += 1
+        return rt.db_connect(self.db_path)
+
+    def test_all_worker_signatures_receive_services_not_startup_bundle(self):
+        expectations = {
+            rt.process_message_job: (
+                "services", "fields", "chat_id", "text", "message_id",
+                "queued_session_id", "model_override", "job_id",
+            ),
+            rt.process_image_job: (
+                "services", "chat_id", "file_id", "caption", "file_size",
+                "message_id", "queued_session_id", "model_override", "job_id",
+            ),
+            rt.process_callback_job: (
+                "services", "chat_id", "callback", "job_id",
+            ),
+            rt.process_edit_job: (
+                "services", "chat_id", "message_id", "text",
+                "model_override", "job_id",
+            ),
+            rt.process_voice_job: (
+                "services", "fields", "chat_id", "voice", "message_id",
+                "queued_session_id", "model_override", "job_id",
+            ),
+            rt.process_document_job: (
+                "services", "chat_id", "document", "message_id",
+                "model_override", "job_id",
+            ),
+        }
+        for function, expected in expectations.items():
+            with self.subTest(function=function.__name__):
+                self.assertEqual(
+                    tuple(inspect.signature(function).parameters),
+                    expected,
+                )
+
+    def test_message_worker_uses_injected_db_and_config(self):
+        captured = {}
+
+        def fake_process_message(
+            db, token, api_key, model, fields, chat_id, text, message_id,
+            **kwargs,
+        ):
+            captured.update(
+                db=db,
+                token=token,
+                api_key=api_key,
+                model=model,
+                fields=fields,
+                chat_id=chat_id,
+                text=text,
+                message_id=message_id,
+                kwargs=kwargs,
+            )
+
+        with patch.object(
+            rt, "committed_assistant_for_message", return_value=None
+        ), patch.object(
+            rt, "process_message", side_effect=fake_process_message
+        ):
+            rt.process_message_job(
+                self.services,
+                {"name": "Mira"},
+                "chat",
+                "hello",
+                10,
+            )
+
+        self.assertEqual(self.opened, 1)
+        self.assertEqual(captured["token"], "injected-token")
+        self.assertEqual(captured["api_key"], "injected-key")
+        self.assertEqual(captured["model"], "injected::model")
+
+    def test_recovered_model_override_wins_over_config_default(self):
+        captured = {}
+
+        with patch.object(
+            rt, "committed_assistant_for_message", return_value=None
+        ), patch.object(
+            rt,
+            "process_message",
+            side_effect=lambda _db, _token, _key, model, *_args, **_kwargs:
+                captured.setdefault("model", model),
+        ):
+            rt.process_message_job(
+                self.services,
+                {"name": "Mira"},
+                "chat",
+                "hello",
+                11,
+                None,
+                "stored::model",
+            )
+
+        self.assertEqual(captured["model"], "stored::model")
+
+    def test_callback_failure_uses_injected_send_text(self):
+        with patch.object(
+            rt,
+            "process_callback",
+            side_effect=RuntimeError("boom"),
+        ), patch.object(
+            rt,
+            "send_text",
+            side_effect=lambda *args, **_kwargs: self.global_sent.append(args),
+        ):
+            rt.process_callback_job(
+                self.services,
+                "chat",
+                {"id": "callback"},
+            )
+
+        self.assertEqual(
+            self.sent,
+            [(
+                "injected-token",
+                "chat",
+                "Callback processing failed; try the command again.",
+            )],
+        )
+        self.assertEqual(self.global_sent, [])
 
 
 if __name__ == "__main__":
