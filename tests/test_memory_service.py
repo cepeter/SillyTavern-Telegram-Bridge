@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 import sqlite3
 import tempfile
 import unittest
@@ -307,6 +308,185 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(calls[0][6], {})
         self.assertEqual(calls[1][0], "retain")
         self.assertEqual(calls[1][2:], ("chat", "memory-message", "Mira"))
+
+    def test_edited_turn_recovery_uses_injected_memory_service(self):
+        now = rt.time.time()
+        user_cursor = self.db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
+            "VALUES(?,?,?,?,?)",
+            ("chat", self.session["session_id"], "user", "old text", now),
+        )
+        user_rowid = int(user_cursor.lastrowid)
+        self.db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
+            "VALUES(?,?,?,?,?)",
+            ("chat", self.session["session_id"], "assistant", "old reply", now + 0.001),
+        )
+        self.db.commit()
+        calls = []
+        captured = {}
+
+        class FakeMemory:
+            def prompt_context(
+                self,
+                db,
+                chat_id,
+                session,
+                fields,
+                query,
+                **kwargs,
+            ):
+                calls.append(("context", kwargs))
+                return MemoryPromptContext(
+                    recall="recovery recall",
+                    summary="recovery summary",
+                )
+
+            def retain(self, db, chat_id, session, fields):
+                calls.append(("retain", chat_id, session["session_id"]))
+
+        def legacy_called(*_args, **_kwargs):
+            raise AssertionError("legacy memory global must not run")
+
+        def build_messages(
+            session,
+            fields,
+            text,
+            history_rows,
+            **kwargs,
+        ):
+            captured.update(kwargs)
+            return [{"role": "user", "content": text}]
+
+        with patch.object(
+            rt,
+            "recall_memory_context",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "get_session_summary",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "session_summary_for_prompt",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "retain_session_memory",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "rag_retrieval_bundle",
+            return_value={},
+        ), patch.object(
+            rt,
+            "rag_context_for_prompt",
+            return_value="",
+        ), patch.object(
+            rt,
+            "build_chat_messages",
+            side_effect=build_messages,
+        ), patch.object(
+            rt,
+            "_generate_rendered_reply",
+            return_value="new reply",
+        ), patch.object(
+            rt,
+            "_delete_stored_telegram_ids",
+        ), patch.object(
+            rt,
+            "save_response_variant",
+        ), patch.object(
+            rt,
+            "send_reply",
+        ):
+            rt.regenerate_edited_turn(
+                self.db,
+                "token",
+                "key",
+                self.session,
+                self.fields,
+                "chat",
+                user_rowid,
+                "new text",
+                memory_service=FakeMemory(),
+            )
+
+        self.assertEqual(
+            calls[0],
+            ("context", {"edited_user_rowid": user_rowid}),
+        )
+        self.assertEqual(captured["memory_context"], "recovery recall")
+        self.assertEqual(captured["session_summary"], "recovery summary")
+        self.assertEqual(
+            calls[1],
+            ("retain", "chat", self.session["session_id"]),
+        )
+
+    def test_regen_command_propagates_injected_memory_service(self):
+        memory = object()
+        captured = {}
+
+        def fake_regen(*args, **kwargs):
+            captured.update(kwargs)
+
+        with patch.object(
+            rt,
+            "_dispatch_extension_command_routes",
+            return_value=False,
+        ), patch.object(
+            rt,
+            "regenerate_last",
+            side_effect=fake_regen,
+        ):
+            handled = rt.handle_command_route(
+                self.db,
+                "token",
+                "key",
+                "provider::model",
+                self.fields,
+                "chat",
+                "/regen",
+                "/regen",
+                self.session,
+                self.session["session_id"],
+                "provider::model",
+                "",
+                "User",
+                services=SimpleNamespace(memory=memory),
+            )
+
+        self.assertTrue(handled)
+        self.assertIs(captured["memory_service"], memory)
+
+    def test_pending_input_receives_injected_memory_service(self):
+        memory = object()
+        captured = {}
+
+        def fake_pending(*args, **kwargs):
+            captured.update(kwargs)
+            return True
+
+        with patch.object(
+            rt,
+            "handle_pending_input",
+            side_effect=fake_pending,
+        ):
+            rt.process_message(
+                self.db,
+                "token",
+                "key",
+                "provider::model",
+                self.fields,
+                "chat",
+                "replacement text",
+                services=SimpleNamespace(
+                    memory=memory,
+                    group_director=None,
+                ),
+            )
+
+        self.assertIs(captured["memory_service"], memory)
 
 
 if __name__ == "__main__":
