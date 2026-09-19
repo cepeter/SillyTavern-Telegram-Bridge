@@ -48,20 +48,6 @@ def status_text(db, chat_id, session, fields, current_model, current_persona):
     )
 
 
-def send_status_menu(token, chat_id, db, session, fields, current_model, current_persona, message_id=None):
-    text = "Session status\n\n" + status_text(db, chat_id, session, fields, current_model, current_persona)
-    markup = {
-        "inline_keyboard": [
-            [{"text": "🎭 Character", "callback_data": "status:character"}, {"text": "🗂️ Session", "callback_data": "status:session"}],
-            [{"text": "⚙️ Generation", "callback_data": "status:generation"}, {"text": "🧠 Memory", "callback_data": "status:memory"}],
-            [{"text": "📚 Data Bank", "callback_data": "status:databank"}, {"text": "👥 Group", "callback_data": "status:group"}],
-            [{"text": "🔎 Prompt inspector", "callback_data": "prompt:menu"}],
-            [{"text": "❌ Close", "callback_data": "status:close"}],
-        ]
-    }
-    send_panel_message(token, chat_id, text, markup, message_id)
-
-
 def prompt_panel_text(db, chat_id, session, fields, section="overview"):
     if section == "budget":
         return (
@@ -98,39 +84,19 @@ def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, secti
     send_panel_message(token, chat_id, labels.get(section, labels["overview"]) + "\n\n" + prompt_panel_text(db, chat_id, session, fields, section), markup, message_id)
 
 
-def handle_status_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+def handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    """Handle legacy prompt and feature callbacks; status itself is text-only."""
     message_id = message.get("message_id")
-    if data == "status:close" or data == "prompt:close":
+    if data == "prompt:close":
         answer_callback(token, str(callback.get("id", "")), "Closed")
         close_panel_message(token, chat_id, callback)
         return True
-    if data == "status:back":
-        send_status_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or "", message_id)
-        return True
-    if data == "status:character":
-        send_character_menu(token, chat_id, session["character_file"], message_id)
-        return True
-    if data == "status:session":
-        send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, message_id)
-        return True
-    if data == "status:generation":
-        send_settings_menu(token, chat_id, db, session_id, message_id)
-        return True
-    if data == "status:memory":
-        send_memory_menu(token, chat_id, db, message_id)
-        return True
-    if data == "status:databank":
-        send_databank_menu(token, chat_id, db, message_id)
-        return True
-    if data == "status:group":
-        send_group_menu(db, token, chat_id, session, message_id)
-        return True
-    if data == "status:prompt" or data == "prompt:menu":
+    if data == "prompt:menu":
         send_prompt_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id)
         return True
     if data.startswith("prompt:"):
         if data == "prompt:status":
-            send_status_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or "", message_id)
+            send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or ""))
         elif data.rsplit(":", 1)[1] in {"budget", "memory", "group"}:
             send_prompt_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, data.rsplit(":", 1)[1])
         return True
@@ -194,7 +160,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
             answer_callback(token, str(callback.get("id", "")), "Closed")
             close_panel_message(token, chat_id, callback)
         elif action == "status":
-            send_status_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or "", message_id)
+            send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or ""))
         elif action == "refresh":
             send_typing(token, chat_id)
             refresh_scene_state_now(db, "", chat_id, session, str(card_fields_from_file(session["character_file"]).get("name") or "unknown"))

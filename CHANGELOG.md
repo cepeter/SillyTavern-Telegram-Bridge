@@ -4,6 +4,18 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.016] - 2026-09-19
+
+### Added
+
+- Added explicit duplicate and new-version notifications for uploaded character cards; changed cards are retained with content-hash filenames.
+
+### Changed
+
+- Made `/status` text-only with a formatted Telegram report and removed the obsolete status drilldown panel.
+- Externalized privacy-sensitive character, model, user-name, provider, and TTS defaults from source code into environment configuration.
+- Removed character and model identity details from startup logs.
+
 ## [0.2.015] - 2026-09-19
 
 ### Added

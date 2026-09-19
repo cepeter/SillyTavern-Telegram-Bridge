@@ -4,7 +4,7 @@
 [![Latest release](https://img.shields.io/github/v/release/cepeter/SillyTavern-Telegram-Bridge?display_name=tag)](https://github.com/cepeter/SillyTavern-Telegram-Bridge/releases/latest)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
-> **v0.2.015** · Talk to your SillyTavern characters from Telegram. That's the whole pitch.
+> **v0.2.016** · Talk to your SillyTavern characters from Telegram. That's the whole pitch.
 
 ---
 
@@ -315,7 +315,7 @@ prevents accidental changes.
 | Command | What it does |
 |---|---|
 | `/start` | Show the greeting when Persona, World Info, and System Prompt are enabled |
-| `/status` | Open read-only session status and drilldown panels |
+| `/status` | Show formatted read-only session status text |
 | `/new` | Create and activate a named isolated session |
 | `/reset` | Confirm an active-session reset and memory purge |
 | `/session` | Switch, create, or delete an inactive session |
