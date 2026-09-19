@@ -1,3 +1,5 @@
+from contextlib import contextmanager as _contextmanager
+
 _DB_WRITE_LOCK = globals().get("_DB_WRITE_LOCK") or threading.RLock()
 _WRITE_SQL_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
 
@@ -63,6 +65,24 @@ def run_write_txn(db: sqlite3.Connection, operation):
     del db
     with _DB_WRITE_LOCK:
         return operation()
+
+
+@_contextmanager
+def write_transaction(db: sqlite3.Connection):
+    """Own one short SQLite write transaction unless the caller already does."""
+    if db.in_transaction:
+        yield db
+        return
+
+    with _DB_WRITE_LOCK:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            yield db
+        except Exception:
+            db.rollback()
+            raise
+        else:
+            db.commit()
 
 
 def _apply_connection_pragmas(db: sqlite3.Connection, timeout: float = 30.0) -> None:
