@@ -1,7 +1,9 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
+import bridge.extension_registry as extension_registry
 import bridge.runtime as rt
 
 
@@ -112,6 +114,201 @@ class GroupDirectorTests(unittest.TestCase):
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(plan[2], "")
+
+    def test_director_without_policy_uses_main_model_and_base_token_budget(self):
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Hold the beat."}'
+
+        rt.generate_text = fake_generate
+        try:
+            with patch.object(
+                extension_registry,
+                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
+                None,
+            ):
+                plan = rt.group_director_plan(
+                    self.db,
+                    "key",
+                    "chat|topic:1",
+                    self.session,
+                    "Continue.",
+                )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(plan[0], "alice.png")
+        self.assertEqual(calls[0][0], "provider::main")
+        self.assertEqual(calls[0][2]["settings"]["max_tokens"], 180)
+
+    def test_director_applies_bounded_customization(self):
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Bob","direction":"Notice the door."}'
+
+        customization = extension_registry.DirectorCustomization(
+            model="utility::director",
+            hidden_instructions="Hidden scene objective: reveal the door slowly.",
+            max_tokens=220,
+            speaker_context="Hidden scene objective: reveal the door slowly.",
+        )
+
+        rt.generate_text = fake_generate
+        try:
+            with patch.object(
+                extension_registry,
+                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
+                ("test", lambda db, chat_id, session: customization),
+            ):
+                plan = rt.group_director_plan(
+                    self.db,
+                    "key",
+                    "chat|topic:1",
+                    self.session,
+                    "Look around.",
+                )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(plan[0], "bob.png")
+        self.assertEqual(calls[0][0], "utility::director")
+        self.assertEqual(calls[0][2]["settings"]["max_tokens"], 220)
+        joined = "\n".join(str(message["content"]) for message in calls[0][1])
+        self.assertIn("reveal the door slowly", joined)
+
+    def test_director_policy_failure_uses_ordinary_director_behavior(self):
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fail_policy(_db, _chat_id, _session):
+            raise RuntimeError("policy failed")
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Continue normally."}'
+
+        rt.generate_text = fake_generate
+        try:
+            with patch.object(
+                extension_registry,
+                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
+                ("broken", fail_policy),
+            ):
+                plan = rt.group_director_plan(
+                    self.db,
+                    "key",
+                    "chat|topic:1",
+                    self.session,
+                    "Continue.",
+                )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(plan[0], "alice.png")
+        self.assertEqual(calls[0][0], "provider::main")
+        self.assertEqual(calls[0][2]["settings"]["max_tokens"], 180)
+
+    def test_forced_speaker_bypasses_policy_and_generation(self):
+        state = rt.group_state(self.db, "chat|topic:1", self.session["session_id"])
+        state["forced_speaker"] = "bob.png"
+        rt.save_group_state(
+            self.db,
+            "chat|topic:1",
+            self.session["session_id"],
+            state,
+        )
+
+        old_safe = rt.safe_character_path
+        old_generate = rt.generate_text
+        policy_calls = []
+        generation_calls = []
+        rt.safe_character_path = lambda filename: Path(filename)
+
+        def policy(_db, _chat_id, _session):
+            policy_calls.append(True)
+            return None
+
+        def generate(*_args, **_kwargs):
+            generation_calls.append(True)
+            raise AssertionError("generation should not run")
+
+        rt.generate_text = generate
+        try:
+            with patch.object(
+                extension_registry,
+                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
+                ("test", policy),
+            ):
+                plan = rt.group_director_plan(
+                    self.db,
+                    "key",
+                    "chat|topic:1",
+                    self.session,
+                    "Continue.",
+                )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.generate_text = old_generate
+
+        self.assertEqual(plan[0], "bob.png")
+        self.assertEqual(policy_calls, [])
+        self.assertEqual(generation_calls, [])
+
+    def test_group_prompt_context_appends_director_policy_context(self):
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        customization = extension_registry.DirectorCustomization(
+            speaker_context="Hidden scene objective: keep the letter unopened."
+        )
+        try:
+            with patch.object(
+                extension_registry,
+                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
+                ("test", lambda db, chat_id, session: customization),
+            ):
+                context = rt.group_prompt_context(
+                    self.db,
+                    "chat|topic:1",
+                    self.session,
+                    "alice.png",
+                    "Keep the pace measured.",
+                )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+
+        self.assertIn("Invisible director guidance: Keep the pace measured.", context)
+        self.assertIn("keep the letter unopened", context)
 
 
 if __name__ == "__main__":
