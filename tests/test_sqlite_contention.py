@@ -115,7 +115,13 @@ class SqliteContentionTests(unittest.TestCase):
         self.assertFalse(persisted)
         self.assertTrue(db.rolled_back)
 
-    def test_finish_job_lock_is_nonfatal_after_successful_delivery(self):
+    def test_native_edit_post_commit_failure_is_not_treated_as_uncommitted(self):
+        operation_id = "edit-test"
+        self.assertTrue(rt.begin_operation(self.db, operation_id, "edit"))
+        rt.set_operation_phase(self.db, operation_id, "edit", "local_committed")
+        self.assertTrue(rt.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked")))
+        self.assertFalse(rt.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("Telegram sendMessage failed: Not Found")))
+
         class LockedDb:
             def __init__(self):
                 self.rolled_back = False

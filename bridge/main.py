@@ -150,6 +150,16 @@ def process_callback_job(token: str, chat_id: str, callback: dict, job_id: int |
             db.close()
 
 
+def native_edit_committed_after_failure(db: sqlite3.Connection, job_id: int | None, exc: BaseException) -> bool:
+    if job_id is None or "Telegram sendMessage failed" in str(exc):
+        return False
+    try:
+        return operation_phase(db, job_id) == "local_committed"
+    except sqlite3.OperationalError:
+        logging.warning("Could not inspect native edit operation %s after failure", job_id, exc_info=True)
+        return False
+
+
 def process_edit_job(token: str, api_key: str, chat_id: str, message_id: int, text: str, default_model: str, job_id: int | None = None) -> None:
     with chat_job_lock(chat_id):
         db = db_connect()
@@ -162,6 +172,11 @@ def process_edit_job(token: str, api_key: str, chat_id: str, message_id: int, te
                 finish_job(db, job_id, "done")
         except Exception as exc:
             logging.error("Background native edit failed: %s", exc, exc_info=True)
+            if native_edit_committed_after_failure(db, job_id, exc):
+                logging.warning("Native edit %s committed locally; suppressing rollback fallback", job_id)
+                if job_id is not None:
+                    finish_job(db, job_id, "done")
+                return
             if job_id is not None:
                 finish_job(db, job_id, "failed", str(exc))
             send_text(token, chat_id, "Native message edit failed; the previous branch was preserved.")
