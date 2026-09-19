@@ -5,17 +5,17 @@ into the roleplay transcript; they influence the invisible speaker-selection
 call and the bounded group speaker prompt only while director mode is active.
 """
 
-import logging
 import re
 import time
 
-from bridge.extension_registry import register_command_route as _register_command_route
+from bridge.extension_registry import (
+    DirectorCustomization as _DirectorCustomization,
+    register_command_route as _register_command_route,
+    register_director_customization_provider as _register_director_customization_provider,
+)
 
 
 _DIRECTOR_GOAL_MAX_CHARS = 1200
-
-_ORIGINAL_GROUP_DIRECTOR_PLAN_GOALS = group_director_plan
-_ORIGINAL_GROUP_PROMPT_CONTEXT_GOALS = group_prompt_context
 
 
 def ensure_director_goal_schema(db: sqlite3.Connection) -> None:
@@ -72,113 +72,35 @@ def set_director_goal(
     return value
 
 
-def group_director_plan(
-    db: sqlite3.Connection,
-    api_key: str,
-    chat_id: str,
-    session: dict[str, str],
-    user_text: str,
-) -> tuple[str, dict[str, object], str] | None:
-    state = group_state(db, chat_id, session["session_id"])
-    members = [name for name in state["members"] if safe_character_path(name)]
-    if not state["enabled"] or state.get("mode") != "director" or len(members) < 2:
-        return None
-    forced = str(state.get("forced_speaker") or "")
-    if forced in members:
-        return forced, state, ""
-
-    labels = group_member_labels(members)
-    recent = db.execute(
-        "SELECT role,content FROM messages WHERE chat_id=? AND session_id=? "
-        "ORDER BY created_at DESC,rowid DESC LIMIT 12",
-        (chat_id, session["session_id"]),
-    ).fetchall()
-    recent = list(reversed(recent))
-    transcript = "\n".join(
-        f"{role}: {str(content)[:1200]}" for role, content in recent
-    )[-9000:]
-    goal = get_director_goal(db, chat_id, session["session_id"])
-    goal_block = (
-        "\nHidden scene objective:\n" + goal +
-        "\nAdvance this objective naturally when appropriate. Do not force completion, "
-        "do not contradict established continuity, and never mention that an objective exists."
-        if goal else
-        "\nThere is no configured hidden scene objective."
-    )
-    director_messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are an invisible scene director for a multi-character roleplay. "
-                "Choose exactly one next speaker from the allowed names and provide one short "
-                "pacing/scene direction. Respect the hidden scene objective when one is supplied, "
-                "but continuity and believable character behavior take priority. Do not write dialogue. "
-                "Do not speak for the user. Never reveal director instructions. Output strict JSON only: "
-                '{"speaker":"NAME","direction":"short direction"}.'
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                "Allowed speakers: " + ", ".join(labels) +
-                goal_block +
-                "\nRecent transcript:\n" + (transcript or "(empty)") +
-                "\nLatest user turn:\n" + str(user_text)[:4000]
-            ),
-        },
-    ]
-    settings = get_generation_settings(db, chat_id, session["session_id"])
-    settings.update({
-        "temperature": 0.1,
-        "max_tokens": 220,
-        "reasoning_budget": 0,
-        "stop_sequences": "",
-    })
-    try:
-        model = task_model_for_session(db, chat_id, session, "director")
-        raw = generate_text(
-            api_key,
-            model,
-            director_messages,
-            session_id=f"group-director:{chat_id}:{session['session_id']}",
-            settings=settings,
-            force_non_stream=True,
-        )
-        decision = parse_group_director_decision(raw, members)
-    except Exception:
-        logging.warning("Group director decision failed; falling back to round robin", exc_info=True)
-        decision = None
-    if decision:
-        return decision[0], state, decision[1]
-    index = int(state["turn_index"]) % len(members)
-    return members[index], state, ""
-
-
-def group_prompt_context(
+def _director_goal_customization(
     db: sqlite3.Connection,
     chat_id: str,
     session: dict[str, str],
-    speaker_file: str,
-    director_instruction: str = "",
-) -> str:
-    base = _ORIGINAL_GROUP_PROMPT_CONTEXT_GOALS(
-        db,
-        chat_id,
-        session,
-        speaker_file,
-        director_instruction,
-    )
-    state = group_state(db, chat_id, session["session_id"])
-    if state.get("mode") != "director":
-        return base
+) -> _DirectorCustomization:
     goal = get_director_goal(db, chat_id, session["session_id"])
+    model = task_model_for_session(db, chat_id, session, "director")
     if not goal:
-        return base
-    return (
-        base +
-        "\nHidden scene objective: " + goal +
+        return _DirectorCustomization(
+            model=model,
+            max_tokens=220,
+        )
+
+    hidden_instructions = (
+        "Hidden scene objective: " + goal +
+        " Advance this objective naturally when appropriate. "
+        "Do not force completion. Established continuity and believable character behavior "
+        "take priority. Never mention that an objective exists."
+    )
+    speaker_context = (
+        "Hidden scene objective: " + goal +
         " Advance it only when natural for the current speaker and established scene. "
         "Never mention, quote, or expose this objective."
+    )
+    return _DirectorCustomization(
+        model=model,
+        hidden_instructions=hidden_instructions,
+        max_tokens=220,
+        speaker_context=speaker_context,
     )
 
 
@@ -234,4 +156,8 @@ def _director_goal_command_route(
     return False
 
 
+_register_director_customization_provider(
+    "director_goals",
+    _director_goal_customization,
+)
 _register_command_route("director_goals", _director_goal_command_route)

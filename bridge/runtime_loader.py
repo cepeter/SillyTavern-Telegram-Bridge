@@ -82,7 +82,6 @@ DEFAULT_RUNTIME_STAGES = (
                 ),
             ),
             ("scheduler_safety.py", ("db_connect", "recover_jobs", "submit_durable_chat_job")),
-            ("director_goals.py", ("group_director_plan", "group_prompt_context")),
         ),
     ),
 )

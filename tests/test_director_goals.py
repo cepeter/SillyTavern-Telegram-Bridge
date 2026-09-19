@@ -86,6 +86,7 @@ class DirectorGoalsTests(unittest.TestCase):
 
         rt.generate_text = fake_generate
         try:
+            before = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
             plan = rt.group_director_plan(
                 self.db,
                 "",
@@ -93,6 +94,7 @@ class DirectorGoalsTests(unittest.TestCase):
                 self.session,
                 "I look around.",
             )
+            after = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
         finally:
             rt.safe_character_path = old_safe
             rt.card_fields_from_file = old_fields
@@ -102,7 +104,169 @@ class DirectorGoalsTests(unittest.TestCase):
         self.assertEqual(calls[0][0], "utility::director")
         joined = "\n".join(str(message["content"]) for message in calls[0][1])
         self.assertIn("hidden door", joined)
+        self.assertIn("believable character behavior", joined)
         self.assertTrue(calls[0][2]["force_non_stream"])
+        self.assertEqual(before, after)
+
+    def test_director_policy_prefers_director_task_model(self):
+        rt.set_task_model(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "utility::fallback",
+            task="utility",
+        )
+        rt.set_task_model(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "director::special",
+            task="director",
+        )
+
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Continue."}'
+
+        rt.generate_text = fake_generate
+        try:
+            rt.group_director_plan(
+                self.db,
+                "",
+                self.chat_id,
+                self.session,
+                "Continue.",
+            )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(calls[0][0], "director::special")
+
+    def test_director_policy_falls_back_to_utility_model(self):
+        rt.set_task_model(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "utility::fallback",
+            task="utility",
+        )
+        rt.set_task_model(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "",
+            task="director",
+        )
+
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Continue."}'
+
+        rt.generate_text = fake_generate
+        try:
+            rt.group_director_plan(
+                self.db,
+                "",
+                self.chat_id,
+                self.session,
+                "Continue.",
+            )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(calls[0][0], "utility::fallback")
+
+    def test_director_policy_falls_back_to_main_model(self):
+        rt.set_task_model(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "",
+            task="director",
+        )
+        rt.set_task_model(
+            self.db,
+            self.chat_id,
+            self.session["session_id"],
+            "",
+            task="utility",
+        )
+
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Continue."}'
+
+        rt.generate_text = fake_generate
+        try:
+            rt.group_director_plan(
+                self.db,
+                "",
+                self.chat_id,
+                self.session,
+                "Continue.",
+            )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(calls[0][0], "primary::main")
+
+    def test_director_policy_applies_model_and_token_budget_without_goal(self):
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Continue."}'
+
+        rt.generate_text = fake_generate
+        try:
+            rt.group_director_plan(
+                self.db,
+                "",
+                self.chat_id,
+                self.session,
+                "Continue.",
+            )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        joined = "\n".join(str(message["content"]) for message in calls[0][1])
+        self.assertEqual(calls[0][0], "utility::director")
+        self.assertEqual(calls[0][2]["settings"]["max_tokens"], 220)
+        self.assertNotIn("Hidden scene objective:", joined)
 
     def test_generation_context_keeps_goal_hidden_but_actionable(self):
         rt.set_director_goal(
