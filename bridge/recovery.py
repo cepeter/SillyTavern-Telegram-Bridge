@@ -370,7 +370,7 @@ def _operation_command(text):
     return command
 
 
-def process_message(db, token, api_key, model, fields, chat_id, text, telegram_message_id=None, queued_session_id=None, operation_id=None):
+def process_message(db, token, api_key, model, fields, chat_id, text, telegram_message_id=None, queued_session_id=None, operation_id=None, *, services=None):
     # Command-specific local_committed recovery must run before the legacy
     # generic recovery shortcut, otherwise cleanup/variant work is skipped.
     if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
@@ -399,6 +399,7 @@ def process_message(db, token, api_key, model, fields, chat_id, text, telegram_m
             telegram_message_id,
             queued_session_id=queued_session_id,
             operation_id=operation_id,
+            services=services,
         )
     finally:
         _OPERATION_CONTEXT.reset(context_token)
