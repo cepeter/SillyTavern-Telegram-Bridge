@@ -477,6 +477,7 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
                 (1, "core_baseline"),
                 (2, "scene_state"),
                 (3, "director_goals"),
+                (4, "sync_lifecycle_trigger"),
             ],
         )
         for object_type, name in (
@@ -493,6 +494,13 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
                         (object_type, name),
                     ).fetchone()
                 )
+
+        self.assertIsNotNone(
+            self.db.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type='trigger' AND name='sessions_delete_sync_binding'"
+            ).fetchone()
+        )
 
     def test_existing_scene_and_director_rows_survive_ledger_adoption(self):
         schema._migration_001_core_baseline(self.db)
