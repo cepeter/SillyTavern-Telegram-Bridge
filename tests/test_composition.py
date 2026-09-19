@@ -348,5 +348,163 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertEqual(self.global_sent, [])
 
 
+class RecoveryCompositionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "recovery.sqlite3"
+        self.db = rt.db_connect(self.path)
+        self.submitted = []
+        config = BridgeConfig(
+            bot_token="token",
+            api_key="key",
+            default_model="current::model",
+            default_character_file="mira.png",
+            card_file=Path(self.tmp.name) / "mira.png",
+            db_file=self.path,
+            allowed_users=frozenset(),
+        )
+        self.background = BackgroundRuntime(
+            submit_chat=self._submit,
+            register_backlog_dispatcher=lambda _callback: None,
+            begin_shutdown=lambda: None,
+        )
+        self.services = BridgeServices(
+            config=config,
+            db_factory=lambda: rt.db_connect(self.path),
+            telegram=TelegramRuntime(
+                request=lambda *_args, **_kwargs: {},
+                send_text=lambda *_args, **_kwargs: None,
+            ),
+            background=self.background,
+        )
+
+    def tearDown(self):
+        self.db.close()
+        self.tmp.cleanup()
+
+    def _submit(self, label, chat_id, function, *args):
+        self.submitted.append((label, chat_id, function, args))
+        return True
+
+    def test_submit_durable_chat_job_uses_injected_background_and_explicit_job_id(self):
+        with patch.object(
+            rt,
+            "submit_chat_background",
+            side_effect=AssertionError("global background used"),
+        ), patch.object(rt, "mark_job_scheduled") as scheduled:
+            queued = rt.submit_durable_chat_job(
+                self.db,
+                self.background,
+                "generation",
+                "chat",
+                41,
+                rt.process_message_job,
+                self.services,
+                {"name": "Mira"},
+                "chat",
+                "hello",
+                10,
+                None,
+                None,
+            )
+
+        self.assertTrue(queued)
+        self.assertIs(self.submitted[0][3][0], self.services)
+        self.assertEqual(self.submitted[0][3][-1], 41)
+        scheduled.assert_called_once_with(self.db, 41)
+
+    def test_recovered_job_propagates_same_services_and_stored_model(self):
+        row = (
+            51,
+            "chat",
+            "session",
+            "10",
+            "generation",
+            '{"text":"hello","model":"stored::model"}',
+        )
+        with patch.object(
+            rt,
+            "recover_jobs",
+            return_value=[row],
+        ), patch.object(
+            rt,
+            "mark_job_scheduled",
+        ):
+            rt.dispatch_recovered_jobs(
+                self.db,
+                self.services,
+                {"name": "Mira"},
+            )
+
+        label, chat_id, function, args = self.submitted[0]
+        self.assertEqual(label, "generation")
+        self.assertEqual(chat_id, "chat")
+        self.assertIs(function, rt.process_message_job)
+        self.assertIs(args[0], self.services)
+        self.assertEqual(args[-2], "stored::model")
+        self.assertEqual(args[-1], 51)
+
+    def test_failed_background_submission_does_not_mark_job_scheduled(self):
+        background = BackgroundRuntime(
+            submit_chat=lambda *_args, **_kwargs: False,
+            register_backlog_dispatcher=lambda _callback: None,
+            begin_shutdown=lambda: None,
+        )
+        with patch.object(
+            rt,
+            "submit_chat_background",
+            side_effect=AssertionError("global background used"),
+        ), patch.object(rt, "mark_job_scheduled") as scheduled:
+            queued = rt.submit_durable_chat_job(
+                self.db,
+                background,
+                "generation",
+                "chat",
+                52,
+                rt.process_message_job,
+                self.services,
+                {"name": "Mira"},
+                "chat",
+                "hello",
+                10,
+                None,
+                None,
+            )
+        self.assertFalse(queued)
+        scheduled.assert_not_called()
+
+    def test_backlog_dispatcher_reuses_same_services_instance(self):
+        opened = []
+        seen = []
+
+        def factory():
+            db = rt.db_connect(self.path)
+            opened.append(db)
+            return db
+
+        services = BridgeServices(
+            config=self.services.config,
+            db_factory=factory,
+            telegram=self.services.telegram,
+            background=self.services.background,
+        )
+
+        with patch.object(
+            rt,
+            "dispatch_recovered_jobs",
+            side_effect=lambda db, actual_services, fields, **kwargs:
+                seen.append((db, actual_services, fields, kwargs)),
+        ):
+            dispatcher = rt.make_durable_backlog_dispatcher(
+                services,
+                {"name": "Mira"},
+            )
+            dispatcher()
+
+        self.assertEqual(len(opened), 1)
+        self.assertIs(seen[0][1], services)
+        self.assertEqual(seen[0][3], {"recover_running": False})
+
+
 if __name__ == "__main__":
     unittest.main()
