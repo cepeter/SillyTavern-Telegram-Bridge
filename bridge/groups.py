@@ -1,4 +1,6 @@
-from bridge.extension_registry import get_director_customization as _get_director_customization\n\ndef group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
+from bridge.extension_registry import get_director_customization as _get_director_customization
+
+def group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
     row = db.execute("SELECT title,enabled,turn_index,mode,forced_speaker,members_json,turn_user_id,turn_users_json FROM group_sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)).fetchone()
     if not row:
         return {"title": "Group chat", "enabled": False, "turn_index": 0, "mode": "round_robin", "forced_speaker": "", "members": [], "turn_user_id": "", "turn_users": []}
