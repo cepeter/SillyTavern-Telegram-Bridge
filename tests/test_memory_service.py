@@ -1,5 +1,10 @@
+from pathlib import Path
 import sqlite3
+import tempfile
 import unittest
+from unittest.mock import patch
+
+import bridge.runtime as rt
 
 from bridge.memory_service import MemoryPromptContext, MemoryService
 
@@ -141,6 +146,167 @@ class MemoryServiceTests(unittest.TestCase):
 
         self.assertEqual(result, 7)
         self.assertEqual(calls, [(self.db, "chat", "session-1")])
+
+
+class MemoryServiceMessageIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.old_db = rt.DB_FILE
+        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+        self.db = rt.db_connect()
+        self.session = rt.create_session(
+            self.db,
+            "chat",
+            "provider::model",
+            session_id="memory-message",
+        )
+        self.fields = {"name": "Mira"}
+
+    def tearDown(self):
+        self.db.close()
+        rt.DB_FILE = self.old_db
+        with rt._DB_SCHEMA_LOCK:
+            rt._DB_SCHEMA_READY = False
+        self.tmp.cleanup()
+
+    def test_generate_and_store_reply_uses_injected_memory_service(self):
+        calls = []
+        captured = {}
+
+        class FakeMemory:
+            def prompt_context(
+                self,
+                db,
+                chat_id,
+                session,
+                fields,
+                query,
+                **kwargs,
+            ):
+                calls.append(
+                    (
+                        "context",
+                        db,
+                        chat_id,
+                        session["session_id"],
+                        fields["name"],
+                        query,
+                        kwargs,
+                    )
+                )
+                return MemoryPromptContext(
+                    recall="service recall",
+                    summary="service summary",
+                )
+
+            def retain(self, db, chat_id, session, fields):
+                calls.append(
+                    (
+                        "retain",
+                        db,
+                        chat_id,
+                        session["session_id"],
+                        fields["name"],
+                    )
+                )
+
+        def build_messages(
+            session,
+            fields,
+            text,
+            history_rows,
+            **kwargs,
+        ):
+            captured.update(kwargs)
+            return [{"role": "user", "content": text}]
+
+        def legacy_called(*_args, **_kwargs):
+            raise AssertionError("legacy memory global must not run")
+
+        with patch.object(
+            rt,
+            "recall_memory_context",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "session_summary_for_prompt",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "retain_session_memory",
+            side_effect=legacy_called,
+        ), patch.object(
+            rt,
+            "rag_retrieval_bundle",
+            return_value={},
+        ), patch.object(
+            rt,
+            "rag_context_for_prompt",
+            return_value="",
+        ), patch.object(
+            rt,
+            "rag_citation_footer",
+            return_value="",
+        ), patch.object(
+            rt,
+            "build_chat_messages",
+            side_effect=build_messages,
+        ), patch.object(
+            rt,
+            "send_typing",
+        ), patch.object(
+            rt,
+            "normalize_response_language",
+            return_value="en",
+        ), patch.object(
+            rt,
+            "get_generation_settings",
+            return_value={},
+        ), patch.object(
+            rt,
+            "generate_text",
+            return_value="reply",
+        ), patch.object(
+            rt,
+            "render_response_language",
+            side_effect=lambda _key, _model, reply, *_args: reply,
+        ), patch.object(
+            rt,
+            "save_response_variant",
+            return_value=1,
+        ), patch.object(
+            rt,
+            "queue_user_quote_tts",
+        ), patch.object(
+            rt,
+            "send_reply",
+        ):
+            rt.generate_and_store_reply(
+                self.db,
+                "token",
+                "key",
+                self.fields,
+                "chat",
+                "hello",
+                self.session,
+                self.session["session_id"],
+                "provider::model",
+                None,
+                "",
+                None,
+                None,
+                memory_service=FakeMemory(),
+            )
+
+        self.assertEqual(captured["memory_context"], "service recall")
+        self.assertEqual(captured["session_summary"], "service summary")
+        self.assertEqual(calls[0][0], "context")
+        self.assertEqual(calls[0][2:6], ("chat", "memory-message", "Mira", "hello"))
+        self.assertEqual(calls[0][6], {})
+        self.assertEqual(calls[1][0], "retain")
+        self.assertEqual(calls[1][2:], ("chat", "memory-message", "Mira"))
 
 
 if __name__ == "__main__":
