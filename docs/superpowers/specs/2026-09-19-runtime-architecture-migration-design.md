@@ -3,14 +3,14 @@
 Date: 2026-09-19
 Status: Master architecture target; implementation is decomposed into independently mergeable phases
 Repository: `punzer4-code/SillyTavern-Telegram-Bridge`
-Baseline: post-PR #27 architecture
+Baseline: post-the merged extension-registry refactor architecture
 Phase 1 design: `docs/superpowers/specs/2026-09-19-director-policy-boundary-design.md`
 
 ## 1. Purpose
 
 This document defines the long-term architecture target for the SillyTavern Telegram Bridge and the migration program used to reach it without a big-bang rewrite.
 
-PR #27 established explicit extension hooks for several newer cross-cutting features. The codebase still relies on a compatibility runtime that executes modules into one shared namespace, selected late overrides for recovery and safety behavior, global runtime state, mixed schema/runtime initialization, and helper functions that often own their own commits.
+the merged extension-registry refactor established explicit extension hooks for several newer cross-cutting features. The codebase still relies on a compatibility runtime that executes modules into one shared namespace, selected late overrides for recovery and safety behavior, global runtime state, mixed schema/runtime initialization, and helper functions that often own their own commits.
 
 The migration must remove those architectural constraints while preserving the reliability properties already present in the application.
 
@@ -81,7 +81,7 @@ The remaining safety/recovery layers include late replacement of behavior such a
 - database/job scheduling helpers
 - Group Director policy
 
-PR #27 removed late override composition for Scene State and Memory Curator and moved several cross-cutting behaviors into explicit registries.
+the merged extension-registry refactor removed late override composition for Scene State and Memory Curator and moved several cross-cutting behaviors into explicit registries.
 
 That registry is useful as a migration boundary, but it is not the intended final application architecture.
 
@@ -271,7 +271,7 @@ injected service/adapter
 remove compatibility layer
 ```
 
-The compatibility registry introduced in PR #27 is intentionally temporary. It provides deterministic extension boundaries while the composition root does not yet exist.
+The compatibility registry introduced in the merged extension-registry refactor is intentionally temporary. It provides deterministic extension boundaries while the composition root does not yet exist.
 
 ## 9. Migration invariants
 
@@ -291,7 +291,7 @@ Existing instances may remain temporarily only until the phase responsible for r
 
 The migration is decomposed into seven primary implementation phases.
 
-### Phase 1 / PR #28 — DirectorPolicy boundary
+### Phase 1 — DirectorPolicy boundary
 
 Detailed design:
 `docs/superpowers/specs/2026-09-19-director-policy-boundary-design.md`
@@ -307,7 +307,7 @@ Completion signal:
 - `director_goals.py` has zero public-callable overrides
 - Group Director behavior and fallbacks are unchanged
 
-### Phase 2 / PR #29 — Versioned database migrations
+### Phase 2 — Versioned database migrations
 
 Purpose:
 
@@ -343,7 +343,7 @@ Requirements:
 
 This phase does not yet require a general ORM or full repository rewrite.
 
-### Phase 3 / PR #30 — Repository and transaction ownership
+### Phase 3 — Repository and transaction ownership
 
 Purpose:
 
@@ -367,7 +367,7 @@ Rules:
 
 A lightweight SQLite repository layer is preferred over an ORM.
 
-### Phase 4 / PR #31 — Composition root and runtime context
+### Phase 4 — Composition root and runtime context
 
 Purpose:
 
@@ -398,7 +398,7 @@ The composition root owns construction of:
 
 This phase must coexist with the compatibility runtime; it does not remove `runtime_loader.py` yet.
 
-### Phase 5 / PR #32+ — Application service extraction
+### Phase 5 — Application service extraction
 
 Purpose:
 
@@ -423,7 +423,7 @@ Each service extraction must:
 
 Large routing/UI modules may then delegate to services rather than own business logic.
 
-### Phase 6 / PR #33 — Replace safety/recovery overrides with adapters and decorators
+### Phase 6 — Replace safety/recovery overrides with adapters and decorators
 
 Purpose:
 
@@ -460,7 +460,7 @@ Requirements:
 - no loss of scheduler durability
 - no loss of sync backoff/recovery semantics
 
-### Phase 7 / PR #34 — Retire compatibility runtime loading
+### Phase 7 — Retire compatibility runtime loading
 
 Purpose:
 
