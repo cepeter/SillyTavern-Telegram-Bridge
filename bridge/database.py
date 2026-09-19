@@ -1,4 +1,61 @@
-_DB_WRITE_LOCK = threading.RLock()
+_DB_WRITE_LOCK = globals().get("_DB_WRITE_LOCK") or threading.RLock()
+_WRITE_SQL_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
+
+
+class _SerializedSQLiteConnection(sqlite3.Connection):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._bridge_write_lock_depth = 0
+
+    def _acquire_write_lock(self, sql: str) -> bool:
+        statement = str(sql).lstrip().upper()
+        if not statement.startswith(_WRITE_SQL_PREFIXES):
+            return False
+        if self._bridge_write_lock_depth == 0:
+            _DB_WRITE_LOCK.acquire()
+        self._bridge_write_lock_depth = 1
+        return True
+
+    def _release_write_lock(self) -> None:
+        while self._bridge_write_lock_depth:
+            self._bridge_write_lock_depth -= 1
+            _DB_WRITE_LOCK.release()
+
+    def execute(self, sql, parameters=()):
+        acquired = self._acquire_write_lock(sql)
+        try:
+            return super().execute(sql, parameters)
+        except Exception:
+            if acquired:
+                self._release_write_lock()
+            raise
+
+    def executemany(self, sql, seq_of_parameters):
+        acquired = self._acquire_write_lock(sql)
+        try:
+            return super().executemany(sql, seq_of_parameters)
+        except Exception:
+            if acquired:
+                self._release_write_lock()
+            raise
+
+    def commit(self):
+        try:
+            return super().commit()
+        finally:
+            self._release_write_lock()
+
+    def rollback(self):
+        try:
+            return super().rollback()
+        finally:
+            self._release_write_lock()
+
+    def close(self):
+        try:
+            return super().close()
+        finally:
+            self._release_write_lock()
 
 
 def run_write_txn(db: sqlite3.Connection, operation):
@@ -98,7 +155,7 @@ def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: floa
 def db_connect() -> sqlite3.Connection:
     """Open the configured SQLite database and initialize its schema."""
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB_FILE, timeout=30)
+    db = sqlite3.connect(DB_FILE, timeout=30, factory=_SerializedSQLiteConnection)
     _apply_connection_pragmas(db, timeout=30.0)
     # One-time database-level setup, on the schema-init connection only and
     # never on per-worker lightweight connections. auto_vacuum must precede
@@ -188,6 +245,7 @@ def begin_operation(db: sqlite3.Connection, operation_id: int | str | None, kind
         return True
     now = time.time()
     cursor = db.execute("INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?, 'in_progress',?,?)", (str(operation_id), kind, now, now))
+    db.commit()
     if cursor.rowcount == 1:
         return True
     return not operation_was_applied(db, operation_id)

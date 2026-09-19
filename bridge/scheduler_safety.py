@@ -9,7 +9,7 @@ _DB_SCHEMA_LOCK = threading.Lock()
 
 def _lightweight_db_connect(timeout: float = 30.0):
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_FILE, timeout=timeout)
+    connection = sqlite3.connect(DB_FILE, timeout=timeout, factory=_SerializedSQLiteConnection)
     # Connection-local pragmas only. Worker startup must never negotiate
     # journal mode, auto_vacuum, or extensions per connection: WAL, schema,
     # and optional extension setup happen once in db_connect(), and repeating

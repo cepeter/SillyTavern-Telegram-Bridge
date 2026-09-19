@@ -76,6 +76,35 @@ class SqliteContentionTests(unittest.TestCase):
             rt.db_connect = original_connect
         self.assertIsNotNone(self.db.execute("SELECT 1 FROM callback_tokens WHERE token=?", (token,)).fetchone())
 
+    def test_raw_connection_writes_share_mutex(self):
+        barrier = threading.Barrier(2)
+        errors = []
+        connect = rt.db_connect
+
+        def worker(index):
+            db = connect()
+            try:
+                barrier.wait()
+                db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)", (f"raw-mutex-{index}", "ok"))
+                time.sleep(0.01)
+                db.commit()
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                db.close()
+
+        threads = [threading.Thread(target=worker, args=(index,)) for index in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+
+    def test_begin_operation_commits_before_external_work(self):
+        operation_id = "lock-release-test"
+        self.assertTrue(rt.begin_operation(self.db, operation_id, "generation"))
+        self.assertFalse(self.db.in_transaction)
+
     def test_job_writers_from_separate_connections_do_not_lock_each_other(self):
         barrier = threading.Barrier(2)
         errors = []
