@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import MutableMapping
 
+from bridge.extension_registry import reset_extension_registry as _reset_extension_registry
+
 
 @dataclass(frozen=True)
 class RuntimeStage:
@@ -128,6 +130,7 @@ def load_runtime_namespace(
 ) -> tuple[dict[str, object], ...]:
     """Execute runtime modules in validated stages and return an override report."""
     _validate_stages(stages)
+    _reset_extension_registry()
     report = []
     for stage in stages:
         for filename in stage.modules:

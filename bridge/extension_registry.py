@@ -8,12 +8,13 @@ introspectable, which makes extension order visible to tests and diagnostics.
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
 from typing import Any
 
 
 CommandRoute = Callable[..., bool]
 PostRetainHook = Callable[[Any, str, dict[str, str], dict[str, str]], None]
-SummaryContextHook = Callable[[str, Any, str, dict[str, str]], str]
+SummaryContextHook = Callable[[str, Any, str, dict[str, str]], str | None]
 SummaryClearHook = Callable[[Any, str, str], None]
 
 
@@ -23,12 +24,22 @@ _SUMMARY_CONTEXT_HOOKS: dict[str, SummaryContextHook] = {}
 _SUMMARY_CLEAR_HOOKS: dict[str, SummaryClearHook] = {}
 
 
+def reset_extension_registry() -> None:
+    """Clear all registered compatibility extensions before a runtime load."""
+    _COMMAND_ROUTES.clear()
+    _POST_RETAIN_HOOKS.clear()
+    _SUMMARY_CONTEXT_HOOKS.clear()
+    _SUMMARY_CLEAR_HOOKS.clear()
+
+
 def _register(registry: dict[str, Callable], name: str, handler: Callable) -> None:
     key = str(name or "").strip()
     if not key:
         raise ValueError("extension name must not be empty")
     if not callable(handler):
         raise TypeError(f"extension {key} must be callable")
+    if key in registry:
+        raise RuntimeError(f"extension name already registered: {key}")
     registry[key] = handler
 
 
@@ -37,6 +48,12 @@ def register_command_route(name: str, handler: CommandRoute) -> None:
 
 
 def dispatch_command_routes(*args, **kwargs) -> bool:
+    """Dispatch registered command routes.
+
+    Handler exceptions intentionally propagate to the durable command worker.
+    This prevents a failed extension command from falling through into ordinary
+    character generation.
+    """
     for handler in tuple(_COMMAND_ROUTES.values()):
         if handler(*args, **kwargs):
             return True
@@ -53,8 +70,11 @@ def run_post_retain_hooks(
     session: dict[str, str],
     fields: dict[str, str],
 ) -> None:
-    for handler in tuple(_POST_RETAIN_HOOKS.values()):
-        handler(db, chat_id, session, fields)
+    for name, handler in tuple(_POST_RETAIN_HOOKS.items()):
+        try:
+            handler(db, chat_id, session, fields)
+        except Exception:
+            logging.exception("Post-retain extension hook failed: %s", name)
 
 
 def register_summary_context_hook(name: str, handler: SummaryContextHook) -> None:
@@ -68,8 +88,14 @@ def apply_summary_context_hooks(
     session: dict[str, str],
 ) -> str:
     result = str(summary or "")
-    for handler in tuple(_SUMMARY_CONTEXT_HOOKS.values()):
-        result = str(handler(result, db, chat_id, session) or "")
+    for name, handler in tuple(_SUMMARY_CONTEXT_HOOKS.items()):
+        try:
+            updated = handler(result, db, chat_id, session)
+        except Exception:
+            logging.exception("Summary-context extension hook failed: %s", name)
+            continue
+        if updated is not None:
+            result = str(updated)
     return result
 
 
@@ -78,8 +104,11 @@ def register_summary_clear_hook(name: str, handler: SummaryClearHook) -> None:
 
 
 def run_summary_clear_hooks(db: Any, chat_id: str, session_id: str) -> None:
-    for handler in tuple(_SUMMARY_CLEAR_HOOKS.values()):
-        handler(db, chat_id, session_id)
+    for name, handler in tuple(_SUMMARY_CLEAR_HOOKS.items()):
+        try:
+            handler(db, chat_id, session_id)
+        except Exception:
+            logging.exception("Summary-clear extension hook failed: %s", name)
 
 
 def extension_registry_snapshot() -> dict[str, tuple[str, ...]]:
