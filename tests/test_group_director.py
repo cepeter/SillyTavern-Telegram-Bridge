@@ -225,6 +225,89 @@ class GroupDirectorTests(unittest.TestCase):
         joined = "\n".join(str(message["content"]) for message in calls[0][1])
         self.assertIn("reveal the door slowly", joined)
 
+    def test_invalid_director_customization_fields_fall_back_to_core_defaults(self):
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Continue safely."}'
+
+        customization = extension_registry.DirectorCustomization(
+            model=" invalid model ",
+            max_tokens="large",
+        )
+
+        rt.generate_text = fake_generate
+        try:
+            with patch.object(
+                extension_registry,
+                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
+                ("invalid", lambda db, chat_id, session: customization),
+            ):
+                plan = rt.group_director_plan(
+                    self.db,
+                    "key",
+                    "chat|topic:1",
+                    self.session,
+                    "Continue.",
+                )
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
+        self.assertEqual(plan[0], "alice.png")
+        self.assertEqual(calls[0][0], "provider::main")
+        self.assertEqual(calls[0][2]["settings"]["max_tokens"], 180)
+
+    def test_director_customization_token_budget_clamps_to_generation_limits(self):
+        old_safe = rt.safe_character_path
+        old_fields = rt.card_fields_from_file
+        old_generate = rt.generate_text
+        calls = []
+
+        rt.safe_character_path = lambda filename: Path(filename)
+        rt.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+
+        def fake_generate(_key, model, messages, **kwargs):
+            calls.append((model, messages, kwargs))
+            return '{"speaker":"Alice","direction":"Continue."}'
+
+        rt.generate_text = fake_generate
+        try:
+            for supplied, expected in ((0, 1), (-50, 1), (99999, 16000), ("220", 220)):
+                calls.clear()
+                customization = extension_registry.DirectorCustomization(
+                    model=" utility::director ",
+                    max_tokens=supplied,
+                )
+                with self.subTest(max_tokens=supplied):
+                    with patch.object(
+                        extension_registry,
+                        "_DIRECTOR_CUSTOMIZATION_PROVIDER",
+                        ("bounded", lambda db, chat_id, session, value=customization: value),
+                    ):
+                        plan = rt.group_director_plan(
+                            self.db,
+                            "key",
+                            "chat|topic:1",
+                            self.session,
+                            "Continue.",
+                        )
+                    self.assertEqual(plan[0], "alice.png")
+                    self.assertEqual(calls[0][0], "utility::director")
+                    self.assertEqual(calls[0][2]["settings"]["max_tokens"], expected)
+        finally:
+            rt.safe_character_path = old_safe
+            rt.card_fields_from_file = old_fields
+            rt.generate_text = old_generate
+
     def test_director_policy_failure_uses_ordinary_director_behavior(self):
         old_safe = rt.safe_character_path
         old_fields = rt.card_fields_from_file
