@@ -61,6 +61,19 @@ class CatalogPanelTests(unittest.TestCase):
         self.assertEqual(request.headers["Content-type"], "application/json")
         self.assertEqual(body["model"], "zai-org/glm-5.3-flash")
 
+    def test_model_selection_offers_story_or_utility_target(self):
+        calls = []
+        original_request = rt.telegram_request
+        rt.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {"message_id": 1}
+        try:
+            rt.send_model_target_menu("token", "chat", "provider::model", "main::model", "utility::model")
+        finally:
+            rt.telegram_request = original_request
+        callbacks = [button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row]
+        self.assertTrue(any(value.startswith("modeltarget:story:") for value in callbacks))
+        self.assertTrue(any(value.startswith("modeltarget:utility:") for value in callbacks))
+        self.assertIn("Where should this model be used?", calls[0][1]["text"])
+
     def test_model_panel_treats_not_modified_as_success(self):
         original_groups = rt.get_model_groups
         original_request = rt.telegram_request

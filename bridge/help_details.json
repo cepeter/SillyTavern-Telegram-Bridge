@@ -15,7 +15,7 @@
 
   "/update": "Checks GitHub for the latest release and shows your installed version, the latest version, and short release notes. If you're already up to date, it says so and does nothing. If an update is available, it opens a confirmation panel — confirm only works with a clean checkout and a fast-forwardable main branch, then it syncs the live bridge and restarts the service. Cancel does nothing.",
 
-  "/providers": "Opens the provider and model catalog. Pick a model that has its adapter enabled — catalog-only entries are view-only and can't run inference.",
+  "/providers": "Opens the provider and model catalog. Pick a model, then choose whether it is the Story model for character replies or the Utility model for summaries, memory, and other bridge tasks. Catalog-only entries are view-only and can't run inference.",
 
   "/providers refresh": "Opens the provider panel, where Refresh models updates the discoverable provider catalogs.",
 

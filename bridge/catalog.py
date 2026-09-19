@@ -210,6 +210,15 @@ def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: s
         raise
 
 
+def send_model_target_menu(token: str, chat_id: str, model: str, current_model: str, utility_model: str, message_id: int | None = None) -> None:
+    callback_token = dynamic_callback_token("model_target", model, chat_id)
+    markup = {"inline_keyboard": [[
+        {"text": ("✅ " if model == current_model else "") + "📖 Story model", "callback_data": "modeltarget:story:" + callback_token},
+        {"text": ("✅ " if model == utility_model else "") + "🛠️ Utility model", "callback_data": "modeltarget:utility:" + callback_token},
+    ], [{"text": "⬅️ Back to models", "callback_data": "models:back"}, {"text": "❌ Cancel", "callback_data": "models:cancel"}]]}
+    send_panel_message(token, chat_id, f"Selected model: {model}\n\nWhere should this model be used?", markup, message_id)
+
+
 def send_provider_health_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
     checks = provider_health_checks()
     lines = [f"{name}: {status}" for _provider_id, name, status in checks]

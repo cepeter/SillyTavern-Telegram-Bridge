@@ -502,15 +502,30 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
         answer_callback(token, str(callback.get("id", "")), "Catalog only: adapter not enabled")
         send_text(token, chat_id, f"Provider '{provider_id}' is visible in the bridge catalog, but its adapter is not enabled yet.")
         return True
+    if data.startswith("modeltarget:"):
+        parts = data.split(":", 2)
+        target = parts[1]
+        model = resolve_dynamic_callback_token(parts[2], "model_target", chat_id) or ""
+        if target not in {"story", "utility"} or not model:
+            answer_callback(token, str(callback.get("id", "")), "Model choice expired")
+            return True
+        if target == "story":
+            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="model_select", model_id=model)
+            message = f"Story model updated: {model}"
+        else:
+            set_task_model(db, chat_id, session_id, model, "utility")
+            message = f"Utility model updated: {model}"
+        answer_callback(token, str(callback.get("id", "")), "Model updated")
+        send_text(token, chat_id, message)
+        send_model_menu(token, chat_id, model if target == "story" else session["model_id"] or DEFAULT_MODEL, message_id=message_id)
+        return True
     if not data.startswith("model:"):
         return False
     model = resolve_dynamic_callback_token(data.split(":", 1)[1], "model", chat_id) or ""
     if not model:
         answer_callback(token, str(callback.get("id", "")), "Model choice expired")
         return True
-    update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="model_select", model_id=model)
-    answer_callback(token, str(callback.get("id", "")), f"Selected {model}")
-    remove_inline_keyboard(token, callback)
-    send_text(token, chat_id, f"Model changed to: {model}")
-    logging.info("Model changed by Telegram user %s to %s", str((callback.get("from") or {}).get("id", "")), model)
+    utility_model = task_model_for_session(db, chat_id, session, "utility")
+    answer_callback(token, str(callback.get("id", "")), "Choose model target")
+    send_model_target_menu(token, chat_id, model, session["model_id"] or DEFAULT_MODEL, utility_model, message_id)
     return True
