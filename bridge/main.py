@@ -15,6 +15,9 @@ from bridge.extension_registry import (
 from bridge.group_director_service import (
     GroupDirectorService as _GroupDirectorService,
 )
+from bridge.memory_service import (
+    MemoryService as _MemoryService,
+)
 
 _SHUTDOWN_EVENT = threading.Event()
 
@@ -461,6 +464,13 @@ def _build_startup_services(
         director_customization=_get_director_customization_value,
         default_model=config.default_model,
     )
+    memory = _MemoryService(
+        recall_context=recall_memory_context,
+        summary_for_prompt=session_summary_for_prompt,
+        summary_state=get_session_summary,
+        retain_session=retain_session_memory,
+        purge_session_memory=purge_hindsight_session,
+    )
     return _build_bridge_services_value(
         config,
         db_factory=_partial(db_connect, config.db_file),
@@ -474,6 +484,7 @@ def _build_startup_services(
             begin_shutdown=begin_background_shutdown,
         ),
         group_director=group_director,
+        memory=memory,
     )
 
 
