@@ -135,6 +135,82 @@ class RagScalingTests(unittest.TestCase):
         self.assertTrue(results)
         self.assertEqual(results[0][1], "chunk 251")
 
+    def test_add_document_embedding_batches_run_outside_write_transaction(self):
+        original_extract = rt.extract_data_bank_text
+        original_split = rt.split_data_bank_chunks
+        original_embed = rt.embed_rag_batch
+        transaction_states = []
+
+        rt.extract_data_bank_text = lambda _filename, _raw: "content"
+        rt.split_data_bank_chunks = lambda _text: [
+            f"chunk {index}" for index in range(65)
+        ]
+
+        def fake_embed(texts):
+            transaction_states.append(self.db.in_transaction)
+            return [[1.0, 0.0] for _ in texts]
+
+        rt.embed_rag_batch = fake_embed
+        try:
+            status, count = rt.add_data_bank_document(
+                self.db,
+                "chat",
+                "batched.txt",
+                b"batched-payload",
+            )
+        finally:
+            rt.extract_data_bank_text = original_extract
+            rt.split_data_bank_chunks = original_split
+            rt.embed_rag_batch = original_embed
+
+        self.assertEqual((status, count), ("added", 65))
+        self.assertEqual(transaction_states, [False, False, False])
+        self.assertFalse(self.db.in_transaction)
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM data_bank_embeddings"
+            ).fetchone()[0],
+            65,
+        )
+
+    def test_reindex_embedding_batches_release_write_transaction_between_calls(self):
+        now = rt.time.time()
+        self.db.execute(
+            "INSERT INTO data_bank_documents("
+            "chat_id,document_id,filename,byte_size,chunk_count,created_at,updated_at"
+            ") VALUES(?,?,?,?,?,?,?)",
+            ("chat", "reindex-doc", "reindex.txt", 65, 65, now, now),
+        )
+        for index in range(65):
+            self.db.execute(
+                "INSERT INTO data_bank_chunks("
+                "chat_id,document_id,chunk_index,content"
+                ") VALUES(?,?,?,?)",
+                ("chat", "reindex-doc", index, f"chunk {index}"),
+            )
+        self.db.commit()
+
+        original_embed = rt.embed_rag_batch
+        transaction_states = []
+
+        def fake_embed(texts):
+            transaction_states.append(self.db.in_transaction)
+            return [[1.0, 0.0] for _ in texts]
+
+        rt.embed_rag_batch = fake_embed
+        try:
+            total, indexed = rt.reindex_data_bank_documents(
+                self.db,
+                "chat",
+                "reindex.txt",
+            )
+        finally:
+            rt.embed_rag_batch = original_embed
+
+        self.assertEqual((total, indexed), (65, 65))
+        self.assertEqual(transaction_states, [False, False, False])
+        self.assertFalse(self.db.in_transaction)
+
     def test_legacy_embedding_signatures_are_backfilled_lazily(self):
         self._insert_chunks(30, with_signatures=False)
         self.assertEqual(
