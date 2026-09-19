@@ -2,7 +2,7 @@
 
 Date: 2026-09-19
 Status: Proposed for implementation after review
-Repository: `punzer4-code/SillyTavern-Telegram-Bridge`
+Repository: `cepeter/SillyTavern-Telegram-Bridge`
 Target implementation: Phase 1 implementation PR (number assigned when opened)
 Parent architecture: `docs/superpowers/specs/2026-09-19-runtime-architecture-migration-design.md`
 Migration phase: Phase 1
@@ -551,19 +551,19 @@ The selected design deliberately creates a boundary that can later be injected i
 
 After Phase 1 implementation, the recommended sequence is:
 
-### PR #29 — Versioned schema migrations
+### Phase 2 — Versioned schema migrations
 
 Move feature schema creation out of getters and runtime feature paths.
 
-### PR #30 — Repository and transaction ownership
+### Phase 3 — Repository and transaction ownership
 
 Make reads side-effect free and move commit responsibility to explicit application/service boundaries.
 
-### PR #31 — Composition root
+### Phase 4 — Composition root
 
 Introduce `BridgeConfig` / `BridgeServices` and begin explicit dependency construction.
 
-### PR #32+ — Service extraction
+### Phase 5+ — Service extraction
 
 Incrementally extract Group Director, Memory, Persona/Sync, and Job services.
 
