@@ -667,14 +667,6 @@ class SyncPollOwnershipTests(unittest.TestCase):
             source,
         )
 
-    def test_phase6e_transition_keeps_sync_safety_public_owner(self):
-        self.assertEqual(
-            Path(
-                rt.phase3_sync_poll.__code__.co_filename
-            ).name,
-            "sync_safety.py",
-        )
-
     def test_sync_safety_module_is_retired(self):
         path = (
             Path(__file__).parents[1]
