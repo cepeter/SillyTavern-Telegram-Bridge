@@ -86,4 +86,5 @@ class MemoryService:
         chat_id: str,
         session_id: str,
     ) -> int:
-        return int(self.purge_session_memory(db, chat_id, session_id))
+        result = self.purge_session_memory(db, chat_id, session_id)
+        return 0 if result is None else int(result)
