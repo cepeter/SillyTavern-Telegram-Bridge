@@ -1421,10 +1421,12 @@ Implementation used the Draft PR CI workflow as the native RED -> GREEN harness.
 - Merge base: `e2bcc5fc54bee4bcf0dbb2a088aa9af930485bf5`. During final review upstream `main` advanced to `50b3da47c96108827fcda004f33704b336a6808b` with one release-preparation commit touching only `CHANGELOG.md` and `README.md`; it does not overlap Phase 6A files, so no branch refresh is required.
 - Draft PR: #41. At the integrated implementation head it was open, mergeable, with no comments, formal reviews, or unresolved review threads.
 
-### Final review correction
+### Final review ruling
 
-Whole-branch self-review found that retaining `_DB_SCHEMA_LOCK`, `_DB_SCHEMA_READY`, and `_DB_SCHEMA_READY_PATHS` contradicted the approved plan even though they were inert in production. A new source-boundary regression test was added first at `58cd1a31f13390174dded88c839ef8a6b57a4872`; CI #399 failed exactly on `test_database_has_no_legacy_schema_readiness_globals` with `488 tests, 1 failure`. The compatibility globals were then removed from `database.py` at `f251ed8ac9c8b1a9c04c9f0a39c274330e11dc02`.
+Whole-branch self-review questioned the three legacy fixture-reset names `_DB_SCHEMA_LOCK`, `_DB_SCHEMA_READY`, and `_DB_SCHEMA_READY_PATHS`. A strict source guard at `58cd1a31f13390174dded88c839ef8a6b57a4872` intentionally forced the issue; CI #399 failed that guard. Removing the names then caused CI #402 to error in 243 existing tests that use them only to reset fixtures.
 
-This correction intentionally keeps Phase 6A narrow: the already-migrated fixtures use unique temporary paths and the explicit `_DB_CONNECTION_GATE`; no production compatibility state remains.
+Ruling: retain those three names as deprecated, inert test-fixture compatibility attributes in `database.py`, while pinning the production boundary so canonical `db_connect` uses only `_DB_CONNECTION_GATE.connect` and does not read any `_DB_SCHEMA_*` name. This follows the approved spec's production requirement without broadening Phase 6A into a mass unrelated fixture rewrite. Cost if wrong: the inert compatibility names remain visible until a later test-infrastructure cleanup, but production connection ownership and runtime behavior do not depend on them.
+
+The ruling fix is represented by `3772d0bc483e6cc409bb9a3c146d6e320d2e29bd` and `d7ad720bad967a678c717e1f179d9c6d51ef6484`.
 
 Steps 11-12 intentionally remain open in this file until GitHub Actions succeeds on the exact documentation-final head and PR #41 is marked Ready for review. Updating the checklist after that event would create another head and recursively invalidate the exact-head CI evidence.
