@@ -148,6 +148,13 @@ class RepositoryPrimitiveTests(unittest.TestCase):
                 persona_id TEXT NOT NULL,
                 PRIMARY KEY(chat_id, session_id)
             );
+            CREATE TABLE messages(
+                chat_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
             """
         )
         self.db.commit()
@@ -228,6 +235,52 @@ class RepositoryPrimitiveTests(unittest.TestCase):
             )
         finally:
             self.db.set_trace_callback(None)
+        self.assertFalse(self.db.in_transaction)
+        self.assertFalse(
+            any(
+                sql.lstrip().upper().startswith(
+                    (
+                        "INSERT",
+                        "UPDATE",
+                        "DELETE",
+                        "REPLACE",
+                        "CREATE",
+                        "ALTER",
+                        "DROP",
+                    )
+                )
+                for sql in traced
+            ),
+            traced,
+        )
+
+    def test_count_session_messages_is_read_only(self):
+        self.db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
+            "VALUES(?,?,?,?,?)",
+            ("chat", "session", "user", "one", 1.0),
+        )
+        self.db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
+            "VALUES(?,?,?,?,?)",
+            ("chat", "session", "assistant", "two", 2.0),
+        )
+        self.db.commit()
+
+        traced = []
+        self.db.set_trace_callback(traced.append)
+        try:
+            self.assertEqual(
+                repositories.count_session_messages(
+                    self.db,
+                    "chat",
+                    "session",
+                ),
+                2,
+            )
+        finally:
+            self.db.set_trace_callback(None)
+
         self.assertFalse(self.db.in_transaction)
         self.assertFalse(
             any(
