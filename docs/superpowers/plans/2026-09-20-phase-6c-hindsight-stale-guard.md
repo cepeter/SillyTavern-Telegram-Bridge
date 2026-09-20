@@ -2042,3 +2042,15 @@ If no independent reviewer/subagent capability exists in the harness, perform th
 Only after Steps 12-13 pass.
 
 Do not merge the PR. Merge is a separate user decision.
+
+
+## Execution Ledger (in progress)
+
+- Execution ruling: this harness has no local Git checkout/worktree. The isolated feature branch is the workspace and Draft PR GitHub Actions is the authoritative RED -> GREEN runner. Cost if wrong: focused local commands are unavailable, but every state is observed on an exact repository SHA.
+- Task 1 ruling: the approved spec explicitly requires empty-current-snapshot rejection, while the written Task 1 test body omitted it. Added `test_empty_current_snapshot_skips_retain_backend` before production code. Cost if wrong: one additional regression test only.
+- Task 1 RED: `c3e6c65107485500b606d63761c3dee11ce4b8fb`, CI #419 failed with `ModuleNotFoundError: No module named 'bridge.hindsight_integrity'`.
+- Task 1 GREEN: `c16c3f1b9be8c593509ed7bcec51f403a36e4d06`, CI #420 completed successfully.
+- Task 2 RED: `bb78b6e2373c2189f3111c9d3d2fdee62f752bbe`, CI #421 failed on the missing `_HINDSIGHT_STALE_GUARD` / memory-owned helpers while the transition ownership test remained green.
+- Task 2 ruling: the native stale-retain test originally counted all background submissions, but post-retain hooks correctly enqueue Scene State and Memory Curator jobs. The test now asserts exactly one `hindsight_retain` submission while permitting independent hook jobs. Cost if wrong: it could hide non-Hindsight background duplication, which is outside this test's contract; duplicate Hindsight scheduling remains detected.
+- Task 2 code head: `f8c8b7a962a0236c6430d5d036ba5990cd54fa04`. All Phase 6C Task 1/2 tests passed in CI #423, but the full run later failed in unrelated `test_sync_phase3.Phase3SyncTests.test_realtime_round_trip_and_conflict_stop` during `TemporaryDirectory` cleanup with `OSError: [Errno 39] Directory not empty`.
+- CI retry ruling: the GitHub integration lacks Actions write permission for rerunning failed jobs (403). This documentation-only ledger commit intentionally triggers a fresh full CI run with identical production/test code to distinguish a transient Sync cleanup race from a Phase 6C regression. Cost if wrong: one documentation commit and one additional CI run.
