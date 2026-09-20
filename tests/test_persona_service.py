@@ -1,5 +1,6 @@
 import sqlite3
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import bridge.runtime as rt
@@ -259,6 +260,40 @@ class PersonaServiceTests(unittest.TestCase):
             self.service.delete_if_unused(self.db, "native.png")
         )
         self.assertEqual(self.deletes, ["native.png"])
+
+
+class PersonaSourceBoundaryTests(unittest.TestCase):
+    def _function_chunk(self, source, marker):
+        start = source.index(marker)
+        next_def = source.find("\ndef ", start + len(marker))
+        return source[start: next_def if next_def >= 0 else None]
+
+    def test_migrated_persona_application_paths_do_not_call_raw_lifecycle(self):
+        root = Path(__file__).parents[1] / "bridge"
+        input_source = (root / "input_flows.py").read_text(
+            encoding="utf-8"
+        )
+        for forbidden in (
+            "upsert_native_persona(",
+            "delete_native_persona(",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, input_source)
+
+        for marker in (
+            "def _handle_persona_input",
+            "def handle_persona_callback",
+        ):
+            chunk = self._function_chunk(input_source, marker)
+            self.assertNotIn("update_session(", chunk, marker)
+
+    def test_persona_menu_reads_only_through_service_boundary(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "cards.py"
+        ).read_text(encoding="utf-8")
+        chunk = self._function_chunk(source, "def send_persona_menu")
+        self.assertNotIn("load_personas(", chunk)
+        self.assertNotIn("persona_name(", chunk)
 
 
 class PersonaCompatibilityServiceTests(unittest.TestCase):
