@@ -2108,3 +2108,6 @@ Do not merge the PR. Merge remains a separate user decision.
 - Pre-flight: Task 2 produces canonical orphan-binding cleanup in `schema.py::_run_startup_database_cleanup`; Task 4 relies on that behavior before deleting the late `initialize_database_schema` wrapper. Ownership and commit boundaries match.
 - Pre-flight: Task 3 produces `_SYNC_POLL_SAFETY` while intentionally preserving `sync_safety.py` as the temporary public owner; Task 4 consumes the adapter in one atomic cutover and deletes the late wrapper. Transition contract is explicit and avoids double hardening.
 - Pre-flight: Task 4 produces canonical `schema.py::initialize_database_schema` and `sync_api.py::phase3_sync_poll` ownership; Task 5 verifies those owners plus non-scope equivalence.
+
+- Task 1 RED: `ef31526512737560b9a6dd7c823e23b36c62f941`, CI #450 failed with `ModuleNotFoundError: No module named 'bridge.sync_poll_safety'`.
+- Task 1 GREEN: `0a68e615b68e167ed0f38996e1102870511ca9aa`, CI #451 completed successfully.
