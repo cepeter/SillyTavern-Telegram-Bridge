@@ -4,6 +4,7 @@ from bridge.extension_registry import (
     apply_summary_context_hooks as _apply_summary_context_hooks,
     run_summary_clear_hooks as _run_summary_clear_hooks,
 )
+from bridge.memory_service import MemoryService as _MemoryService
 
 def hindsight_bank_id(chat_id: str) -> str:
     return "sillytavern-telegram-" + hashlib.sha256(str(chat_id).encode("utf-8")).hexdigest()[:24]
@@ -385,3 +386,25 @@ def session_summary_for_prompt(db: sqlite3.Connection, chat_id: str, session: di
     if count >= SUMMARY_TRIGGER_MESSAGES:
         summary = generate_session_summary(db, chat_id, session)
     return _apply_summary_context_hooks(summary, db, chat_id, session)
+
+
+def compatibility_memory_service() -> _MemoryService:
+    """Build a short-lived MemoryService from the final shared-runtime collaborators.
+
+    This is the compatibility adapter for direct legacy callers. The function
+    resolves collaborators at call time so late-loaded safety overrides remain
+    effective without letting application workflows call backend functions
+    directly.
+    """
+    return _MemoryService(
+        recall_context=recall_memory_context,
+        summary_for_prompt=session_summary_for_prompt,
+        summary_state=get_session_summary,
+        retain_session=retain_session_memory,
+        purge_session_memory=purge_hindsight_session,
+    )
+
+
+def resolve_memory_service(memory_service=None) -> _MemoryService:
+    """Return an injected service or the compatibility adapter."""
+    return memory_service if memory_service is not None else compatibility_memory_service()
