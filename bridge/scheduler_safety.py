@@ -127,16 +127,8 @@ def _requeue_worker_boot_failure(
     logging.error("Durable job %s remains recoverable on restart after DB startup failure", job_id)
 
 
-def submit_durable_chat_job(
-    db,
-    background,
-    label,
-    chat_id,
-    job_id,
-    function,
-    *args,
-):
-    """Guard the worker boot window while using injected background dispatch."""
+def _guard_durable_worker(db, job_id: int, function):
+    """Preserve the transient worker-boot requeue guard as an injected seam."""
     database_path = _connection_database_path(db)
 
     @functools.wraps(function)
@@ -151,13 +143,27 @@ def submit_durable_chat_job(
             )
             raise
 
-    queued = background.submit_chat(
-        label,
-        chat_id,
-        guarded_worker,
-        *args,
+    return guarded_worker
+
+
+def submit_durable_chat_job(
+    db,
+    background,
+    label,
+    chat_id,
+    job_id,
+    function,
+    *args,
+):
+    """Compatibility entry point delegating lifecycle ownership to JobService."""
+    jobs = _compatibility_job_service(background)
+    return jobs.submit(
+        db,
         int(job_id),
+        _JobSubmission(
+            label=str(label),
+            chat_id=str(chat_id),
+            worker=function,
+            args=tuple(args),
+        ),
     )
-    if queued:
-        mark_job_scheduled(db, int(job_id))
-    return queued

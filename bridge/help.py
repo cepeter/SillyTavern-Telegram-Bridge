@@ -479,11 +479,12 @@ def process_document_job(
 ) -> None:
     token = services.config.bot_token
     model = model_override or services.config.default_model
+    jobs = _jobs_for_services(services)
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
         try:
-            if job_id is not None and not mark_job_running(db, job_id):
+            if job_id is not None and not jobs.start(db, job_id):
                 return
             import_telegram_document(
                 db,
@@ -495,11 +496,11 @@ def process_document_job(
                 memory_service=services.memory,
             )
             if job_id is not None:
-                finish_job(db, job_id, "done")
+                jobs.complete(db, job_id)
         except Exception as exc:
             logging.error("Document job failed: %s", exc, exc_info=True)
             if job_id is not None:
-                finish_job(db, job_id, "failed", str(exc))
+                jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Document import failed. Check the file format and size limits.")
         finally:
             set_db_connection_context(None)

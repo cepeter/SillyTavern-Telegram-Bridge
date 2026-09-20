@@ -243,33 +243,34 @@ def process_voice_job(
     token = services.config.bot_token
     api_key = services.config.api_key
     model = model_override or services.config.default_model
+    jobs = _jobs_for_services(services)
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
         try:
-            if job_id is not None and not mark_job_running(db, job_id):
+            if job_id is not None and not jobs.start(db, job_id):
                 return
-            set_panel_actor_context(job_actor_id(db, job_id))
+            set_panel_actor_context(jobs.actor_id(db, job_id))
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 if json.loads(existing[2] or "[]"):
                     clear_failed_turn(db, chat_id, message_id)
                     if job_id is not None:
-                        finish_job(db, job_id, "done")
+                        jobs.complete(db, job_id)
                     return
                 delivery_session_id = queued_session_id or ensure_session(db, chat_id, model)["session_id"]
                 send_reply(token, chat_id, str(existing[1]), db, delivery_session_id, int(existing[0]))
                 clear_failed_turn(db, chat_id, message_id)
                 if job_id is not None:
-                    finish_job(db, job_id, "done")
+                    jobs.complete(db, job_id)
                 return
             process_voice_message(db, token, api_key, model, fields, chat_id, voice, message_id, queued_session_id=queued_session_id)
             if job_id is not None:
-                finish_job(db, job_id, "done")
+                jobs.complete(db, job_id)
         except Exception as exc:
             logging.error("Voice job failed: %s", exc, exc_info=True)
             if job_id is not None:
-                finish_job(db, job_id, "failed", str(exc))
+                jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings.")
         finally:
             set_panel_actor_context(None)

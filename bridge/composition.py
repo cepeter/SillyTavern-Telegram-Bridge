@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 
 from bridge.group_director_service import GroupDirectorService
+from bridge.job_service import JobService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.sync_service import SyncService
@@ -46,6 +47,7 @@ class BridgeServices:
     memory: MemoryService | None = None
     persona: PersonaService | None = None
     sync: SyncService | None = None
+    jobs: JobService | None = None
 
 
 def load_bridge_config(
@@ -104,6 +106,7 @@ def build_bridge_services(
     memory: MemoryService | None = None,
     persona: PersonaService | None = None,
     sync: SyncService | None = None,
+    jobs: JobService | None = None,
 ) -> BridgeServices:
     return BridgeServices(
         config=config,
@@ -114,4 +117,5 @@ def build_bridge_services(
         memory=memory,
         persona=persona,
         sync=sync,
+        jobs=jobs,
     )

@@ -4,11 +4,12 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import bridge.runtime as rt
 
 from bridge.group_director_service import GroupDirectorService
+from bridge.job_service import DurableJob, JobService, JobSubmission
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.sync_service import SyncService
@@ -96,6 +97,7 @@ class CompositionConfigTests(unittest.TestCase):
         )
         persona = object()
         sync = object()
+        jobs = object()
         services = build_bridge_services(
             config,
             db_factory=lambda: sqlite3.connect(":memory:"),
@@ -104,6 +106,7 @@ class CompositionConfigTests(unittest.TestCase):
             memory=memory,
             persona=persona,
             sync=sync,
+            jobs=jobs,
         )
 
         self.assertIs(services.config, config)
@@ -112,6 +115,7 @@ class CompositionConfigTests(unittest.TestCase):
         self.assertIs(services.memory, memory)
         self.assertIs(services.persona, persona)
         self.assertIs(services.sync, sync)
+        self.assertIs(services.jobs, jobs)
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
 
@@ -657,11 +661,14 @@ class RecoveryCompositionTests(unittest.TestCase):
         return True
 
     def test_submit_durable_chat_job_uses_injected_background_and_explicit_job_id(self):
+        fake_jobs = Mock()
+        fake_jobs.submit.return_value = True
+
         with patch.object(
             rt,
-            "submit_chat_background",
-            side_effect=AssertionError("global background used"),
-        ), patch.object(rt, "mark_job_scheduled") as scheduled:
+            "_compatibility_job_service",
+            return_value=fake_jobs,
+        ):
             queued = rt.submit_durable_chat_job(
                 self.db,
                 self.background,
@@ -679,40 +686,177 @@ class RecoveryCompositionTests(unittest.TestCase):
             )
 
         self.assertTrue(queued)
-        self.assertIs(self.submitted[0][3][0], self.services)
-        self.assertEqual(self.submitted[0][3][-1], 41)
-        scheduled.assert_called_once_with(self.db, 41)
-
-    def test_recovered_job_propagates_same_services_and_stored_model(self):
-        row = (
-            51,
-            "chat",
-            "session",
-            "10",
-            "generation",
-            '{"text":"hello","model":"stored::model"}',
+        self.assertEqual(
+            fake_jobs.submit.call_args.args[1],
+            41,
         )
+        submission = fake_jobs.submit.call_args.args[2]
+        self.assertIsInstance(submission, JobSubmission)
+        self.assertEqual(submission.label, "generation")
+        self.assertEqual(submission.chat_id, "chat")
+        self.assertIs(submission.worker, rt.process_message_job)
+        self.assertEqual(submission.args[0], self.services)
+        fake_jobs.submit.assert_called_once()
+
+    def test_recovered_job_resolver_preserves_stored_model_and_session(self):
+        generation = DurableJob(
+            job_id=51,
+            chat_id="chat",
+            session_id="stored-session",
+            telegram_message_id=10,
+            kind="generation",
+            payload={
+                "text": "hello",
+                "model": "stored::model",
+            },
+        )
+        submission = rt.resolve_recovered_job_submission(
+            self.services,
+            {"name": "Mira"},
+            generation,
+        )
+
+        self.assertEqual(submission.label, "generation")
+        self.assertIs(
+            inspect.unwrap(submission.worker),
+            rt.process_message_job,
+        )
+        self.assertIs(submission.args[0], self.services)
+        self.assertEqual(submission.args[-2], "stored-session")
+        self.assertEqual(submission.args[-1], "stored::model")
+        self.assertNotIn(51, submission.args)
+
+        active = DurableJob(
+            job_id=52,
+            chat_id="chat",
+            session_id="stored-session",
+            telegram_message_id=11,
+            kind="generation",
+            payload={
+                "text": "hello",
+                "model": "stored::model",
+                "resolve_active": True,
+            },
+        )
+        active_submission = rt.resolve_recovered_job_submission(
+            self.services,
+            {"name": "Mira"},
+            active,
+        )
+        self.assertIsNone(active_submission.args[-2])
+
+    def test_recovered_job_resolver_maps_all_worker_kinds(self):
+        fields = {"name": "Mira"}
+        cases = [
+            (
+                DurableJob(
+                    61, "chat", "session", 21, "callback",
+                    {"callback": {"id": "cb"}},
+                ),
+                rt.process_callback_job,
+                {"id": "cb"},
+            ),
+            (
+                DurableJob(
+                    62, "chat", "session", 22, "edit",
+                    {"text": "edited", "model": "stored::edit"},
+                ),
+                rt.process_edit_job,
+                "stored::edit",
+            ),
+            (
+                DurableJob(
+                    63, "chat", "session", 23, "voice",
+                    {
+                        "voice": {"file_id": "voice"},
+                        "model": "stored::voice",
+                    },
+                ),
+                rt.process_voice_job,
+                "stored::voice",
+            ),
+            (
+                DurableJob(
+                    64, "chat", "session", 24, "image",
+                    {
+                        "file_id": "image",
+                        "caption": "caption",
+                        "file_size": 7,
+                        "model": "stored::image",
+                    },
+                ),
+                rt.process_image_job,
+                "stored::image",
+            ),
+            (
+                DurableJob(
+                    65, "chat", "session", 25, "document",
+                    {
+                        "document": {"file_name": "notes.txt"},
+                        "model": "stored::document",
+                    },
+                ),
+                rt.process_document_job,
+                "stored::document",
+            ),
+        ]
+
+        for job, worker, expected_tail in cases:
+            with self.subTest(kind=job.kind):
+                submission = rt.resolve_recovered_job_submission(
+                    self.services,
+                    fields,
+                    job,
+                )
+                self.assertEqual(submission.label, job.kind)
+                self.assertIs(
+                    inspect.unwrap(submission.worker),
+                    worker,
+                )
+                self.assertIs(submission.args[0], self.services)
+                self.assertIn(expected_tail, submission.args)
+                self.assertNotIn(job.job_id, submission.args)
+
+        unknown = DurableJob(
+            66, "chat", "session", 26, "unknown", {}
+        )
+        self.assertIsNone(
+            rt.resolve_recovered_job_submission(
+                self.services,
+                fields,
+                unknown,
+            )
+        )
+
+    def test_dispatch_recovered_jobs_is_compatibility_delegate(self):
+        fake_jobs = Mock()
         with patch.object(
             rt,
-            "recover_jobs",
-            return_value=[row],
-        ), patch.object(
-            rt,
-            "mark_job_scheduled",
+            "_jobs_for_services",
+            return_value=fake_jobs,
         ):
             rt.dispatch_recovered_jobs(
                 self.db,
                 self.services,
                 {"name": "Mira"},
+                recover_running=False,
             )
 
-        label, chat_id, function, args = self.submitted[0]
-        self.assertEqual(label, "generation")
-        self.assertEqual(chat_id, "chat")
-        self.assertIs(inspect.unwrap(function), rt.process_message_job)
-        self.assertIs(args[0], self.services)
-        self.assertEqual(args[-2], "stored::model")
-        self.assertEqual(args[-1], 51)
+        fake_jobs.recover.assert_called_once()
+        call = fake_jobs.recover.call_args
+        self.assertIs(call.args[0], self.db)
+        self.assertFalse(call.kwargs["recover_running"])
+        resolved = call.args[1](
+            DurableJob(
+                67,
+                "chat",
+                "session",
+                27,
+                "generation",
+                {"text": "hello"},
+            )
+        )
+        self.assertEqual(resolved.label, "generation")
 
     def test_failed_background_submission_does_not_mark_job_scheduled(self):
         background = BackgroundRuntime(
@@ -807,9 +951,9 @@ class RecoveryCompositionTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(state, ("queued",))
 
-    def test_backlog_dispatcher_reuses_same_services_instance(self):
+    def test_backlog_dispatcher_uses_injected_job_recovery(self):
         opened = []
-        seen = []
+        fake_jobs = Mock()
 
         def factory():
             db = rt.db_connect(self.path)
@@ -821,23 +965,76 @@ class RecoveryCompositionTests(unittest.TestCase):
             db_factory=factory,
             telegram=self.services.telegram,
             background=self.services.background,
+            jobs=fake_jobs,
         )
 
-        with patch.object(
-            rt,
-            "dispatch_recovered_jobs",
-            side_effect=lambda db, actual_services, fields, **kwargs:
-                seen.append((db, actual_services, fields, kwargs)),
-        ):
-            dispatcher = rt.make_durable_backlog_dispatcher(
-                services,
-                {"name": "Mira"},
-            )
-            dispatcher()
+        dispatcher = rt.make_durable_backlog_dispatcher(
+            services,
+            {"name": "Mira"},
+        )
+        dispatcher()
 
         self.assertEqual(len(opened), 1)
-        self.assertIs(seen[0][1], services)
-        self.assertEqual(seen[0][3], {"recover_running": False})
+        fake_jobs.recover.assert_called_once()
+        call = fake_jobs.recover.call_args
+        self.assertIs(call.args[0], opened[0])
+        self.assertFalse(call.kwargs["recover_running"])
+        submission = call.args[1](
+            DurableJob(
+                68,
+                "chat",
+                "session",
+                28,
+                "generation",
+                {"text": "hello"},
+            )
+        )
+        self.assertEqual(submission.label, "generation")
+        with self.assertRaises(sqlite3.ProgrammingError):
+            opened[0].execute("SELECT 1")
+
+
+class RecordingJobs:
+    def __init__(self, *, submit_result=True):
+        self.calls = []
+        self.submit_result = submit_result
+        self.next_id = 700
+
+    def enqueue(
+        self,
+        db,
+        update_id,
+        chat_id,
+        session_id,
+        message_id,
+        kind,
+        payload,
+    ):
+        job_id = self.next_id
+        self.next_id += 1
+        self.calls.append((
+            "enqueue",
+            update_id,
+            chat_id,
+            session_id,
+            message_id,
+            kind,
+            payload,
+        ))
+        return job_id
+
+    def submit(self, db, job_id, submission):
+        self.calls.append(("submit", job_id, submission))
+        return self.submit_result
+
+    def recover(self, db, resolver, *, recover_running=True):
+        self.calls.append((
+            "recover",
+            db,
+            resolver,
+            recover_running,
+        ))
+        return None
 
 
 class StartupCompositionTests(unittest.TestCase):
@@ -998,6 +1195,40 @@ class StartupCompositionTests(unittest.TestCase):
         self.assertIs(services.sync.disable_realtime, disable)
         self.assertIs(services.sync.api_configured, configured)
 
+    def test_startup_builds_job_service_from_final_job_collaborators(self):
+        with patch.object(
+            rt,
+            "enqueue_job",
+        ) as enqueue, patch.object(
+            rt,
+            "job_actor_id",
+        ) as actor, patch.object(
+            rt,
+            "mark_job_scheduled",
+        ) as scheduled, patch.object(
+            rt,
+            "mark_job_running",
+        ) as running, patch.object(
+            rt,
+            "finish_job",
+        ) as finish, patch.object(
+            rt,
+            "recover_jobs",
+        ) as recover, patch.object(
+            rt,
+            "submit_chat_background",
+        ) as submit_chat:
+            services = rt._build_startup_services(self.config)
+
+        self.assertIsInstance(services.jobs, JobService)
+        self.assertIs(services.jobs.enqueue_backend, enqueue)
+        self.assertIs(services.jobs.actor_backend, actor)
+        self.assertIs(services.jobs.schedule_backend, scheduled)
+        self.assertIs(services.jobs.start_backend, running)
+        self.assertIs(services.jobs.finish_backend, finish)
+        self.assertIs(services.jobs.recover_backend, recover)
+        self.assertIs(services.jobs.submit_chat, submit_chat)
+
     def test_main_starts_sync_worker_with_injected_sync_service(self):
         sync_service = object()
 
@@ -1020,6 +1251,7 @@ class StartupCompositionTests(unittest.TestCase):
                 begin_shutdown=lambda: None,
             ),
             sync=sync_service,
+            jobs=Mock(),
         )
         parsed = rt.argparse.Namespace(check=False)
 
@@ -1048,7 +1280,11 @@ class StartupCompositionTests(unittest.TestCase):
         ), patch.object(
             rt, "install_bridge_signal_handlers"
         ), patch.object(
-            rt, "dispatch_recovered_jobs"
+            rt,
+            "dispatch_recovered_jobs",
+            side_effect=AssertionError(
+                "production startup must use services.jobs.recover"
+            ),
         ), patch.object(
             rt, "start_phase3_sync_worker"
         ) as start_sync, patch.object(
@@ -1063,7 +1299,304 @@ class StartupCompositionTests(unittest.TestCase):
         start_sync.assert_called_once_with(
             sync_service=sync_service
         )
+        services.jobs.recover.assert_called_once()
+        recover_call = services.jobs.recover.call_args
+        self.assertTrue(
+            recover_call.kwargs["recover_running"]
+        )
         rt._SHUTDOWN_EVENT.clear()
+
+    def _run_one_update(self, update, *, submit_result=True):
+        jobs = RecordingJobs(submit_result=submit_result)
+        sent = []
+        delivered = False
+
+        def request(_token, method, _payload=None):
+            nonlocal delivered
+            if method == "getUpdates":
+                if not delivered:
+                    delivered = True
+                    rt._SHUTDOWN_EVENT.set()
+                    return [update]
+                return []
+            return {}
+
+        services = BridgeServices(
+            config=self.config,
+            db_factory=lambda: rt.db_connect(self.config.db_file),
+            telegram=TelegramRuntime(
+                request=request,
+                send_text=lambda *args, **_kwargs: sent.append(args),
+            ),
+            background=BackgroundRuntime(
+                submit_chat=lambda *_args, **_kwargs: True,
+                register_backlog_dispatcher=lambda _callback: None,
+                begin_shutdown=lambda: None,
+            ),
+            sync=object(),
+            jobs=jobs,
+        )
+        parsed = rt.argparse.Namespace(check=False)
+
+        try:
+            with patch.object(
+                rt.argparse.ArgumentParser,
+                "parse_args",
+                return_value=parsed,
+            ), patch.object(
+                rt, "load_env_file"
+            ), patch.object(
+                rt, "refresh_phase3_config"
+            ), patch.object(
+                rt, "enforce_runtime_permissions"
+            ), patch.object(
+                rt, "_load_startup_config", return_value=self.config
+            ), patch.object(
+                rt, "_build_startup_services", return_value=services
+            ), patch.object(
+                rt, "validate_startup_credential"
+            ), patch.object(
+                rt, "set_bot_commands"
+            ), patch.object(
+                rt, "read_png_chara", return_value={}
+            ), patch.object(
+                rt, "card_fields", return_value={"name": "Mira"}
+            ), patch.object(
+                rt, "install_bridge_signal_handlers"
+            ), patch.object(
+                rt, "dispatch_recovered_jobs"
+            ), patch.object(
+                rt, "start_phase3_sync_worker"
+            ), patch.object(
+                rt, "stop_phase3_sync_worker", return_value=True
+            ), patch.object(
+                rt, "shutdown_background_executors", return_value=True
+            ), patch.object(
+                rt, "run_database_maintenance"
+            ), patch.object(
+                rt, "answer_callback"
+            ), patch.object(
+                rt, "group_user_turn_allowed", return_value=True
+            ):
+                self.assertEqual(rt.main(), 0)
+        finally:
+            rt._SHUTDOWN_EVENT.clear()
+
+        return jobs, sent
+
+    def test_main_durable_paths_enqueue_and_submit_through_jobs_service(self):
+        cases = [
+            (
+                "callback",
+                {
+                    "update_id": 1,
+                    "callback_query": {
+                        "id": "cb",
+                        "from": {"id": 100},
+                        "data": "enum:status",
+                        "message": {
+                            "message_id": 10,
+                            "chat": {"id": "chat"},
+                        },
+                    },
+                },
+                "callback",
+            ),
+            (
+                "edit",
+                {
+                    "update_id": 2,
+                    "edited_message": {
+                        "message_id": 11,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "edited",
+                    },
+                },
+                "edit",
+            ),
+            (
+                "voice",
+                {
+                    "update_id": 3,
+                    "message": {
+                        "message_id": 12,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "voice": {"file_id": "voice"},
+                    },
+                },
+                "voice",
+            ),
+            (
+                "image",
+                {
+                    "update_id": 4,
+                    "message": {
+                        "message_id": 13,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "photo": [
+                            {"file_id": "photo", "file_size": 5},
+                        ],
+                    },
+                },
+                "image",
+            ),
+            (
+                "document",
+                {
+                    "update_id": 5,
+                    "message": {
+                        "message_id": 14,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "document": {
+                            "file_id": "doc",
+                            "file_name": "notes.txt",
+                            "mime_type": "text/plain",
+                        },
+                    },
+                },
+                "document",
+            ),
+            (
+                "command",
+                {
+                    "update_id": 6,
+                    "message": {
+                        "message_id": 15,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "/status",
+                    },
+                },
+                "command",
+            ),
+            (
+                "generation",
+                {
+                    "update_id": 7,
+                    "message": {
+                        "message_id": 16,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "hello",
+                    },
+                },
+                "generation",
+            ),
+        ]
+
+        for label, update, expected_kind in cases:
+            with self.subTest(label=label):
+                jobs, _sent = self._run_one_update(update)
+                enqueue_calls = [
+                    call for call in jobs.calls
+                    if call[0] == "enqueue"
+                ]
+                submit_calls = [
+                    call for call in jobs.calls
+                    if call[0] == "submit"
+                ]
+                self.assertEqual(len(enqueue_calls), 1)
+                self.assertEqual(len(submit_calls), 1)
+                self.assertEqual(
+                    enqueue_calls[0][5],
+                    expected_kind,
+                )
+                self.assertIsInstance(
+                    submit_calls[0][2],
+                    JobSubmission,
+                )
+                self.assertEqual(
+                    submit_calls[0][2].label,
+                    expected_kind,
+                )
+
+    def test_rejected_durable_admission_preserves_restart_feedback(self):
+        cases = [
+            (
+                {
+                    "update_id": 20,
+                    "message": {
+                        "message_id": 20,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "hello",
+                    },
+                },
+                "⏳ Message saved for generation after restart.",
+            ),
+            (
+                {
+                    "update_id": 21,
+                    "message": {
+                        "message_id": 21,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "photo": [
+                            {"file_id": "photo", "file_size": 5},
+                        ],
+                    },
+                },
+                "🖼️ Image saved for processing after restart.",
+            ),
+            (
+                {
+                    "update_id": 22,
+                    "message": {
+                        "message_id": 22,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "voice": {"file_id": "voice"},
+                    },
+                },
+                "🎙️ Voice saved for processing after restart.",
+            ),
+            (
+                {
+                    "update_id": 23,
+                    "message": {
+                        "message_id": 23,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "document": {
+                            "file_id": "doc",
+                            "file_name": "notes.txt",
+                            "mime_type": "text/plain",
+                        },
+                    },
+                },
+                "📄 Document saved for processing after restart.",
+            ),
+            (
+                {
+                    "update_id": 24,
+                    "message": {
+                        "message_id": 24,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "/summarize",
+                    },
+                },
+                "⏳ Command saved for execution after restart.",
+            ),
+        ]
+
+        for update, expected in cases:
+            with self.subTest(expected=expected):
+                _jobs, sent = self._run_one_update(
+                    update,
+                    submit_result=False,
+                )
+                self.assertTrue(
+                    any(
+                        len(call) >= 3 and call[2] == expected
+                        for call in sent
+                    ),
+                    sent,
+                )
 
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = rt.argparse.Namespace(check=True)
@@ -1154,7 +1687,7 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("get_services(", source)
         self.assertNotIn("set_services(", source)
 
-    def test_phase5_extracted_services_stop_at_sync(self):
+    def test_phase5_extracted_services_include_job_service(self):
         root = Path(__file__).parents[1] / "bridge"
         source = "\n".join(
             path.read_text(encoding="utf-8")
@@ -1164,11 +1697,7 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertIn("class MemoryService", source)
         self.assertIn("class PersonaService", source)
         self.assertIn("class SyncService", source)
-        for forbidden in (
-            "class JobService",
-        ):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, source)
+        self.assertIn("class JobService", source)
 
 
 if __name__ == "__main__":
