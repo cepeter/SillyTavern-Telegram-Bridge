@@ -1344,3 +1344,54 @@ Before Ready-for-review, verify:
 Only after Steps 12-13 are satisfied.
 
 Do not merge the PR. Merge remains a separate user decision.
+
+
+## Execution Evidence
+
+### Execution ruling
+
+- Ruling: this harness has no runnable local repository/worktree, so the Draft PR GitHub Actions workflow is the native RED -> GREEN runner for every task. The exact repository CI executes compile, full unittest discovery, full pytest, `pip check`, and locked dependency audit. Cost if wrong: focused local commands are not separately recorded, but every RED assertion and every GREEN state is observed on the actual branch SHA under the repository's authoritative CI environment.
+
+### Task 1 — ordinary Persona integrity adapter
+
+- RED head: `0a9630cf86a6ad8b7c8c98ee19a2fba79d636112`.
+- CI #407 (`35508118147`) failed with `ModuleNotFoundError: No module named 'bridge.persona_integrity'`; 489 unittest tests ran with one import error.
+- GREEN head: `86b42260b7c1653a0b9cc3f11f17e7519aeab493`.
+- CI #408 (`35508176987`) completed successfully across every workflow step.
+- Result: `IntegrityCheckedPersonaStore` exists as ordinary-import infrastructure and its serialization/collision/client/exception tests pass.
+
+### Task 2 — canonical native Persona storage
+
+- RED head: `03162f5c57bbb866ba972a7c5fabfb0b7609770d`.
+- CI #409 (`35508241141`) failed with three `AttributeError` failures because `rt._PERSONA_STORE` did not exist and one source-boundary failure because `persona_sync.py` did not own `_choose_native_avatar`; 499 unittest tests ran.
+- GREEN head: `6cc642a5ebc13cd5539a4129bf37821ef6a060a5`.
+- CI #410 (`35508306082`) completed successfully across every workflow step.
+- Result: avatar allocation and native persistence backends are canonical in `persona_sync.py`; `_PERSONA_STORE` wraps them explicitly.
+
+### Task 3 — retire Persona state-integrity overrides
+
+- RED head: `f32880509a6f68823297096f55a6f9f7b23b0256`.
+- CI #412 (`35508376356`) failed exactly four ownership assertions:
+  - `state_integrity.py` still contained `_ORIGINAL_UPSERT_NATIVE_PERSONA`;
+  - the allowlist still contained `upsert_native_persona` / `delete_native_persona`;
+  - runtime public owners still resolved to `state_integrity.py`;
+  - the runtime report still listed the two Persona overrides.
+- GREEN implementation head: `90a74c13cc46a7eeed30a9e81f53433be2733387`.
+- CI #416 (`35508485578`) succeeded:
+  - `501` unittest tests passed;
+  - pytest: `501 passed, 103 subtests passed`;
+  - `pip check`: `No broken requirements found.`;
+  - locked dependency audit: `No known vulnerabilities found`.
+- Source-boundary verification on the implementation head:
+  - no `_ORIGINAL_UPSERT_NATIVE_PERSONA`;
+  - no `_ORIGINAL_DELETE_NATIVE_PERSONA`;
+  - no Persona public definitions or avatar allocator remain in `state_integrity.py`;
+  - its allowed overrides are now only `retain_session_memory`, `purge_hindsight_session`, and `apply_sync_snapshot`;
+  - the complete Hindsight/Live-Sync portion of `state_integrity.py`, beginning at `_hindsight_epoch_key`, is byte-for-byte identical to baseline `314b2137b36164608c0d427583564b0fcb1660d1`;
+  - `sync_safety.py` is unchanged.
+
+### Upstream and PR state before final exact-head gate
+
+- Merge base / current upstream `main`: `314b2137b36164608c0d427583564b0fcb1660d1`; no upstream drift is present.
+- Draft PR: #42.
+- Final exact-head CI, review-thread inspection, whole-branch review, and Ready-for-review transition are intentionally performed after this evidence commit. Updating this document again after those checks would create another head and recursively invalidate exact-head CI evidence.
