@@ -120,7 +120,8 @@ def send_session_delete_confirm(token: str, chat_id: str, session_id: str, title
     send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
-def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None) -> tuple[bool, str]:
+def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None, *, memory_service=None) -> tuple[bool, str]:
+    memory_service = resolve_memory_service(memory_service)
     if target_session_id == active_session_id:
         return False, "active session"
     exists = db.execute("SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id)).fetchone()
@@ -136,7 +137,7 @@ def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id:
         if busy:
             return False, "session has active jobs"
         try:
-            purge_hindsight_session(db, chat_id, target_session_id)
+            memory_service.purge_session(db, chat_id, target_session_id)
         except RuntimeError:
             return False, "Hindsight cleanup failed; session was preserved"
         if operation_id is not None and not begin_operation(db, operation_id, "session_delete"):
