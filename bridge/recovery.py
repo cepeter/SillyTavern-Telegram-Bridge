@@ -171,6 +171,7 @@ def _begin_durable_operation(db, operation_id, kind, deliver_recovered):
 
 
 def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=None, *, memory_service=None):
+    memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
     def deliver_recovered_regen():
@@ -197,25 +198,15 @@ def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=N
     user_text = rows[last_user_index][2]
     history_rows = [(row[1], row[2]) for row in rows[:last_user_index]]
     rag_bundle = rag_retrieval_bundle(db, chat_id, user_text)
-    if memory_service is not None:
-        memory_prompt = memory_service.prompt_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            user_text,
-        )
-        memory_context = memory_prompt.recall
-        session_summary = memory_prompt.summary
-    else:
-        memory_context = recall_memory_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            user_text,
-        )
-        session_summary = session_summary_for_prompt(db, chat_id, session)
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        user_text,
+    )
+    memory_context = memory_prompt.recall
+    session_summary = memory_prompt.summary
     messages = build_chat_messages(
         session,
         fields,
@@ -246,15 +237,13 @@ def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=N
     assistant_rowid, variant = run_write_txn(db, persist_regeneration)
 
     _delete_stored_telegram_ids(token, chat_id, old_message_ids)
-    if memory_service is not None:
-        memory_service.retain(db, chat_id, session, fields)
-    else:
-        retain_session_memory(db, chat_id, session, fields)
+    memory_service.retain(db, chat_id, session, fields)
     send_reply(token, chat_id, f"♻️ Regenerated response (variant {variant})\n\n{reply}", db, session_id, assistant_rowid)
     _finish_operation(db, operation_id, "regen")
 
 
 def continue_last(db, token, api_key, session, fields, chat_id, operation_id=None, *, memory_service=None):
+    memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
     def deliver_recovered_continue():
@@ -279,25 +268,15 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
     instruction = "Continue the previous assistant response from its exact ending. Do not repeat any existing text. Output only the continuation."
     history_rows = [(row[1], row[2]) for row in rows]
     rag_bundle = rag_retrieval_bundle(db, chat_id, instruction)
-    if memory_service is not None:
-        memory_prompt = memory_service.prompt_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            instruction,
-        )
-        memory_context = memory_prompt.recall
-        session_summary = memory_prompt.summary
-    else:
-        memory_context = recall_memory_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            instruction,
-        )
-        session_summary = session_summary_for_prompt(db, chat_id, session)
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        instruction,
+    )
+    memory_context = memory_prompt.recall
+    session_summary = memory_prompt.summary
     messages = build_chat_messages(
         session,
         fields,
@@ -329,15 +308,13 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
     run_write_txn(db, persist_continuation)
 
     _prepare_delivery_recovery(db, token, chat_id, assistant_row[0], operation_id)
-    if memory_service is not None:
-        memory_service.retain(db, chat_id, session, fields)
-    else:
-        retain_session_memory(db, chat_id, session, fields)
+    memory_service.retain(db, chat_id, session, fields)
     send_reply(token, chat_id, f"↪️ Continued response\n\n{combined}", db, session_id, int(assistant_row[0]))
     _finish_operation(db, operation_id, "continue")
 
 
 def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_rowid, new_text, operation_id=None, *, memory_service=None):
+    memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
     def deliver_recovered_edit():
@@ -360,35 +337,16 @@ def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_ro
     if target_index is None:
         raise ValueError("Telegram message is not a user turn in the active session")
     history_rows = [(row[1], row[2]) for row in rows[:target_index]]
-    if memory_service is not None:
-        memory_prompt = memory_service.prompt_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            new_text,
-            edited_user_rowid=int(user_rowid),
-        )
-        memory_context = memory_prompt.recall
-        session_summary = memory_prompt.summary
-    else:
-        memory_context = recall_memory_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            new_text,
-        )
-        _covered_summary, covered_until = get_session_summary(
-            db,
-            chat_id,
-            session_id,
-        )
-        session_summary = (
-            ""
-            if covered_until >= int(user_rowid)
-            else session_summary_for_prompt(db, chat_id, session)
-        )
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        new_text,
+        edited_user_rowid=int(user_rowid),
+    )
+    memory_context = memory_prompt.recall
+    session_summary = memory_prompt.summary
     rag_bundle = rag_retrieval_bundle(db, chat_id, new_text)
     messages = build_chat_messages(
         session,
@@ -423,10 +381,7 @@ def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_ro
     assistant_rowid = run_write_txn(db, persist_edit)
 
     _delete_stored_telegram_ids(token, chat_id, old_message_ids)
-    if memory_service is not None:
-        memory_service.retain(db, chat_id, session, fields)
-    else:
-        retain_session_memory(db, chat_id, session, fields)
+    memory_service.retain(db, chat_id, session, fields)
     send_reply(token, chat_id, f"✏️ Edited message regenerated.\n\n{reply}", db, session_id, assistant_rowid)
     _finish_operation(db, operation_id, "edit")
 
@@ -444,7 +399,9 @@ def _operation_command(text):
 
 
 def process_message(db, token, api_key, model, fields, chat_id, text, telegram_message_id=None, queued_session_id=None, operation_id=None, *, services=None):
-    memory_service = getattr(services, "memory", None) if services is not None else None
+    memory_service = resolve_memory_service(
+        getattr(services, "memory", None) if services is not None else None
+    )
     # Command-specific local_committed recovery must run before the legacy
     # generic recovery shortcut, otherwise cleanup/variant work is skipped.
     if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
