@@ -1,5 +1,6 @@
 
 def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service=None) -> None:
+    memory_service = resolve_memory_service(memory_service)
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_current_speaker(db, chat_id, session, caption)
     group_context = ""
@@ -10,25 +11,15 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
     rows = db.execute("SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session["session_id"])).fetchall()
     history_rows = [(row[0], row[1]) for row in rows[-MAX_HISTORY_MESSAGES:]]
     rag_bundle = rag_retrieval_bundle(db, chat_id, caption)
-    if memory_service is not None:
-        memory_prompt = memory_service.prompt_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            caption,
-        )
-        memory_context = memory_prompt.recall
-        session_summary = memory_prompt.summary
-    else:
-        memory_context = recall_memory_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            caption,
-        )
-        session_summary = session_summary_for_prompt(db, chat_id, session)
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        caption,
+    )
+    memory_context = memory_prompt.recall
+    session_summary = memory_prompt.summary
     messages = build_chat_messages(session, fields, caption, history_rows, image_data_uri=image_data_uri, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context_for_prompt(db, chat_id, caption, rag_bundle), group_context=group_context)
     send_typing(token, chat_id)
     reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session['session_id']}", settings=get_generation_settings(db, chat_id, session["session_id"]))
@@ -50,14 +41,12 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
         )
         if group_turn:
             advance_group_turn(db, chat_id, session["session_id"])
-    if memory_service is not None:
-        memory_service.retain(db, chat_id, session, fields)
-    else:
-        retain_session_memory(db, chat_id, session, fields)
+    memory_service.retain(db, chat_id, session, fields)
     send_reply(token, chat_id, stored_reply, db, session["session_id"], assistant_rowid)
 
 
-def regenerate_edited_turn(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, user_rowid: int, new_text: str, operation_id: int | str | None = None) -> None:
+def regenerate_edited_turn(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, user_rowid: int, new_text: str, operation_id: int | str | None = None, *, memory_service=None) -> None:
+    memory_service = resolve_memory_service(memory_service)
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "edit"):
             return
@@ -67,9 +56,16 @@ def regenerate_edited_turn(db: sqlite3.Connection, token: str, api_key: str, ses
     if target_index is None:
         raise ValueError("Telegram message is not a user turn in the active session")
     history_rows = [(row[1], row[2]) for row in rows[:target_index]]
-    memory_context = recall_memory_context(db, chat_id, session, fields, new_text)
-    _covered_summary, covered_until = get_session_summary(db, chat_id, session_id)
-    session_summary = "" if covered_until >= int(user_rowid) else session_summary_for_prompt(db, chat_id, session)
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        new_text,
+        edited_user_rowid=int(user_rowid),
+    )
+    memory_context = memory_prompt.recall
+    session_summary = memory_prompt.summary
     rag_bundle = rag_retrieval_bundle(db, chat_id, new_text)
     rag_context = rag_context_for_prompt(db, chat_id, new_text, rag_bundle)
     generation_settings = get_generation_settings(db, chat_id, session_id)
@@ -89,7 +85,7 @@ def regenerate_edited_turn(db: sqlite3.Connection, token: str, api_key: str, ses
         db.commit()
     delete_outgoing_messages(db, token, chat_id, session_id, user_rowid)
     save_response_variant(db, chat_id, session_id, new_text, reply)
-    retain_session_memory(db, chat_id, session, fields)
+    memory_service.retain(db, chat_id, session, fields)
     send_reply(token, chat_id, f"✏️ Edited message regenerated.\n\n{reply}", db, session_id, assistant_rowid)
     if operation_id is not None:
         record_operation(db, operation_id, "edit")
@@ -171,9 +167,10 @@ def apply_preset_action(db: sqlite3.Connection, token: str, chat_id: str, sessio
     send_text(token, chat_id, f"Preset deleted: {name}" if delete_generation_preset(db, chat_id, name) else f"Preset not found: {name}")
 
 
-def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str]) -> str:
+def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], *, memory_service=None) -> str:
+    memory_service = resolve_memory_service(memory_service)
     message_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0]
-    summary, covered_until = get_session_summary(db, chat_id, session["session_id"])
+    summary, covered_until = memory_service.summary_status(db, chat_id, session["session_id"])
     docs = data_bank_documents(db, chat_id)
     group = group_state(db, chat_id, session["session_id"])
     return (f"Prompt inspector\nCharacter: {fields['name']}\nMessages: {message_count}\n"
