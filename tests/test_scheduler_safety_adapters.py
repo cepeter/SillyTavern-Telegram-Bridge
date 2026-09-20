@@ -290,5 +290,88 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
             second.close()
 
 
+class CanonicalRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "recovery.sqlite3"
+        self.db = rt.db_connect(self.path)
+
+    def tearDown(self):
+        self.db.close()
+        self.tmp.cleanup()
+
+    def test_database_recover_jobs_is_bounded_in_canonical_source(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "database.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("def recover_jobs(")
+        end = source.find("\ndef ", start + 4)
+        chunk = source[start:end if end >= 0 else None]
+        self.assertIn("LIMIT 128", chunk)
+        self.assertNotIn(
+            'limit_clause = "" if recover_running else " LIMIT 128"',
+            chunk,
+        )
+
+    def test_startup_and_backlog_recovery_are_bounded_oldest_first(self):
+        job_ids = []
+        for update_id in range(130):
+            job_ids.append(
+                rt.enqueue_job(
+                    self.db,
+                    update_id + 1,
+                    "chat",
+                    "session",
+                    update_id + 1,
+                    "generation",
+                    {"text": str(update_id)},
+                )
+            )
+
+        for created_at, job_id in enumerate(job_ids, start=1):
+            self.db.execute(
+                "UPDATE jobs SET created_at=? WHERE job_id=?",
+                (float(created_at), job_id),
+            )
+        self.db.execute(
+            "UPDATE jobs SET state='running' WHERE job_id=?",
+            (job_ids[0],),
+        )
+        self.db.execute(
+            "UPDATE jobs SET state='scheduled' WHERE job_id=?",
+            (job_ids[1],),
+        )
+        self.db.commit()
+
+        first = rt.recover_jobs(self.db, recover_running=True)
+        self.assertEqual(len(first), 128)
+        self.assertEqual(
+            [row[0] for row in first],
+            job_ids[:128],
+        )
+        states = dict(
+            self.db.execute(
+                "SELECT job_id,state FROM jobs WHERE job_id IN (?,?)",
+                (job_ids[0], job_ids[1]),
+            ).fetchall()
+        )
+        self.assertEqual(states[job_ids[0]], "queued")
+        self.assertEqual(states[job_ids[1]], "queued")
+
+        for row in first:
+            self.assertTrue(rt.mark_job_scheduled(self.db, row[0]))
+
+        second = rt.recover_jobs(
+            self.db,
+            recover_running=False,
+        )
+        self.assertEqual(
+            [row[0] for row in second],
+            job_ids[128:],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
