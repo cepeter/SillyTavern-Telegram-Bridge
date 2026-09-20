@@ -765,6 +765,33 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             ],
         )
 
+    def test_expected_transient_error_releases_chat_lock(self):
+        self.add_binding("chat", "session")
+
+        def fail(*_args):
+            raise ExpectedSyncError(
+                "temporary",
+                transient=True,
+            )
+
+        self.adapter = SyncPollSafetyAdapter(
+            sync_now=fail,
+            chat_lock=self.lock_for,
+            disable_realtime=self.disable,
+            expected_errors=(ExpectedSyncError, ValueError),
+            sync_interval=lambda: self.interval,
+            now=lambda: self.now_value,
+            log_warning=lambda *_args, **_kwargs: None,
+        )
+
+        self.adapter.poll(self.db)
+
+        lock = self.lock_for("chat")
+        self.assertTrue(
+            lock.acquire(blocking=False)
+        )
+        lock.release()
+
     def test_error_path_releases_chat_lock(self):
         self.add_binding("chat", "session")
 
@@ -1319,7 +1346,7 @@ from bridge.sync_poll_safety import (
 
 - [ ] **Step 4: Compose the adapter with call-time collaborators**
 
-After `phase3_sync_now`, `_phase3_disable`, and their dependencies are defined, but before compatibility service construction is used at runtime, add:
+Insert immediately before `def compatibility_sync_service()`. At that point `_phase3_disable`, `phase3_sync_now`, `phase3_toggle_realtime`, and all required globals are already defined:
 
 ```python
 _SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
