@@ -774,3 +774,11 @@ If no independent reviewer/subagent capability exists in the harness, perform th
 Only after Steps 13–14 pass.
 
 Do not merge the PR. Merge remains a separate user decision.
+
+
+## Execution Ledger (in progress)
+
+- Ruling: this harness exposes no local Git checkout/worktree, so the isolated feature branch `punzer4-code:refactor/phase-6f-persona-load-owner` is the execution workspace and exact-SHA GitHub Actions is the authoritative command runner. Cost if wrong: focused commands cannot be recorded separately from CI, but every committed repository state remains reproducible by exact SHA.
+- Baseline: merged Phase 6E commit `df552d3d40b92c1016431fb4ef7eeee74bbbc284`; branch started directly from that commit and was 0 behind at execution start.
+- Pre-flight: Task 1 produces characterization tests for final loader semantics/call-time binding; Task 2 consumes those exact behaviors and changes only `cards.py` plus `runtime_loader.py`.
+- Pre-flight: Task 2 produces a no-Persona-override runtime state; Task 3 consumes that state for exact-head verification and PR readiness. No interface conflict found.
