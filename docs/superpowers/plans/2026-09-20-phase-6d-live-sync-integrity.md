@@ -1637,3 +1637,6 @@ Do not merge the PR. Merge is a separate user decision.
 
 - Task 2 final RED: `4a46b7b714c86249af2bf7cfbd4f5dadf03c91d3`, CI #440 failed on missing `_SYNC_SNAPSHOT_INTEGRITY` both through the direct runtime test and the source composition assertion; the transition public-owner assertion remained valid.
 - Task 2 GREEN: `623476642e21820c717907b23a39d78e3ed7b1a2`, CI #441 completed successfully with the public owner still pinned to `state_integrity.py`.
+
+- Task 3 RED: `5b83f45eea5feb6f15726f922114cc74f2dce4f6`, CI #444 failed on exactly six final ownership/retirement assertions while the migrated explicit-clear + Hindsight-refresh integration test passed.
+- Task 3 Ruling: two older Phase 6B/6C source-boundary tests must treat deletion of `state_integrity.py` as the stronger final condition instead of opening the retired file and scanning it. CI #445 showed only these two `FileNotFoundError` regressions after the cutover; all new Phase 6D ownership/behavior tests passed. Cost if wrong: the tests no longer enumerate old forbidden symbols inside a file that no longer exists; file absence is a stricter boundary.
