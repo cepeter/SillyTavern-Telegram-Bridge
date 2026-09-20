@@ -2099,3 +2099,12 @@ If no independent reviewer/subagent capability exists in the harness, perform th
 Only after Steps 12–13 pass.
 
 Do not merge the PR. Merge remains a separate user decision.
+
+
+## Execution Ledger (in progress)
+
+- Ruling: This harness has no local Git checkout/worktree. The isolated feature branch `punzer4-code:refactor/phase-6e-sync-safety` is the execution workspace and Draft PR GitHub Actions is the authoritative RED -> GREEN runner. Cost if wrong: focused local commands cannot be recorded separately, but each RED/GREEN state is observed on an exact repository SHA.
+- Pre-flight: Task 1 produces `SyncPollSafetyAdapter.poll(db)`; Task 3 consumes that exact interface for explicit `sync_api.py` composition. Signatures match.
+- Pre-flight: Task 2 produces canonical orphan-binding cleanup in `schema.py::_run_startup_database_cleanup`; Task 4 relies on that behavior before deleting the late `initialize_database_schema` wrapper. Ownership and commit boundaries match.
+- Pre-flight: Task 3 produces `_SYNC_POLL_SAFETY` while intentionally preserving `sync_safety.py` as the temporary public owner; Task 4 consumes the adapter in one atomic cutover and deletes the late wrapper. Transition contract is explicit and avoids double hardening.
+- Pre-flight: Task 4 produces canonical `schema.py::initialize_database_schema` and `sync_api.py::phase3_sync_poll` ownership; Task 5 verifies those owners plus non-scope equivalence.
