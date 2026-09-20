@@ -4,7 +4,7 @@
 [![Latest release](https://img.shields.io/github/v/release/cepeter/SillyTavern-Telegram-Bridge?display_name=tag)](https://github.com/cepeter/SillyTavern-Telegram-Bridge/releases/latest)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
-> **v0.2.017** · Talk to your SillyTavern characters from Telegram. That's the whole pitch.
+> **v0.2.018** · Talk to your SillyTavern characters from Telegram. That's the whole pitch.
 
 ---
 

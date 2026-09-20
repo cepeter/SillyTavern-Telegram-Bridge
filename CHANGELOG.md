@@ -4,6 +4,19 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.018] - 2026-09-20
+
+### Added
+
+- Added injected PersonaService, SyncService, and JobService application boundaries while preserving compatibility with existing callers.
+- Added regression coverage for Persona lifecycle safety, Live API Sync routing, and durable job intake and recovery.
+
+### Fixed
+
+- Made Persona creation retry-safe and cleaned up newly created Personas when session selection fails.
+- Serialized Persona selection, update, disable, and deletion operations to close lifecycle race windows.
+- Preserved durable job ordering, idempotency, recovery, and worker boot behavior through JobService.
+
 ### Changed
 
 - Reduced SQLite contention by keeping RAG embedding work outside write transactions, reusing the realtime sync worker connection, and using a smaller page-cache budget for lightweight worker connections.
