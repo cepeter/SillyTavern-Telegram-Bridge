@@ -72,9 +72,8 @@
 - Assert state-integrity no longer allowlists Persona replacements.
 - Assert runtime report has no state-integrity Persona override.
 
-**Modify `tests/test_composition.py` only if needed**
-- Existing PersonaService composition should remain unchanged.
-- Add a regression assertion only if current tests do not already pin the canonical `upsert_native_persona`/`delete_native_persona` injection.
+**Do not modify `tests/test_composition.py`**
+- The existing `test_startup_builds_persona_service_from_final_runtime_collaborators` already pins `services.persona.upsert_persona` and `services.persona.delete_persona` to the final runtime collaborators.
 
 ---
 
@@ -410,8 +409,8 @@ git commit -m "refactor: add persona integrity store"
   - `_upsert_native_persona_storage(identifier: str, name: str, description: str, client=None) -> str`
   - `_delete_native_persona_storage(identifier: str, client=None) -> bool`
   - `_PERSONA_STORE: IntegrityCheckedPersonaStore`
-  - canonical public `upsert_native_persona(...)`
-  - canonical public `delete_native_persona(...)`
+  - canonical public `upsert_native_persona(identifier: str, name: str, description: str, client=None) -> str`
+  - canonical public `delete_native_persona(identifier: str, client=None) -> bool`
 
 - [ ] **Step 1: Add RED canonical-store integration tests**
 
@@ -786,7 +785,7 @@ git commit -m "refactor: make native persona storage explicit"
 - Modify: `tests/test_state_integrity.py`
 - Modify: `tests/test_runtime_loader.py`
 - Modify: `tests/test_persona_native_storage.py`
-- Modify: `tests/test_composition.py` only if current Persona composition is not already pinned
+- Verify unchanged: `tests/test_composition.py`
 
 **Interfaces:**
 - Consumes:
@@ -903,32 +902,43 @@ _ORIGINAL_UPSERT_NATIVE_PERSONA = upsert_native_persona
 _ORIGINAL_DELETE_NATIVE_PERSONA = delete_native_persona
 ```
 
-Remove:
+Remove the complete current definition beginning with:
 
 ```python
-def _native_persona_id_is_taken(...):
-    ...
+def _native_persona_id_is_taken(
+    identifier: str,
+) -> bool:
 ```
 
-Remove:
+Remove the complete current definition beginning with:
 
 ```python
-def _choose_native_avatar(...):
-    ...
+def _choose_native_avatar(
+    persona_id: str,
+    persona: dict,
+    settings: dict,
+    native_names: dict,
+) -> str:
 ```
 
-Remove the replacement public functions:
+Remove the complete replacement public definition beginning with:
 
 ```python
-def upsert_native_persona(...):
-    ...
+def upsert_native_persona(
+    identifier: str,
+    name: str,
+    description: str,
+    client=None,
+) -> str:
 ```
 
-and:
+and the complete replacement public definition beginning with:
 
 ```python
-def delete_native_persona(...):
-    ...
+def delete_native_persona(
+    identifier: str,
+    client=None,
+) -> bool:
 ```
 
 Do not modify:
@@ -1009,26 +1019,18 @@ Add to `tests/test_persona_native_storage.py`:
 
 This validates the actual compatibility surface after `state_integrity.py` stops replacing it.
 
-- [ ] **Step 8: Verify PersonaService production composition remains canonical**
+- [ ] **Step 8: Verify the existing PersonaService composition test remains unchanged and green**
 
-Inspect the existing composition test for `_build_startup_services`.
+The current `tests/test_composition.py::CompositionIntegrationTests.test_startup_builds_persona_service_from_final_runtime_collaborators` already patches `rt.upsert_native_persona` and `rt.delete_native_persona`, builds startup services, and asserts those exact callables are injected into `PersonaService`.
 
-If it already asserts:
+Do not edit that test. Run it after the cutover:
 
-```python
-self.assertIs(
-    services.persona.upsert_persona,
-    rt.upsert_native_persona,
-)
-self.assertIs(
-    services.persona.delete_persona,
-    rt.delete_native_persona,
-)
+```bash
+python -m unittest \
+  tests.test_composition.CompositionIntegrationTests.test_startup_builds_persona_service_from_final_runtime_collaborators -v
 ```
 
-leave it unchanged.
-
-If those assertions are absent, add them to the existing PersonaService composition test in `tests/test_composition.py`.
+Expected: PASS, proving startup composition automatically follows the new canonical public owners.
 
 - [ ] **Step 9: Run the focused Persona/runtime suite**
 
