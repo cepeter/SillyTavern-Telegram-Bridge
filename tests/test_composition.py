@@ -11,6 +11,7 @@ import bridge.runtime as rt
 from bridge.group_director_service import GroupDirectorService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
+from bridge.sync_service import SyncService
 
 from bridge.composition import (
     BackgroundRuntime,
@@ -94,6 +95,7 @@ class CompositionConfigTests(unittest.TestCase):
             purge_session_memory=lambda *_args, **_kwargs: 0,
         )
         persona = object()
+        sync = object()
         services = build_bridge_services(
             config,
             db_factory=lambda: sqlite3.connect(":memory:"),
@@ -101,6 +103,7 @@ class CompositionConfigTests(unittest.TestCase):
             background=background,
             memory=memory,
             persona=persona,
+            sync=sync,
         )
 
         self.assertIs(services.config, config)
@@ -108,6 +111,7 @@ class CompositionConfigTests(unittest.TestCase):
         self.assertIs(services.background, background)
         self.assertIs(services.memory, memory)
         self.assertIs(services.persona, persona)
+        self.assertIs(services.sync, sync)
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
 
@@ -892,6 +896,36 @@ class StartupCompositionTests(unittest.TestCase):
             update_session,
         )
 
+    def test_startup_builds_sync_service_from_final_runtime_collaborators(self):
+        with patch.object(
+            rt,
+            "sync_binding",
+        ) as binding, patch.object(
+            rt,
+            "phase3_sync_now",
+        ) as sync_now, patch.object(
+            rt,
+            "phase3_toggle_realtime",
+        ) as toggle, patch.object(
+            rt,
+            "phase3_sync_poll",
+        ) as poll, patch.object(
+            rt,
+            "_phase3_disable",
+        ) as disable, patch.object(
+            rt,
+            "phase3_api_configured",
+        ) as configured:
+            services = rt._build_startup_services(self.config)
+
+        self.assertIsInstance(services.sync, SyncService)
+        self.assertIs(services.sync.load_binding, binding)
+        self.assertIs(services.sync.sync_now_backend, sync_now)
+        self.assertIs(services.sync.toggle_realtime_backend, toggle)
+        self.assertIs(services.sync.poll_backend, poll)
+        self.assertIs(services.sync.disable_realtime, disable)
+        self.assertIs(services.sync.api_configured, configured)
+
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = rt.argparse.Namespace(check=True)
         with patch.object(
@@ -981,7 +1015,7 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("get_services(", source)
         self.assertNotIn("set_services(", source)
 
-    def test_phase5_extracted_services_stop_at_persona(self):
+    def test_phase5_extracted_services_stop_at_sync(self):
         root = Path(__file__).parents[1] / "bridge"
         source = "\n".join(
             path.read_text(encoding="utf-8")
@@ -990,8 +1024,8 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertIn("class GroupDirectorService", source)
         self.assertIn("class MemoryService", source)
         self.assertIn("class PersonaService", source)
+        self.assertIn("class SyncService", source)
         for forbidden in (
-            "class SyncService",
             "class JobService",
         ):
             with self.subTest(forbidden=forbidden):
