@@ -59,6 +59,7 @@ Create `tests/test_job_service.py`:
 
 ```python
 import json
+from pathlib import Path
 import sqlite3
 import unittest
 
@@ -568,9 +569,11 @@ refactor: add JobService application contract
 
 - [ ] **Step 1: Add RED composition tests**
 
-In `tests/test_composition.py`, import:
+In `tests/test_composition.py`, update the mock import and add JobService imports:
 
 ```python
+from unittest.mock import Mock, patch
+
 from bridge.job_service import JobService, JobSubmission
 ```
 
@@ -609,15 +612,17 @@ def test_startup_builds_job_service_from_final_job_collaborators(self):
     self.assertIs(services.jobs.submit_chat, submit_chat)
 ```
 
-Update the source guard from "stops at Sync" to "stops at JobService":
+Update the existing Phase 5 source guard from "stops at Sync" to "stops at JobService". The current guard already forbids `class JobService`; replace that prohibition with:
 
 ```python
+self.assertIn("class GroupDirectorService", source)
+self.assertIn("class MemoryService", source)
+self.assertIn("class PersonaService", source)
+self.assertIn("class SyncService", source)
 self.assertIn("class JobService", source)
-for forbidden in ("class ConversationService",):
-    self.assertNotIn(forbidden, source)
 ```
 
-Do not invent a future service if no such class name exists in the roadmap source guard; if the existing test only guards JobService, simply remove JobService from the forbidden tuple and assert it is present.
+Do not add a speculative future-service class name.
 
 - [ ] **Step 2: Add RED runtime-stage guard**
 
