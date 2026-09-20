@@ -410,13 +410,17 @@ class Phase3SyncTests(unittest.TestCase):
         self.assertEqual(len(retained), 1)
 
     def test_public_snapshot_absent_persona_and_world_preserve_assignments(self):
-        rt.update_session(
-            self.db,
-            "chat",
-            "phase3",
-            persona_id="existing.png",
-            world_file='["existing.json"]',
+        self.db.execute(
+            "UPDATE sessions SET persona_id=?,world_file=? "
+            "WHERE chat_id=? AND session_id=?",
+            (
+                "existing.png",
+                '["existing.json"]',
+                "chat",
+                "phase3",
+            ),
         )
+        self.db.commit()
         current = rt.load_session(
             self.db,
             "chat",
