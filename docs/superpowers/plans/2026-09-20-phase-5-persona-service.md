@@ -156,6 +156,37 @@ class PersonaServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "used by another session"):
             self.service.delete_if_unused(self.db, "native.png")
         self.assertEqual(self.deletes, [])
+
+    def test_create_does_not_delete_native_persona_when_session_select_fails(self):
+        def failing_update(*_args, **_kwargs):
+            raise RuntimeError("session write failed")
+
+        service = PersonaService(
+            load_personas=lambda: dict(self.personas),
+            load_default_persona=lambda: "native.png",
+            upsert_persona=self._upsert,
+            delete_persona=self._delete,
+            update_session_persona=failing_update,
+            persona_reference_count=lambda _db, _persona_id: 0,
+        )
+        with self.assertRaisesRegex(RuntimeError, "session write failed"):
+            service.create_and_select(
+                self.db, "chat", "session",
+                "writer", "Writer", "Writes notes",
+            )
+        self.assertIn("bridge-writer.png", self.personas)
+        self.assertEqual(self.deletes, [])
+
+    def test_delete_checks_current_reference_count_on_each_call(self):
+        self.references = 0
+        self.assertTrue(self.service.delete_if_unused(self.db, "native.png"))
+        self.personas["native.png"] = {
+            "name": "Native", "description": "Original",
+            "sillytavern_avatar": "native.png",
+        }
+        self.references = 1
+        with self.assertRaisesRegex(ValueError, "used by another session"):
+            self.service.delete_if_unused(self.db, "native.png")
 ```
 
 Also cover successful `update()`, successful `select()`, successful unused deletion, duplicate logical ID rejection when the current catalog already exposes that ID/avatar, and name/description bounds.
@@ -260,7 +291,7 @@ Behavior:
 - `get()` reads from `list()`.
 - `name()` returns an empty string for a missing Persona.
 - `default_id()` delegates to `load_default_persona()`.
-- `create_and_select()` validates ID/name/description, rejects an ID already present in the catalog, calls `upsert_persona`, then calls `update_session_persona(... persona_id=avatar, operation_id=..., operation_kind="persona_create")`.
+- `create_and_select()` validates ID/name/description and rejects a logical ID already represented either directly by a catalog key or by a native avatar whose stem is `bridge-<logical_id>`; then it calls `upsert_persona` and `update_session_persona(... persona_id=avatar, operation_id=..., operation_kind="persona_create")`.
 - `update()` refuses a missing Persona and delegates upsert using the native Persona/avatar identifier.
 - `select()` returns `False` for missing Persona and otherwise calls `update_session_persona(... operation_kind="persona_select")`.
 - `disable()` writes `persona_id=""` with `operation_kind="persona_select"`.
