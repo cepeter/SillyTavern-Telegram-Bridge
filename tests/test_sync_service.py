@@ -1,0 +1,129 @@
+import sqlite3
+import unittest
+
+from bridge.sync_service import SyncService, SyncStatus
+
+
+class ExpectedSyncError(RuntimeError):
+    pass
+
+
+class SyncServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.db = sqlite3.connect(":memory:")
+        self.binding = {
+            "sync_id": "stb-test",
+            "last_synced_at": 123.0,
+            "last_direction": "bridge_to_sillytavern_api",
+            "realtime_enabled": 1,
+        }
+        self.disabled = []
+        self.polls = []
+        self.sync_result = "unchanged"
+        self.toggle_result = "realtime API sync disabled"
+        self.api_ready = True
+
+        self.service = SyncService(
+            load_binding=lambda _db, _chat, _session: dict(self.binding),
+            count_messages=lambda _db, _chat, _session: 7,
+            sync_now_backend=self._sync_now,
+            toggle_realtime_backend=lambda *_args: self.toggle_result,
+            poll_backend=lambda db: self.polls.append(db),
+            disable_realtime=lambda _db, chat, session, error:
+                self.disabled.append((chat, session, error)),
+            api_configured=lambda: self.api_ready,
+            expected_errors=(ExpectedSyncError, ValueError),
+        )
+
+    def tearDown(self):
+        self.db.close()
+
+    def _sync_now(self, *_args):
+        if isinstance(self.sync_result, BaseException):
+            raise self.sync_result
+        return self.sync_result
+
+    def test_status_is_structured_and_read_only(self):
+        status = self.service.status(self.db, "chat", "session")
+        self.assertEqual(
+            status,
+            SyncStatus(
+                session_id="session",
+                message_count=7,
+                sync_id="stb-test",
+                last_synced_at=123.0,
+                last_direction="bridge_to_sillytavern_api",
+                realtime_enabled=True,
+                api_configured=True,
+            ),
+        )
+        self.assertFalse(self.db.in_transaction)
+
+    def test_status_handles_unconfigured_api_and_never_synced_binding(self):
+        self.binding.update(
+            {
+                "last_synced_at": 0,
+                "last_direction": "",
+                "realtime_enabled": 0,
+            }
+        )
+        self.api_ready = False
+
+        status = self.service.status(self.db, "chat", "session")
+
+        self.assertEqual(status.last_synced_at, 0.0)
+        self.assertEqual(status.last_direction, "")
+        self.assertFalse(status.realtime_enabled)
+        self.assertFalse(status.api_configured)
+
+    def test_manual_sync_delegates_success(self):
+        self.assertEqual(
+            self.service.sync_now(self.db, "chat", "session"),
+            "unchanged",
+        )
+        self.assertEqual(self.disabled, [])
+
+    def test_expected_manual_failure_disables_realtime_and_returns_feedback(self):
+        self.sync_result = ExpectedSyncError("API unavailable")
+
+        self.assertEqual(
+            self.service.sync_now(self.db, "chat", "session"),
+            "Live API unavailable: API unavailable",
+        )
+        self.assertEqual(
+            self.disabled,
+            [("chat", "session", "API unavailable")],
+        )
+
+    def test_value_error_manual_failure_uses_same_existing_feedback(self):
+        self.sync_result = ValueError("bad snapshot")
+
+        self.assertEqual(
+            self.service.sync_now(self.db, "chat", "session"),
+            "Live API unavailable: bad snapshot",
+        )
+        self.assertEqual(
+            self.disabled,
+            [("chat", "session", "bad snapshot")],
+        )
+
+    def test_unexpected_manual_failure_propagates(self):
+        self.sync_result = RuntimeError("bug")
+
+        with self.assertRaisesRegex(RuntimeError, "bug"):
+            self.service.sync_now(self.db, "chat", "session")
+        self.assertEqual(self.disabled, [])
+
+    def test_toggle_preserves_backend_result(self):
+        self.assertEqual(
+            self.service.toggle_realtime(self.db, "chat", "session"),
+            "realtime API sync disabled",
+        )
+
+    def test_poll_delegates_to_injected_backend(self):
+        self.service.poll(self.db)
+        self.assertEqual(self.polls, [self.db])
+
+
+if __name__ == "__main__":
+    unittest.main()
