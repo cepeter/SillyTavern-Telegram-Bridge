@@ -45,10 +45,9 @@
 
 **Modify `bridge/memory.py`**
 - Import `HindsightStaleGuard` and `run_post_retain_hooks`.
-- Own canonical epoch/snapshot/session-existence/local-purge-state helpers.
-- Rename current raw retain/purge implementations to private backend functions.
-- Compose `_HINDSIGHT_STALE_GUARD`.
-- Keep `retain_session_memory` and `purge_hindsight_session` as stable public delegates.
+- Own canonical epoch/snapshot/session-existence/local-purge-state helpers under names that cannot collide with the still-loaded Phase 6B state-integrity helpers.
+- Compose `_HINDSIGHT_STALE_GUARD` first without changing public ownership.
+- During the Task 3 cutover, rename current raw retain/purge implementations to private backend functions and expose stable public delegates through the guard.
 
 **Modify `bridge/state_integrity.py`**
 - Remove Hindsight captures, epoch/snapshot helpers, private worker replacement, and public retain/purge replacements.
@@ -610,7 +609,7 @@ class HindsightStaleGuard:
             return int(deleted)
 ```
 
-- [ ] **Step 5: Run Task 1 tests and verify GREEN**
+- [ ] **Step 6: Run Task 1 tests and verify GREEN**
 
 Run:
 
@@ -620,7 +619,7 @@ python -m unittest tests.test_hindsight_integrity -v
 
 Expected: all tests PASS.
 
-- [ ] **Step 6: Commit Task 1**
+- [ ] **Step 7: Commit Task 1**
 
 ```bash
 git add   bridge/hindsight_integrity.py   tests/test_hindsight_integrity.py
@@ -639,16 +638,13 @@ git commit -m "refactor: add hindsight stale guard"
 - Consumes:
   - `HindsightStaleGuard` from Task 1.
 - Produces:
-  - `_hindsight_epoch_key(chat_id: str, session_id: str) -> str`
-  - `_hindsight_memory_epoch(db, chat_id: str, session_id: str) -> int`
-  - `_hindsight_conversation_snapshot(db, chat_id: str, session_id: str) -> tuple[str, str]`
-  - `_hindsight_session_exists(db, chat_id: str, session_id: str) -> bool`
+  - `_memory_memory_memory_hindsight_epoch_key(chat_id: str, session_id: str) -> str`
+  - `_memory_hindsight_epoch(db, chat_id: str, session_id: str) -> int`
+  - `_memory_memory_memory_hindsight_conversation_snapshot(db, chat_id: str, session_id: str) -> tuple[str, str]`
+  - `_memory_memory_memory_hindsight_session_exists(db, chat_id: str, session_id: str) -> bool`
   - `_write_hindsight_successful_purge_state(db, chat_id: str, session_id: str) -> None`
-  - `_retain_session_memory_backend(chat_id: str, session: dict[str, str], character_name: str, conversation: str) -> None`
-  - `_purge_hindsight_session_backend(db, chat_id: str, session_id: str) -> int`
   - `_HINDSIGHT_STALE_GUARD: HindsightStaleGuard`
-  - stable public `retain_session_memory(db, chat_id, session, fields) -> None`
-  - stable public `purge_hindsight_session(db, chat_id, session_id) -> int`
+  - Task 2 deliberately preserves the existing public/raw `retain_session_memory`, `purge_hindsight_session`, and `_retain_session_memory` names so the still-loaded Phase 6B `state_integrity.py` continues to execute unchanged until Task 3.
 
 - [ ] **Step 1: Add RED native-boundary tests**
 
@@ -785,26 +781,23 @@ class MemoryNativeBackendTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "def _hindsight_conversation_snapshot(",
+            "def _memory_memory_memory_hindsight_conversation_snapshot(",
             source,
         )
         self.assertIn(
-            "def _hindsight_memory_epoch(",
+            "def _memory_hindsight_epoch(",
             source,
         )
         self.assertIn(
-            "def _retain_session_memory_backend(",
-            source,
-        )
-        self.assertIn(
-            "def _purge_hindsight_session_backend(",
+            "def _memory_memory_memory_hindsight_session_exists(",
             source,
         )
 
     def test_malformed_and_negative_epoch_values_read_as_zero(self):
-        key = rt._hindsight_epoch_key(
-            "chat",
-            self.session["session_id"],
+        key = (
+            "hindsight_epoch:"
+            "chat:"
+            f"{self.session['session_id']}"
         )
 
         rt.set_meta(self.db, key, "not-an-int")
@@ -943,7 +936,7 @@ Append:
         )
         self.db.commit()
 
-        key = rt._hindsight_epoch_key(
+        key = rt._memory_memory_hindsight_epoch_key(
             "chat",
             self.session["session_id"],
         )
@@ -1014,14 +1007,14 @@ Do not import `bridge.runtime` or `state_integrity.py`.
 Add before the raw retain backend:
 
 ```python
-def _hindsight_epoch_key(
+def _memory_memory_hindsight_epoch_key(
     chat_id: str,
     session_id: str,
 ) -> str:
     return f"hindsight_epoch:{chat_id}:{session_id}"
 
 
-def _hindsight_memory_epoch(
+def _memory_hindsight_epoch(
     db: sqlite3.Connection,
     chat_id: str,
     session_id: str,
@@ -1032,7 +1025,7 @@ def _hindsight_memory_epoch(
             int(
                 get_meta(
                     db,
-                    _hindsight_epoch_key(
+                    _memory_memory_hindsight_epoch_key(
                         chat_id,
                         session_id,
                     ),
@@ -1045,7 +1038,7 @@ def _hindsight_memory_epoch(
         return 0
 
 
-def _hindsight_session_exists(
+def _memory_memory_hindsight_session_exists(
     db: sqlite3.Connection,
     chat_id: str,
     session_id: str,
@@ -1059,7 +1052,7 @@ def _hindsight_session_exists(
     )
 
 
-def _hindsight_conversation_snapshot(
+def _memory_memory_hindsight_conversation_snapshot(
     db: sqlite3.Connection,
     chat_id: str,
     session_id: str,
@@ -1117,7 +1110,7 @@ def _write_hindsight_successful_purge_state(
             (str(chat_id), str(session_id)),
         )
         next_epoch = (
-            _hindsight_memory_epoch(
+            _memory_hindsight_epoch(
                 db,
                 chat_id,
                 session_id,
@@ -1128,7 +1121,7 @@ def _write_hindsight_successful_purge_state(
             "INSERT OR REPLACE INTO meta(key,value) "
             "VALUES(?,?)",
             (
-                _hindsight_epoch_key(
+                _memory_memory_hindsight_epoch_key(
                     chat_id,
                     session_id,
                 ),
@@ -1142,51 +1135,9 @@ def _write_hindsight_successful_purge_state(
 
 These bodies preserve the current `state_integrity.py` algorithms exactly; formatting may change, semantics may not.
 
-- [ ] **Step 6: Rename the existing raw Hindsight backends without changing their bodies**
+- [ ] **Step 6: Compose the guard without changing public/raw ownership yet**
 
-Perform exact function-name substitutions:
-
-```python
-# before
-def _retain_session_memory(
-    chat_id: str,
-    session: dict[str, str],
-    character_name: str,
-    conversation: str,
-) -> None:
-
-# after
-def _retain_session_memory_backend(
-    chat_id: str,
-    session: dict[str, str],
-    character_name: str,
-    conversation: str,
-) -> None:
-```
-
-and:
-
-```python
-# before
-def purge_hindsight_session(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session_id: str,
-) -> int:
-
-# after
-def _purge_hindsight_session_backend(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session_id: str,
-) -> int:
-```
-
-Keep the statements in both raw bodies behavior-equivalent to baseline. In particular, keep their existing per-session lock, remote deletion verification, Hindsight client closing, session-existence check, document ID, and logging behavior.
-
-- [ ] **Step 7: Replace the old public retain body with explicit guard composition and delegates**
-
-Delete the old raw public `retain_session_memory` implementation and compose the guard after both private backends and the helpers exist:
+Immediately after the existing raw `_retain_session_memory` definition and before the existing public `retain_session_memory` definition, add:
 
 ```python
 _HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(
@@ -1209,49 +1160,53 @@ _HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(
             **kwargs,
         )
     ),
-    session_exists=_hindsight_session_exists,
-    read_epoch=_hindsight_memory_epoch,
-    snapshot=_hindsight_conversation_snapshot,
-    retain_backend=_retain_session_memory_backend,
-    purge_backend=_purge_hindsight_session_backend,
+    session_exists=_memory_hindsight_session_exists,
+    read_epoch=_memory_hindsight_epoch,
+    snapshot=_memory_hindsight_conversation_snapshot,
+    retain_backend=_retain_session_memory,
+    purge_backend=purge_hindsight_session,
     write_successful_purge_state=(
         _write_hindsight_successful_purge_state
     ),
     run_post_retain_hooks=_run_post_retain_hooks,
 )
-
-
-def retain_session_memory(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session: dict[str, str],
-    fields: dict[str, str],
-) -> None:
-    _HINDSIGHT_STALE_GUARD.retain(
-        db,
-        chat_id,
-        session,
-        fields,
-    )
-
-
-def purge_hindsight_session(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session_id: str,
-) -> int:
-    return _HINDSIGHT_STALE_GUARD.purge(
-        db,
-        chat_id,
-        session_id,
-    )
 ```
 
-The dynamic lambda around `submit_background` is intentional: existing tests and compatibility paths patch the final shared-runtime function, so the guard must resolve that collaborator at call time rather than freeze the pre-runtime function object.
+The dynamic lambda around `submit_background` is intentional: existing tests and compatibility paths patch the final shared-runtime function, so the guard must resolve that collaborator at call time.
 
-- [ ] **Step 8: Add post-retain-hook integration coverage**
+Do **not** rename `_retain_session_memory`, `retain_session_memory`, or `purge_hindsight_session` in Task 2. Do **not** route the public functions through the guard yet. This preserves the exact Phase 6B late-override execution contract while the new guard is exercised directly.
+
+- [ ] **Step 8: Assert Task 2 does not change current public ownership**
 
 Append to `tests/test_memory_native_backend.py`:
+
+```python
+    def test_guard_composition_does_not_cut_over_public_ownership_early(self):
+        self.assertEqual(
+            Path(
+                rt.retain_session_memory.__code__.co_filename
+            ).name,
+            "state_integrity.py",
+        )
+        self.assertEqual(
+            Path(
+                rt.purge_hindsight_session.__code__.co_filename
+            ).name,
+            "state_integrity.py",
+        )
+```
+
+This is an intentional transition-state test. Task 3 deletes it when the cutover becomes the required behavior.
+
+- [ ] **Step 9: Add post-retain-hook integration coverage**
+
+Add this import to `tests/test_memory_native_backend.py`:
+
+```python
+import bridge.extension_registry as registry
+```
+
+Then append:
 
 ```python
     def test_direct_guard_runs_post_retain_hook_when_memory_off(self):
@@ -1268,7 +1223,7 @@ Append to `tests/test_memory_native_backend.py`:
             )
 
         with patch.dict(
-            rt._POST_RETAIN_HOOKS,
+            registry._POST_RETAIN_HOOKS,
             {"test": hook},
             clear=True,
         ):
@@ -1297,9 +1252,7 @@ Append to `tests/test_memory_native_backend.py`:
         )
 ```
 
-If `_POST_RETAIN_HOOKS` is intentionally not exposed through `bridge.runtime`, import `bridge.extension_registry as registry` in the test and patch `registry._POST_RETAIN_HOOKS` instead. Use whichever form matches the current runtime surface; do not add a new runtime export solely for the test.
-
-- [ ] **Step 9: Run Task 1 + Task 2 focused tests**
+- [ ] **Step 10: Run Task 1 + Task 2 focused tests**
 
 Run:
 
@@ -1307,9 +1260,9 @@ Run:
 python -m unittest   tests.test_hindsight_integrity   tests.test_memory_native_backend   tests.test_memory_service   tests.test_memory_curator   tests.test_extension_registry -v
 ```
 
-Expected: PASS. At this point the explicit guard works directly, but `state_integrity.py` may still late-replace the public retain/purge functions until Task 3.
+Expected: PASS. At this point the explicit guard works directly, and the transition-state ownership test confirms the public retain/purge functions are still intentionally owned by `state_integrity.py`.
 
-- [ ] **Step 10: Commit Task 2**
+- [ ] **Step 11: Commit Task 2**
 
 ```bash
 git add   bridge/memory.py   tests/test_memory_native_backend.py
@@ -1333,6 +1286,9 @@ git commit -m "refactor: compose hindsight stale guard"
   - canonical `memory.py::purge_hindsight_session`;
   - `_HINDSIGHT_STALE_GUARD` and helpers from Task 2.
 - Produces:
+  - `_retain_session_memory_backend(chat_id: str, session: dict[str, str], character_name: str, conversation: str) -> None`;
+  - `_purge_hindsight_session_backend(db, chat_id: str, session_id: str) -> int`;
+  - stable public `memory.py::retain_session_memory` and `memory.py::purge_hindsight_session` delegates through `_HINDSIGHT_STALE_GUARD`;
   - `state_integrity.py` with only Live Sync `apply_sync_snapshot` override behavior;
   - state-integrity allowlist containing only `apply_sync_snapshot`;
   - public Hindsight owners resolving to `memory.py`.
@@ -1521,6 +1477,89 @@ python -m unittest   tests.test_runtime_loader.RuntimeLoaderTests.test_hindsight
 ```
 
 Expected: failures because `state_integrity.py` still captures/replaces Hindsight retain/purge and the allowlist still permits them.
+
+- [ ] **Step 5: Atomically cut memory.py public ownership over to the guard**
+
+In `bridge/memory.py`, rename the existing raw worker:
+
+```python
+# before
+def _retain_session_memory(
+    chat_id: str,
+    session: dict[str, str],
+    character_name: str,
+    conversation: str,
+) -> None:
+
+# after
+def _retain_session_memory_backend(
+    chat_id: str,
+    session: dict[str, str],
+    character_name: str,
+    conversation: str,
+) -> None:
+```
+
+Rename the existing raw purge:
+
+```python
+# before
+def purge_hindsight_session(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+) -> int:
+
+# after
+def _purge_hindsight_session_backend(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+) -> int:
+```
+
+Keep both raw bodies statement-equivalent to baseline.
+
+Update the existing guard composition to bind:
+
+```python
+    retain_backend=_retain_session_memory_backend,
+    purge_backend=_purge_hindsight_session_backend,
+```
+
+Replace the old public foreground retain body with:
+
+```python
+def retain_session_memory(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+) -> None:
+    _HINDSIGHT_STALE_GUARD.retain(
+        db,
+        chat_id,
+        session,
+        fields,
+    )
+```
+
+Define the new stable public purge delegate after the guard exists:
+
+```python
+def purge_hindsight_session(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+) -> int:
+    return _HINDSIGHT_STALE_GUARD.purge(
+        db,
+        chat_id,
+        session_id,
+    )
+```
+
+Delete the Task 2 transition-state test `test_guard_composition_does_not_cut_over_public_ownership_early`; Task 3 runtime-owner tests now require the opposite final ownership.
 
 - [ ] **Step 5: Remove only the Hindsight section from state_integrity.py**
 
@@ -1741,7 +1780,7 @@ Expected:
 Phase 6C Hindsight ownership verified
 ```
 
-- [ ] **Step 11: Commit Task 3**
+- [ ] **Step 12: Commit Task 3**
 
 ```bash
 git add   bridge/state_integrity.py   bridge/runtime_loader.py   tests/test_state_integrity.py   tests/test_runtime_loader.py   tests/test_memory_native_backend.py
