@@ -373,6 +373,18 @@ class CanonicalRecoveryTests(unittest.TestCase):
         )
 
 
+class DatabaseSourceBoundaryTests(unittest.TestCase):
+    def test_database_has_no_legacy_schema_readiness_globals(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "database.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("_DB_SCHEMA_READY", source)
+        self.assertNotIn("_DB_SCHEMA_READY_PATHS", source)
+        self.assertNotIn("_DB_SCHEMA_LOCK", source)
+
+
 class SchedulerSafetySourceBoundaryTests(unittest.TestCase):
     def test_module_has_no_late_override_capture_or_compat_submitter(self):
         source = (
