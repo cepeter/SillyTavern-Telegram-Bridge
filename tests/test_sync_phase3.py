@@ -349,6 +349,66 @@ class Phase3SyncTests(unittest.TestCase):
             ["Live API unavailable: API unavailable"],
         )
 
+    def test_service_backed_import_uses_final_state_integrity_snapshot(self):
+        self._add("Original")
+        self.db.execute(
+            "UPDATE sessions SET persona_id=?,world_file=? "
+            "WHERE chat_id=? AND session_id=?",
+            (
+                "existing.png",
+                '["existing.json"]',
+                "chat",
+                "phase3",
+            ),
+        )
+        self.db.commit()
+        self.session = rt.load_session(
+            self.db,
+            "chat",
+            "phase3",
+            rt.DEFAULT_MODEL,
+        )
+
+        self.assertIn(
+            "realtime API sync enabled",
+            rt.phase3_toggle_realtime(
+                self.db,
+                "chat",
+                "phase3",
+            ),
+        )
+        metadata = self.fake.records[0]["chat_metadata"]
+        metadata["persona"] = ""
+        metadata["world_info"] = []
+        self.fake.records[1]["mes"] = "Remote edit"
+
+        retained = []
+        with patch.object(
+            rt,
+            "retain_session_memory",
+            side_effect=lambda *args, **kwargs:
+                retained.append((args, kwargs)),
+        ):
+            result = rt.resolve_sync_service().sync_now(
+                self.db,
+                "chat",
+                "phase3",
+            )
+
+        self.assertEqual(
+            result,
+            "imported SillyTavern API changes",
+        )
+        refreshed = rt.load_session(
+            self.db,
+            "chat",
+            "phase3",
+            rt.DEFAULT_MODEL,
+        )
+        self.assertEqual(refreshed["persona_id"], "")
+        self.assertEqual(refreshed["world_file"], "")
+        self.assertEqual(len(retained), 1)
+
     def test_sync_panel_exposes_realtime_control(self):
         calls = []
         original = rt.telegram_request
