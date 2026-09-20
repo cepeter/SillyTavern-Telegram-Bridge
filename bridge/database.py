@@ -245,6 +245,14 @@ _DB_CONNECTION_GATE = _DatabaseConnectionGate(
     _lightweight_db_connect,
 )
 
+# Deprecated test-fixture compatibility only. Production connection readiness
+# is owned exclusively by _DB_CONNECTION_GATE; these names are intentionally
+# ignored by db_connect and can be removed when legacy tests stop resetting
+# scheduler_safety implementation globals directly.
+_DB_SCHEMA_LOCK = threading.RLock()
+_DB_SCHEMA_READY = False
+_DB_SCHEMA_READY_PATHS: set[Path] = set()
+
 
 def db_connect(database_path: Path | None = None) -> sqlite3.Connection:
     """Open the canonical connection for a SQLite database path."""
