@@ -219,6 +219,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.global_sent = []
         self.memory_service = object()
         self.persona_service = object()
+        self.sync_service = object()
 
         config = BridgeConfig(
             bot_token="injected-token",
@@ -243,6 +244,7 @@ class WorkerInjectionTests(unittest.TestCase):
             ),
             memory=self.memory_service,
             persona=self.persona_service,
+            sync=self.sync_service,
         )
 
     def tearDown(self):
@@ -354,6 +356,76 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertIs(
             captured["memory_service"],
             self.memory_service,
+        )
+
+    def test_sync_command_propagates_injected_sync_service(self):
+        captured = {}
+        db = self._db_factory()
+        try:
+            session = rt.ensure_session(
+                db,
+                "chat",
+                "injected::model",
+            )
+            with patch.object(
+                rt,
+                "send_sync_menu",
+                side_effect=lambda *_args, **kwargs:
+                    captured.update(kwargs),
+            ):
+                handled = rt.handle_command_route(
+                    db,
+                    "injected-token",
+                    "injected-key",
+                    "injected::model",
+                    {"name": "Mira"},
+                    "chat",
+                    "/sync",
+                    "/sync",
+                    session,
+                    session["session_id"],
+                    session["model_id"],
+                    session.get("persona_id") or "",
+                    "User",
+                    services=self.services,
+                )
+        finally:
+            db.close()
+
+        self.assertTrue(handled)
+        self.assertIs(
+            captured["sync_service"],
+            self.sync_service,
+        )
+
+    def test_process_callback_propagates_injected_sync_service(self):
+        captured = {}
+        db = self._db_factory()
+        callback = {
+            "id": "cb",
+            "from": {"id": "100"},
+            "data": "sync:status",
+            "message": {"chat": {"id": "chat"}},
+        }
+        try:
+            with patch.object(
+                rt,
+                "handle_primary_panel_callback",
+                side_effect=lambda *_args, **kwargs:
+                    captured.update(kwargs) or True,
+            ):
+                rt.process_callback(
+                    db,
+                    "injected-token",
+                    callback,
+                    services=self.services,
+                )
+        finally:
+            db.close()
+
+        self.assertIs(
+            captured["sync_service"],
+            self.sync_service,
         )
 
     def test_edit_worker_propagates_injected_memory_service(self):
