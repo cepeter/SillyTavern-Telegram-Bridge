@@ -1,3 +1,4 @@
+from pathlib import Path
 import unittest
 
 from bridge.sync_integrity import SyncSnapshotIntegrityAdapter
@@ -424,6 +425,26 @@ class SyncSnapshotIntegrityAdapterTests(unittest.TestCase):
 
         self.assertEqual(result, "raw-hash")
         self.assertEqual(len(self.warnings), 1)
+
+
+class SyncIntegritySourceBoundaryTests(unittest.TestCase):
+    def test_sync_integrity_has_no_runtime_sync_or_ui_imports(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "sync_integrity.py"
+        ).read_text(encoding="utf-8")
+
+        for forbidden in (
+            "bridge.runtime",
+            "bridge.sync_core",
+            "bridge.sync_api",
+            "bridge.sync_safety",
+            "bridge.state_integrity",
+            "bridge.telegram",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
 
 
 if __name__ == "__main__":
