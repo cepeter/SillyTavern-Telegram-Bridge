@@ -99,13 +99,14 @@ def process_message_job(
     token = services.config.bot_token
     api_key = services.config.api_key
     model = model_override or services.config.default_model
+    jobs = _jobs_for_services(services)
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
         try:
-            if job_id is not None and not mark_job_running(db, job_id):
+            if job_id is not None and not jobs.start(db, job_id):
                 return
-            set_panel_actor_context(job_actor_id(db, job_id))
+            set_panel_actor_context(jobs.actor_id(db, job_id))
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 recovery_session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
@@ -114,13 +115,13 @@ def process_message_job(
                 if json.loads(existing[2] or "[]"):
                     clear_failed_turn(db, chat_id, message_id)
                     if job_id is not None:
-                        finish_job(db, job_id, "done")
+                        jobs.complete(db, job_id)
                     return
                 delivery_session_id = queued_session_id or ensure_session(db, chat_id, model)["session_id"]
                 send_reply(token, chat_id, str(existing[1]), db, delivery_session_id, int(existing[0]))
                 clear_failed_turn(db, chat_id, message_id)
                 if job_id is not None:
-                    finish_job(db, job_id, "done")
+                    jobs.complete(db, job_id)
                 return
             process_message(
                 db,
@@ -136,12 +137,12 @@ def process_message_job(
                 services=services,
             )
             if job_id is not None:
-                finish_job(db, job_id, "done")
+                jobs.complete(db, job_id)
         except Exception as exc:
             logging.error("Background message processing failed: %s", exc, exc_info=True)
             record_failed_turn(db, chat_id, message_id, text, model, str(exc), queued_session_id or "")
             if job_id is not None:
-                finish_job(db, job_id, "failed", str(exc))
+                jobs.fail(db, job_id, exc)
             if str(text).lstrip().startswith("/"):
                 if "Telegram sendMessage failed" in str(exc):
                     failure_message = "Telegram could not deliver this command. The character backend was not called; retry the command."
@@ -169,24 +170,25 @@ def process_image_job(
 ) -> None:
     token = services.config.bot_token
     model = model_override or services.config.default_model
+    jobs = _jobs_for_services(services)
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
         try:
-            if job_id is not None and not mark_job_running(db, job_id):
+            if job_id is not None and not jobs.start(db, job_id):
                 return
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 if json.loads(existing[2] or "[]"):
                     clear_failed_turn(db, chat_id, message_id)
                     if job_id is not None:
-                        finish_job(db, job_id, "done")
+                        jobs.complete(db, job_id)
                     return
                 delivery_session_id = queued_session_id or ensure_session(db, chat_id, model)["session_id"]
                 send_reply(token, chat_id, str(existing[1]), db, delivery_session_id, int(existing[0]))
                 clear_failed_turn(db, chat_id, message_id)
                 if job_id is not None:
-                    finish_job(db, job_id, "done")
+                    jobs.complete(db, job_id)
                 return
             process_telegram_image(
                 db,
@@ -202,11 +204,11 @@ def process_image_job(
                 persona_service=services.persona,
             )
             if job_id is not None:
-                finish_job(db, job_id, "done")
+                jobs.complete(db, job_id)
         except Exception as exc:
             logging.error("Background image processing failed: %s", exc, exc_info=True)
             if job_id is not None:
-                finish_job(db, job_id, "failed", str(exc))
+                jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Image processing failed. The selected model may not support vision.")
         finally:
             set_db_connection_context(None)
@@ -220,15 +222,24 @@ def process_callback_job(
     job_id: int | None = None,
 ) -> None:
     token = services.config.bot_token
+    jobs = _jobs_for_services(services)
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
         try:
-            if job_id is not None and not mark_job_running(db, job_id):
+            if job_id is not None and not jobs.start(db, job_id):
                 return
-            set_panel_actor_context(str((callback.get("from") or {}).get("id", "")))
+            actor_id = (
+                jobs.actor_id(db, job_id)
+                if job_id is not None
+                else ""
+            )
+            set_panel_actor_context(
+                actor_id
+                or str((callback.get("from") or {}).get("id", ""))
+            )
             if job_id is not None and operation_was_applied(db, job_id):
-                finish_job(db, job_id, "done")
+                jobs.complete(db, job_id)
                 return
             process_callback(
                 db,
@@ -242,11 +253,11 @@ def process_callback_job(
                     record_operation(db, job_id, "callback")
                     db.commit()
                 run_write_txn(db, write_callback_operation)
-                finish_job(db, job_id, "done")
+                jobs.complete(db, job_id)
         except Exception as exc:
             logging.error("Background callback processing failed: %s", exc, exc_info=True)
             if job_id is not None:
-                finish_job(db, job_id, "failed", str(exc))
+                jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Callback processing failed; try the command again.")
         finally:
             set_panel_actor_context(None)
@@ -275,11 +286,12 @@ def process_edit_job(
     token = services.config.bot_token
     api_key = services.config.api_key
     model = model_override or services.config.default_model
+    jobs = _jobs_for_services(services)
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
         try:
-            if job_id is not None and not mark_job_running(db, job_id):
+            if job_id is not None and not jobs.start(db, job_id):
                 return
             edit_telegram_user_message(
                 db,
@@ -294,16 +306,16 @@ def process_edit_job(
                 persona_service=services.persona,
             )
             if job_id is not None:
-                finish_job(db, job_id, "done")
+                jobs.complete(db, job_id)
         except Exception as exc:
             logging.error("Background native edit failed: %s", exc, exc_info=True)
             if native_edit_committed_after_failure(db, job_id, exc):
                 logging.warning("Native edit %s committed locally; suppressing rollback fallback", job_id)
                 if job_id is not None:
-                    finish_job(db, job_id, "done")
+                    jobs.complete(db, job_id)
                 return
             if job_id is not None:
-                finish_job(db, job_id, "failed", str(exc))
+                jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Native message edit failed; the previous branch was preserved.")
         finally:
             set_db_connection_context(None)
