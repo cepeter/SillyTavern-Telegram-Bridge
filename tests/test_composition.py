@@ -4,11 +4,12 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import bridge.runtime as rt
 
 from bridge.group_director_service import GroupDirectorService
+from bridge.job_service import JobService, JobSubmission
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.sync_service import SyncService
@@ -96,6 +97,7 @@ class CompositionConfigTests(unittest.TestCase):
         )
         persona = object()
         sync = object()
+        jobs = object()
         services = build_bridge_services(
             config,
             db_factory=lambda: sqlite3.connect(":memory:"),
@@ -104,6 +106,7 @@ class CompositionConfigTests(unittest.TestCase):
             memory=memory,
             persona=persona,
             sync=sync,
+            jobs=jobs,
         )
 
         self.assertIs(services.config, config)
@@ -112,6 +115,7 @@ class CompositionConfigTests(unittest.TestCase):
         self.assertIs(services.memory, memory)
         self.assertIs(services.persona, persona)
         self.assertIs(services.sync, sync)
+        self.assertIs(services.jobs, jobs)
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
 
@@ -657,11 +661,14 @@ class RecoveryCompositionTests(unittest.TestCase):
         return True
 
     def test_submit_durable_chat_job_uses_injected_background_and_explicit_job_id(self):
+        fake_jobs = Mock()
+        fake_jobs.submit.return_value = True
+
         with patch.object(
             rt,
-            "submit_chat_background",
-            side_effect=AssertionError("global background used"),
-        ), patch.object(rt, "mark_job_scheduled") as scheduled:
+            "_compatibility_job_service",
+            return_value=fake_jobs,
+        ):
             queued = rt.submit_durable_chat_job(
                 self.db,
                 self.background,
@@ -679,9 +686,17 @@ class RecoveryCompositionTests(unittest.TestCase):
             )
 
         self.assertTrue(queued)
-        self.assertIs(self.submitted[0][3][0], self.services)
-        self.assertEqual(self.submitted[0][3][-1], 41)
-        scheduled.assert_called_once_with(self.db, 41)
+        self.assertEqual(
+            fake_jobs.submit.call_args.args[1],
+            41,
+        )
+        submission = fake_jobs.submit.call_args.args[2]
+        self.assertIsInstance(submission, JobSubmission)
+        self.assertEqual(submission.label, "generation")
+        self.assertEqual(submission.chat_id, "chat")
+        self.assertIs(submission.worker, rt.process_message_job)
+        self.assertEqual(submission.args[0], self.services)
+        fake_jobs.submit.assert_called_once()
 
     def test_recovered_job_propagates_same_services_and_stored_model(self):
         row = (
@@ -998,6 +1013,40 @@ class StartupCompositionTests(unittest.TestCase):
         self.assertIs(services.sync.disable_realtime, disable)
         self.assertIs(services.sync.api_configured, configured)
 
+    def test_startup_builds_job_service_from_final_job_collaborators(self):
+        with patch.object(
+            rt,
+            "enqueue_job",
+        ) as enqueue, patch.object(
+            rt,
+            "job_actor_id",
+        ) as actor, patch.object(
+            rt,
+            "mark_job_scheduled",
+        ) as scheduled, patch.object(
+            rt,
+            "mark_job_running",
+        ) as running, patch.object(
+            rt,
+            "finish_job",
+        ) as finish, patch.object(
+            rt,
+            "recover_jobs",
+        ) as recover, patch.object(
+            rt,
+            "submit_chat_background",
+        ) as submit_chat:
+            services = rt._build_startup_services(self.config)
+
+        self.assertIsInstance(services.jobs, JobService)
+        self.assertIs(services.jobs.enqueue_backend, enqueue)
+        self.assertIs(services.jobs.actor_backend, actor)
+        self.assertIs(services.jobs.schedule_backend, scheduled)
+        self.assertIs(services.jobs.start_backend, running)
+        self.assertIs(services.jobs.finish_backend, finish)
+        self.assertIs(services.jobs.recover_backend, recover)
+        self.assertIs(services.jobs.submit_chat, submit_chat)
+
     def test_main_starts_sync_worker_with_injected_sync_service(self):
         sync_service = object()
 
@@ -1154,7 +1203,7 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("get_services(", source)
         self.assertNotIn("set_services(", source)
 
-    def test_phase5_extracted_services_stop_at_sync(self):
+    def test_phase5_extracted_services_include_job_service(self):
         root = Path(__file__).parents[1] / "bridge"
         source = "\n".join(
             path.read_text(encoding="utf-8")
@@ -1164,11 +1213,7 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertIn("class MemoryService", source)
         self.assertIn("class PersonaService", source)
         self.assertIn("class SyncService", source)
-        for forbidden in (
-            "class JobService",
-        ):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, source)
+        self.assertIn("class JobService", source)
 
 
 if __name__ == "__main__":
