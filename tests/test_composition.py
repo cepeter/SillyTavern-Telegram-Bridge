@@ -1228,6 +1228,11 @@ class StartupCompositionTests(unittest.TestCase):
         self.assertIs(services.jobs.finish_backend, finish)
         self.assertIs(services.jobs.recover_backend, recover)
         self.assertIs(services.jobs.submit_chat, submit_chat)
+        self.assertIsNotNone(services.jobs.prepare_worker)
+        self.assertIs(
+            services.jobs.prepare_worker.__self__,
+            rt._DURABLE_WORKER_GUARD,
+        )
 
     def test_main_starts_sync_worker_with_injected_sync_service(self):
         sync_service = object()
@@ -1686,6 +1691,21 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("CURRENT_SERVICES", source)
         self.assertNotIn("get_services(", source)
         self.assertNotIn("set_services(", source)
+
+    def test_job_service_worker_guard_is_explicit_not_global_lookup(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "main.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn(
+            'prepare_worker=globals().get("_guard_durable_worker")',
+            source,
+        )
+        self.assertIn(
+            "prepare_worker=_DURABLE_WORKER_GUARD.prepare",
+            source,
+        )
 
     def test_phase5_extracted_services_include_job_service(self):
         root = Path(__file__).parents[1] / "bridge"
