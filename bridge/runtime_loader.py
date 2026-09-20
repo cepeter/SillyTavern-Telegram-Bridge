@@ -74,8 +74,6 @@ DEFAULT_RUNTIME_STAGES = (
             (
                 "state_integrity.py",
                 (
-                    "upsert_native_persona",
-                    "delete_native_persona",
                     "retain_session_memory",
                     "purge_hindsight_session",
                     "apply_sync_snapshot",

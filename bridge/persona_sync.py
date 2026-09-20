@@ -9,6 +9,9 @@ import re
 import time
 from pathlib import Path
 
+from bridge.persona_integrity import (
+    IntegrityCheckedPersonaStore as _IntegrityCheckedPersonaStore,
+)
 from bridge.persona_service import PersonaService as _PersonaService
 from bridge.repositories import (
     count_persona_references as _repo_count_persona_references,
@@ -214,7 +217,32 @@ def _ensure_native_avatar(avatar: str, settings: dict) -> bool:
     return True
 
 
-def upsert_native_persona(identifier: str, name: str, description: str, client=None) -> str:
+def _choose_native_avatar(persona_id: str, persona: dict, settings: dict, native_names: dict) -> str:
+    """Allocate a native avatar without lying about the cloned image format."""
+    mapped = _valid_native_avatar(persona.get("sillytavern_avatar"))
+    if mapped:
+        return mapped
+    matches = [
+        avatar for avatar, name in native_names.items()
+        if str(name).casefold() == str(persona["name"]).casefold() and _valid_native_avatar(avatar)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    source_name = _valid_native_avatar(settings.get("user_avatar"))
+    suffix = Path(source_name).suffix.casefold() if source_name else ".png"
+    if suffix not in _NATIVE_AVATAR_SUFFIXES:
+        suffix = ".png"
+    base = f"bridge-{persona_id}"
+    candidate = f"{base}{suffix}"
+    for attempt in range(257):
+        if candidate not in native_names and not (NATIVE_PERSONA_AVATAR_DIR / candidate).exists():
+            return candidate
+        token = hashlib.sha256(f"{persona_id}:{attempt}".encode("utf-8")).hexdigest()[:8]
+        candidate = f"{base[:54]}-{token}{suffix}"
+    raise ValueError("Could not allocate a unique native persona avatar")
+
+
+def _upsert_native_persona_storage(identifier: str, name: str, description: str, client=None) -> str:
     """Create or update one Persona directly in native SillyTavern settings."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(identifier or "")) and not _valid_native_avatar(str(identifier or "")):
         raise ValueError("Persona ID must contain only letters, numbers, hyphens, or underscores")
@@ -263,7 +291,7 @@ def upsert_native_persona(identifier: str, name: str, description: str, client=N
     return avatar
 
 
-def delete_native_persona(identifier: str, client=None) -> bool:
+def _delete_native_persona_storage(identifier: str, client=None) -> bool:
     """Remove one native Persona metadata entry while preserving its avatar file."""
     api = client or (phase3_client() if phase3_api_configured() else None)
     original = _native_settings(api)
@@ -284,3 +312,30 @@ def delete_native_persona(identifier: str, client=None) -> bool:
         raise SillyTavernApiError("SillyTavern Persona deletion readback did not match")
     _NATIVE_PERSONA_CACHE.clear()
     return True
+
+
+_PERSONA_STORE = _IntegrityCheckedPersonaStore(
+    load_personas=load_native_personas,
+    upsert_backend=_upsert_native_persona_storage,
+    delete_backend=_delete_native_persona_storage,
+    valid_avatar=_valid_native_avatar,
+    edit_lock=lambda: PERSONA_EDIT_LOCK,
+)
+
+
+def upsert_native_persona(identifier: str, name: str, description: str, client=None) -> str:
+    """Create or update one Persona through the integrity-checked native store."""
+    return _PERSONA_STORE.upsert(
+        identifier,
+        name,
+        description,
+        client=client,
+    )
+
+
+def delete_native_persona(identifier: str, client=None) -> bool:
+    """Delete one Persona through the integrity-checked native store."""
+    return _PERSONA_STORE.delete(
+        identifier,
+        client=client,
+    )

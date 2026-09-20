@@ -1,67 +1,16 @@
-"""Late-loaded state-integrity hardening for native storage and Live Sync.
+"""Late-loaded Hindsight and Live Sync state-integrity hardening.
 
-Keep whole-document native Persona writes serialized, preserve native avatar media
-extensions, propagate explicit Live Sync metadata clears, and prevent queued
-Hindsight retention from restoring a stale session snapshot after newer local
-state or a session-memory purge.
+Propagate explicit Live Sync metadata clears and prevent queued Hindsight
+retention from restoring a stale session snapshot after newer local state or a
+session-memory purge.
 """
 
 from bridge.extension_registry import run_post_retain_hooks as _run_post_retain_hooks
 
 
-_ORIGINAL_UPSERT_NATIVE_PERSONA = upsert_native_persona
-_ORIGINAL_DELETE_NATIVE_PERSONA = delete_native_persona
 _ORIGINAL_APPLY_SYNC_SNAPSHOT = apply_sync_snapshot
 _ORIGINAL_RETAIN_SESSION_MEMORY_WORKER = _retain_session_memory
 _ORIGINAL_PURGE_HINDSIGHT_SESSION = purge_hindsight_session
-
-
-def _native_persona_id_is_taken(identifier: str) -> bool:
-    """Treat bridge-created native avatar stems as stable logical Persona IDs."""
-    value = str(identifier or "")
-    if _valid_native_avatar(value):
-        return False
-    expected_stem = f"bridge-{value}"
-    return any(Path(avatar).stem == expected_stem for avatar in load_native_personas(force=True))
-
-
-def _choose_native_avatar(persona_id: str, persona: dict, settings: dict, native_names: dict) -> str:
-    """Allocate a native avatar without lying about the cloned image format."""
-    mapped = _valid_native_avatar(persona.get("sillytavern_avatar"))
-    if mapped:
-        return mapped
-    matches = [
-        avatar for avatar, name in native_names.items()
-        if str(name).casefold() == str(persona["name"]).casefold() and _valid_native_avatar(avatar)
-    ]
-    if len(matches) == 1:
-        return matches[0]
-    source_name = _valid_native_avatar(settings.get("user_avatar"))
-    suffix = Path(source_name).suffix.casefold() if source_name else ".png"
-    if suffix not in _NATIVE_AVATAR_SUFFIXES:
-        suffix = ".png"
-    base = f"bridge-{persona_id}"
-    candidate = f"{base}{suffix}"
-    for attempt in range(257):
-        if candidate not in native_names and not (NATIVE_PERSONA_AVATAR_DIR / candidate).exists():
-            return candidate
-        token = hashlib.sha256(f"{persona_id}:{attempt}".encode("utf-8")).hexdigest()[:8]
-        candidate = f"{base[:54]}-{token}{suffix}"
-    raise ValueError("Could not allocate a unique native persona avatar")
-
-
-def upsert_native_persona(identifier: str, name: str, description: str, client=None) -> str:
-    """Serialize native settings read-modify-write and enforce logical ID uniqueness."""
-    with PERSONA_EDIT_LOCK:
-        if _native_persona_id_is_taken(identifier):
-            raise ValueError("Persona ID already exists")
-        return _ORIGINAL_UPSERT_NATIVE_PERSONA(identifier, name, description, client=client)
-
-
-def delete_native_persona(identifier: str, client=None) -> bool:
-    """Serialize native settings deletion with create/edit operations."""
-    with PERSONA_EDIT_LOCK:
-        return _ORIGINAL_DELETE_NATIVE_PERSONA(identifier, client=client)
 
 
 def _hindsight_epoch_key(chat_id: str, session_id: str) -> str:
