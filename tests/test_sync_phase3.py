@@ -675,6 +675,35 @@ class SyncPollOwnershipTests(unittest.TestCase):
             "sync_safety.py",
         )
 
+    def test_sync_safety_module_is_retired(self):
+        path = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "sync_safety.py"
+        )
+        self.assertFalse(path.exists())
+
+    def test_no_sync_safety_original_captures_remain(self):
+        root = (
+            Path(__file__).parents[1]
+            / "bridge"
+        )
+        offenders = []
+        for path in root.glob("*.py"):
+            source = path.read_text(
+                encoding="utf-8"
+            )
+            if (
+                "_ORIGINAL_SYNC_INITIALIZE_DATABASE_SCHEMA"
+                in source
+                or "_ORIGINAL_PHASE3_SYNC_NOW_FOR_POLL"
+                in source
+            ):
+                offenders.append(path.name)
+
+        self.assertEqual(offenders, [])
+
+
 
 class SyncWorkerInjectionTests(unittest.TestCase):
     class FakeStopEvent:
