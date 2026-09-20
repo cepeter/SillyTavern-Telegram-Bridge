@@ -244,7 +244,12 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
     meta_key = f"persona_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
-        send_persona_menu(token, chat_id, session.get("persona_id") or "")
+        send_persona_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            persona_service=persona_service,
+        )
         return True
     mode = str(state.get("mode") or "")
     persona_id = str(state.get("persona_id") or "")
@@ -276,7 +281,12 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
         target_id = persona_id
     else:
         _cancel_pending(db, token, chat_id, meta_key, state)
-        send_persona_menu(token, chat_id, session.get("persona_id") or "")
+        send_persona_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            persona_service=persona_service,
+        )
         return True
     try:
         if mode == "create":
@@ -320,7 +330,12 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
         return True
     _cancel_pending(db, token, chat_id, meta_key, state)
     send_text(token, chat_id, f"Persona {'created and selected' if mode == 'create' else 'updated'}: {persona_service.name(native_avatar)}")
-    send_persona_menu(token, chat_id, native_avatar if mode == "create" else session.get("persona_id") or "")
+    send_persona_menu(
+        token,
+        chat_id,
+        native_avatar if mode == "create" else session.get("persona_id") or "",
+        persona_service=persona_service,
+    )
     return True
 
 
@@ -382,14 +397,27 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
     message_id = message.get("message_id")
     if data.startswith("persona:delete_page:"):
         page = max(0, int(data.rsplit(":", 1)[1]))
-        send_persona_delete_menu(token, chat_id, session.get("persona_id") or "", message_id, page)
+        send_persona_delete_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            message_id,
+            page,
+            persona_service=persona_service,
+        )
         return True
     if data.startswith("persona:delete:"):
         target = resolve_dynamic_callback_token(data.split(":", 2)[2], "persona", chat_id) or ""
         if not target or target == session.get("persona_id"):
             answer_callback(token, str(callback.get("id", "")), "Cannot delete the current Persona")
             return True
-        send_persona_delete_confirm(token, chat_id, target, message_id)
+        send_persona_delete_confirm(
+            token,
+            chat_id,
+            target,
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if data.startswith("personadeleteconfirm:"):
         persona_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "persona", chat_id) or ""
@@ -413,7 +441,13 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             answer_callback(token, str(callback.get("id", "")), "Persona deletion failed")
             return True
         answer_callback(token, str(callback.get("id", "")), "Deleted" if deleted else "Persona not found")
-        send_persona_menu(token, chat_id, session.get("persona_id") or "", message_id)
+        send_persona_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if not data.startswith("persona:"):
         return False
@@ -424,11 +458,24 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         value = resolve_dynamic_callback_token(value, "persona", chat_id) or ""
     if value.startswith("page:"):
         answer_callback(token, str(callback.get("id", "")), "Page")
-        send_persona_menu(token, chat_id, session["persona_id"], message_id, int(value.split(":", 1)[1]))
+        send_persona_menu(
+            token,
+            chat_id,
+            session["persona_id"],
+            message_id,
+            int(value.split(":", 1)[1]),
+            persona_service=persona_service,
+        )
         return True
     if value == "menu":
         answer_callback(token, str(callback.get("id", "")), "Personas")
-        send_persona_menu(token, chat_id, session.get("persona_id") or "", message_id)
+        send_persona_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if value == "edit":
         persona_id = session.get("persona_id") or ""
@@ -436,7 +483,13 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             answer_callback(token, str(callback.get("id", "")), "Current persona not found")
             return True
         answer_callback(token, str(callback.get("id", "")), "Review persona")
-        send_persona_edit_menu(token, chat_id, persona_id, message_id)
+        send_persona_edit_menu(
+            token,
+            chat_id,
+            persona_id,
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if value in {"create", "edit_name", "edit_description", "edit_all"}:
         persona_id = session.get("persona_id") or "" if value != "create" else ""
@@ -444,11 +497,26 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             answer_callback(token, str(callback.get("id", "")), "Current persona not found")
             return True
         answer_callback(token, str(callback.get("id", "")), "Enter persona text")
-        start_persona_input(db, token, chat_id, session_id, value, persona_id, callback)
+        start_persona_input(
+            db,
+            token,
+            chat_id,
+            session_id,
+            value,
+            persona_id,
+            callback,
+            persona_service=persona_service,
+        )
         return True
     if value == "delete":
         answer_callback(token, str(callback.get("id", "")), "Choose an inactive Persona")
-        send_persona_delete_menu(token, chat_id, session.get("persona_id") or "", message_id)
+        send_persona_delete_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if value == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
