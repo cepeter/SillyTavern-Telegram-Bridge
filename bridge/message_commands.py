@@ -13,7 +13,8 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     telegram_request(token, method, payload)
 
 
-def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None) -> None:
+def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None, *, memory_service=None) -> None:
+    memory_service = resolve_memory_service(memory_service)
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "reset"):
             return
@@ -24,7 +25,7 @@ def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dic
             db.commit()
         return
     if phase != "memory_purged":
-        purge_hindsight_session(db, chat_id, session["session_id"])
+        memory_service.purge_session(db, chat_id, session["session_id"])
         if operation_id is not None:
             set_operation_phase(db, operation_id, "reset", "memory_purged")
         db.commit()
@@ -53,35 +54,22 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
 
 def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service=None) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
+    memory_service = resolve_memory_service(memory_service)
     history_rows = timed_call("history_load", db.execute,
         "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
         (chat_id, session_id, context_history_candidate_limit()),
     ).fetchall()
     history_rows = list(reversed(history_rows))
     rag_bundle = timed_call("rag_retrieval", rag_retrieval_bundle, db, chat_id, text)
-    if memory_service is not None:
-        memory_prompt = memory_service.prompt_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            text,
-        )
-        memory_context = memory_prompt.recall
-        session_summary = memory_prompt.summary
-    else:
-        memory_context = recall_memory_context(
-            db,
-            chat_id,
-            session,
-            fields,
-            text,
-        )
-        session_summary = session_summary_for_prompt(
-            db,
-            chat_id,
-            session,
-        )
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        text,
+    )
+    memory_context = memory_prompt.recall
+    session_summary = memory_prompt.summary
     messages = timed_call("prompt_assembly", build_chat_messages, session, fields, text, history_rows, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle), group_context=group_context)
     send_typing(token, chat_id)
     language = session.get("response_language") or "auto"
@@ -132,10 +120,7 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
             return assistant_rowid
 
     assistant_rowid = run_write_txn(db, persist_turn)
-    if memory_service is not None:
-        memory_service.retain(db, chat_id, session, fields)
-    else:
-        retain_session_memory(db, chat_id, session, fields)
+    memory_service.retain(db, chat_id, session, fields)
     if telegram_message_id is not None:
         clear_failed_turn(db, chat_id, telegram_message_id)
     if stream_message_id:
