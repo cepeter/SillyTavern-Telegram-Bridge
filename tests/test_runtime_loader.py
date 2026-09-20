@@ -217,6 +217,54 @@ class RuntimeLoaderTests(unittest.TestCase):
             "main.py",
         )
 
+    def test_persona_integrity_writes_are_not_state_integrity_overrides(self):
+        state_stage = next(
+            stage
+            for stage in DEFAULT_RUNTIME_STAGES
+            if stage.name == "safety_overrides"
+        )
+        allowed = state_stage.allowed_overrides_for(
+            "state_integrity.py"
+        )
+
+        self.assertNotIn(
+            "upsert_native_persona",
+            allowed,
+        )
+        self.assertNotIn(
+            "delete_native_persona",
+            allowed,
+        )
+
+    def test_persona_write_owners_are_persona_sync(self):
+        self.assertEqual(
+            Path(
+                rt.upsert_native_persona.__code__.co_filename
+            ).name,
+            "persona_sync.py",
+        )
+        self.assertEqual(
+            Path(
+                rt.delete_native_persona.__code__.co_filename
+            ).name,
+            "persona_sync.py",
+        )
+
+    def test_state_integrity_runtime_report_has_no_persona_overrides(self):
+        entry = next(
+            item
+            for item in rt.RUNTIME_LOAD_REPORT
+            if item["module"] == "state_integrity.py"
+        )
+        self.assertNotIn(
+            "upsert_native_persona",
+            entry["public_callable_overrides"],
+        )
+        self.assertNotIn(
+            "delete_native_persona",
+            entry["public_callable_overrides"],
+        )
+
     def test_loader_rejects_module_outside_base_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
