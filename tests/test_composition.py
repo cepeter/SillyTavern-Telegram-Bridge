@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import bridge.runtime as rt
 
 from bridge.group_director_service import GroupDirectorService
-from bridge.job_service import JobService, JobSubmission
+from bridge.job_service import DurableJob, JobService, JobSubmission
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.sync_service import SyncService
@@ -698,36 +698,165 @@ class RecoveryCompositionTests(unittest.TestCase):
         self.assertEqual(submission.args[0], self.services)
         fake_jobs.submit.assert_called_once()
 
-    def test_recovered_job_propagates_same_services_and_stored_model(self):
-        row = (
-            51,
-            "chat",
-            "session",
-            "10",
-            "generation",
-            '{"text":"hello","model":"stored::model"}',
+    def test_recovered_job_resolver_preserves_stored_model_and_session(self):
+        generation = DurableJob(
+            job_id=51,
+            chat_id="chat",
+            session_id="stored-session",
+            telegram_message_id=10,
+            kind="generation",
+            payload={
+                "text": "hello",
+                "model": "stored::model",
+            },
         )
+        submission = rt.resolve_recovered_job_submission(
+            self.services,
+            {"name": "Mira"},
+            generation,
+        )
+
+        self.assertEqual(submission.label, "generation")
+        self.assertIs(
+            inspect.unwrap(submission.worker),
+            rt.process_message_job,
+        )
+        self.assertIs(submission.args[0], self.services)
+        self.assertEqual(submission.args[-2], "stored-session")
+        self.assertEqual(submission.args[-1], "stored::model")
+        self.assertNotIn(51, submission.args)
+
+        active = DurableJob(
+            job_id=52,
+            chat_id="chat",
+            session_id="stored-session",
+            telegram_message_id=11,
+            kind="generation",
+            payload={
+                "text": "hello",
+                "model": "stored::model",
+                "resolve_active": True,
+            },
+        )
+        active_submission = rt.resolve_recovered_job_submission(
+            self.services,
+            {"name": "Mira"},
+            active,
+        )
+        self.assertIsNone(active_submission.args[-2])
+
+    def test_recovered_job_resolver_maps_all_worker_kinds(self):
+        fields = {"name": "Mira"}
+        cases = [
+            (
+                DurableJob(
+                    61, "chat", "session", 21, "callback",
+                    {"callback": {"id": "cb"}},
+                ),
+                rt.process_callback_job,
+                {"id": "cb"},
+            ),
+            (
+                DurableJob(
+                    62, "chat", "session", 22, "edit",
+                    {"text": "edited", "model": "stored::edit"},
+                ),
+                rt.process_edit_job,
+                "stored::edit",
+            ),
+            (
+                DurableJob(
+                    63, "chat", "session", 23, "voice",
+                    {
+                        "voice": {"file_id": "voice"},
+                        "model": "stored::voice",
+                    },
+                ),
+                rt.process_voice_job,
+                "stored::voice",
+            ),
+            (
+                DurableJob(
+                    64, "chat", "session", 24, "image",
+                    {
+                        "file_id": "image",
+                        "caption": "caption",
+                        "file_size": 7,
+                        "model": "stored::image",
+                    },
+                ),
+                rt.process_image_job,
+                "stored::image",
+            ),
+            (
+                DurableJob(
+                    65, "chat", "session", 25, "document",
+                    {
+                        "document": {"file_name": "notes.txt"},
+                        "model": "stored::document",
+                    },
+                ),
+                rt.process_document_job,
+                "stored::document",
+            ),
+        ]
+
+        for job, worker, expected_tail in cases:
+            with self.subTest(kind=job.kind):
+                submission = rt.resolve_recovered_job_submission(
+                    self.services,
+                    fields,
+                    job,
+                )
+                self.assertEqual(submission.label, job.kind)
+                self.assertIs(
+                    inspect.unwrap(submission.worker),
+                    worker,
+                )
+                self.assertIs(submission.args[0], self.services)
+                self.assertIn(expected_tail, submission.args)
+                self.assertNotIn(job.job_id, submission.args)
+
+        unknown = DurableJob(
+            66, "chat", "session", 26, "unknown", {}
+        )
+        self.assertIsNone(
+            rt.resolve_recovered_job_submission(
+                self.services,
+                fields,
+                unknown,
+            )
+        )
+
+    def test_dispatch_recovered_jobs_is_compatibility_delegate(self):
+        fake_jobs = Mock()
         with patch.object(
             rt,
-            "recover_jobs",
-            return_value=[row],
-        ), patch.object(
-            rt,
-            "mark_job_scheduled",
+            "_jobs_for_services",
+            return_value=fake_jobs,
         ):
             rt.dispatch_recovered_jobs(
                 self.db,
                 self.services,
                 {"name": "Mira"},
+                recover_running=False,
             )
 
-        label, chat_id, function, args = self.submitted[0]
-        self.assertEqual(label, "generation")
-        self.assertEqual(chat_id, "chat")
-        self.assertIs(inspect.unwrap(function), rt.process_message_job)
-        self.assertIs(args[0], self.services)
-        self.assertEqual(args[-2], "stored::model")
-        self.assertEqual(args[-1], 51)
+        fake_jobs.recover.assert_called_once()
+        call = fake_jobs.recover.call_args
+        self.assertIs(call.args[0], self.db)
+        self.assertFalse(call.kwargs["recover_running"])
+        resolved = call.args[1](
+            DurableJob(
+                67,
+                "chat",
+                "session",
+                27,
+                "generation",
+                {"text": "hello"},
+            )
+        )
+        self.assertEqual(resolved.label, "generation")
 
     def test_failed_background_submission_does_not_mark_job_scheduled(self):
         background = BackgroundRuntime(
@@ -822,9 +951,9 @@ class RecoveryCompositionTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(state, ("queued",))
 
-    def test_backlog_dispatcher_reuses_same_services_instance(self):
+    def test_backlog_dispatcher_uses_injected_job_recovery(self):
         opened = []
-        seen = []
+        fake_jobs = Mock()
 
         def factory():
             db = rt.db_connect(self.path)
@@ -836,23 +965,33 @@ class RecoveryCompositionTests(unittest.TestCase):
             db_factory=factory,
             telegram=self.services.telegram,
             background=self.services.background,
+            jobs=fake_jobs,
         )
 
-        with patch.object(
-            rt,
-            "dispatch_recovered_jobs",
-            side_effect=lambda db, actual_services, fields, **kwargs:
-                seen.append((db, actual_services, fields, kwargs)),
-        ):
-            dispatcher = rt.make_durable_backlog_dispatcher(
-                services,
-                {"name": "Mira"},
-            )
-            dispatcher()
+        dispatcher = rt.make_durable_backlog_dispatcher(
+            services,
+            {"name": "Mira"},
+        )
+        dispatcher()
 
         self.assertEqual(len(opened), 1)
-        self.assertIs(seen[0][1], services)
-        self.assertEqual(seen[0][3], {"recover_running": False})
+        fake_jobs.recover.assert_called_once()
+        call = fake_jobs.recover.call_args
+        self.assertIs(call.args[0], opened[0])
+        self.assertFalse(call.kwargs["recover_running"])
+        submission = call.args[1](
+            DurableJob(
+                68,
+                "chat",
+                "session",
+                28,
+                "generation",
+                {"text": "hello"},
+            )
+        )
+        self.assertEqual(submission.label, "generation")
+        with self.assertRaises(sqlite3.ProgrammingError):
+            opened[0].execute("SELECT 1")
 
 
 class RecordingJobs:
