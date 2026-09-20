@@ -321,6 +321,87 @@ class MemoryNativeBackendTests(unittest.TestCase):
             1,
         )
 
+    def test_public_retain_rejects_stale_transcript_after_cutover(self):
+        self._add_message()
+        queued = []
+        fake = _FakeHindsight()
+        rt.hindsight_client = lambda: fake
+
+        with patch.object(
+            rt,
+            "submit_background",
+            side_effect=lambda name, fn, *args, **kwargs: (
+                queued.append(
+                    (name, fn, args, kwargs)
+                )
+            ),
+        ):
+            rt.retain_session_memory(
+                self.db,
+                "chat",
+                self.session,
+                self.fields,
+            )
+
+        hindsight_jobs = [
+            item
+            for item in queued
+            if item[0] == "hindsight_retain"
+        ]
+        self.assertEqual(len(hindsight_jobs), 1)
+
+        self.db.execute(
+            "UPDATE messages SET content='new text' "
+            "WHERE chat_id=? AND session_id=?",
+            ("chat", self.session["session_id"]),
+        )
+        self.db.commit()
+
+        _name, fn, args, kwargs = hindsight_jobs[0]
+        fn(*args, **kwargs)
+
+        self.assertEqual(fake.retained, [])
+
+    def test_public_purge_invalidates_already_queued_retain(self):
+        self._add_message()
+        queued = []
+        fake = _FakeHindsight()
+        rt.hindsight_client = lambda: fake
+
+        with patch.object(
+            rt,
+            "submit_background",
+            side_effect=lambda name, fn, *args, **kwargs: (
+                queued.append(
+                    (name, fn, args, kwargs)
+                )
+            ),
+        ):
+            rt.retain_session_memory(
+                self.db,
+                "chat",
+                self.session,
+                self.fields,
+            )
+
+        hindsight_jobs = [
+            item
+            for item in queued
+            if item[0] == "hindsight_retain"
+        ]
+        self.assertEqual(len(hindsight_jobs), 1)
+
+        rt.purge_hindsight_session(
+            self.db,
+            "chat",
+            self.session["session_id"],
+        )
+
+        _name, fn, args, kwargs = hindsight_jobs[0]
+        fn(*args, **kwargs)
+
+        self.assertEqual(fake.retained, [])
+
     def test_guard_composition_does_not_cut_over_public_ownership_early(self):
         self.assertEqual(
             Path(
@@ -375,6 +456,47 @@ class MemoryNativeBackendTests(unittest.TestCase):
                     "Mira",
                 )
             ],
+        )
+
+
+class HindsightSourceBoundaryTests(unittest.TestCase):
+    def test_state_integrity_no_longer_owns_hindsight_safety(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "state_integrity.py"
+        ).read_text(encoding="utf-8")
+
+        for forbidden in (
+            "_ORIGINAL_RETAIN_SESSION_MEMORY_WORKER",
+            "_ORIGINAL_PURGE_HINDSIGHT_SESSION",
+            "def _hindsight_epoch_key(",
+            "def _hindsight_memory_epoch(",
+            "def _hindsight_conversation_snapshot(",
+            "def _retain_session_memory(",
+            "def retain_session_memory(",
+            "def purge_hindsight_session(",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(
+                    forbidden,
+                    source,
+                )
+
+    def test_hindsight_integrity_has_no_runtime_import(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "hindsight_integrity.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn(
+            "import bridge.runtime",
+            source,
+        )
+        self.assertNotIn(
+            "from bridge.runtime",
+            source,
         )
 
 
