@@ -2115,3 +2115,6 @@ Do not merge the PR. Merge remains a separate user decision.
 - Task 2 RED: `44766370eafd392e3f7908f348a85c1fac6bd0c4`, CI #452 failed because canonical `_run_startup_database_cleanup` left the orphan Sync binding in place.
 - Task 2 GREEN: `7c39264142cdae2832ceaf61220782476d0cf59e`, CI #453 completed successfully.
 - Task 3 Ruling: move `test_direct_poll_adapter_uses_final_runtime_sync_now` before production composition so the call-time collaborator contract is observed RED before implementation. The written plan placed that test after composition, conflicting with the TDD sub-skill. Cost if wrong: only test sequencing changes; the designed interface and production scope are unchanged.
+
+- Task 3 RED: `6abaf43e9be3ce8d59e8a76aa4b3bf906a28564b`, CI #455 failed because `_SYNC_POLL_SAFETY` composition was absent; the transition ownership assertion still passed with `sync_safety.py` as public owner.
+- Task 3 GREEN: `2285a75404c5051cc5cbdd4837986018f2580ec2`, CI #456 completed successfully with transition ownership preserved.
