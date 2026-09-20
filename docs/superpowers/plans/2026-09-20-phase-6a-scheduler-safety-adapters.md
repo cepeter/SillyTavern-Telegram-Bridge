@@ -1421,8 +1421,10 @@ Implementation used the Draft PR CI workflow as the native RED -> GREEN harness.
 - Merge base / current upstream `main` during verification: `e2bcc5fc54bee4bcf0dbb2a088aa9af930485bf5`; no upstream drift was present.
 - Draft PR: #41. At the integrated implementation head it was open, mergeable, with no comments, formal reviews, or unresolved review threads.
 
-### Compatibility ruling
+### Final review correction
 
-The legacy test suite directly resets `_DB_SCHEMA_LOCK`, `_DB_SCHEMA_READY`, and `_DB_SCHEMA_READY_PATHS` in many fixtures. Phase 6A retains those three names in `database.py` as deprecated, inert test-fixture compatibility attributes rather than broadening this PR into a mass test-fixture rewrite. Production readiness is owned exclusively by `_DB_CONNECTION_GATE`; the canonical `db_connect` body does not read any `_DB_SCHEMA_*` name.
+Whole-branch self-review found that retaining `_DB_SCHEMA_LOCK`, `_DB_SCHEMA_READY`, and `_DB_SCHEMA_READY_PATHS` contradicted the approved plan even though they were inert in production. A new source-boundary regression test was added first at `58cd1a31f13390174dded88c839ef8a6b57a4872`; CI #399 failed exactly on `test_database_has_no_legacy_schema_readiness_globals` with `488 tests, 1 failure`. The compatibility globals were then removed from `database.py` at `f251ed8ac9c8b1a9c04c9f0a39c274330e11dc02`.
+
+This correction intentionally keeps Phase 6A narrow: the already-migrated fixtures use unique temporary paths and the explicit `_DB_CONNECTION_GATE`; no production compatibility state remains.
 
 Steps 11-12 intentionally remain open in this file until GitHub Actions succeeds on the exact documentation-final head and PR #41 is marked Ready for review. Updating the checklist after that event would create another head and recursively invalidate the exact-head CI evidence.
