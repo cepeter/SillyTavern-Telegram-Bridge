@@ -174,6 +174,14 @@ class RuntimeLoaderTests(unittest.TestCase):
         }
         self.assertNotIn("persona_service.py", loaded_modules)
 
+    def test_sync_service_is_not_a_runtime_stage(self):
+        loaded_modules = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn("sync_service.py", loaded_modules)
+
     def test_loader_rejects_module_outside_base_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
