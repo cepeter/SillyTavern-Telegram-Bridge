@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import bridge.runtime as rt
 
@@ -48,6 +49,59 @@ class NativePersonaSyncTests(unittest.TestCase):
         self.assertEqual(personas["native.png"]["name"], "Native")
         self.assertEqual(personas["native.png"]["description"], "Native desc")
         self.assertEqual(personas["native.png"]["sillytavern_avatar"], "native.png")
+
+
+    def test_loader_failure_returns_empty_and_logs_final_warning(self):
+        with patch.object(
+            rt,
+            "load_native_personas",
+            side_effect=RuntimeError("boom"),
+        ), patch.object(
+            rt.logging,
+            "warning",
+        ) as warning:
+            result = rt.load_personas()
+
+        self.assertEqual(result, {})
+        warning.assert_called_once_with(
+            "Could not load native Persona metadata",
+            exc_info=True,
+        )
+
+    def test_persona_read_helpers_use_final_runtime_loader_at_call_time(self):
+        personas = {
+            "patched.png": {
+                "name": "Patched",
+                "description": "Patched description",
+                "sillytavern_avatar": "patched.png",
+            }
+        }
+
+        with patch.object(
+            rt,
+            "load_personas",
+            return_value=personas,
+        ), patch.object(
+            rt,
+            "_native_settings",
+            return_value={
+                "power_user": {
+                    "default_persona": "patched.png",
+                }
+            },
+        ):
+            self.assertEqual(
+                rt.get_persona("patched.png"),
+                personas["patched.png"],
+            )
+            self.assertEqual(
+                rt.default_persona_id(),
+                "patched.png",
+            )
+            self.assertEqual(
+                rt.persona_name("patched.png"),
+                "Patched",
+            )
 
     def test_upsert_preserves_unrelated_native_settings_and_descriptor_fields(self):
         avatar = rt.upsert_native_persona("native.png", "Updated", "Updated desc")
