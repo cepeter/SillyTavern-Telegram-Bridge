@@ -609,7 +609,7 @@ class HindsightStaleGuard:
             return int(deleted)
 ```
 
-- [ ] **Step 6: Run Task 1 tests and verify GREEN**
+- [ ] **Step 5: Run Task 1 tests and verify GREEN**
 
 Run:
 
@@ -619,7 +619,7 @@ python -m unittest tests.test_hindsight_integrity -v
 
 Expected: all tests PASS.
 
-- [ ] **Step 7: Commit Task 1**
+- [ ] **Step 6: Commit Task 1**
 
 ```bash
 git add   bridge/hindsight_integrity.py   tests/test_hindsight_integrity.py
@@ -1176,7 +1176,7 @@ The dynamic lambda around `submit_background` is intentional: existing tests and
 
 Do **not** rename `_retain_session_memory`, `retain_session_memory`, or `purge_hindsight_session` in Task 2. Do **not** route the public functions through the guard yet. This preserves the exact Phase 6B late-override execution contract while the new guard is exercised directly.
 
-- [ ] **Step 8: Assert Task 2 does not change current public ownership**
+- [ ] **Step 7: Assert Task 2 does not change current public ownership**
 
 Append to `tests/test_memory_native_backend.py`:
 
@@ -1198,7 +1198,7 @@ Append to `tests/test_memory_native_backend.py`:
 
 This is an intentional transition-state test. Task 3 deletes it when the cutover becomes the required behavior.
 
-- [ ] **Step 9: Add post-retain-hook integration coverage**
+- [ ] **Step 8: Add post-retain-hook integration coverage**
 
 Add this import to `tests/test_memory_native_backend.py`:
 
@@ -1252,7 +1252,7 @@ Then append:
         )
 ```
 
-- [ ] **Step 10: Run Task 1 + Task 2 focused tests**
+- [ ] **Step 9: Run Task 1 + Task 2 focused tests**
 
 Run:
 
@@ -1262,7 +1262,7 @@ python -m unittest   tests.test_hindsight_integrity   tests.test_memory_native_b
 
 Expected: PASS. At this point the explicit guard works directly, and the transition-state ownership test confirms the public retain/purge functions are still intentionally owned by `state_integrity.py`.
 
-- [ ] **Step 11: Commit Task 2**
+- [ ] **Step 10: Commit Task 2**
 
 ```bash
 git add   bridge/memory.py   tests/test_memory_native_backend.py
@@ -1561,7 +1561,7 @@ def purge_hindsight_session(
 
 Delete the Task 2 transition-state test `test_guard_composition_does_not_cut_over_public_ownership_early`; Task 3 runtime-owner tests now require the opposite final ownership.
 
-- [ ] **Step 5: Remove only the Hindsight section from state_integrity.py**
+- [ ] **Step 6: Remove only the Hindsight section from state_integrity.py**
 
 Keep the module import:
 
@@ -1610,7 +1610,7 @@ Do not modify the statements in the remaining `apply_sync_snapshot` definition o
 
 Update the module docstring so it describes Live Sync integrity only.
 
-- [ ] **Step 6: Shrink the state-integrity runtime allowlist to one symbol**
+- [ ] **Step 7: Shrink the state-integrity runtime allowlist to one symbol**
 
 In `bridge/runtime_loader.py`, replace:
 
@@ -1632,7 +1632,7 @@ with:
 
 Keep `state_integrity.py` in `safety_overrides` for Phase 6D.
 
-- [ ] **Step 7: Migrate Hindsight tests out of test_state_integrity.py**
+- [ ] **Step 8: Migrate Hindsight tests out of test_state_integrity.py**
 
 Delete these tests from `tests/test_state_integrity.py`:
 
@@ -1653,7 +1653,7 @@ test_live_sync_explicitly_clears_persona_and_world_and_refreshes_memory
 
 unchanged for Phase 6D.
 
-- [ ] **Step 8: Add deleted-session public regression**
+- [ ] **Step 9: Add deleted-session public regression**
 
 Append to `MemoryNativeBackendTests`:
 
@@ -1693,7 +1693,7 @@ Append to `MemoryNativeBackendTests`:
         self.assertEqual(fake.retained, [])
 ```
 
-- [ ] **Step 9: Run the focused memory/runtime suite**
+- [ ] **Step 10: Run the focused memory/runtime suite**
 
 Run:
 
@@ -1703,7 +1703,7 @@ python -m unittest   tests.test_hindsight_integrity   tests.test_memory_native_b
 
 Expected: PASS.
 
-- [ ] **Step 10: Run the architecture/source scan**
+- [ ] **Step 11: Run the architecture/source scan**
 
 Run:
 
