@@ -1,3 +1,4 @@
+from dataclasses import replace
 import json
 import sqlite3
 import unittest
@@ -111,6 +112,40 @@ class JobServiceTests(unittest.TestCase):
             submit[4],
             ("services", "fields", 41),
         )
+        self.assertEqual(
+            self.calls[1],
+            ("scheduled", self.db, 41),
+        )
+
+    def test_submit_can_prepare_worker_without_owning_business_logic(self):
+        seen = []
+        worker = lambda *_args: None
+
+        def prepare_worker(db, job_id, actual_worker):
+            seen.append((db, job_id, actual_worker))
+
+            def guarded(*args):
+                return actual_worker(*args)
+
+            return guarded
+
+        service = replace(
+            self.service,
+            prepare_worker=prepare_worker,
+        )
+        submission = JobSubmission(
+            label="generation",
+            chat_id="chat",
+            worker=worker,
+            args=("services",),
+        )
+
+        self.assertTrue(service.submit(self.db, 41, submission))
+
+        self.assertEqual(seen, [(self.db, 41, worker)])
+        submit = self.calls[0]
+        self.assertIsNot(submit[3], worker)
+        self.assertEqual(submit[4], ("services", 41))
         self.assertEqual(
             self.calls[1],
             ("scheduled", self.db, 41),
