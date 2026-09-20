@@ -9,6 +9,7 @@ from unittest.mock import patch
 import bridge.runtime as rt
 
 from bridge.group_director_service import GroupDirectorService
+from bridge.memory_service import MemoryService
 
 from bridge.composition import (
     BackgroundRuntime,
@@ -84,16 +85,25 @@ class CompositionConfigTests(unittest.TestCase):
             register_backlog_dispatcher=lambda _callback: None,
             begin_shutdown=lambda: None,
         )
+        memory = MemoryService(
+            recall_context=lambda *_args, **_kwargs: "",
+            summary_for_prompt=lambda *_args, **_kwargs: "",
+            summary_state=lambda *_args, **_kwargs: ("", 0),
+            retain_session=lambda *_args, **_kwargs: None,
+            purge_session_memory=lambda *_args, **_kwargs: 0,
+        )
         services = build_bridge_services(
             config,
             db_factory=lambda: sqlite3.connect(":memory:"),
             telegram=telegram,
             background=background,
+            memory=memory,
         )
 
         self.assertIs(services.config, config)
         self.assertIs(services.telegram, telegram)
         self.assertIs(services.background, background)
+        self.assertIs(services.memory, memory)
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
 
@@ -199,6 +209,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.opened = 0
         self.sent = []
         self.global_sent = []
+        self.memory_service = object()
 
         config = BridgeConfig(
             bot_token="injected-token",
@@ -221,6 +232,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 register_backlog_dispatcher=lambda _callback: None,
                 begin_shutdown=lambda: None,
             ),
+            memory=self.memory_service,
         )
 
     def tearDown(self):
@@ -301,6 +313,29 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertEqual(captured["model"], "injected::model")
         self.assertIs(captured["kwargs"]["services"], self.services)
 
+    def test_edit_worker_propagates_injected_memory_service(self):
+        captured = {}
+
+        def fake_edit(*args, **kwargs):
+            captured.update(kwargs)
+
+        with patch.object(
+            rt,
+            "edit_telegram_user_message",
+            side_effect=fake_edit,
+        ):
+            rt.process_edit_job(
+                self.services,
+                "chat",
+                77,
+                "edited text",
+            )
+
+        self.assertIs(
+            captured["memory_service"],
+            self.memory_service,
+        )
+
     def test_retry_propagates_services_to_nested_message(self):
         captured = {}
         failed = (
@@ -374,6 +409,52 @@ class WorkerInjectionTests(unittest.TestCase):
             )
 
         self.assertEqual(captured["model"], "stored::model")
+
+    def test_image_worker_propagates_injected_memory_service(self):
+        captured = {}
+
+        with patch.object(
+            rt,
+            "committed_assistant_for_message",
+            return_value=None,
+        ), patch.object(
+            rt,
+            "process_telegram_image",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            rt.process_image_job(
+                self.services,
+                "chat",
+                "file-id",
+                "caption",
+                100,
+                55,
+            )
+
+        self.assertIs(
+            captured["memory_service"],
+            self.memory_service,
+        )
+
+    def test_document_worker_propagates_injected_memory_service(self):
+        captured = {}
+
+        with patch.object(
+            rt,
+            "import_telegram_document",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            rt.process_document_job(
+                self.services,
+                "chat",
+                {"file_name": "photo.png"},
+                56,
+            )
+
+        self.assertIs(
+            captured["memory_service"],
+            self.memory_service,
+        )
 
     def test_callback_failure_uses_injected_send_text(self):
         with patch.object(
@@ -712,6 +793,14 @@ class StartupCompositionTests(unittest.TestCase):
             GroupDirectorService,
         )
 
+    def test_startup_builds_memory_service(self):
+        services = rt._build_startup_services(self.config)
+
+        self.assertIsInstance(
+            services.memory,
+            MemoryService,
+        )
+
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = rt.argparse.Namespace(check=True)
         with patch.object(
@@ -801,15 +890,15 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("get_services(", source)
         self.assertNotIn("set_services(", source)
 
-    def test_phase5_group_director_service_is_the_only_extracted_service(self):
+    def test_phase5_group_director_and_memory_are_the_only_extracted_services(self):
         root = Path(__file__).parents[1] / "bridge"
         source = "\n".join(
             path.read_text(encoding="utf-8")
             for path in root.glob("*.py")
         )
         self.assertIn("class GroupDirectorService", source)
+        self.assertIn("class MemoryService", source)
         for forbidden in (
-            "class MemoryService",
             "class PersonaService",
             "class SyncService",
             "class JobService",

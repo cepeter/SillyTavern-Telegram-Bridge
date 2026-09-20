@@ -120,7 +120,8 @@ def send_session_delete_confirm(token: str, chat_id: str, session_id: str, title
     send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
-def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None) -> tuple[bool, str]:
+def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None, *, memory_service=None) -> tuple[bool, str]:
+    memory_service = resolve_memory_service(memory_service)
     if target_session_id == active_session_id:
         return False, "active session"
     exists = db.execute("SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id)).fetchone()
@@ -136,7 +137,7 @@ def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id:
         if busy:
             return False, "session has active jobs"
         try:
-            purge_hindsight_session(db, chat_id, target_session_id)
+            memory_service.purge_session(db, chat_id, target_session_id)
         except RuntimeError:
             return False, "Hindsight cleanup failed; session was preserved"
         if operation_id is not None and not begin_operation(db, operation_id, "session_delete"):
@@ -232,14 +233,25 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     return raw
 
 
-def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None) -> None:
+def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service=None) -> None:
     if file_size > IMAGE_MAX_BYTES:
         send_text(token, chat_id, "Image is too large. The limit is 8 MB.")
         return
     image_bytes = download_telegram_file(token, file_id, IMAGE_MAX_BYTES)
     session = load_session(db, chat_id, queued_session_id, default_model) if queued_session_id else ensure_session(db, chat_id, default_model)
     fields = card_fields_from_file(session["character_file"])
-    process_image_message(db, token, os.environ.get("LLM_API_KEY", ""), session, fields, chat_id, caption, image_bytes, telegram_message_id=telegram_message_id)
+    process_image_message(
+        db,
+        token,
+        os.environ.get("LLM_API_KEY", ""),
+        session,
+        fields,
+        chat_id,
+        caption,
+        image_bytes,
+        telegram_message_id=telegram_message_id,
+        memory_service=memory_service,
+    )
 
 
 def verify_character_card_backup(target: Path, raw: bytes) -> Path:
@@ -354,7 +366,7 @@ def import_world_info_document(db: sqlite3.Connection, token: str, chat_id: str,
         send_text(token, chat_id, f"World Info imported: {target.name}. Open /world to enable it.")
 
 
-def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None) -> None:
+def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None, *, memory_service=None) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
     file_size = int(document.get("file_size") or 0)
@@ -375,7 +387,19 @@ def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, d
         except Exception:
             session = ensure_session(db, chat_id, default_model)
             fields = card_fields_from_file(session["character_file"])
-            process_image_message(db, token, os.environ.get("LLM_API_KEY", ""), session, fields, chat_id, str(document.get("caption") or ""), raw, mime_type="image/png", telegram_message_id=telegram_message_id)
+            process_image_message(
+                db,
+                token,
+                os.environ.get("LLM_API_KEY", ""),
+                session,
+                fields,
+                chat_id,
+                str(document.get("caption") or ""),
+                raw,
+                mime_type="image/png",
+                telegram_message_id=telegram_message_id,
+                memory_service=memory_service,
+            )
         else:
             import_character_card(db, token, chat_id, filename, raw)
         return

@@ -73,7 +73,18 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         send_prompt_menu(token, chat_id, db, session, fields)
         return True
     if command == "/prompt text":
-        send_text(token, chat_id, prompt_diagnostics(db, chat_id, session, fields))
+        memory_service = getattr(services, "memory", None) if services is not None else None
+        send_text(
+            token,
+            chat_id,
+            prompt_diagnostics(
+                db,
+                chat_id,
+                session,
+                fields,
+                memory_service=memory_service,
+            ),
+        )
         return True
     return False
 
@@ -235,21 +246,51 @@ def _handle_entities(db, token, model, fields, chat_id, command, session, sessio
     return False
 
 
-def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, session, operation_id):
+def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, session, operation_id, services=None):
     """Handle edit, continuation, swipe, branch, and regeneration commands."""
     if command == "/edit":
         start_text_action_input(db, token, chat_id, session["session_id"], "edit", "Send the replacement text for the latest user message.")
         return True
+    memory_service = getattr(services, "memory", None) if services is not None else None
     if command.startswith("/edit "):
-        return handle_inline_text_action(db, token, api_key, chat_id, session, fields, "edit", stripped.split(None, 1)[1], operation_id)
+        return handle_inline_text_action(
+            db,
+            token,
+            api_key,
+            chat_id,
+            session,
+            fields,
+            "edit",
+            stripped.split(None, 1)[1],
+            operation_id,
+            memory_service=memory_service,
+        )
     if command == "/continue":
-        continue_last(db, token, api_key, session, fields, chat_id, operation_id=operation_id)
+        continue_last(
+            db,
+            token,
+            api_key,
+            session,
+            fields,
+            chat_id,
+            operation_id=operation_id,
+            memory_service=memory_service,
+        )
         return True
     if command == "/swipe" or command == "/branch" or command.startswith("/branch "):
         send_swipe_menu(token, db, chat_id, session["session_id"])
         return True
     if command == "/regen":
-        regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=operation_id)
+        regenerate_last(
+            db,
+            token,
+            api_key,
+            session,
+            fields,
+            chat_id,
+            operation_id=operation_id,
+            memory_service=memory_service,
+        )
         return True
     return False
 
@@ -295,7 +336,19 @@ def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, c
         return True
     if _handle_entities(db, token, model, fields, chat_id, command, session, session_id, current_model, current_persona):
         return True
-    if _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, session, operation_id):
+    if _handle_chat(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        operation_id,
+        services=services,
+    ):
         return True
     if command.startswith("/"):
         send_text(token, chat_id, "Unknown or removed command. Use /help to see available commands.")

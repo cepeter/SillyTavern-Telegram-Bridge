@@ -15,6 +15,9 @@ from bridge.extension_registry import (
 from bridge.group_director_service import (
     GroupDirectorService as _GroupDirectorService,
 )
+from bridge.memory_service import (
+    MemoryService as _MemoryService,
+)
 
 _SHUTDOWN_EVENT = threading.Event()
 
@@ -171,7 +174,18 @@ def process_image_job(
                 if job_id is not None:
                     finish_job(db, job_id, "done")
                 return
-            process_telegram_image(db, token, chat_id, file_id, caption, model, file_size, message_id, queued_session_id=queued_session_id)
+            process_telegram_image(
+                db,
+                token,
+                chat_id,
+                file_id,
+                caption,
+                model,
+                file_size,
+                message_id,
+                queued_session_id=queued_session_id,
+                memory_service=services.memory,
+            )
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
@@ -246,7 +260,17 @@ def process_edit_job(
         try:
             if job_id is not None and not mark_job_running(db, job_id):
                 return
-            edit_telegram_user_message(db, token, api_key, chat_id, message_id, text, model, operation_id=job_id)
+            edit_telegram_user_message(
+                db,
+                token,
+                api_key,
+                chat_id,
+                message_id,
+                text,
+                model,
+                operation_id=job_id,
+                memory_service=services.memory,
+            )
             if job_id is not None:
                 finish_job(db, job_id, "done")
         except Exception as exc:
@@ -461,6 +485,13 @@ def _build_startup_services(
         director_customization=_get_director_customization_value,
         default_model=config.default_model,
     )
+    memory = _MemoryService(
+        recall_context=recall_memory_context,
+        summary_for_prompt=session_summary_for_prompt,
+        summary_state=get_session_summary,
+        retain_session=retain_session_memory,
+        purge_session_memory=purge_hindsight_session,
+    )
     return _build_bridge_services_value(
         config,
         db_factory=_partial(db_connect, config.db_file),
@@ -474,6 +505,7 @@ def _build_startup_services(
             begin_shutdown=begin_background_shutdown,
         ),
         group_director=group_director,
+        memory=memory,
     )
 
 

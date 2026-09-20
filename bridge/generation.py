@@ -492,7 +492,8 @@ def save_response_variant(db: sqlite3.Connection, chat_id: str, session_id: str,
     return index
 
 
-def regenerate_last(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, operation_id: int | str | None = None) -> None:
+def regenerate_last(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, operation_id: int | str | None = None, *, memory_service=None) -> None:
+    memory_service = resolve_memory_service(memory_service)
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "regen"):
             return
@@ -505,7 +506,22 @@ def regenerate_last(db: sqlite3.Connection, token: str, api_key: str, session: d
     user_text = rows[last_user_index][2]
     history_rows = [(row[1], row[2]) for row in rows[:last_user_index]]
     rag_bundle = rag_retrieval_bundle(db, chat_id, user_text)
-    messages = build_chat_messages(session, fields, user_text, history_rows, memory_context=recall_memory_context(db, chat_id, session, fields, user_text), session_summary=session_summary_for_prompt(db, chat_id, session), rag_context=rag_context_for_prompt(db, chat_id, user_text, rag_bundle))
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        user_text,
+    )
+    messages = build_chat_messages(
+        session,
+        fields,
+        user_text,
+        history_rows,
+        memory_context=memory_prompt.recall,
+        session_summary=memory_prompt.summary,
+        rag_context=rag_context_for_prompt(db, chat_id, user_text, rag_bundle),
+    )
     send_typing(token, chat_id)
     settings = get_generation_settings(db, chat_id, session_id)
     reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=settings)
@@ -520,7 +536,7 @@ def regenerate_last(db: sqlite3.Connection, token: str, api_key: str, session: d
     if operation_id is not None:
         set_operation_phase(db, operation_id, "regen", "local_committed")
         db.commit()
-    retain_session_memory(db, chat_id, session, fields)
+    memory_service.retain(db, chat_id, session, fields)
     send_reply(token, chat_id, f"♻️ Regenerated response (variant {variant})\n\n{reply}", db, session_id, assistant_rowid)
     if operation_id is not None:
         record_operation(db, operation_id, "regen")
@@ -587,7 +603,8 @@ def keep_swipe_variant(db: sqlite3.Connection, chat_id: str, session_id: str, in
     return selected
 
 
-def continue_last(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, operation_id: int | str | None = None) -> None:
+def continue_last(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, operation_id: int | str | None = None, *, memory_service=None) -> None:
+    memory_service = resolve_memory_service(memory_service)
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "continue"):
             return
@@ -600,7 +617,22 @@ def continue_last(db: sqlite3.Connection, token: str, api_key: str, session: dic
     instruction = "Continue the previous assistant response from its exact ending. Do not repeat any existing text. Output only the continuation."
     history_rows = [(row[1], row[2]) for row in rows]
     rag_bundle = rag_retrieval_bundle(db, chat_id, instruction)
-    messages = build_chat_messages(session, fields, instruction, history_rows, memory_context=recall_memory_context(db, chat_id, session, fields, instruction), session_summary=session_summary_for_prompt(db, chat_id, session), rag_context=rag_context_for_prompt(db, chat_id, instruction, rag_bundle))
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        instruction,
+    )
+    messages = build_chat_messages(
+        session,
+        fields,
+        instruction,
+        history_rows,
+        memory_context=memory_prompt.recall,
+        session_summary=memory_prompt.summary,
+        rag_context=rag_context_for_prompt(db, chat_id, instruction, rag_bundle),
+    )
     send_typing(token, chat_id)
     settings = get_generation_settings(db, chat_id, session_id)
     reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=settings)
@@ -615,7 +647,7 @@ def continue_last(db: sqlite3.Connection, token: str, api_key: str, session: dic
     if operation_id is not None:
         set_operation_phase(db, operation_id, "continue", "local_committed")
         db.commit()
-    retain_session_memory(db, chat_id, session, fields)
+    memory_service.retain(db, chat_id, session, fields)
     delete_outgoing_message_row(db, token, chat_id, int(assistant_row[0]))
     send_reply(token, chat_id, f"↪️ Continued response\n\n{combined}", db, session_id, int(assistant_row[0]))
     if operation_id is not None:
