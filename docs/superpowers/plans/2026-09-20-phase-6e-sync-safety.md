@@ -2120,3 +2120,5 @@ Do not merge the PR. Merge remains a separate user decision.
 - Task 3 GREEN: `2285a75404c5051cc5cbdd4837986018f2580ec2`, CI #456 completed successfully with transition ownership preserved.
 
 - Task 4 Ruling: the first atomic test migration removed `test_sync_lock_is_released_when_job_query_fails` by searching for the next indented `def`, which matched nested `BrokenDb.execute` and left an invalid residual block. Remove that residual block through the next class-level test boundary; production cutover remains unchanged. Cost if wrong: test-file cleanup only; no production semantics change.
+
+- Task 4 Ruling: migrate the stale `tests/test_sync_service.py::test_compatibility_service_uses_hardened_poll_override` assertion after the final cutover. It searched for `sync_safety.py` in `RUNTIME_LOAD_REPORT`, which directly contradicts Phase 6E's approved requirement to delete that module. The replacement asserts the compatibility service binds canonical `sync_api.py::phase3_sync_poll` and that `sync_safety.py` is absent. Cost if wrong: one legacy architecture assertion changes; runtime behavior and the SyncService interface remain untouched.
