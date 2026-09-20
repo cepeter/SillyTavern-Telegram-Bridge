@@ -378,14 +378,15 @@ def phase3_sync_poll(db: sqlite3.Connection) -> None:
             run_write_txn(db, write_unexpected)
 
 
-def _phase3_worker_loop() -> None:
+def _phase3_worker_loop(sync_service=None) -> None:
+    sync_service = resolve_sync_service(sync_service)
     db = None
     try:
         while not _PHASE3_STOP_EVENT.wait(PHASE3_SYNC_INTERVAL_SECONDS):
             try:
                 if db is None:
                     db = db_connect()
-                phase3_sync_poll(db)
+                sync_service.poll(db)
             except Exception as exc:
                 if db is not None and db.in_transaction:
                     try:
@@ -403,7 +404,7 @@ def _phase3_worker_loop() -> None:
             db.close()
 
 
-def start_phase3_sync_worker() -> bool:
+def start_phase3_sync_worker(*, sync_service=None) -> bool:
     """Start one daemon worker when the loopback API is configured."""
     global _PHASE3_WORKER
     if not phase3_api_configured():
@@ -412,7 +413,12 @@ def start_phase3_sync_worker() -> bool:
         if _PHASE3_WORKER is not None and _PHASE3_WORKER.is_alive():
             return True
         _PHASE3_STOP_EVENT.clear()
-        _PHASE3_WORKER = threading.Thread(target=_phase3_worker_loop, name="sillytavern-phase3-sync", daemon=True)
+        _PHASE3_WORKER = threading.Thread(
+            target=_phase3_worker_loop,
+            args=(sync_service,),
+            name="sillytavern-phase3-sync",
+            daemon=True,
+        )
         _PHASE3_WORKER.start()
         return True
 
