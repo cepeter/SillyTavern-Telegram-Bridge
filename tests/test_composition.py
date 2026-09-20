@@ -855,6 +855,43 @@ class RecoveryCompositionTests(unittest.TestCase):
         self.assertEqual(seen[0][3], {"recover_running": False})
 
 
+class RecordingJobs:
+    def __init__(self, *, submit_result=True):
+        self.calls = []
+        self.submit_result = submit_result
+        self.next_id = 700
+
+    def enqueue(
+        self,
+        db,
+        update_id,
+        chat_id,
+        session_id,
+        message_id,
+        kind,
+        payload,
+    ):
+        job_id = self.next_id
+        self.next_id += 1
+        self.calls.append((
+            "enqueue",
+            update_id,
+            chat_id,
+            session_id,
+            message_id,
+            kind,
+            payload,
+        ))
+        return job_id
+
+    def submit(self, db, job_id, submission):
+        self.calls.append(("submit", job_id, submission))
+        return self.submit_result
+
+    def recover(self, *_args, **_kwargs):
+        return None
+
+
 class StartupCompositionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -1113,6 +1150,298 @@ class StartupCompositionTests(unittest.TestCase):
             sync_service=sync_service
         )
         rt._SHUTDOWN_EVENT.clear()
+
+    def _run_one_update(self, update, *, submit_result=True):
+        jobs = RecordingJobs(submit_result=submit_result)
+        sent = []
+        delivered = False
+
+        def request(_token, method, _payload=None):
+            nonlocal delivered
+            if method == "getUpdates":
+                if not delivered:
+                    delivered = True
+                    rt._SHUTDOWN_EVENT.set()
+                    return [update]
+                return []
+            return {}
+
+        services = BridgeServices(
+            config=self.config,
+            db_factory=lambda: rt.db_connect(self.config.db_file),
+            telegram=TelegramRuntime(
+                request=request,
+                send_text=lambda *args, **_kwargs: sent.append(args),
+            ),
+            background=BackgroundRuntime(
+                submit_chat=lambda *_args, **_kwargs: True,
+                register_backlog_dispatcher=lambda _callback: None,
+                begin_shutdown=lambda: None,
+            ),
+            sync=object(),
+            jobs=jobs,
+        )
+        parsed = rt.argparse.Namespace(check=False)
+
+        try:
+            with patch.object(
+                rt.argparse.ArgumentParser,
+                "parse_args",
+                return_value=parsed,
+            ), patch.object(
+                rt, "load_env_file"
+            ), patch.object(
+                rt, "refresh_phase3_config"
+            ), patch.object(
+                rt, "enforce_runtime_permissions"
+            ), patch.object(
+                rt, "_load_startup_config", return_value=self.config
+            ), patch.object(
+                rt, "_build_startup_services", return_value=services
+            ), patch.object(
+                rt, "validate_startup_credential"
+            ), patch.object(
+                rt, "set_bot_commands"
+            ), patch.object(
+                rt, "read_png_chara", return_value={}
+            ), patch.object(
+                rt, "card_fields", return_value={"name": "Mira"}
+            ), patch.object(
+                rt, "install_bridge_signal_handlers"
+            ), patch.object(
+                rt, "dispatch_recovered_jobs"
+            ), patch.object(
+                rt, "start_phase3_sync_worker"
+            ), patch.object(
+                rt, "stop_phase3_sync_worker", return_value=True
+            ), patch.object(
+                rt, "shutdown_background_executors", return_value=True
+            ), patch.object(
+                rt, "run_database_maintenance"
+            ), patch.object(
+                rt, "answer_callback"
+            ), patch.object(
+                rt, "group_user_turn_allowed", return_value=True
+            ):
+                self.assertEqual(rt.main(), 0)
+        finally:
+            rt._SHUTDOWN_EVENT.clear()
+
+        return jobs, sent
+
+    def test_main_durable_paths_enqueue_and_submit_through_jobs_service(self):
+        cases = [
+            (
+                "callback",
+                {
+                    "update_id": 1,
+                    "callback_query": {
+                        "id": "cb",
+                        "from": {"id": 100},
+                        "data": "enum:status",
+                        "message": {
+                            "message_id": 10,
+                            "chat": {"id": "chat"},
+                        },
+                    },
+                },
+                "callback",
+            ),
+            (
+                "edit",
+                {
+                    "update_id": 2,
+                    "edited_message": {
+                        "message_id": 11,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "edited",
+                    },
+                },
+                "edit",
+            ),
+            (
+                "voice",
+                {
+                    "update_id": 3,
+                    "message": {
+                        "message_id": 12,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "voice": {"file_id": "voice"},
+                    },
+                },
+                "voice",
+            ),
+            (
+                "image",
+                {
+                    "update_id": 4,
+                    "message": {
+                        "message_id": 13,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "photo": [
+                            {"file_id": "photo", "file_size": 5},
+                        ],
+                    },
+                },
+                "image",
+            ),
+            (
+                "document",
+                {
+                    "update_id": 5,
+                    "message": {
+                        "message_id": 14,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "document": {
+                            "file_id": "doc",
+                            "file_name": "notes.txt",
+                            "mime_type": "text/plain",
+                        },
+                    },
+                },
+                "document",
+            ),
+            (
+                "command",
+                {
+                    "update_id": 6,
+                    "message": {
+                        "message_id": 15,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "/status",
+                    },
+                },
+                "command",
+            ),
+            (
+                "generation",
+                {
+                    "update_id": 7,
+                    "message": {
+                        "message_id": 16,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "hello",
+                    },
+                },
+                "generation",
+            ),
+        ]
+
+        for label, update, expected_kind in cases:
+            with self.subTest(label=label):
+                jobs, _sent = self._run_one_update(update)
+                enqueue_calls = [
+                    call for call in jobs.calls
+                    if call[0] == "enqueue"
+                ]
+                submit_calls = [
+                    call for call in jobs.calls
+                    if call[0] == "submit"
+                ]
+                self.assertEqual(len(enqueue_calls), 1)
+                self.assertEqual(len(submit_calls), 1)
+                self.assertEqual(
+                    enqueue_calls[0][5],
+                    expected_kind,
+                )
+                self.assertIsInstance(
+                    submit_calls[0][2],
+                    JobSubmission,
+                )
+                self.assertEqual(
+                    submit_calls[0][2].label,
+                    expected_kind,
+                )
+
+    def test_rejected_durable_admission_preserves_restart_feedback(self):
+        cases = [
+            (
+                {
+                    "update_id": 20,
+                    "message": {
+                        "message_id": 20,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "hello",
+                    },
+                },
+                "⏳ Message saved for generation after restart.",
+            ),
+            (
+                {
+                    "update_id": 21,
+                    "message": {
+                        "message_id": 21,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "photo": [
+                            {"file_id": "photo", "file_size": 5},
+                        ],
+                    },
+                },
+                "🖼️ Image saved for processing after restart.",
+            ),
+            (
+                {
+                    "update_id": 22,
+                    "message": {
+                        "message_id": 22,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "voice": {"file_id": "voice"},
+                    },
+                },
+                "🎙️ Voice saved for processing after restart.",
+            ),
+            (
+                {
+                    "update_id": 23,
+                    "message": {
+                        "message_id": 23,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "document": {
+                            "file_id": "doc",
+                            "file_name": "notes.txt",
+                            "mime_type": "text/plain",
+                        },
+                    },
+                },
+                "📄 Document saved for processing after restart.",
+            ),
+            (
+                {
+                    "update_id": 24,
+                    "message": {
+                        "message_id": 24,
+                        "from": {"id": 100},
+                        "chat": {"id": "chat"},
+                        "text": "/summarize",
+                    },
+                },
+                "⏳ Command saved for execution after restart.",
+            ),
+        ]
+
+        for update, expected in cases:
+            with self.subTest(expected=expected):
+                _jobs, sent = self._run_one_update(
+                    update,
+                    submit_result=False,
+                )
+                self.assertTrue(
+                    any(
+                        len(call) >= 3 and call[2] == expected
+                        for call in sent
+                    ),
+                    sent,
+                )
 
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = rt.argparse.Namespace(check=True)
