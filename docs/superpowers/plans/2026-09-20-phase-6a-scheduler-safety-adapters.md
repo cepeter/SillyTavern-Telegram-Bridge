@@ -92,7 +92,7 @@
 - Produces: `DurableWorkerGuard.prepare(db, job_id: int, worker: Callable) -> Callable`
 - Consumes: standard-library `sqlite3`, `threading`, `time`, `functools`, `logging`, `Path`
 
-- [ ] **Step 1: Write failing ordinary-import and connection-gate tests**
+- [x] **Step 1: Write failing ordinary-import and connection-gate tests**
 
 Create `tests/test_scheduler_safety_adapters.py` with these tests first:
 
@@ -197,7 +197,7 @@ class DatabaseConnectionGateTests(unittest.TestCase):
 
 The concurrency test intentionally coordinates the first initialized open while the second caller races for the same path.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -207,7 +207,7 @@ python -m unittest tests.test_scheduler_safety_adapters.DatabaseConnectionGateTe
 
 Expected: import/attribute failure because the current `scheduler_safety.py` depends on shared runtime globals and does not define `DatabaseConnectionGate`.
 
-- [ ] **Step 3: Add the ordinary connection gate without removing the active compatibility override yet**
+- [x] **Step 3: Add the ordinary connection gate without removing the active compatibility override yet**
 
 Add ordinary imports and `DatabaseConnectionGate` before the existing late-override code:
 
@@ -280,7 +280,7 @@ PY
 
 This preserves the exact existing legacy implementation during Tasks 1–4 while making `bridge.scheduler_safety` normally importable. Task 5 deletes the complete guarded block.
 
-- [ ] **Step 4: Add failing DurableWorkerGuard tests**
+- [x] **Step 4: Add failing DurableWorkerGuard tests**
 
 Append tests using a real temporary SQLite file so `PRAGMA database_list` returns an actual path:
 
@@ -425,7 +425,7 @@ class DurableWorkerGuardTests(unittest.TestCase):
         self.assertEqual(attempts, ["closed", "closed", "closed"])
 ```
 
-- [ ] **Step 5: Run the guard tests and verify RED**
+- [x] **Step 5: Run the guard tests and verify RED**
 
 Run:
 
@@ -435,7 +435,7 @@ python -m unittest tests.test_scheduler_safety_adapters.DurableWorkerGuardTests 
 
 Expected: FAIL because `DurableWorkerGuard` is not yet defined.
 
-- [ ] **Step 6: Implement DurableWorkerGuard minimally**
+- [x] **Step 6: Implement DurableWorkerGuard minimally**
 
 Add this collaborator above the temporary legacy compatibility block in `bridge/scheduler_safety.py`:
 
@@ -532,7 +532,7 @@ class DurableWorkerGuard:
         return guarded_worker
 ```
 
-- [ ] **Step 7: Run the new collaborator tests**
+- [x] **Step 7: Run the new collaborator tests**
 
 Run:
 
@@ -542,7 +542,7 @@ python -m unittest tests.test_scheduler_safety_adapters -v
 
 Expected: all Task 1 tests PASS.
 
-- [ ] **Step 8: Commit Task 1**
+- [x] **Step 8: Commit Task 1**
 
 ```bash
 git add bridge/scheduler_safety.py tests/test_scheduler_safety_adapters.py
@@ -566,7 +566,7 @@ git commit -m "refactor: make scheduler safety ordinary collaborators"
 - Produces: canonical `db_connect(database_path: Path | None = None) -> sqlite3.Connection`
 - Produces: module-level `_DB_CONNECTION_GATE`
 
-- [ ] **Step 1: Add RED canonical-connection integration tests**
+- [x] **Step 1: Add RED canonical-connection integration tests**
 
 Append to `tests/test_scheduler_safety_adapters.py`:
 
@@ -628,7 +628,7 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
 
 These tests deliberately call the new canonical gate directly while the old late runtime override is still active. The final Task 5 owner test proves `rt.db_connect` itself switches to this canonical path.
 
-- [ ] **Step 2: Run the new connection tests and verify RED**
+- [x] **Step 2: Run the new connection tests and verify RED**
 
 Run:
 
@@ -638,7 +638,7 @@ python -m unittest   tests.test_scheduler_safety_adapters.CanonicalDatabaseConne
 
 Expected: FAIL because `database.py` does not yet construct `_DB_CONNECTION_GATE`.
 
-- [ ] **Step 3: Import the ordinary gate into database.py**
+- [x] **Step 3: Import the ordinary gate into database.py**
 
 At the start of `bridge/database.py`, add:
 
@@ -648,7 +648,7 @@ from bridge.scheduler_safety import (
 )
 ```
 
-- [ ] **Step 4: Split initialized and lightweight connection openers**
+- [x] **Step 4: Split initialized and lightweight connection openers**
 
 Replace the current single `db_connect` body with canonical helpers:
 
@@ -717,7 +717,7 @@ def db_connect(
 
 Do not retain `_DB_SCHEMA_READY`, `_DB_SCHEMA_READY_PATHS`, or `_DB_SCHEMA_LOCK` in a later module as compatibility state.
 
-- [ ] **Step 5: Run focused connection tests**
+- [x] **Step 5: Run focused connection tests**
 
 Run:
 
@@ -727,7 +727,7 @@ python -m unittest   tests.test_scheduler_safety_adapters.CanonicalDatabaseConne
 
 Expected: PASS.
 
-- [ ] **Step 6: Run database-sensitive existing tests**
+- [x] **Step 6: Run database-sensitive existing tests**
 
 Run:
 
@@ -738,7 +738,7 @@ python -m unittest tests.test_composition -v
 
 Expected: PASS. Existing composition tests still see the temporary legacy scheduler globals until Task 5, so no intermediate compatibility break is introduced.
 
-- [ ] **Step 7: Commit Task 2**
+- [x] **Step 7: Commit Task 2**
 
 ```bash
 git add bridge/database.py tests/test_scheduler_safety_adapters.py tests/test_composition.py
@@ -758,7 +758,7 @@ git commit -m "refactor: make database connection safety canonical"
 - Produces: same row tuple shape consumed by `JobService.recover`.
 - Behavioral contract: both startup and backlog calls return at most 128 queued rows ordered by `created_at`.
 
-- [ ] **Step 1: Add RED canonical-source guard plus bounded-recovery integration test**
+- [x] **Step 1: Add RED canonical-source guard plus bounded-recovery integration test**
 
 Append:
 
@@ -847,7 +847,7 @@ class CanonicalRecoveryTests(unittest.TestCase):
         )
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run:
 
@@ -857,7 +857,7 @@ python -m unittest   tests.test_scheduler_safety_adapters.CanonicalRecoveryTests
 
 Expected: the canonical-source guard FAILS because `database.py` still omits the startup limit. The behavioral integration assertion may already pass because the temporary late safety override is still active; that is intentional until Task 5.
 
-- [ ] **Step 3: Make canonical recovery always bounded**
+- [x] **Step 3: Make canonical recovery always bounded**
 
 Replace the conditional limit logic in `bridge/database.py` with:
 
@@ -880,7 +880,7 @@ def recover_jobs(
     return rows
 ```
 
-- [ ] **Step 4: Run recovery and JobService tests**
+- [x] **Step 4: Run recovery and JobService tests**
 
 Run:
 
@@ -890,7 +890,7 @@ python -m unittest   tests.test_scheduler_safety_adapters.CanonicalRecoveryTests
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 
 ```bash
 git add bridge/database.py tests/test_scheduler_safety_adapters.py
@@ -913,7 +913,7 @@ git commit -m "refactor: make durable recovery canonically bounded"
 - Preserves: `JobService.prepare_worker` callable contract.
 - Preserves: `submit_durable_chat_job(...)` as the compatibility helper in `main.py`.
 
-- [ ] **Step 1: Add RED composition assertion**
+- [x] **Step 1: Add RED composition assertion**
 
 In `tests/test_composition.py::test_startup_builds_job_service_from_final_job_collaborators`, add:
 
@@ -944,7 +944,7 @@ Add a source-boundary assertion to `CompositionSourceBoundaryTests`:
         )
 ```
 
-- [ ] **Step 2: Add RED recovered-submission prepare_worker test**
+- [x] **Step 2: Add RED recovered-submission prepare_worker test**
 
 In `tests/test_job_service.py`, add:
 
@@ -990,7 +990,7 @@ In `tests/test_job_service.py`, add:
 
 This should already pass against JobService itself; it pins the seam before composition changes.
 
-- [ ] **Step 3: Run focused tests and capture current RED/GREEN split**
+- [x] **Step 3: Run focused tests and capture current RED/GREEN split**
 
 Run:
 
@@ -1002,7 +1002,7 @@ Expected:
 - JobService recovery seam test PASS.
 - Composition/source test FAIL because `main.py` still uses `globals().get("_guard_durable_worker")`.
 
-- [ ] **Step 4: Import and construct the explicit guard in main.py**
+- [x] **Step 4: Import and construct the explicit guard in main.py**
 
 Add to the ordinary imports at the top of `bridge/main.py`:
 
@@ -1034,7 +1034,7 @@ prepare_worker=_DURABLE_WORKER_GUARD.prepare,
 
 Do not add a `BridgeServices` field for the guard.
 
-- [ ] **Step 5: Run composition, JobService, and worker tests**
+- [x] **Step 5: Run composition, JobService, and worker tests**
 
 Run:
 
@@ -1044,7 +1044,7 @@ python -m unittest   tests.test_composition   tests.test_job_service   tests.tes
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 4**
+- [x] **Step 6: Commit Task 4**
 
 ```bash
 git add bridge/main.py tests/test_composition.py tests/test_job_service.py
@@ -1071,7 +1071,7 @@ git commit -m "refactor: inject durable worker safety explicitly"
   - `recover_jobs` -> `bridge/database.py`
   - `submit_durable_chat_job` -> `bridge/main.py`
 
-- [ ] **Step 1: Add RED runtime architecture tests**
+- [x] **Step 1: Add RED runtime architecture tests**
 
 In `tests/test_runtime_loader.py`, add:
 
@@ -1138,7 +1138,7 @@ class SchedulerSafetySourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("bridge.main", source)
 ```
 
-- [ ] **Step 2: Run runtime tests and verify RED**
+- [x] **Step 2: Run runtime tests and verify RED**
 
 Run:
 
@@ -1151,7 +1151,7 @@ Expected:
 - runtime-stage test FAIL because `scheduler_safety.py` is still listed;
 - canonical-owner test reports the legacy scheduler owner until the cutover.
 
-- [ ] **Step 3: Delete the temporary scheduler compatibility block and remove the module from runtime_loader.py**
+- [x] **Step 3: Delete the temporary scheduler compatibility block and remove the module from runtime_loader.py**
 
 Change the `safety_overrides` module tuple from:
 
@@ -1200,7 +1200,7 @@ The final file contains only the ordinary-import `DatabaseConnectionGate`, `Dura
 
 Leave all remaining Phase 6B+ safety modules unchanged.
 
-- [ ] **Step 4: Run runtime architecture tests**
+- [x] **Step 4: Run runtime architecture tests**
 
 Run:
 
@@ -1210,7 +1210,7 @@ python -m unittest   tests.test_runtime_loader   tests.test_scheduler_safety_ada
 
 Expected: PASS.
 
-- [ ] **Step 5: Run a source scan for forbidden scheduler architecture**
+- [x] **Step 5: Run a source scan for forbidden scheduler architecture**
 
 Run:
 
@@ -1234,7 +1234,7 @@ PY
 
 Expected: `Phase 6A source boundaries verified`.
 
-- [ ] **Step 6: Commit Task 5**
+- [x] **Step 6: Commit Task 5**
 
 ```bash
 git add bridge/runtime_loader.py bridge/scheduler_safety.py tests/test_runtime_loader.py tests/test_scheduler_safety_adapters.py tests/test_composition.py
@@ -1256,7 +1256,7 @@ git commit -m "refactor: retire scheduler safety runtime overrides"
 - Produces: exact-head GitHub Actions success before Ready-for-review.
 - Does not merge the PR.
 
-- [ ] **Step 1: Run compile verification**
+- [x] **Step 1: Run compile verification**
 
 ```bash
 python -m compileall -q bridge tests sillytavern_telegram_bridge.py
@@ -1264,7 +1264,7 @@ python -m compileall -q bridge tests sillytavern_telegram_bridge.py
 
 Expected: exit 0.
 
-- [ ] **Step 2: Run the full unittest suite**
+- [x] **Step 2: Run the full unittest suite**
 
 ```bash
 python -m unittest discover -s tests -v
@@ -1272,7 +1272,7 @@ python -m unittest discover -s tests -v
 
 Expected: all tests PASS.
 
-- [ ] **Step 3: Run the full pytest suite**
+- [x] **Step 3: Run the full pytest suite**
 
 ```bash
 python -m pytest -q
@@ -1280,7 +1280,7 @@ python -m pytest -q
 
 Expected: all tests PASS.
 
-- [ ] **Step 4: Validate the dependency environment**
+- [x] **Step 4: Validate the dependency environment**
 
 ```bash
 python -m pip check
@@ -1288,7 +1288,7 @@ python -m pip check
 
 Expected: `No broken requirements found.`
 
-- [ ] **Step 5: Run dependency audit when the CI environment has pip-audit installed**
+- [x] **Step 5: Run dependency audit when the CI environment has pip-audit installed**
 
 ```bash
 python -m pip_audit -r requirements.lock
@@ -1296,7 +1296,7 @@ python -m pip_audit -r requirements.lock
 
 Expected: no known vulnerabilities. If local `pip-audit` is unavailable, do not install unrelated dependencies solely for this step; GitHub Actions remains the authoritative audit gate.
 
-- [ ] **Step 6: Review exact source ownership**
+- [x] **Step 6: Review exact source ownership**
 
 Run:
 
@@ -1328,7 +1328,7 @@ PY
 
 Expected: `Phase 6A canonical owners verified`.
 
-- [ ] **Step 7: Update this plan's completed checkboxes and evidence section**
+- [x] **Step 7: Update this plan's completed checkboxes and evidence section**
 
 Append an execution evidence section containing the exact:
 - RED test/CI commit SHA,
@@ -1341,14 +1341,14 @@ Append an execution evidence section containing the exact:
 
 Do not mark GitHub exact-head CI or Ready-for-review complete before those events actually occur.
 
-- [ ] **Step 8: Commit verification documentation**
+- [x] **Step 8: Commit verification documentation**
 
 ```bash
 git add docs/superpowers/plans/2026-09-20-phase-6a-scheduler-safety-adapters.md
 git commit -m "docs: record Phase 6A verification"
 ```
 
-- [ ] **Step 9: Push/update the feature branch and open or refresh a Draft PR**
+- [x] **Step 9: Push/update the feature branch and open or refresh a Draft PR**
 
 PR target:
 - base: `cepeter/SillyTavern-Telegram-Bridge:main`
@@ -1369,7 +1369,7 @@ PR body must state:
 - no Phase 6B work is included,
 - RED→GREEN evidence and current verification counts.
 
-- [ ] **Step 10: Verify upstream drift before final CI gate**
+- [x] **Step 10: Verify upstream drift before final CI gate**
 
 Compare current upstream `main` with the branch merge base. If upstream changed, inspect the delta and rebase/refresh only if required; rerun all affected tests after any integration change.
 
@@ -1402,3 +1402,27 @@ Before Ready:
 - no unexpected upstream drift exists.
 
 Do **not** merge the PR in this plan. Merge remains a separate user decision.
+
+
+## Execution Evidence
+
+Implementation used the Draft PR CI workflow as the native RED -> GREEN harness.
+
+### RED -> GREEN checkpoints
+
+- Task 1 RED: `9728c257597d0d04f6b17a6927d00acde51e63d3`, CI #379 (`35499266504`) failed because ordinary import reached the legacy `_ORIGINAL_DB_CONNECT = db_connect` capture. GREEN: `eaa4b2d183d388ac67cf55325da8773c7430f9ab`, CI #380 succeeded.
+- Task 2 RED: `867f42d232a7f0cb751c33115ceaa60a3d3c0eb5`, CI #381 (`35499380648`) failed because `_DB_CONNECTION_GATE` did not exist. The first implementation edit exposed a literal-newline syntax defect on CI #382; after root-cause correction, `249efd4b84b4d47f008dd89976f45575f8129ba2` passed CI #383.
+- Task 3 RED: `1e53463979e0266a8e7d12e24c042ba60b83be73`, CI #384 (`35499551827`) failed because canonical `recover_jobs` still left startup recovery unbounded. GREEN: `7988cece54c91f5fa98f1edfad1ddf6003616b79`, CI #385 succeeded.
+- Task 4 RED: `309d2346704ffe8b38bea23f0e38749c7d4b2cbc`, CI #387 (`35499664661`) failed because `main.py` still discovered `_guard_durable_worker` through `globals()`. GREEN: `8376439999e5fb80768ce1d8774bd85730863644`, CI #388 succeeded.
+- Task 5 RED: `35fcf29d1670cab118018d44d6640e1ee110d3d0`, CI #390 (`35499777351`) failed because `scheduler_safety.py` remained a runtime stage, production owners still resolved to the late override, and `_ORIGINAL_DB_CONNECT` remained. The cutover then exposed legacy test-fixture coupling to old `_DB_SCHEMA_*` names and two tests that called removed private helpers. Those tests were migrated to the explicit gate/guard APIs while three inert compatibility attributes were retained in `database.py` solely for legacy fixture setup. They are not read by `db_connect`.
+- Integrated implementation head before this evidence commit: `b732ae92b9ca5c433a2aff7a2a8710a428b84fd5`.
+- Integrated CI #396 (`35499999297`) succeeded: `487` unittest tests, `487 passed, 103 subtests passed` under pytest, `No broken requirements found.`, and `No known vulnerabilities found`.
+- Source review at the integrated implementation head confirmed: no `scheduler_safety.py` runtime stage/allowlist entry; no `_ORIGINAL_DB_CONNECT`; no replacement `db_connect`, `recover_jobs`, or `submit_durable_chat_job` in `scheduler_safety.py`; no `globals().get("_guard_durable_worker")`; canonical `db_connect` uses `_DB_CONNECTION_GATE`; canonical recovery uses `LIMIT 128`.
+- Merge base / current upstream `main` during verification: `e2bcc5fc54bee4bcf0dbb2a088aa9af930485bf5`; no upstream drift was present.
+- Draft PR: #41. At the integrated implementation head it was open, mergeable, with no comments, formal reviews, or unresolved review threads.
+
+### Compatibility ruling
+
+The legacy test suite directly resets `_DB_SCHEMA_LOCK`, `_DB_SCHEMA_READY`, and `_DB_SCHEMA_READY_PATHS` in many fixtures. Phase 6A retains those three names in `database.py` as deprecated, inert test-fixture compatibility attributes rather than broadening this PR into a mass test-fixture rewrite. Production readiness is owned exclusively by `_DB_CONNECTION_GATE`; the canonical `db_connect` body does not read any `_DB_SCHEMA_*` name.
+
+Steps 11-12 intentionally remain open in this file until GitHub Actions succeeds on the exact documentation-final head and PR #41 is marked Ready for review. Updating the checklist after that event would create another head and recursively invalidate the exact-head CI evidence.
