@@ -242,7 +242,7 @@ class PersonaServiceTests(unittest.TestCase):
             self.service.delete_if_unused(self.db, "native.png")
         self.assertEqual(self.deletes, [])
 
-    def test_create_does_not_delete_native_persona_when_session_select_fails(self):
+    def test_create_cleans_up_new_persona_when_session_select_fails(self):
         def failing_update(*_args, **_kwargs):
             raise RuntimeError("session write failed")
 
@@ -263,8 +263,8 @@ class PersonaServiceTests(unittest.TestCase):
                 "Writer",
                 "Writes notes",
             )
-        self.assertIn("bridge-writer.png", self.personas)
-        self.assertEqual(self.deletes, [])
+        self.assertNotIn("bridge-writer.png", self.personas)
+        self.assertEqual(self.deletes, ["bridge-writer.png"])
 
     def test_delete_checks_current_reference_count_on_each_call(self):
         self.references = 1
@@ -278,6 +278,30 @@ class PersonaServiceTests(unittest.TestCase):
             self.service.delete_if_unused(self.db, "native.png")
         )
         self.assertEqual(self.deletes, ["native.png"])
+
+    def test_create_preserves_persona_if_select_failure_adopted_it(self):
+        def failing_update(*_args, **_kwargs):
+            raise RuntimeError("session write failed")
+
+        service = PersonaService(
+            load_personas=lambda: dict(self.personas),
+            load_default_persona=lambda: "native.png",
+            upsert_persona=self._upsert,
+            delete_persona=self._delete,
+            update_session_persona=failing_update,
+            persona_reference_count=lambda _db, _persona_id: 1,
+        )
+        with self.assertRaisesRegex(RuntimeError, "session write failed"):
+            service.create_and_select(
+                self.db,
+                "chat",
+                "session",
+                "writer",
+                "Writer",
+                "Writes notes",
+            )
+        self.assertIn("bridge-writer.png", self.personas)
+        self.assertEqual(self.deletes, [])
 
     def test_delete_serializes_reference_check_and_native_delete(self):
         events = []
@@ -355,6 +379,14 @@ class PersonaSourceBoundaryTests(unittest.TestCase):
         chunk = self._function_chunk(source, "def send_persona_menu")
         self.assertNotIn("load_personas(", chunk)
         self.assertNotIn("persona_name(", chunk)
+
+    def test_generation_prompt_reads_only_through_service_boundary(self):
+        source = (Path(__file__).parents[1] / "bridge" / "generation.py").read_text(
+            encoding="utf-8"
+        )
+        chunk = self._function_chunk(source, "def build_chat_messages")
+        self.assertNotIn("persona_name(", chunk)
+        self.assertNotIn("get_persona(", chunk)
 
 
 class PersonaCompatibilityServiceTests(unittest.TestCase):

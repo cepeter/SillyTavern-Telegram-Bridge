@@ -406,12 +406,9 @@ def format_user_dialogue_action(text: str) -> str:
 
 def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_text: str, history_rows: list[tuple[str, str]], image_data_uri: str | None = None, memory_context: str = "", session_summary: str = "", rag_context: str = "", group_context: str = "", persona_service=None) -> list[dict]:
     current_persona = session["persona_id"]
-    if persona_service is not None:
-        user_name = persona_service.name(current_persona) if current_persona else DEFAULT_USER_NAME
-        persona = persona_service.get(current_persona) if current_persona else None
-    else:
-        user_name = persona_name(current_persona) if current_persona else DEFAULT_USER_NAME
-        persona = get_persona(current_persona) if current_persona else None
+    persona_service = resolve_persona_service(persona_service)
+    user_name = persona_service.name(current_persona) if current_persona else DEFAULT_USER_NAME
+    persona = persona_service.get(current_persona) if current_persona else None
     history = [{"role": role, "content": format_user_dialogue_action(content) if role == "user" else content} for role, content in history_rows]
     language_value = session.get("response_language") or "auto"
     language_instruction = response_language_instruction(language_value)
