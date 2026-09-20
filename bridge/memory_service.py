@@ -58,6 +58,19 @@ class MemoryService:
             summary=str(summary or ""),
         )
 
+    def summary_status(
+        self,
+        db: sqlite3.Connection,
+        chat_id: str,
+        session_id: str,
+    ) -> tuple[str, int]:
+        summary, covered_until = self.summary_state(
+            db,
+            chat_id,
+            session_id,
+        )
+        return str(summary or ""), int(covered_until)
+
     def retain(
         self,
         db: sqlite3.Connection,
