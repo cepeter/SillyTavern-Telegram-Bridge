@@ -34,6 +34,7 @@ class JobService:
     finish_backend: Callable[..., bool]
     recover_backend: Callable[..., list[tuple]]
     submit_chat: Callable[..., bool]
+    prepare_worker: Callable[..., Callable[..., None]] | None = None
 
     def enqueue(
         self,
@@ -63,11 +64,18 @@ class JobService:
         job_id: int,
         submission: JobSubmission,
     ) -> bool:
+        worker = submission.worker
+        if self.prepare_worker is not None:
+            worker = self.prepare_worker(
+                db,
+                int(job_id),
+                worker,
+            )
         accepted = bool(
             self.submit_chat(
                 submission.label,
                 submission.chat_id,
-                submission.worker,
+                worker,
                 *submission.args,
                 int(job_id),
             )
