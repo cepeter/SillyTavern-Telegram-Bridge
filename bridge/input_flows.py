@@ -226,8 +226,9 @@ def start_persona_input(db, token: str, chat_id: str, session_id: str, mode: str
 
 
 
-def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None) -> bool:
-    """Validate and persist one Persona directly in native SillyTavern."""
+def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None, *, persona_service=None) -> bool:
+    """Validate Persona input and delegate lifecycle changes to PersonaService."""
+    persona_service = resolve_persona_service(persona_service)
     meta_key = f"persona_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
@@ -235,14 +236,14 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
         return True
     mode = str(state.get("mode") or "")
     persona_id = str(state.get("persona_id") or "")
-    current = get_persona(persona_id) if persona_id else None
+    current = persona_service.get(persona_id) if persona_id else None
     if mode == "create":
         parts = [part.strip() for part in stripped.split("|", 2)]
         if len(parts) != 3 or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", parts[0]):
             send_pending_input_message(db, token, chat_id, meta_key, state, "Use: id | display name | persona description. Try again or send /cancel.")
             return True
         requested_id, name, description = parts
-        if requested_id in load_personas() or not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
+        if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
             send_pending_input_message(db, token, chat_id, meta_key, state, "Persona ID must be new; name 1–120 characters; description 1–4,000 characters. Try again or send /cancel.")
             return True
         target_id = requested_id
@@ -266,20 +267,52 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
         send_persona_menu(token, chat_id, session.get("persona_id") or "")
         return True
     try:
-        native_avatar = upsert_native_persona(target_id, name, description)
+        if mode == "create":
+            native_avatar = persona_service.create_and_select(
+                db,
+                chat_id,
+                session["session_id"],
+                target_id,
+                name,
+                description,
+                operation_id=operation_id,
+            )
+        else:
+            native_avatar = persona_service.update(
+                target_id,
+                name,
+                description,
+            )
+    except ValueError as exc:
+        if mode == "create" and (
+            "already exists" in str(exc)
+            or "Persona ID" in str(exc)
+            or "Persona name" in str(exc)
+            or "Persona description" in str(exc)
+        ):
+            send_pending_input_message(
+                db,
+                token,
+                chat_id,
+                meta_key,
+                state,
+                "Persona ID must be new; name 1–120 characters; description 1–4,000 characters. Try again or send /cancel.",
+            )
+            return True
+        logging.warning("Native SillyTavern Persona save failed", exc_info=True)
+        send_pending_input_message(db, token, chat_id, meta_key, state, f"Native Persona could not be saved: {exc}. Try again or send /cancel.")
+        return True
     except Exception as exc:
         logging.warning("Native SillyTavern Persona save failed", exc_info=True)
         send_pending_input_message(db, token, chat_id, meta_key, state, f"Native Persona could not be saved: {exc}. Try again or send /cancel.")
         return True
-    if mode == "create":
-        update_session(db, chat_id, session["session_id"], persona_id=native_avatar, operation_id=operation_id, operation_kind="persona_create")
     _cancel_pending(db, token, chat_id, meta_key, state)
-    send_text(token, chat_id, f"Persona {'created and selected' if mode == 'create' else 'updated'}: {persona_name(native_avatar)}")
+    send_text(token, chat_id, f"Persona {'created and selected' if mode == 'create' else 'updated'}: {persona_service.name(native_avatar)}")
     send_persona_menu(token, chat_id, native_avatar if mode == "create" else session.get("persona_id") or "")
     return True
 
 
-def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service=None) -> bool:
+def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service=None, persona_service=None) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
     world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
@@ -308,7 +341,16 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
         return _handle_stt_input(db, token, chat_id, stripped, stt)
     persona = _pending_state(db, f"persona_input:{chat_id}", session_id, token, chat_id)
     if persona:
-        return _handle_persona_input(db, token, chat_id, session, stripped, persona, operation_id)
+        return _handle_persona_input(
+            db,
+            token,
+            chat_id,
+            session,
+            stripped,
+            persona,
+            operation_id,
+            persona_service=persona_service,
+        )
     note = _pending_state(db, f"note_input:{chat_id}", session_id, token, chat_id)
     if note:
         return _handle_note_input(db, token, chat_id, session, stripped, note, operation_id)
