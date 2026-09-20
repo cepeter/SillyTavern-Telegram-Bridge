@@ -15,6 +15,9 @@ import urllib.request
 from bridge.repositories import (
     count_session_messages as _count_session_messages,
 )
+from bridge.sync_poll_safety import (
+    SyncPollSafetyAdapter as _SyncPollSafetyAdapter,
+)
 from bridge.sync_service import SyncService as _SyncService
 
 
@@ -329,6 +332,51 @@ def phase3_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: st
     enabled = "on" if binding.get("realtime_enabled") else "off"
     configured = "configured" if phase3_api_configured() else "not configured"
     return f"Live API sync: {enabled} ({configured})"
+
+
+_SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
+    sync_now=(
+        lambda db, chat_id, session_id:
+        phase3_sync_now(
+            db,
+            chat_id,
+            session_id,
+        )
+    ),
+    chat_lock=(
+        lambda chat_id:
+        chat_job_lock(chat_id)
+    ),
+    disable_realtime=(
+        lambda db, chat_id, session_id, error:
+        _phase3_disable(
+            db,
+            chat_id,
+            session_id,
+            error,
+        )
+    ),
+    expected_errors=(
+        SillyTavernApiError,
+        ValueError,
+    ),
+    sync_interval=(
+        lambda:
+        PHASE3_SYNC_INTERVAL_SECONDS
+    ),
+    now=(
+        lambda:
+        time.time()
+    ),
+    log_warning=(
+        lambda message, *args, **kwargs:
+        logging.warning(
+            message,
+            *args,
+            **kwargs,
+        )
+    ),
+)
 
 
 def compatibility_sync_service() -> _SyncService:
