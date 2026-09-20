@@ -120,6 +120,23 @@ class NativePersonaStorageTests(unittest.TestCase):
             self._settings()["power_user"]["personas"],
         )
 
+    def test_public_persona_functions_use_explicit_store_after_cutover(self):
+        avatar = rt.upsert_native_persona(
+            "public",
+            "Public",
+            "Public description",
+        )
+        self.assertTrue(
+            Path(avatar).stem.startswith("bridge-public")
+        )
+
+        self.assertTrue(
+            rt.delete_native_persona(avatar)
+        )
+        self.assertTrue(
+            (rt.NATIVE_PERSONA_AVATAR_DIR / avatar).is_file()
+        )
+
     def test_persona_service_lock_can_nest_into_integrity_store(self):
         service = rt.compatibility_persona_service()
         db = rt.db_connect(
