@@ -190,6 +190,33 @@ class RuntimeLoaderTests(unittest.TestCase):
         }
         self.assertNotIn("job_service.py", loaded_modules)
 
+    def test_scheduler_safety_is_not_a_runtime_stage(self):
+        loaded_modules = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn("scheduler_safety.py", loaded_modules)
+        for stage in DEFAULT_RUNTIME_STAGES:
+            self.assertEqual(
+                stage.allowed_overrides_for("scheduler_safety.py"),
+                frozenset(),
+            )
+
+    def test_scheduler_owners_are_canonical_files(self):
+        self.assertEqual(
+            Path(rt.db_connect.__code__.co_filename).name,
+            "database.py",
+        )
+        self.assertEqual(
+            Path(rt.recover_jobs.__code__.co_filename).name,
+            "database.py",
+        )
+        self.assertEqual(
+            Path(rt.submit_durable_chat_job.__code__.co_filename).name,
+            "main.py",
+        )
+
     def test_loader_rejects_module_outside_base_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

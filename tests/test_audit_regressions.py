@@ -124,9 +124,18 @@ class AuditRegressionTests(unittest.TestCase):
             self.db.execute("SELECT job_id FROM jobs WHERE update_id=999").fetchone()[0]
         )
 
-        rt._requeue_worker_boot_failure(
-            job_id, sqlite3.OperationalError("database is locked")
+        guarded = rt._DURABLE_WORKER_GUARD.prepare(
+            self.db,
+            job_id,
+            lambda: (_ for _ in ()).throw(
+                sqlite3.OperationalError("database is locked")
+            ),
         )
+        with self.assertRaisesRegex(
+            sqlite3.OperationalError,
+            "database is locked",
+        ):
+            guarded()
 
         state = self.db.execute(
             "SELECT state FROM jobs WHERE job_id=?", (job_id,)

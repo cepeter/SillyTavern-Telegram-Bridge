@@ -380,6 +380,45 @@ class JobServiceTests(unittest.TestCase):
         )
 
 
+    def test_recover_uses_prepare_worker_for_recovered_submission(self):
+        prepared = []
+
+        def prepare_worker(db, job_id, worker):
+            prepared.append((db, job_id, worker))
+            return worker
+
+        service = replace(
+            self.service,
+            prepare_worker=prepare_worker,
+        )
+        self.recovery_rows = [
+            (
+                58,
+                "chat",
+                "session",
+                "17",
+                "generation",
+                "{}",
+            ),
+        ]
+        worker = lambda *_args: None
+
+        service.recover(
+            self.db,
+            lambda job: JobSubmission(
+                label=job.kind,
+                chat_id=job.chat_id,
+                worker=worker,
+                args=(),
+            ),
+        )
+
+        self.assertEqual(
+            prepared,
+            [(self.db, 58, worker)],
+        )
+
+
 def function_chunk(source: str, function_name: str) -> str:
     start = source.index(function_name)
     next_function = source.find("\ndef ", start + len(function_name))
