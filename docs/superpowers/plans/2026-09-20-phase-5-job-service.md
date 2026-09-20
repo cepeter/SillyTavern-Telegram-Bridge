@@ -1,6 +1,6 @@
 # Phase 5E JobService Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Extract durable job lifecycle, admission, and recovery orchestration behind an injected `JobService` while preserving all existing durable SQLite, per-chat ordering, operation-idempotency, recovery, and shutdown behavior.
 
@@ -53,7 +53,7 @@
   - `submit_chat(label, chat_id, worker, *args) -> bool`
 - Produces `DurableJob`, `JobSubmission`, and `JobService.enqueue/submit/start/complete/fail/actor_id/recover`.
 
-- [ ] **Step 1: Write RED unit tests for core lifecycle**
+- [x] **Step 1: Write RED unit tests for core lifecycle**
 
 Create `tests/test_job_service.py`:
 
@@ -218,7 +218,7 @@ class JobServiceTests(unittest.TestCase):
 
 Add a second test where `start_result=False` and assert `start()` returns False unchanged.
 
-- [ ] **Step 2: Write RED recovery tests**
+- [x] **Step 2: Write RED recovery tests**
 
 Continue in `tests/test_job_service.py`:
 
@@ -369,7 +369,7 @@ Continue in `tests/test_job_service.py`:
         )
 ```
 
-- [ ] **Step 3: Verify Task 1 is RED**
+- [x] **Step 3: Verify Task 1 is RED**
 
 Run:
 
@@ -379,7 +379,7 @@ python -m unittest tests.test_job_service -v
 
 Expected: import failure because `bridge.job_service` does not exist.
 
-- [ ] **Step 4: Implement minimal JobService**
+- [x] **Step 4: Implement minimal JobService**
 
 Create `bridge/job_service.py`:
 
@@ -535,7 +535,7 @@ class JobService:
 
 Important: after the `submission is None` branch, `continue` prevents the surrounding exception handler from writing a second failure.
 
-- [ ] **Step 5: Verify Task 1 GREEN**
+- [x] **Step 5: Verify Task 1 GREEN**
 
 Run:
 
@@ -545,7 +545,7 @@ python -m unittest tests.test_job_service -v
 
 Expected: all JobService unit tests pass.
 
-- [ ] **Step 6: Commit Task 1**
+- [x] **Step 6: Commit Task 1**
 
 Commit:
 
@@ -567,7 +567,7 @@ refactor: add JobService application contract
 - Consumes Task 1 `JobService` and `JobSubmission`.
 - Produces `BridgeServices.jobs`, startup JobService construction, `_compatibility_job_service(background)`, `_jobs_for_services(services)`, and a compatibility `submit_durable_chat_job()` delegate.
 
-- [ ] **Step 1: Add RED composition tests**
+- [x] **Step 1: Add RED composition tests**
 
 In `tests/test_composition.py`, update the mock import and add JobService imports:
 
@@ -624,7 +624,7 @@ self.assertIn("class JobService", source)
 
 Do not add a speculative future-service class name.
 
-- [ ] **Step 2: Add RED runtime-stage guard**
+- [x] **Step 2: Add RED runtime-stage guard**
 
 In `tests/test_runtime_loader.py`:
 
@@ -638,7 +638,7 @@ def test_job_service_is_not_a_runtime_stage(self):
     self.assertNotIn("job_service.py", loaded_modules)
 ```
 
-- [ ] **Step 3: Add RED compatibility submit test**
+- [x] **Step 3: Add RED compatibility submit test**
 
 Replace the existing raw-scheduling expectation in `RecoveryCompositionTests.test_submit_durable_chat_job_uses_injected_background_and_explicit_job_id`.
 
@@ -681,7 +681,7 @@ fake_jobs.submit.assert_called_once()
 
 Retain the existing explicit-job-id assertion through `fake_jobs.submit.call_args.args[1] == 41`.
 
-- [ ] **Step 4: Verify Task 2 RED**
+- [x] **Step 4: Verify Task 2 RED**
 
 Run:
 
@@ -691,7 +691,7 @@ python -m unittest   tests.test_composition   tests.test_runtime_loader -v
 
 Expected failures: missing `BridgeServices.jobs`, missing startup JobService, missing compatibility helper.
 
-- [ ] **Step 5: Wire composition and production startup**
+- [x] **Step 5: Wire composition and production startup**
 
 In `bridge/composition.py`:
 
@@ -740,7 +740,7 @@ return _build_bridge_services_value(
 )
 ```
 
-- [ ] **Step 6: Implement compatibility helper and submit wrapper**
+- [x] **Step 6: Implement compatibility helper and submit wrapper**
 
 In `bridge/main.py`:
 
@@ -794,11 +794,11 @@ def submit_durable_chat_job(
 
 This helper remains a compatibility entry point only; later production paths use `services.jobs`.
 
-- [ ] **Step 7: Verify Task 2 GREEN**
+- [x] **Step 7: Verify Task 2 GREEN**
 
 Run the Task 2 tests. Expected: all pass.
 
-- [ ] **Step 8: Commit Task 2**
+- [x] **Step 8: Commit Task 2**
 
 Commit:
 
@@ -821,7 +821,7 @@ refactor: inject JobService at startup
 - Consumes `_jobs_for_services(services)` and Task 1 lifecycle methods.
 - Produces service-backed lifecycle for message, callback, edit, image, voice, and document durable workers.
 
-- [ ] **Step 1: Create a reusable fake JobService for worker tests**
+- [x] **Step 1: Create a reusable fake JobService for worker tests**
 
 Create `tests/test_job_service_workers.py` with:
 
@@ -899,7 +899,7 @@ class JobWorkerServiceTests(unittest.TestCase):
         self.tmp.cleanup()
 ```
 
-- [ ] **Step 2: Add RED duplicate-start guard for message worker**
+- [x] **Step 2: Add RED duplicate-start guard for message worker**
 
 ```python
     def test_message_worker_stops_when_job_start_is_rejected(self):
@@ -924,7 +924,7 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 ```
 
-- [ ] **Step 3: Add RED lifecycle tests for every worker**
+- [x] **Step 3: Add RED lifecycle tests for every worker**
 
 For message worker success/failure, patch `committed_assistant_for_message=None` and `process_message`.
 
@@ -951,11 +951,11 @@ Each representative failure path must assert `["start", "fail"]` and verify the 
 
 At minimum include explicit failure tests for message, callback, edit, voice, image, and document so no worker retains raw `finish_job` behavior.
 
-- [ ] **Step 4: Pin actor lookup migration**
+- [x] **Step 4: Pin actor lookup migration**
 
 Add message/callback/voice tests that set `self.jobs.actor="777"`, patch `set_panel_actor_context`, and assert `"777"` is used for the durable worker actor context.
 
-- [ ] **Step 5: Pin native-edit local-commit recovery**
+- [x] **Step 5: Pin native-edit local-commit recovery**
 
 ```python
     def test_locally_committed_edit_failure_completes_instead_of_failing(self):
@@ -981,7 +981,7 @@ Add message/callback/voice tests that set `self.jobs.actor="777"`, patch `set_pa
         self.assertNotIn("fail", names)
 ```
 
-- [ ] **Step 6: Verify worker tests are RED**
+- [x] **Step 6: Verify worker tests are RED**
 
 Run:
 
@@ -991,7 +991,7 @@ python -m unittest tests.test_job_service_workers -v
 
 Expected: workers still call raw `mark_job_running`, `finish_job`, and `job_actor_id`; fake JobService calls are missing.
 
-- [ ] **Step 7: Migrate workers minimally**
+- [x] **Step 7: Migrate workers minimally**
 
 At the beginning of every durable worker:
 
@@ -1057,7 +1057,7 @@ Apply to:
 
 Do not change their chat locks, DB factory usage, business calls, user-facing messages, operation checks, or finally blocks.
 
-- [ ] **Step 8: Preserve callback-applied fast path**
+- [x] **Step 8: Preserve callback-applied fast path**
 
 In `process_callback_job`, retain:
 
@@ -1069,7 +1069,7 @@ if job_id is not None and operation_was_applied(db, job_id):
 
 Add/retain a test that patches `process_callback` to raise if called and asserts the fake JobService receives exactly `start`, then `complete`.
 
-- [ ] **Step 9: Verify Task 3 GREEN**
+- [x] **Step 9: Verify Task 3 GREEN**
 
 Run:
 
@@ -1079,7 +1079,7 @@ python -m unittest   tests.test_job_service_workers   tests.test_composition -v
 
 Expected: all pass.
 
-- [ ] **Step 10: Commit Task 3**
+- [x] **Step 10: Commit Task 3**
 
 Commit:
 
@@ -1100,7 +1100,7 @@ refactor: route durable workers through JobService
 - Consumes `services.jobs.enqueue()`, `services.jobs.submit()`, and `JobSubmission`.
 - Produces a Telegram update loop with no direct durable enqueue/admission orchestration for callback, edit, voice, image, document, command, or generation paths.
 
-- [ ] **Step 1: Add an integration fake for update-loop job calls**
+- [x] **Step 1: Add an integration fake for update-loop job calls**
 
 In `tests/test_composition.py`, add:
 
@@ -1142,7 +1142,7 @@ class RecordingJobs:
         return None
 ```
 
-- [ ] **Step 2: Add a one-update main-loop harness**
+- [x] **Step 2: Add a one-update main-loop harness**
 
 In `StartupCompositionTests`, add a helper that builds `BridgeServices` with `RecordingJobs`, returns one Telegram update from the first `getUpdates` call, sets `_SHUTDOWN_EVENT`, and returns no further updates.
 
@@ -1164,7 +1164,7 @@ Patch the same startup-only dependencies already used by `test_main_starts_sync_
 
 The helper returns the `RecordingJobs` instance and captured Telegram sends.
 
-- [ ] **Step 3: Add RED table-driven enqueue/submit tests**
+- [x] **Step 3: Add RED table-driven enqueue/submit tests**
 
 Use subtests for these updates and expected kinds:
 
@@ -1281,7 +1281,7 @@ self.assertEqual(submit_call[2].label, expected_kind)
 
 For the callback case, choose callback data that is not handled by the immediate help callback path.
 
-- [ ] **Step 4: Pin rejected-admission user feedback**
+- [x] **Step 4: Pin rejected-admission user feedback**
 
 Run generation, image, voice, document, and long-running command cases with `RecordingJobs(submit_result=False)`.
 
@@ -1294,11 +1294,11 @@ Assert their existing messages remain:
 
 For ordinary slash commands whose current branch unconditionally reports queued, preserve the current text exactly; do not invent a new failure message in Phase 5E.
 
-- [ ] **Step 5: Verify Task 4 RED**
+- [x] **Step 5: Verify Task 4 RED**
 
 Run the focused composition tests. Expected: `RecordingJobs` sees no enqueue/submit calls because main still invokes raw helpers.
 
-- [ ] **Step 6: Migrate each update-loop durable path**
+- [x] **Step 6: Migrate each update-loop durable path**
 
 For every durable path, replace raw enqueue:
 
@@ -1349,7 +1349,7 @@ Apply to callback, edit, voice, both image branches, document, command, and gene
 
 Do not change immediate help callbacks because they are intentionally not durable jobs today.
 
-- [ ] **Step 7: Add source guard for update loop**
+- [x] **Step 7: Add source guard for update loop**
 
 In `tests/test_job_service.py`, slice `bridge/main.py` from `def main` to EOF and assert:
 
@@ -1362,7 +1362,7 @@ self.assertIn("services.jobs.submit(", main_chunk)
 
 This prevents a future durable branch from silently bypassing JobService.
 
-- [ ] **Step 8: Verify Task 4 GREEN**
+- [x] **Step 8: Verify Task 4 GREEN**
 
 Run:
 
@@ -1372,7 +1372,7 @@ python -m unittest   tests.test_composition   tests.test_job_service -v
 
 Expected: all pass.
 
-- [ ] **Step 9: Commit Task 4**
+- [x] **Step 9: Commit Task 4**
 
 Commit:
 
@@ -1395,7 +1395,7 @@ refactor: route durable intake through JobService
 - Consumes `DurableJob`, `JobSubmission`, `JobService.recover()`.
 - Produces `resolve_recovered_job_submission(services, fields, job)`, compatibility `dispatch_recovered_jobs`, service-backed startup and backlog recovery.
 
-- [ ] **Step 1: Add RED resolver mapping tests**
+- [x] **Step 1: Add RED resolver mapping tests**
 
 In `tests/test_composition.py`, construct explicit `DurableJob` values and call:
 
@@ -1436,7 +1436,7 @@ Add mapping tests for callback, edit, voice, image, and document, checking store
 
 Unknown kind returns `None`.
 
-- [ ] **Step 2: Add RED startup recovery injection test**
+- [x] **Step 2: Add RED startup recovery injection test**
 
 Use a fake `jobs` object with:
 
@@ -1451,7 +1451,7 @@ Assert startup calls exactly once with `recover_running=True`.
 
 Do not patch `dispatch_recovered_jobs` in this test; production startup should call `services.jobs.recover` directly.
 
-- [ ] **Step 3: Add RED backlog recovery test**
+- [x] **Step 3: Add RED backlog recovery test**
 
 Update `test_backlog_dispatcher_reuses_same_services_instance`.
 
@@ -1461,7 +1461,7 @@ Use a fake injected jobs service and assert invoking the returned dispatcher:
 - resolver maps through the same `resolve_recovered_job_submission`,
 - closes the connection.
 
-- [ ] **Step 4: Preserve compatibility dispatch helper**
+- [x] **Step 4: Preserve compatibility dispatch helper**
 
 Add/modify a direct helper test:
 
@@ -1486,7 +1486,7 @@ self.assertFalse(
 
 The wrapper should contain no row loop of its own after migration.
 
-- [ ] **Step 5: Pin bounded repository recovery and boot failure**
+- [x] **Step 5: Pin bounded repository recovery and boot failure**
 
 Retain unchanged:
 - `test_startup_recovery_is_bounded` in `tests/test_audit_regressions.py`;
@@ -1495,7 +1495,7 @@ Retain unchanged:
 
 These tests remain required. If the service migration breaks them, repair service plumbing rather than changing the recovery limit/state semantics.
 
-- [ ] **Step 6: Implement recovered-job resolver**
+- [x] **Step 6: Implement recovered-job resolver**
 
 In `bridge/main.py`:
 
@@ -1603,7 +1603,7 @@ def resolve_recovered_job_submission(
 
 Ordinary-import `DurableJob as _DurableJob` in main.py.
 
-- [ ] **Step 7: Replace recovery row loop with JobService**
+- [x] **Step 7: Replace recovery row loop with JobService**
 
 Compatibility wrapper:
 
@@ -1665,7 +1665,7 @@ services.jobs.recover(
 
 Production must no longer use `dispatch_recovered_jobs`; that name remains compatibility-only.
 
-- [ ] **Step 8: Add source-boundary recovery guards**
+- [x] **Step 8: Add source-boundary recovery guards**
 
 In `tests/test_job_service.py`:
 
@@ -1692,7 +1692,7 @@ def test_job_service_is_ordinary_import_boundary(self):
 
 Add a reusable `function_chunk` helper in that test module.
 
-- [ ] **Step 9: Verify Task 5 GREEN**
+- [x] **Step 9: Verify Task 5 GREEN**
 
 Run:
 
@@ -1702,7 +1702,7 @@ python -m unittest   tests.test_job_service   tests.test_job_service_workers   t
 
 Expected: all pass.
 
-- [ ] **Step 10: Commit Task 5**
+- [x] **Step 10: Commit Task 5**
 
 Commit:
 
@@ -1714,6 +1714,14 @@ refactor: recover durable jobs through JobService
 
 ### Task 6: Whole-phase verification, review, documentation, and PR
 
+**Verified implementation evidence before final checklist commit:**
+- RED CI: run #356 at `78e3f387ed7a150a68878cd7a0ba481dd6202dbb` failed as intended because `bridge.job_service` did not yet exist.
+- GREEN integrated-code CI: run #375 at `0df40bf8303846dcfee23bcc6ff9482a1cff1bf2` passed compile, 469 unittest tests, pytest with 469 passed plus 103 subtests, and dependency audit with no known vulnerabilities.
+- Source review: production `main()` has zero raw `enqueue_job` / `submit_durable_chat_job` calls and uses `services.jobs.enqueue/submit/recover`; migrated workers have zero raw `mark_job_running`, `finish_job`, or `job_actor_id` lifecycle calls.
+- Upstream `main` remained at baseline `1dc67befe02bc84e49be224c40506d44a557e52c` during review.
+- Final exact-head CI, PR review-state inspection, and Ready transition remain open until this checklist commit itself passes.
+
+
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-20-job-service-design.md` only if a genuine implementation ruling changes the approved design.
 - Modify: `docs/superpowers/plans/2026-09-20-phase-5-job-service.md` only to mark checklist items backed by evidence.
@@ -1722,7 +1730,7 @@ refactor: recover durable jobs through JobService
 - Consumes the complete Phase 5E branch.
 - Produces exact-head verification and a Ready-for-review PR; does not merge it.
 
-- [ ] **Step 1: Run focused Phase 5E verification**
+- [x] **Step 1: Run focused Phase 5E verification**
 
 Run:
 
@@ -1732,7 +1740,7 @@ python -m unittest   tests.test_job_service   tests.test_job_service_workers   t
 
 Expected: zero failures/errors.
 
-- [ ] **Step 2: Run repository CI-equivalent suite**
+- [x] **Step 2: Run repository CI-equivalent suite**
 
 Inspect `.github/workflows` first and use its exact commands. The expected current equivalents are:
 
@@ -1745,7 +1753,7 @@ pip-audit
 
 Do not substitute a smaller suite for the workflow.
 
-- [ ] **Step 3: Review the whole branch against baseline**
+- [x] **Step 3: Review the whole branch against baseline**
 
 Compare final branch head against:
 
@@ -1767,7 +1775,7 @@ Review specifically for:
 
 For every Critical/Important finding, add a failing regression first, verify RED, fix minimally, and rerun focused/full suites.
 
-- [ ] **Step 4: Verify source boundaries**
+- [x] **Step 4: Verify source boundaries**
 
 Search the migrated functions specifically:
 
@@ -1789,7 +1797,7 @@ Expected:
 
 Also verify `job_service.py` is absent from `DEFAULT_RUNTIME_STAGES`.
 
-- [ ] **Step 5: Update verified checklist state**
+- [x] **Step 5: Update verified checklist state**
 
 Mark plan items `[x]` only when test/CI evidence exists. Update the approved spec only for genuine design rulings.
 
