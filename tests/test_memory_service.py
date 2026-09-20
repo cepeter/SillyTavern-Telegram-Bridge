@@ -148,6 +148,20 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(result, 7)
         self.assertEqual(calls, [(self.db, "chat", "session-1")])
 
+    def test_summary_status_delegates_to_summary_state_provider(self):
+        calls = []
+        service = self._service(
+            summary_state=lambda db, chat_id, session_id: (
+                calls.append((db, chat_id, session_id))
+                or ("stored summary", 23)
+            )
+        )
+
+        result = service.summary_status(self.db, "chat", "session-1")
+
+        self.assertEqual(result, ("stored summary", 23))
+        self.assertEqual(calls, [(self.db, "chat", "session-1")])
+
 
 class MemoryServiceMessageIntegrationTests(unittest.TestCase):
     def setUp(self):
