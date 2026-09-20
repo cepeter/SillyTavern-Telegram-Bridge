@@ -112,7 +112,7 @@ def build_sync_records(
     return records
 
 
-def apply_sync_snapshot(
+def _apply_sync_snapshot_backend(
     db: sqlite3.Connection,
     chat_id: str,
     session: dict[str, str],
@@ -179,7 +179,7 @@ def apply_sync_snapshot(
 
 
 _SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
-    apply_backend=apply_sync_snapshot,
+    apply_backend=_apply_sync_snapshot_backend,
     update_session=(
         lambda db, chat_id, session_id, **updates:
         update_session(
@@ -217,6 +217,24 @@ _SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
         logging.warning(message, **kwargs)
     ),
 )
+
+
+def apply_sync_snapshot(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    metadata: dict,
+    messages: list[tuple[str, str]],
+    variants: dict[int, tuple[list[str], int]],
+) -> str:
+    return _SYNC_SNAPSHOT_INTEGRITY.apply(
+        db,
+        chat_id,
+        session,
+        metadata,
+        messages,
+        variants,
+    )
 
 
 def set_sync_state(

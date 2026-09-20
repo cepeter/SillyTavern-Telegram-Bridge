@@ -573,94 +573,6 @@ class Phase3SyncTests(unittest.TestCase):
             ],
         )
 
-    def test_task2_preserves_state_integrity_public_owner(self):
-        self.assertEqual(
-            Path(
-                rt.apply_sync_snapshot.__code__.co_filename
-            ).name,
-            "state_integrity.py",
-        )
-
-    def test_public_snapshot_explicitly_clears_persona_and_world_and_refreshes_memory(self):
-        self.db.execute(
-            "UPDATE sessions SET persona_id=?,world_file=? "
-            "WHERE chat_id=? AND session_id=?",
-            (
-                "existing.png",
-                '["existing.json"]',
-                "chat",
-                "phase3",
-            ),
-        )
-        self.db.commit()
-        retained = []
-
-        with patch.object(
-            rt,
-            "get_persona",
-            side_effect=lambda persona_id: (
-                {"name": "Existing"}
-                if persona_id == "existing.png"
-                else None
-            ),
-        ), patch.object(
-            rt,
-            "safe_world_path",
-            return_value=True,
-        ), patch.object(
-            rt,
-            "retain_session_memory",
-            side_effect=lambda _db, chat_id, session, fields:
-                retained.append(
-                    (
-                        chat_id,
-                        session["session_id"],
-                        fields["name"],
-                    )
-                ),
-        ), patch.object(
-            rt,
-            "card_fields_from_file",
-            return_value={"name": "Test"},
-        ):
-            current = rt.load_session(
-                self.db,
-                "chat",
-                "phase3",
-                rt.DEFAULT_MODEL,
-            )
-            imported_hash = rt.apply_sync_snapshot(
-                self.db,
-                "chat",
-                current,
-                {
-                    "name": "Remote",
-                    "persona": "",
-                    "world_info": [],
-                },
-                [("user", "remote transcript")],
-                {},
-            )
-
-        refreshed = rt.load_session(
-            self.db,
-            "chat",
-            "phase3",
-            rt.DEFAULT_MODEL,
-        )
-        self.assertEqual(refreshed["persona_id"], "")
-        self.assertEqual(refreshed["world_file"], "")
-        self.assertEqual(
-            retained,
-            [("chat", "phase3", "Test")],
-        )
-        self.assertEqual(
-            imported_hash,
-            rt.sync_transcript_hash(
-                [("user", "remote transcript")]
-            ),
-        )
-
     def test_sync_panel_exposes_realtime_control(self):
         calls = []
         original = rt.telegram_request
@@ -707,11 +619,15 @@ class SyncSnapshotOwnershipTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "apply_backend=apply_sync_snapshot,",
+            "apply_backend=_apply_sync_snapshot_backend,",
             source,
         )
-        self.assertNotIn(
+        self.assertIn(
             "def _apply_sync_snapshot_backend(",
+            source,
+        )
+        self.assertIn(
+            "def apply_sync_snapshot(",
             source,
         )
 

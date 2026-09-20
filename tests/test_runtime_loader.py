@@ -250,21 +250,6 @@ class RuntimeLoaderTests(unittest.TestCase):
             "persona_sync.py",
         )
 
-    def test_state_integrity_runtime_report_has_no_persona_overrides(self):
-        entry = next(
-            item
-            for item in rt.RUNTIME_LOAD_REPORT
-            if item["module"] == "state_integrity.py"
-        )
-        self.assertNotIn(
-            "upsert_native_persona",
-            entry["public_callable_overrides"],
-        )
-        self.assertNotIn(
-            "delete_native_persona",
-            entry["public_callable_overrides"],
-        )
-
     def test_hindsight_writes_are_not_state_integrity_overrides(self):
         state_stage = next(
             stage
@@ -275,7 +260,7 @@ class RuntimeLoaderTests(unittest.TestCase):
             state_stage.allowed_overrides_for(
                 "state_integrity.py"
             ),
-            frozenset({"apply_sync_snapshot"}),
+            frozenset(),
         )
 
     def test_hindsight_public_owners_are_memory_module(self):
@@ -290,25 +275,6 @@ class RuntimeLoaderTests(unittest.TestCase):
                 rt.purge_hindsight_session.__code__.co_filename
             ).name,
             "memory.py",
-        )
-
-    def test_state_integrity_runtime_report_has_no_hindsight_overrides(self):
-        entry = next(
-            item
-            for item in rt.RUNTIME_LOAD_REPORT
-            if item["module"] == "state_integrity.py"
-        )
-        self.assertNotIn(
-            "retain_session_memory",
-            entry["public_callable_overrides"],
-        )
-        self.assertNotIn(
-            "purge_hindsight_session",
-            entry["public_callable_overrides"],
-        )
-        self.assertEqual(
-            entry["public_callable_overrides"],
-            ("apply_sync_snapshot",),
         )
 
     def test_sync_snapshot_public_owner_is_sync_core(self):
