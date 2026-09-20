@@ -73,7 +73,18 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         send_prompt_menu(token, chat_id, db, session, fields)
         return True
     if command == "/prompt text":
-        send_text(token, chat_id, prompt_diagnostics(db, chat_id, session, fields))
+        memory_service = getattr(services, "memory", None) if services is not None else None
+        send_text(
+            token,
+            chat_id,
+            prompt_diagnostics(
+                db,
+                chat_id,
+                session,
+                fields,
+                memory_service=memory_service,
+            ),
+        )
         return True
     return False
 
