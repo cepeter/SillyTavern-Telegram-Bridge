@@ -4,7 +4,7 @@
 
 **Goal:** Extract prompt-memory orchestration, retention, and purge delegation into an injected `MemoryService` while preserving the staged Hindsight safety/curation stack.
 
-**Architecture:** Add an ordinary-import application service with explicit callable collaborators. Inject it through `BridgeServices`, use it in normal and recovery generation paths, and keep legacy direct-call fallbacks until later migration phases.
+**Architecture:** Add an ordinary-import application service with explicit callable collaborators. Inject it through `BridgeServices` and route legacy direct callers through a late-bound compatibility `MemoryService`, so application workflows never call backend memory functions directly.
 
 **Tech Stack:** Python 3, dataclasses, SQLite, unittest/pytest, GitHub Actions.
 
@@ -38,10 +38,10 @@
 - Consumes: injected recall, summary, summary-state, retain, and purge callables.
 - Produces: `MemoryPromptContext`, `MemoryService.prompt_context()`, `retain()`, and `purge_session()`.
 
-- [ ] Write tests for normal prompt context, edit-covered suppression, edit-not-covered summary, retain delegation, and purge delegation.
-- [ ] Run the tests and verify RED because `bridge.memory_service` does not exist.
-- [ ] Implement the minimal ordinary-import service.
-- [ ] Run the service tests and verify GREEN.
+- [x] Write tests for normal prompt context, edit-covered suppression, edit-not-covered summary, retain delegation, purge delegation, and summary status.
+- [x] Run the tests and verify RED because `bridge.memory_service` does not exist.
+- [x] Implement the minimal ordinary-import service.
+- [x] Run the service tests and verify GREEN.
 
 ### Task 2: Composition root injection
 
@@ -54,12 +54,12 @@
 - Consumes: `MemoryService` from Task 1 and staged runtime memory collaborators.
 - Produces: `BridgeServices.memory` and production startup construction.
 
-- [ ] Add failing tests asserting `BridgeServices` exposes `memory` and startup builds a `MemoryService`.
-- [ ] Verify RED.
-- [ ] Add the optional memory field and builder parameter.
-- [ ] Construct the production service in `_build_startup_services()`.
-- [ ] Update the Phase 5 extraction guard to allow GroupDirectorService + MemoryService while still forbidding PersonaService, SyncService, and JobService.
-- [ ] Verify GREEN.
+- [x] Add failing tests asserting `BridgeServices` exposes `memory` and startup builds a `MemoryService`.
+- [x] Verify RED.
+- [x] Add the optional memory field and builder parameter.
+- [x] Construct the production service in `_build_startup_services()`.
+- [x] Update the Phase 5 extraction guard to allow GroupDirectorService + MemoryService while still forbidding PersonaService, SyncService, and JobService.
+- [x] Verify GREEN.
 
 ### Task 3: Normal message workflow
 
@@ -71,11 +71,11 @@
 - Consumes: `services.memory`.
 - Produces: injected prompt-context and retention usage for ordinary generation.
 
-- [ ] Add a failing test that supplies a fake memory service and proves prompt assembly receives its recall/summary and post-persist retain is invoked.
-- [ ] Verify RED.
-- [ ] Thread the optional memory service into `generate_and_store_reply()`.
-- [ ] Use service context/retain when present and legacy functions otherwise.
-- [ ] Verify the focused test and existing direct-call tests GREEN.
+- [x] Add a failing test that supplies a fake memory service and proves prompt assembly receives its recall/summary and post-persist retain is invoked.
+- [x] Verify RED.
+- [x] Thread the optional memory service into `generate_and_store_reply()`.
+- [x] Route both injected and direct legacy callers through `MemoryService`.
+- [x] Verify the focused test and existing direct-call tests GREEN.
 
 ### Task 4: Recovery workflow
 
@@ -87,12 +87,12 @@
 - Consumes: injected `MemoryService`.
 - Produces: service-backed context/retention for regen, continue, and edited-turn regeneration.
 
-- [ ] Add failing tests or source-boundary assertions proving recovery receives and uses the injected service.
-- [ ] Add a failing edited-turn test proving `edited_user_rowid` reaches the service and legacy summary branching is not duplicated.
-- [ ] Verify RED.
-- [ ] Add optional memory-service parameters to recovery helpers and propagate from the recovery `process_message` wrapper.
-- [ ] Use service context/retain with legacy fallbacks.
-- [ ] Verify recovery and state-integrity tests GREEN.
+- [x] Add failing tests or source-boundary assertions proving recovery receives and uses the injected service.
+- [x] Add a failing edited-turn test proving `edited_user_rowid` reaches the service and legacy summary branching is not duplicated.
+- [x] Verify RED.
+- [x] Add optional memory-service parameters to recovery helpers and propagate from the recovery `process_message` wrapper.
+- [x] Route recovery through the injected or compatibility `MemoryService` with no direct backend calls.
+- [x] Verify recovery and state-integrity tests GREEN.
 
 ### Task 5: Image generation boundary
 
@@ -113,7 +113,27 @@
 - [x] Use service context/retain in `process_image_message()` with legacy fallback.
 - [x] Verify full CI GREEN.
 
-### Task 6: Runtime boundary and full verification
+### Task 6: Review feedback — unify compatibility boundary
+
+**Files:**
+- Modify: `bridge/memory.py`
+- Modify: `bridge/memory_service.py`
+- Modify: `bridge/commands.py`
+- Modify: `bridge/generation.py`
+- Modify: `bridge/message_commands.py`
+- Modify: `bridge/recovery.py`
+- Modify: `bridge/telegram.py`
+- Modify: focused memory tests.
+
+- [x] Add RED source-boundary tests for the four files identified by review.
+- [x] Add RED tests for compatibility service late binding and reset purge delegation.
+- [x] Add a late-bound compatibility `MemoryService` adapter in `memory.py`.
+- [x] Remove direct recall/summary/retain/purge/summary-state calls from reviewed application files.
+- [x] Route reset and inactive-session deletion through `MemoryService.purge_session()`.
+- [x] Preserve legacy direct callers and state-integrity overrides.
+- [x] Verify GREEN on exact-head CI.
+
+### Task 7: Runtime boundary and full verification
 
 **Files:**
 - Modify: `tests/test_runtime_loader.py`
@@ -123,9 +143,9 @@
 - Consumes: completed Phase 5B implementation.
 - Produces: runtime-stage regression guard and release evidence.
 
-- [ ] Add a regression assertion that `memory_service.py` is not a runtime stage.
-- [ ] Run targeted memory/state-integrity/curator tests.
-- [ ] Run the complete repository CI suite.
-- [ ] Inspect the whole branch diff for Critical/Important issues.
-- [ ] Fix any Important findings with a RED→GREEN regression test.
-- [ ] Re-run exact-head CI before opening the PR.
+- [x] Add a regression assertion that `memory_service.py` is not a runtime stage.
+- [x] Run targeted memory/state-integrity/curator tests through CI.
+- [x] Run the complete repository CI suite.
+- [x] Inspect the whole branch diff for Critical/Important issues.
+- [x] Fix Important findings with RED→GREEN regression tests.
+- [x] Re-run exact-head CI before marking the PR Ready for review.
