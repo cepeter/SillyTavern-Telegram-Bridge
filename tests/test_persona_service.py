@@ -121,6 +121,24 @@ class PersonaServiceTests(unittest.TestCase):
         self.assertEqual(self.upserts, [])
         self.assertEqual(self.session_updates, [])
 
+    def test_create_retry_reuses_matching_existing_persona(self):
+        self.personas["bridge-writer.png"] = {
+            "name": "Writer",
+            "description": "Description",
+            "sillytavern_avatar": "bridge-writer.png",
+        }
+        avatar = self.service.create_and_select(
+            self.db,
+            "chat",
+            "session",
+            "writer",
+            "Writer",
+            "Description",
+        )
+        self.assertEqual(avatar, "bridge-writer.png")
+        self.assertEqual(self.upserts, [])
+        self.assertEqual(self.session_updates[-1][3]["persona_id"], avatar)
+
     def test_create_validates_name_and_description_bounds(self):
         cases = (
             ("", "Description"),
@@ -260,6 +278,49 @@ class PersonaServiceTests(unittest.TestCase):
             self.service.delete_if_unused(self.db, "native.png")
         )
         self.assertEqual(self.deletes, ["native.png"])
+
+    def test_delete_serializes_reference_check_and_native_delete(self):
+        events = []
+
+        class Lock:
+            def __enter__(self):
+                events.append("enter")
+
+            def __exit__(self, *_args):
+                events.append("exit")
+
+        service = PersonaService(
+            load_personas=lambda: dict(self.personas),
+            load_default_persona=lambda: "native.png",
+            upsert_persona=self._upsert,
+            delete_persona=lambda persona_id: events.append(("delete", persona_id)) or True,
+            update_session_persona=self._update_session,
+            persona_reference_count=lambda _db, _persona_id: events.append("check") or 0,
+            persona_edit_lock=lambda: Lock(),
+        )
+        self.assertTrue(service.delete_if_unused(self.db, "native.png"))
+        self.assertEqual(events, ["enter", "check", ("delete", "native.png"), "exit"])
+
+    def test_generation_uses_injected_persona_reads(self):
+        class FakePersonaService:
+            def name(self, persona_id):
+                return "Injected User"
+
+            def get(self, persona_id):
+                return {"description": "Injected persona description"}
+
+        session = {"persona_id": "native.png", "system_prompt": "", "author_note": "", "world_file": "", "response_language": "auto"}
+        fields = {"name": "Character", "description": "", "personality": "", "scenario": "", "first_mes": "", "mes_example": "", "system_prompt": "", "post_history_instructions": ""}
+        messages = rt.build_chat_messages(
+            session,
+            fields,
+            "Hello",
+            [],
+            persona_service=FakePersonaService(),
+        )
+        system = messages[0]["content"]
+        self.assertIn("Name: Injected User", system)
+        self.assertIn("Injected persona description", system)
 
 
 class PersonaSourceBoundaryTests(unittest.TestCase):

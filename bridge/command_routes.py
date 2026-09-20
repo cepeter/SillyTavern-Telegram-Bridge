@@ -260,6 +260,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
         start_text_action_input(db, token, chat_id, session["session_id"], "edit", "Send the replacement text for the latest user message.")
         return True
     memory_service = getattr(services, "memory", None) if services is not None else None
+    persona_service = getattr(services, "persona", None) if services is not None else None
     if command.startswith("/edit "):
         return handle_inline_text_action(
             db,
@@ -272,6 +273,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
             stripped.split(None, 1)[1],
             operation_id,
             memory_service=memory_service,
+            persona_service=persona_service,
         )
     if command == "/continue":
         continue_last(
@@ -283,6 +285,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
             chat_id,
             operation_id=operation_id,
             memory_service=memory_service,
+            persona_service=persona_service,
         )
         return True
     if command == "/swipe" or command == "/branch" or command.startswith("/branch "):
@@ -298,6 +301,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
             chat_id,
             operation_id=operation_id,
             memory_service=memory_service,
+            persona_service=persona_service,
         )
         return True
     return False

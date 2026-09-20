@@ -191,6 +191,7 @@ def process_image_job(
                 message_id,
                 queued_session_id=queued_session_id,
                 memory_service=services.memory,
+                persona_service=services.persona,
             )
             if job_id is not None:
                 finish_job(db, job_id, "done")
@@ -282,6 +283,7 @@ def process_edit_job(
                 model,
                 operation_id=job_id,
                 memory_service=services.memory,
+                persona_service=services.persona,
             )
             if job_id is not None:
                 finish_job(db, job_id, "done")
@@ -511,6 +513,7 @@ def _build_startup_services(
         delete_persona=delete_native_persona,
         update_session_persona=update_session,
         persona_reference_count=_count_persona_references,
+        persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
     )
     return _build_bridge_services_value(
         config,

@@ -48,6 +48,7 @@ def compatibility_persona_service() -> _PersonaService:
         delete_persona=delete_native_persona,
         update_session_persona=update_session,
         persona_reference_count=_repo_count_persona_references,
+        persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
     )
 
 

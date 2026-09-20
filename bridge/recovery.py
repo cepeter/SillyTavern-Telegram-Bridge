@@ -170,7 +170,7 @@ def _begin_durable_operation(db, operation_id, kind, deliver_recovered):
     return begin_operation(db, operation_id, kind)
 
 
-def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=None, *, memory_service=None):
+def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=None, *, memory_service=None, persona_service=None):
     memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
@@ -214,6 +214,7 @@ def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=N
         history_rows,
         memory_context=memory_context,
         session_summary=session_summary,
+        persona_service=persona_service,
         rag_context=rag_context_for_prompt(db, chat_id, user_text, rag_bundle),
     )
     reply = _generate_rendered_reply(db, token, api_key, session, chat_id, messages, user_text, rag_bundle)
@@ -242,7 +243,7 @@ def regenerate_last(db, token, api_key, session, fields, chat_id, operation_id=N
     _finish_operation(db, operation_id, "regen")
 
 
-def continue_last(db, token, api_key, session, fields, chat_id, operation_id=None, *, memory_service=None):
+def continue_last(db, token, api_key, session, fields, chat_id, operation_id=None, *, memory_service=None, persona_service=None):
     memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
@@ -284,6 +285,7 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
         history_rows,
         memory_context=memory_context,
         session_summary=session_summary,
+        persona_service=persona_service,
         rag_context=rag_context_for_prompt(db, chat_id, instruction, rag_bundle),
     )
     reply = _generate_rendered_reply(db, token, api_key, session, chat_id, messages, instruction, rag_bundle)
@@ -313,7 +315,7 @@ def continue_last(db, token, api_key, session, fields, chat_id, operation_id=Non
     _finish_operation(db, operation_id, "continue")
 
 
-def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_rowid, new_text, operation_id=None, *, memory_service=None):
+def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_rowid, new_text, operation_id=None, *, memory_service=None, persona_service=None):
     memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
@@ -355,6 +357,7 @@ def regenerate_edited_turn(db, token, api_key, session, fields, chat_id, user_ro
         history_rows,
         memory_context=memory_context,
         session_summary=session_summary,
+        persona_service=persona_service,
         rag_context=rag_context_for_prompt(db, chat_id, new_text, rag_bundle),
     )
     reply = _generate_rendered_reply(db, token, api_key, session, chat_id, messages, new_text, rag_bundle)

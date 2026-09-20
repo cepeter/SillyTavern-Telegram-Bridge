@@ -233,7 +233,7 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     return raw
 
 
-def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service=None) -> None:
+def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service=None, persona_service=None) -> None:
     if file_size > IMAGE_MAX_BYTES:
         send_text(token, chat_id, "Image is too large. The limit is 8 MB.")
         return
@@ -251,6 +251,7 @@ def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, fil
         image_bytes,
         telegram_message_id=telegram_message_id,
         memory_service=memory_service,
+        persona_service=persona_service,
     )
 
 

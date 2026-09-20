@@ -52,7 +52,7 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
     set_meta(db, meta_key, json.dumps(state))
 
 
-def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service=None) -> None:
+def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service=None, persona_service=None) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
     memory_service = resolve_memory_service(memory_service)
     history_rows = timed_call("history_load", db.execute,
@@ -70,7 +70,7 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
     )
     memory_context = memory_prompt.recall
     session_summary = memory_prompt.summary
-    messages = timed_call("prompt_assembly", build_chat_messages, session, fields, text, history_rows, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle), group_context=group_context)
+    messages = timed_call("prompt_assembly", build_chat_messages, session, fields, text, history_rows, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle), group_context=group_context, persona_service=persona_service)
     send_typing(token, chat_id)
     language = session.get("response_language") or "auto"
     fixed_language = normalize_response_language(language) != "auto"
@@ -262,4 +262,5 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         telegram_message_id,
         operation_id,
         memory_service=memory_service,
+        persona_service=persona_service,
     )

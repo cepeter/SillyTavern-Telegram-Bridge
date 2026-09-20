@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -29,6 +30,7 @@ class PersonaService:
     delete_persona: Callable[[str], bool]
     update_session_persona: Callable[..., None]
     persona_reference_count: Callable[[sqlite3.Connection, str], int]
+    persona_edit_lock: Callable[[], AbstractContextManager[object]] = lambda: nullcontext()
 
     def list(self) -> dict[str, dict[str, object]]:
         return dict(self.load_personas())
@@ -62,14 +64,25 @@ class PersonaService:
         name, description = _validated_text(name, description)
         personas = self.list()
         expected_stem = f"bridge-{logical_id}"
-        if logical_id in personas or any(
-            Path(str(persona_id)).stem == expected_stem
-            for persona_id in personas
-        ):
-            raise ValueError("Persona ID already exists")
-        avatar = str(
-            self.upsert_persona(logical_id, name, description)
+        existing_avatar = next(
+            (
+                str(persona_id)
+                for persona_id, persona in personas.items()
+                if str(persona_id) == logical_id
+                or Path(str(persona_id)).stem == expected_stem
+            ),
+            "",
         )
+        if existing_avatar:
+            existing = personas.get(existing_avatar) or {}
+            if (
+                str(existing.get("name") or "") != name
+                or str(existing.get("description") or "") != description
+            ):
+                raise ValueError("Persona ID already exists")
+            avatar = existing_avatar
+        else:
+            avatar = str(self.upsert_persona(logical_id, name, description))
         self.update_session_persona(
             db,
             str(chat_id),
@@ -137,6 +150,7 @@ class PersonaService:
         persona_id: str,
     ) -> bool:
         persona_id = str(persona_id)
-        if self.persona_reference_count(db, persona_id):
-            raise ValueError("Persona is used by another session")
-        return bool(self.delete_persona(persona_id))
+        with self.persona_edit_lock():
+            if self.persona_reference_count(db, persona_id):
+                raise ValueError("Persona is used by another session")
+            return bool(self.delete_persona(persona_id))
