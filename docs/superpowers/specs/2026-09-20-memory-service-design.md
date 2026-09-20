@@ -151,7 +151,7 @@ Image generation follows the same service boundary. The image worker passes
 post-persist retention. Direct legacy image callers retain the existing
 shared-runtime fallback.
 
-Direct legacy callers with no injected service keep the current calls to `recall_memory_context`, `session_summary_for_prompt`, and `retain_session_memory`.
+Direct legacy callers with no injected service resolve a short-lived compatibility `MemoryService` from `memory.py`. That adapter late-binds the current runtime collaborators, so late-loaded state-integrity overrides remain effective while application workflows still cross the same service boundary.
 
 The durable `/retry` recursion continues passing the same `services` object.
 
@@ -165,20 +165,13 @@ Recovery operations must use the same injected memory service:
 
 For edited turns, the service receives `edited_user_rowid` and owns the stale-summary suppression decision.
 
-Recovery helpers retain direct-call compatibility through optional service arguments and legacy fallback behavior.
+Recovery helpers retain direct-call compatibility through optional service arguments. When no service is injected, they resolve the same late-bound compatibility `MemoryService`; they do not call backend memory functions directly.
 
 ## 9. Reset relationship
 
 Active-session reset keeps its existing durable phase ordering.
 
-Where an injected memory service is available, the purge step may delegate through `MemoryService.purge_session()`; local transcript/summary deletion and operation-phase transitions remain in the reset workflow because they are part of the durable reset transaction rather than the remote memory backend.
-
-The current callback pipeline does not yet carry `BridgeServices` into reset
-and inactive-session deletion. Expanding that pipeline belongs with later
-callback/service extraction, so both workflows intentionally retain the
-existing guarded `purge_hindsight_session` compatibility path in Phase 5B.
-`MemoryService.purge_session()` establishes the application boundary without
-weakening those durable cleanup semantics.
+Reset and inactive-session deletion both cross `MemoryService.purge_session()`. When the callback pipeline does not carry `BridgeServices`, those workflows resolve the late-bound compatibility service rather than calling `purge_hindsight_session` directly. Local transcript/summary deletion and operation-phase transitions remain in their durable workflows because they are transaction ownership concerns, not remote memory-backend behavior.
 
 ## 10. Runtime-loader relationship
 
@@ -201,7 +194,9 @@ Add ordinary service unit tests with fake collaborators for:
 - edit-covered summary suppression,
 - edit-not-covered summary use,
 - retention delegation,
-- purge delegation.
+- purge delegation,
+- summary-status delegation,
+- late-bound compatibility-service construction.
 
 Add composition/integration tests proving:
 
@@ -209,7 +204,8 @@ Add composition/integration tests proving:
 - production message generation uses the injected service,
 - recovery generation uses the injected service,
 - photo and PNG-as-image generation use the injected service,
-- direct legacy callers remain supported,
+- direct legacy callers remain supported through the compatibility service,
+- reviewed application files contain no direct calls to recall, summary, retain, purge, or summary-state backend helpers,
 - `memory_service.py` is not a runtime stage,
 - Phase 5 still has no `PersonaService`, `SyncService`, or `JobService`.
 
