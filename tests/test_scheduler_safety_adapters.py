@@ -373,5 +373,20 @@ class CanonicalRecoveryTests(unittest.TestCase):
         )
 
 
+class SchedulerSafetySourceBoundaryTests(unittest.TestCase):
+    def test_module_has_no_late_override_capture_or_compat_submitter(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "scheduler_safety.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("_ORIGINAL_DB_CONNECT", source)
+        self.assertNotIn("def db_connect(", source)
+        self.assertNotIn("def recover_jobs(", source)
+        self.assertNotIn("def submit_durable_chat_job(", source)
+        self.assertNotIn("bridge.runtime", source)
+        self.assertNotIn("bridge.main", source)
+
+
 if __name__ == "__main__":
     unittest.main()
