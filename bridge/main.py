@@ -33,6 +33,13 @@ from bridge.repositories import (
     count_persona_references as _count_persona_references,
     count_session_messages as _count_session_messages,
 )
+from bridge.scheduler_safety import (
+    DurableWorkerGuard as _DurableWorkerGuard,
+)
+
+_DURABLE_WORKER_GUARD = _DurableWorkerGuard(
+    _lightweight_db_connect
+)
 
 _SHUTDOWN_EVENT = threading.Event()
 
@@ -348,7 +355,7 @@ def _compatibility_job_service(
         finish_backend=finish_job,
         recover_backend=recover_jobs,
         submit_chat=background.submit_chat,
-        prepare_worker=globals().get("_guard_durable_worker"),
+        prepare_worker=_DURABLE_WORKER_GUARD.prepare,
     )
 
 
@@ -599,7 +606,7 @@ def _build_startup_services(
         finish_backend=finish_job,
         recover_backend=recover_jobs,
         submit_chat=background.submit_chat,
-        prepare_worker=globals().get("_guard_durable_worker"),
+        prepare_worker=_DURABLE_WORKER_GUARD.prepare,
     )
     return _build_bridge_services_value(
         config,
