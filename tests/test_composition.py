@@ -1027,7 +1027,13 @@ class RecordingJobs:
         self.calls.append(("submit", job_id, submission))
         return self.submit_result
 
-    def recover(self, *_args, **_kwargs):
+    def recover(self, db, resolver, *, recover_running=True):
+        self.calls.append((
+            "recover",
+            db,
+            resolver,
+            recover_running,
+        ))
         return None
 
 
@@ -1245,6 +1251,7 @@ class StartupCompositionTests(unittest.TestCase):
                 begin_shutdown=lambda: None,
             ),
             sync=sync_service,
+            jobs=Mock(),
         )
         parsed = rt.argparse.Namespace(check=False)
 
@@ -1273,7 +1280,11 @@ class StartupCompositionTests(unittest.TestCase):
         ), patch.object(
             rt, "install_bridge_signal_handlers"
         ), patch.object(
-            rt, "dispatch_recovered_jobs"
+            rt,
+            "dispatch_recovered_jobs",
+            side_effect=AssertionError(
+                "production startup must use services.jobs.recover"
+            ),
         ), patch.object(
             rt, "start_phase3_sync_worker"
         ) as start_sync, patch.object(
@@ -1287,6 +1298,11 @@ class StartupCompositionTests(unittest.TestCase):
 
         start_sync.assert_called_once_with(
             sync_service=sync_service
+        )
+        services.jobs.recover.assert_called_once()
+        recover_call = services.jobs.recover.call_args
+        self.assertTrue(
+            recover_call.kwargs["recover_running"]
         )
         rt._SHUTDOWN_EVENT.clear()
 
