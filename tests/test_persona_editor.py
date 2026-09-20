@@ -26,6 +26,9 @@ class FakePersonaService:
             "sillytavern_avatar": "other.png",
         }
 
+    def list(self):
+        return dict(self.personas)
+
     def get(self, persona_id):
         return self.personas.get(persona_id)
 
@@ -275,6 +278,105 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertTrue(
             json.loads(rt.get_meta(self.db, "persona_input:chat"))
         )
+
+    def test_persona_menu_reads_from_injected_service(self):
+        fake = FakePersonaService()
+        fake.personas = {
+            "injected.png": {
+                "name": "Injected Persona",
+                "description": "Injected",
+                "sillytavern_avatar": "injected.png",
+            }
+        }
+        rt.send_persona_menu(
+            "token",
+            "chat",
+            "injected.png",
+            persona_service=fake,
+        )
+        payload = self.calls[-1][1]
+        labels = [
+            button["text"]
+            for row in payload["reply_markup"]["inline_keyboard"]
+            for button in row
+        ]
+        self.assertIn("✅ Injected Persona", labels)
+        self.assertIn("Current Persona: Injected Persona", payload["text"])
+
+    def test_persona_edit_menu_reads_from_injected_service(self):
+        fake = FakePersonaService()
+        fake.personas = {
+            "injected.png": {
+                "name": "Injected Persona",
+                "description": "Injected description",
+                "sillytavern_avatar": "injected.png",
+            }
+        }
+        rt.send_persona_edit_menu(
+            "token",
+            "chat",
+            "injected.png",
+            77,
+            persona_service=fake,
+        )
+        self.assertIn("Injected Persona", self.calls[-1][1]["text"])
+        self.assertIn(
+            "Injected description",
+            self.calls[-1][1]["text"],
+        )
+
+    def test_persona_delete_menu_reads_from_injected_service(self):
+        fake = FakePersonaService()
+        fake.personas = {
+            "current.png": {
+                "name": "Current",
+                "description": "Current",
+                "sillytavern_avatar": "current.png",
+            },
+            "injected.png": {
+                "name": "Injected Persona",
+                "description": "Injected",
+                "sillytavern_avatar": "injected.png",
+            },
+        }
+        rt.send_persona_delete_menu(
+            "token",
+            "chat",
+            "current.png",
+            persona_service=fake,
+        )
+        labels = [
+            button["text"]
+            for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"]
+            for button in row
+        ]
+        self.assertIn("🗑️ Injected Persona", labels)
+        self.assertNotIn("🗑️ Current", labels)
+
+    def test_persona_command_route_forwards_injected_service(self):
+        fake = FakePersonaService()
+        services = type("Services", (), {"persona": fake})()
+        captured = {}
+        with patch.object(
+            rt,
+            "send_persona_menu",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            handled = rt._handle_entities(
+                self.db,
+                "token",
+                "provider/model",
+                {},
+                "chat",
+                "/persona",
+                self.session,
+                self.session["session_id"],
+                "provider/model",
+                self.session.get("persona_id") or "",
+                services=services,
+            )
+        self.assertTrue(handled)
+        self.assertIs(captured["persona_service"], fake)
 
     def test_native_catalog_loads_and_create_selects_avatar(self):
         self._start("create")
