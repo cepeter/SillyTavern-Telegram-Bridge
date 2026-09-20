@@ -1634,3 +1634,6 @@ Do not merge the PR. Merge is a separate user decision.
 
 - Task 2 Ruling: move `test_direct_integrity_adapter_uses_final_runtime_memory_collaborators` before production composition so the call-time collaborator contract is observed RED before implementation. The written plan placed that test after composition, conflicting with the TDD sub-skill. Cost if wrong: only test sequencing changes; the designed interface is unchanged.
 - Task 2 RED characterization: after validator-aware fixture correction, CI #438 on `ba6f7d0439fc0980e859e3f07de5b0df79399306` passed the absent-metadata and runtime-patching characterizations and failed only the expected missing `sync_core.py` composition assertion.
+
+- Task 2 final RED: `4a46b7b714c86249af2bf7cfbd4f5dadf03c91d3`, CI #440 failed on missing `_SYNC_SNAPSHOT_INTEGRITY` both through the direct runtime test and the source composition assertion; the transition public-owner assertion remained valid.
+- Task 2 GREEN: `623476642e21820c717907b23a39d78e3ed7b1a2`, CI #441 completed successfully with the public owner still pinned to `state_integrity.py`.
