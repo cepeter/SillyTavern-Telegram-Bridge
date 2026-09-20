@@ -1,3 +1,4 @@
+from pathlib import Path
 import sqlite3
 import unittest
 from unittest.mock import patch
@@ -125,6 +126,62 @@ class SyncServiceTests(unittest.TestCase):
     def test_poll_delegates_to_injected_backend(self):
         self.service.poll(self.db)
         self.assertEqual(self.polls, [self.db])
+
+
+class SyncSourceBoundaryTests(unittest.TestCase):
+    def _function_chunk(self, source, marker):
+        start = source.index(marker)
+        next_def = source.find("\ndef ", start + len(marker))
+        return source[start: next_def if next_def >= 0 else None]
+
+    def test_sync_callback_does_not_call_raw_execution_backends(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "recovery.py"
+        ).read_text(encoding="utf-8")
+        chunk = self._function_chunk(
+            source,
+            "def handle_sync_callback",
+        )
+        for forbidden in (
+            "phase3_sync_now(",
+            "phase3_toggle_realtime(",
+            "_phase3_disable(",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, chunk)
+
+    def test_realtime_worker_does_not_call_raw_poll_backend(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "sync_api.py"
+        ).read_text(encoding="utf-8")
+        chunk = self._function_chunk(
+            source,
+            "def _phase3_worker_loop",
+        )
+        self.assertNotIn("phase3_sync_poll(", chunk)
+        self.assertIn("sync_service.poll(", chunk)
+
+    def test_sync_service_has_no_runtime_or_telegram_dependency(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "sync_service.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("bridge.runtime", source)
+        self.assertNotIn("bridge.telegram", source)
+        self.assertNotIn("telegram_request", source)
+
+    def test_compatibility_service_uses_hardened_poll_override(self):
+        service = rt.compatibility_sync_service()
+        self.assertIs(service.poll_backend, rt.phase3_sync_poll)
+
+        safety_entry = next(
+            item
+            for item in rt.RUNTIME_LOAD_REPORT
+            if item["module"] == "sync_safety.py"
+        )
+        self.assertIn(
+            "phase3_sync_poll",
+            safety_entry["public_callable_overrides"],
+        )
 
 
 class SyncCompatibilityServiceTests(unittest.TestCase):
