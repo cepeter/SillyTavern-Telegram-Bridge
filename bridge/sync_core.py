@@ -5,6 +5,10 @@ from pathlib import Path
 import sqlite3
 import time
 
+from bridge.sync_integrity import (
+    SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter,
+)
+
 
 SYNC_MAX_PAYLOAD_BYTES = SYNC_MAX_BYTES
 
@@ -108,7 +112,7 @@ def build_sync_records(
     return records
 
 
-def apply_sync_snapshot(
+def _apply_sync_snapshot_backend(
     db: sqlite3.Connection,
     chat_id: str,
     session: dict[str, str],
@@ -172,6 +176,65 @@ def apply_sync_snapshot(
             )
     db.commit()
     return sync_transcript_hash(messages)
+
+
+_SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
+    apply_backend=_apply_sync_snapshot_backend,
+    update_session=(
+        lambda db, chat_id, session_id, **updates:
+        update_session(
+            db,
+            chat_id,
+            session_id,
+            **updates,
+        )
+    ),
+    load_session=(
+        lambda db, chat_id, session_id, default_model:
+        load_session(
+            db,
+            chat_id,
+            session_id,
+            default_model,
+        )
+    ),
+    retain_memory=(
+        lambda db, chat_id, session, fields:
+        retain_session_memory(
+            db,
+            chat_id,
+            session,
+            fields,
+        )
+    ),
+    card_fields=(
+        lambda character_file:
+        card_fields_from_file(character_file)
+    ),
+    default_model=DEFAULT_MODEL,
+    log_warning=(
+        lambda message, **kwargs:
+        logging.warning(message, **kwargs)
+    ),
+)
+
+
+def apply_sync_snapshot(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    metadata: dict,
+    messages: list[tuple[str, str]],
+    variants: dict[int, tuple[list[str], int]],
+) -> str:
+    return _SYNC_SNAPSHOT_INTEGRITY.apply(
+        db,
+        chat_id,
+        session,
+        metadata,
+        messages,
+        variants,
+    )
 
 
 def set_sync_state(

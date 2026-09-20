@@ -488,27 +488,12 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
 class HindsightSourceBoundaryTests(unittest.TestCase):
     def test_state_integrity_no_longer_owns_hindsight_safety(self):
-        source = (
+        path = (
             Path(__file__).parents[1]
             / "bridge"
             / "state_integrity.py"
-        ).read_text(encoding="utf-8")
-
-        for forbidden in (
-            "_ORIGINAL_RETAIN_SESSION_MEMORY_WORKER",
-            "_ORIGINAL_PURGE_HINDSIGHT_SESSION",
-            "def _hindsight_epoch_key(",
-            "def _hindsight_memory_epoch(",
-            "def _hindsight_conversation_snapshot(",
-            "def _retain_session_memory(",
-            "def retain_session_memory(",
-            "def purge_hindsight_session(",
-        ):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(
-                    forbidden,
-                    source,
-                )
+        )
+        self.assertFalse(path.exists())
 
     def test_hindsight_integrity_has_no_runtime_import(self):
         source = (

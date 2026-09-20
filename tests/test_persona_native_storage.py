@@ -188,32 +188,12 @@ class NativePersonaSourceBoundaryTests(unittest.TestCase):
 
 
     def test_state_integrity_no_longer_owns_persona_storage(self):
-        source = (
+        path = (
             Path(__file__).parents[1]
             / "bridge"
             / "state_integrity.py"
-        ).read_text(encoding="utf-8")
-
-        self.assertNotIn(
-            "_ORIGINAL_UPSERT_NATIVE_PERSONA",
-            source,
         )
-        self.assertNotIn(
-            "_ORIGINAL_DELETE_NATIVE_PERSONA",
-            source,
-        )
-        self.assertNotIn(
-            "def upsert_native_persona(",
-            source,
-        )
-        self.assertNotIn(
-            "def delete_native_persona(",
-            source,
-        )
-        self.assertNotIn(
-            "def _choose_native_avatar(",
-            source,
-        )
+        self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":
