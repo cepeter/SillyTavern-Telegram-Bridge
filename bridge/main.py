@@ -221,7 +221,13 @@ def process_callback_job(
             if job_id is not None and operation_was_applied(db, job_id):
                 finish_job(db, job_id, "done")
                 return
-            process_callback(db, token, callback, operation_id=job_id)
+            process_callback(
+                db,
+                token,
+                callback,
+                operation_id=job_id,
+                services=services,
+            )
             if job_id is not None:
                 def write_callback_operation():
                     record_operation(db, job_id, "callback")
