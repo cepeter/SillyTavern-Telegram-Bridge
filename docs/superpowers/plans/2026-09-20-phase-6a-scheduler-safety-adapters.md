@@ -254,18 +254,31 @@ class DatabaseConnectionGate:
             return connection
 ```
 
-Immediately after the new ordinary-import class definitions, wrap the existing legacy runtime code in this temporary compatibility gate:
+Immediately after adding the ordinary-import class, mechanically wrap the existing legacy runtime section (starting at `_ORIGINAL_DB_CONNECT = db_connect`) so an ordinary import skips it while the shared runtime still executes it:
 
-```python
-# Temporary Phase 6A migration bridge. Ordinary import skips this block;
-# the legacy shared runtime still executes it until Task 5 cuts over.
-if "db_connect" in globals():
-    # Existing scheduler_safety.py implementation remains here unchanged,
-    # including _ORIGINAL_DB_CONNECT and the current overrides.
-    ...
+```bash
+python - <<'PY'
+from pathlib import Path
+import textwrap
+
+path = Path("bridge/scheduler_safety.py")
+source = path.read_text(encoding="utf-8")
+marker = "_ORIGINAL_DB_CONNECT = db_connect\n"
+before, legacy_tail = source.split(marker, 1)
+legacy = marker + legacy_tail
+guard = (
+    '# Temporary Phase 6A migration bridge. Ordinary import skips this block;\n'
+    '# the legacy shared runtime still executes it until Task 5 cuts over.\n'
+    'if "db_connect" in globals():\n'
+)
+path.write_text(
+    before + guard + textwrap.indent(legacy, "    "),
+    encoding="utf-8",
+)
+PY
 ```
 
-When implementing, indent the actual existing legacy code under this condition; do not use the literal ellipsis. This preserves all current production behavior during Tasks 1–4 while making `bridge.scheduler_safety` importable normally for the new collaborators. Task 5 deletes the entire compatibility block.
+This preserves the exact existing legacy implementation during Tasks 1–4 while making `bridge.scheduler_safety` normally importable. Task 5 deletes the complete guarded block.
 
 - [ ] **Step 4: Add failing DurableWorkerGuard tests**
 
