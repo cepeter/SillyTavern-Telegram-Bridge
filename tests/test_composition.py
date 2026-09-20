@@ -495,6 +495,26 @@ class WorkerInjectionTests(unittest.TestCase):
             self.memory_service,
         )
 
+    def test_callback_worker_propagates_services(self):
+        captured = {}
+        callback = {
+            "id": "callback",
+            "from": {"id": "100"},
+            "message": {"chat": {"id": "chat"}},
+        }
+        with patch.object(
+            rt,
+            "process_callback",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            rt.process_callback_job(
+                self.services,
+                "chat",
+                callback,
+            )
+
+        self.assertIs(captured["services"], self.services)
+
     def test_callback_failure_uses_injected_send_text(self):
         with patch.object(
             rt,
