@@ -2,6 +2,7 @@ import copy
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import sqlite3
 import tempfile
 import threading
 import unittest
