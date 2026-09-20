@@ -1,5 +1,6 @@
 from dataclasses import replace
 import json
+from pathlib import Path
 import sqlite3
 import unittest
 
@@ -377,6 +378,21 @@ class JobServiceTests(unittest.TestCase):
                 for call in self.calls
             )
         )
+
+
+class JobServiceSourceBoundaryTests(unittest.TestCase):
+    def test_main_durable_intake_uses_job_service(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "main.py"
+        ).read_text(encoding="utf-8")
+        main_chunk = source[source.index("def main()"):]
+        self.assertNotIn("enqueue_job(", main_chunk)
+        self.assertNotIn(
+            "submit_durable_chat_job(",
+            main_chunk,
+        )
+        self.assertIn("services.jobs.enqueue(", main_chunk)
+        self.assertIn("services.jobs.submit(", main_chunk)
 
 
 if __name__ == "__main__":
