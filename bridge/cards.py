@@ -376,8 +376,9 @@ def send_panel_message(token: str, chat_id: str, text: str, reply_markup: dict, 
     telegram_request(token, method, payload)
 
 
-def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0) -> None:
-    personas = load_personas()
+def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service=None) -> None:
+    persona_service = resolve_persona_service(persona_service)
+    personas = persona_service.list()
     options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in list(personas.items())[:CATALOG_MAX_ITEMS]]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
@@ -397,7 +398,7 @@ def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id
     rows.append([{"text": "➕ Create persona", "callback_data": "persona:create"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
-    text = f"Current Persona: {persona_name(current_persona) if current_persona else 'off'}{page_label}\nChoose a persona:"
+    text = f"Current Persona: {persona_service.name(current_persona) if current_persona else 'off'}{page_label}\nChoose a persona:"
     send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
