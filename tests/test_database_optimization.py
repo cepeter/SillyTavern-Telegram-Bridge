@@ -194,7 +194,10 @@ class DatabaseOptimizationTests(unittest.TestCase):
                 sys.modules.pop("sqlite_vec", None)
 
     def test_db_connect_runs_database_wide_schema_setup_once_per_process(self):
-        self.assertTrue(rt._DB_SCHEMA_READY)
+        self.assertIn(
+            Path(rt.DB_FILE).expanduser().resolve(),
+            rt._DB_CONNECTION_GATE._ready_paths,
+        )
 
         traced = []
         second = rt._lightweight_db_connect(timeout=5.0)
