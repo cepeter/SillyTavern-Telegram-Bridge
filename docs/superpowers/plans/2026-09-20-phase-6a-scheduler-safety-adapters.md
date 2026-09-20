@@ -1418,7 +1418,7 @@ Implementation used the Draft PR CI workflow as the native RED -> GREEN harness.
 - Integrated implementation head before this evidence commit: `b732ae92b9ca5c433a2aff7a2a8710a428b84fd5`.
 - Integrated CI #396 (`35499999297`) succeeded: `487` unittest tests, `487 passed, 103 subtests passed` under pytest, `No broken requirements found.`, and `No known vulnerabilities found`.
 - Source review at the integrated implementation head confirmed: no `scheduler_safety.py` runtime stage/allowlist entry; no `_ORIGINAL_DB_CONNECT`; no replacement `db_connect`, `recover_jobs`, or `submit_durable_chat_job` in `scheduler_safety.py`; no `globals().get("_guard_durable_worker")`; canonical `db_connect` uses `_DB_CONNECTION_GATE`; canonical recovery uses `LIMIT 128`.
-- Merge base / current upstream `main` during verification: `e2bcc5fc54bee4bcf0dbb2a088aa9af930485bf5`; no upstream drift was present.
+- Merge base: `e2bcc5fc54bee4bcf0dbb2a088aa9af930485bf5`. During final review upstream `main` advanced to `50b3da47c96108827fcda004f33704b336a6808b` with one release-preparation commit touching only `CHANGELOG.md` and `README.md`; it does not overlap Phase 6A files, so no branch refresh is required.
 - Draft PR: #41. At the integrated implementation head it was open, mergeable, with no comments, formal reviews, or unresolved review threads.
 
 ### Final review correction
