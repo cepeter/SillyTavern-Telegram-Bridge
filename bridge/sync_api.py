@@ -12,6 +12,11 @@ from urllib.parse import urlparse
 import urllib.error
 import urllib.request
 
+from bridge.repositories import (
+    count_session_messages as _count_session_messages,
+)
+from bridge.sync_service import SyncService as _SyncService
+
 
 PHASE3_SYNC_API_URL = ""
 PHASE3_SYNC_API_HANDLE = ""
@@ -324,6 +329,28 @@ def phase3_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: st
     enabled = "on" if binding.get("realtime_enabled") else "off"
     configured = "configured" if phase3_api_configured() else "not configured"
     return f"Live API sync: {enabled} ({configured})"
+
+
+def compatibility_sync_service() -> _SyncService:
+    """Build a late-bound SyncService over final runtime collaborators."""
+    return _SyncService(
+        load_binding=sync_binding,
+        count_messages=_count_session_messages,
+        sync_now_backend=phase3_sync_now,
+        toggle_realtime_backend=phase3_toggle_realtime,
+        poll_backend=phase3_sync_poll,
+        disable_realtime=_phase3_disable,
+        api_configured=phase3_api_configured,
+        expected_errors=(SillyTavernApiError, ValueError),
+    )
+
+
+def resolve_sync_service(sync_service=None) -> _SyncService:
+    return (
+        sync_service
+        if sync_service is not None
+        else compatibility_sync_service()
+    )
 
 
 def phase3_sync_poll(db: sqlite3.Connection) -> None:
