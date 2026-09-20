@@ -216,6 +216,20 @@ Conceptually:
 
 Exact callable annotations may be narrowed during implementation, but this application ownership is binding.
 
+### 7.1 Implementation ruling: preserve the existing worker-boot safety guard
+
+During implementation, the existing `scheduler_safety.py` durable submission override was confirmed to do more than scheduling: it wraps each worker so a transient SQLite locked/busy failure while opening the worker database can requeue a still-queued/scheduled durable job on the same database path.
+
+Routing `JobService.submit()` directly to raw `BackgroundRuntime.submit_chat` without that wrapper would silently remove guarantee 17 from this design. Phase 5E therefore makes that pre-execution wrapper an explicit injected seam:
+
+- `JobService` accepts an optional `prepare_worker(db, job_id, worker)` capability;
+- production and compatibility JobService construction inject the already-existing scheduler guard;
+- `JobService.submit()` prepares the worker first, performs background admission, and remains the owner of the queued -> scheduled transition;
+- the existing late `submit_durable_chat_job` override is retained only as a compatibility entry point and delegates lifecycle orchestration back to JobService;
+- no new runtime stage, public override, global locator, or `_ORIGINAL_*` capture is introduced.
+
+This is a preservation ruling, not a Phase 6 scheduler redesign. Phase 6 may later replace the remaining late override architecture with an ordinary collaborator while keeping this same JobService contract boundary.
+
 ## 8. Enqueue semantics
 
 JobService.enqueue delegates to the durable repository enqueue primitive.
@@ -233,12 +247,16 @@ Phase 5E does not move that SQL into JobService.
 
 JobService.submit owns the current submit_durable_chat_job application behavior.
 
-Given an existing durable job and a JobSubmission:
+Given an existing durable job and a JobSubmission, the optional injected worker-preparation capability is applied first so existing worker-boot recovery hardening is preserved:
+
+    worker = submission.worker
+    if prepare_worker is not None:
+        worker = prepare_worker(db, job_id, worker)
 
     accepted = submit_chat(
         submission.label,
         submission.chat_id,
-        submission.worker,
+        worker,
         *submission.args,
         job_id,
     )
@@ -375,10 +393,11 @@ Production startup constructs JobService from:
 - mark_job_scheduled,
 - mark_job_running,
 - finish_job,
-- recover_jobs,
-- BackgroundRuntime.submit_chat.
+- the final recover_jobs repository capability,
+- BackgroundRuntime.submit_chat,
+- the existing durable worker-boot guard as optional `prepare_worker`.
 
-Because these primitives are repository/background capabilities rather than late safety overrides, no new staged runtime module is needed.
+No new staged runtime module is needed. The already-existing scheduler safety stage remains authoritative for its bounded recovery/database hardening and compatibility override, while JobService owns durable lifecycle orchestration.
 
 job_service.py must remain outside DEFAULT_RUNTIME_STAGES.
 
