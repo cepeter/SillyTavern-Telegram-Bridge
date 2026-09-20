@@ -130,6 +130,20 @@ def count_persona_references(
     return int(row[0] or 0) if row else 0
 
 
+
+def count_session_messages(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+) -> int:
+    row = db.execute(
+        "SELECT COUNT(*) FROM messages "
+        "WHERE chat_id=? AND session_id=?",
+        (str(chat_id), str(session_id)),
+    ).fetchone()
+    return int(row[0] or 0) if row else 0
+
+
 def load_group_state_row(
     db: sqlite3.Connection,
     chat_id: str,
