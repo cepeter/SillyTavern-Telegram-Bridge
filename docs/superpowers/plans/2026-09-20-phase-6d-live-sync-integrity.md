@@ -1631,3 +1631,6 @@ Do not merge the PR. Merge is a separate user decision.
 - Task 1 GREEN: `3ecfb6fb04af0b0b5820435fd7381fee59f0cf0e`, CI #433 completed successfully.
 
 - Task 2 Ruling: the absent-metadata characterization must seed its fake existing Persona/world directly in the sessions table, matching the pre-existing Sync integration pattern. `update_session()` applies Persona integrity validation and clears the deliberately fake `existing.png` before the snapshot runs. Cost if wrong: only the characterization fixture changes; production semantics remain untouched.
+
+- Task 2 Ruling: move `test_direct_integrity_adapter_uses_final_runtime_memory_collaborators` before production composition so the call-time collaborator contract is observed RED before implementation. The written plan placed that test after composition, conflicting with the TDD sub-skill. Cost if wrong: only test sequencing changes; the designed interface is unchanged.
+- Task 2 RED characterization: after validator-aware fixture correction, CI #438 on `ba6f7d0439fc0980e859e3f07de5b0df79399306` passed the absent-metadata and runtime-patching characterizations and failed only the expected missing `sync_core.py` composition assertion.
