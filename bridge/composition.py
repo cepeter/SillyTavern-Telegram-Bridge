@@ -9,6 +9,7 @@ import sqlite3
 from bridge.group_director_service import GroupDirectorService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
+from bridge.sync_service import SyncService
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class BridgeServices:
     group_director: GroupDirectorService | None = None
     memory: MemoryService | None = None
     persona: PersonaService | None = None
+    sync: SyncService | None = None
 
 
 def load_bridge_config(
@@ -101,6 +103,7 @@ def build_bridge_services(
     group_director: GroupDirectorService | None = None,
     memory: MemoryService | None = None,
     persona: PersonaService | None = None,
+    sync: SyncService | None = None,
 ) -> BridgeServices:
     return BridgeServices(
         config=config,
@@ -110,4 +113,5 @@ def build_bridge_services(
         group_director=group_director,
         memory=memory,
         persona=persona,
+        sync=sync,
     )
