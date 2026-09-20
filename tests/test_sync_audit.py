@@ -270,11 +270,31 @@ class SyncAuditHardeningTests(unittest.TestCase):
             ).fetchone()
         )
         sync_structural = [
-            sql for sql in traced
-            if sql.lstrip().upper().startswith("CREATE TRIGGER")
-            and "sessions_delete_sync_binding" in sql
+            sql
+            for sql in traced
+            if sql.lstrip().upper().startswith(
+                (
+                    "CREATE ",
+                    "ALTER ",
+                    "DROP ",
+                )
+            )
+            and "sync_" in sql.casefold()
         ]
-        self.assertEqual(sync_structural, [], sync_structural)
+        self.assertEqual(
+            sync_structural,
+            [],
+            sync_structural,
+        )
+
+    def test_phase6e_does_not_add_schema_migration(self):
+        self.assertEqual(
+            tuple(
+                migration.version
+                for migration in rt.SCHEMA_MIGRATIONS
+            ),
+            (1, 2, 3, 4),
+        )
 
 
 if __name__ == "__main__":
