@@ -334,6 +334,63 @@ class RuntimeLoaderTests(unittest.TestCase):
             finally:
                 outside.unlink(missing_ok=True)
 
+    def test_sync_schema_public_owner_is_schema(self):
+        self.assertEqual(
+            Path(
+                rt.initialize_database_schema
+                .__code__.co_filename
+            ).name,
+            "schema.py",
+        )
+
+    def test_sync_poll_public_owner_is_sync_api(self):
+        self.assertEqual(
+            Path(
+                rt.phase3_sync_poll
+                .__code__.co_filename
+            ).name,
+            "sync_api.py",
+        )
+
+    def test_sync_safety_is_not_a_runtime_module(self):
+        modules = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn(
+            "sync_safety.py",
+            modules,
+        )
+
+    def test_runtime_report_has_no_sync_safety_entry(self):
+        modules = {
+            item["module"]
+            for item in rt.RUNTIME_LOAD_REPORT
+        }
+        self.assertNotIn(
+            "sync_safety.py",
+            modules,
+        )
+
+    def test_sync_safety_functions_have_no_override_allowlist(self):
+        for stage in DEFAULT_RUNTIME_STAGES:
+            for filename, names in (
+                stage.allowed_public_callable_overrides
+            ):
+                for name in (
+                    "initialize_database_schema",
+                    "phase3_sync_poll",
+                ):
+                    self.assertNotIn(
+                        name,
+                        names,
+                        msg=(
+                            f"{filename} still overrides "
+                            f"{name}"
+                        ),
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

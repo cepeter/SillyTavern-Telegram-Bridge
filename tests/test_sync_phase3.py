@@ -650,6 +650,53 @@ class SyncSnapshotOwnershipTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
+class SyncPollOwnershipTests(unittest.TestCase):
+    def test_sync_api_composes_poll_safety_adapter(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "sync_api.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "SyncPollSafetyAdapter as _SyncPollSafetyAdapter",
+            source,
+        )
+        self.assertIn(
+            "_SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(",
+            source,
+        )
+
+    def test_sync_safety_module_is_retired(self):
+        path = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "sync_safety.py"
+        )
+        self.assertFalse(path.exists())
+
+    def test_no_sync_safety_original_captures_remain(self):
+        root = (
+            Path(__file__).parents[1]
+            / "bridge"
+        )
+        offenders = []
+        for path in root.glob("*.py"):
+            source = path.read_text(
+                encoding="utf-8"
+            )
+            if (
+                "_ORIGINAL_SYNC_INITIALIZE_DATABASE_SCHEMA"
+                in source
+                or "_ORIGINAL_PHASE3_SYNC_NOW_FOR_POLL"
+                in source
+            ):
+                offenders.append(path.name)
+
+        self.assertEqual(offenders, [])
+
+
+
 class SyncWorkerInjectionTests(unittest.TestCase):
     class FakeStopEvent:
         def __init__(self, results):

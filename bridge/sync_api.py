@@ -15,6 +15,9 @@ import urllib.request
 from bridge.repositories import (
     count_session_messages as _count_session_messages,
 )
+from bridge.sync_poll_safety import (
+    SyncPollSafetyAdapter as _SyncPollSafetyAdapter,
+)
 from bridge.sync_service import SyncService as _SyncService
 
 
@@ -331,6 +334,51 @@ def phase3_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: st
     return f"Live API sync: {enabled} ({configured})"
 
 
+_SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
+    sync_now=(
+        lambda db, chat_id, session_id:
+        phase3_sync_now(
+            db,
+            chat_id,
+            session_id,
+        )
+    ),
+    chat_lock=(
+        lambda chat_id:
+        chat_job_lock(chat_id)
+    ),
+    disable_realtime=(
+        lambda db, chat_id, session_id, error:
+        _phase3_disable(
+            db,
+            chat_id,
+            session_id,
+            error,
+        )
+    ),
+    expected_errors=(
+        SillyTavernApiError,
+        ValueError,
+    ),
+    sync_interval=(
+        lambda:
+        PHASE3_SYNC_INTERVAL_SECONDS
+    ),
+    now=(
+        lambda:
+        time.time()
+    ),
+    log_warning=(
+        lambda message, *args, **kwargs:
+        logging.warning(
+            message,
+            *args,
+            **kwargs,
+        )
+    ),
+)
+
+
 def compatibility_sync_service() -> _SyncService:
     """Build a late-bound SyncService over final runtime collaborators."""
     return _SyncService(
@@ -353,29 +401,10 @@ def resolve_sync_service(sync_service=None) -> _SyncService:
     )
 
 
-def phase3_sync_poll(db: sqlite3.Connection) -> None:
-    now = time.time()
-    rows = db.execute("SELECT chat_id,session_id,realtime_failures FROM sync_bindings WHERE realtime_enabled=1 AND realtime_next_retry_at<=? LIMIT 32", (now,)).fetchall()
-    for chat_id, session_id, failures in rows:
-        try:
-            phase3_sync_now(db, str(chat_id), str(session_id))
-        except (SillyTavernApiError, ValueError) as exc:
-            count = int(failures or 0) + 1
-            if not getattr(exc, "transient", False) or count >= 5:
-                _phase3_disable(db, str(chat_id), str(session_id), str(exc))
-                continue
-            delay = min(60.0, PHASE3_SYNC_INTERVAL_SECONDS * (2 ** min(count, 5)))
-            def write_retry():
-                db.execute("UPDATE sync_bindings SET realtime_failures=?,realtime_next_retry_at=?,last_error=? WHERE chat_id=? AND session_id=?", (count, time.time() + delay, str(exc)[:1000], chat_id, session_id))
-                db.commit()
-            run_write_txn(db, write_retry)
-        except Exception as exc:
-            logging.warning("Phase 3 binding failed for session %s", session_id, exc_info=True)
-            count = int(failures or 0) + 1
-            def write_unexpected():
-                db.execute("UPDATE sync_bindings SET realtime_failures=?,realtime_next_retry_at=?,last_error=? WHERE chat_id=? AND session_id=?", (count, time.time() + min(60.0, PHASE3_SYNC_INTERVAL_SECONDS * 2), "unexpected Phase 3 binding failure", chat_id, session_id))
-                db.commit()
-            run_write_txn(db, write_unexpected)
+def phase3_sync_poll(
+    db: sqlite3.Connection,
+) -> None:
+    _SYNC_POLL_SAFETY.poll(db)
 
 
 def _phase3_worker_loop(sync_service=None) -> None:

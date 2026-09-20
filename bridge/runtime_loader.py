@@ -68,10 +68,7 @@ DEFAULT_RUNTIME_STAGES = (
     ),
     RuntimeStage(
         "safety_overrides",
-        ("sync_safety.py", "scene_state.py", "director_goals.py", "memory_curator.py"),
-        (
-            ("sync_safety.py", ("initialize_database_schema", "phase3_sync_poll")),
-        ),
+        ("scene_state.py", "director_goals.py", "memory_curator.py"),
     ),
 )
 
