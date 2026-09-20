@@ -1629,3 +1629,5 @@ Do not merge the PR. Merge is a separate user decision.
 
 - Task 1 RED: `631b38beee73d6d879ba14b74599863b6d269409`, CI #432 failed with `ModuleNotFoundError: No module named 'bridge.sync_integrity'`.
 - Task 1 GREEN: `3ecfb6fb04af0b0b5820435fd7381fee59f0cf0e`, CI #433 completed successfully.
+
+- Task 2 Ruling: the absent-metadata characterization must seed its fake existing Persona/world directly in the sessions table, matching the pre-existing Sync integration pattern. `update_session()` applies Persona integrity validation and clears the deliberately fake `existing.png` before the snapshot runs. Cost if wrong: only the characterization fixture changes; production semantics remain untouched.
