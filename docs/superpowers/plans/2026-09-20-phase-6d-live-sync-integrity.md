@@ -668,7 +668,7 @@ git commit -m "refactor: add Live Sync integrity adapter"
   - `_SYNC_SNAPSHOT_INTEGRITY: SyncSnapshotIntegrityAdapter` composed around the existing raw public `apply_sync_snapshot`.
   - Task 2 deliberately preserves the existing public raw `apply_sync_snapshot` name so the still-loaded Phase 6C `state_integrity.py` continues to wrap it exactly once until Task 3.
 
-- [ ] **Step 1: Add RED public-path integration coverage for absent metadata preservation**
+- [ ] **Step 1: Add public-path characterization coverage for absent metadata preservation**
 
 Append to `Phase3SyncTests` in `tests/test_sync_phase3.py`:
 
@@ -728,7 +728,7 @@ Append to `Phase3SyncTests` in `tests/test_sync_phase3.py`:
         )
 ```
 
-- [ ] **Step 2: Add RED public-owner/composition coverage**
+- [ ] **Step 2: Add public-path characterization coverage for runtime collaborator patching**
 
 Append:
 
@@ -984,7 +984,7 @@ git commit -m "refactor: compose Live Sync snapshot integrity"
 
 **Interfaces:**
 - Consumes:
-  - canonical `sync_core.py::apply_sync_snapshot` from Task 2.
+  - `_SYNC_SNAPSHOT_INTEGRITY` ordinary composition from Task 2 while the public runtime owner is still intentionally `state_integrity.py`.
 - Produces:
   - `_apply_sync_snapshot_backend(db, chat_id, session, metadata, messages, variants) -> str`;
   - stable public `sync_core.py::apply_sync_snapshot` delegate through `_SYNC_SNAPSHOT_INTEGRITY`;
@@ -1222,7 +1222,7 @@ Delete:
 bridge/state_integrity.py
 ```
 
-Do not move any code from it elsewhere; Task 2 already provides its replacement.
+Do not move any code from it elsewhere; the Task 2 adapter plus the Task 3 atomic `sync_core.py` cutover already provide its replacement.
 
 - [ ] **Step 7: Remove state_integrity.py and its allowlist from runtime_loader.py**
 
