@@ -1,6 +1,6 @@
 # Phase 5D SyncService Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Extract Live API Sync application orchestration behind an injected `SyncService` while preserving the current hardened SillyTavern API, polling, conflict, retry/backoff, and state-integrity behavior.
 
@@ -45,7 +45,7 @@
 - Consumes: final binding loader, session-message count repository callable, manual-sync backend, realtime-toggle backend, poll backend, realtime-disable callable, API-configured callable, expected exception types.
 - Produces: `SyncStatus`, `SyncService.status()`, `sync_now()`, `toggle_realtime()`, `poll()`, and `count_session_messages()`.
 
-- [ ] **Step 1: Write RED service tests**
+- [x] **Step 1: Write RED service tests**
 
 Create `tests/test_sync_service.py` with a fake-collaborator fixture:
 
@@ -147,7 +147,7 @@ class SyncServiceTests(unittest.TestCase):
 
 Also add a status case where `api_configured()` returns `False` and the binding has zero/empty last-sync values.
 
-- [ ] **Step 2: Verify service tests are RED**
+- [x] **Step 2: Verify service tests are RED**
 
 Run:
 
@@ -157,7 +157,7 @@ python -m unittest tests.test_sync_service -v
 
 Expected: import failure because `bridge.sync_service` does not exist.
 
-- [ ] **Step 3: Add RED repository test**
+- [x] **Step 3: Add RED repository test**
 
 Extend `RepositoryPrimitiveTests.setUp()` with this exact table before adding the test:
 
@@ -212,13 +212,13 @@ def test_count_session_messages_is_read_only(self):
     )
 ```
 
-- [ ] **Step 4: Verify repository test is RED**
+- [x] **Step 4: Verify repository test is RED**
 
 Run the new repository test directly.
 
 Expected: `AttributeError` for missing `count_session_messages`.
 
-- [ ] **Step 5: Implement the repository primitive**
+- [x] **Step 5: Implement the repository primitive**
 
 Add to `bridge/repositories.py`:
 
@@ -238,7 +238,7 @@ def count_session_messages(
 
 No commit, rollback, or schema creation.
 
-- [ ] **Step 6: Implement minimal SyncService**
+- [x] **Step 6: Implement minimal SyncService**
 
 Create `bridge/sync_service.py`:
 
@@ -310,7 +310,7 @@ class SyncService:
         self.poll_backend(db)
 ```
 
-- [ ] **Step 7: Verify Task 1 GREEN**
+- [x] **Step 7: Verify Task 1 GREEN**
 
 Run:
 
@@ -320,7 +320,7 @@ python -m unittest   tests.test_sync_service   tests.test_repository_transaction
 
 Expected: all pass.
 
-- [ ] **Step 8: Commit Task 1**
+- [x] **Step 8: Commit Task 1**
 
 Commit:
 
@@ -344,7 +344,7 @@ refactor: add SyncService application contract
 - Consumes: Task 1 `SyncService`, `SyncStatus`, and `count_session_messages`.
 - Produces: `compatibility_sync_service()`, `resolve_sync_service()`, `BridgeServices.sync`, and startup-created production SyncService.
 
-- [ ] **Step 1: Add RED compatibility late-binding tests**
+- [x] **Step 1: Add RED compatibility late-binding tests**
 
 In `tests/test_sync_service.py`, import `bridge.runtime as rt` and patch runtime globals after the compatibility module has already loaded:
 
@@ -370,7 +370,7 @@ def test_resolve_sync_service_prefers_injected_service(self):
     self.assertIs(rt.resolve_sync_service(sentinel), sentinel)
 ```
 
-- [ ] **Step 2: Add RED composition/startup tests**
+- [x] **Step 2: Add RED composition/startup tests**
 
 Update `tests/test_composition.py`:
 
@@ -395,7 +395,7 @@ def test_startup_builds_sync_service_from_final_runtime_collaborators(self):
 
 Update the Phase 5 source guard from "stop at persona" to "stop at sync": GroupDirector, Memory, Persona, and Sync must exist; JobService must still not exist.
 
-- [ ] **Step 3: Add RED runtime-loader guard**
+- [x] **Step 3: Add RED runtime-loader guard**
 
 Add to `tests/test_runtime_loader.py`:
 
@@ -409,7 +409,7 @@ def test_sync_service_is_not_a_runtime_stage(self):
     self.assertNotIn("sync_service.py", loaded_modules)
 ```
 
-- [ ] **Step 4: Verify RED**
+- [x] **Step 4: Verify RED**
 
 Run:
 
@@ -419,7 +419,7 @@ python -m unittest   tests.test_sync_service   tests.test_composition   tests.te
 
 Expected failures: missing compatibility helpers, missing `BridgeServices.sync`, and missing startup construction.
 
-- [ ] **Step 5: Implement late-bound compatibility construction**
+- [x] **Step 5: Implement late-bound compatibility construction**
 
 At the ordinary-import top of `bridge/sync_api.py` add:
 
@@ -456,7 +456,7 @@ def resolve_sync_service(sync_service=None) -> _SyncService:
 
 Do not hoist any of those runtime collaborator values into module-level captured aliases.
 
-- [ ] **Step 6: Wire BridgeServices and startup**
+- [x] **Step 6: Wire BridgeServices and startup**
 
 In `bridge/composition.py`:
 
@@ -496,11 +496,11 @@ Pass `sync=sync` into `_build_bridge_services_value()`.
 
 Because `_build_startup_services()` executes only after the staged runtime is fully loaded, these global function lookups must resolve the final hardened runtime values.
 
-- [ ] **Step 7: Verify Task 2 GREEN**
+- [x] **Step 7: Verify Task 2 GREEN**
 
 Run the Task 2 unittest set again. Expected: all pass.
 
-- [ ] **Step 8: Commit Task 2**
+- [x] **Step 8: Commit Task 2**
 
 Commit:
 
@@ -524,7 +524,7 @@ refactor: inject SyncService at startup
 - Consumes: injected `services.sync` or `resolve_sync_service(None)`.
 - Produces: service-backed `sync_status_text`, `send_sync_menu`, `handle_sync_callback`, and production propagation through slash commands/callbacks.
 
-- [ ] **Step 1: Add RED status rendering test**
+- [x] **Step 1: Add RED status rendering test**
 
 In `tests/test_sync_phase3.py`, ordinary-import `SyncStatus`:
 
@@ -565,7 +565,7 @@ def test_sync_status_text_renders_injected_service_status(self):
     self.assertIn("Live API sync: on (not configured)", text)
 ```
 
-- [ ] **Step 2: Add RED callback delegation tests**
+- [x] **Step 2: Add RED callback delegation tests**
 
 Use a fake with `sync_now()`, `toggle_realtime()`, and `status()`, patch raw runtime execution functions to raise, and assert:
 
@@ -595,7 +595,7 @@ Add the equivalent `sync:realtime` test that forbids direct `phase3_toggle_realt
 
 Add a manual expected-failure fake result and assert the callback forwards the service's existing `Live API unavailable: ...` string unchanged.
 
-- [ ] **Step 3: Add RED production propagation tests**
+- [x] **Step 3: Add RED production propagation tests**
 
 In `tests/test_composition.py`:
 
@@ -603,7 +603,7 @@ In `tests/test_composition.py`:
 - patch `send_sync_menu`, invoke the `/sync` command route through `handle_command_route(..., services=services)`, and assert `sync_service=services.sync`;
 - patch `handle_primary_panel_callback`, invoke `process_callback(..., services=services)`, and assert its keyword receives the same Sync service.
 
-- [ ] **Step 4: Verify RED**
+- [x] **Step 4: Verify RED**
 
 Run:
 
@@ -613,7 +613,7 @@ python -m unittest   tests.test_sync_phase3   tests.test_composition -v
 
 Expected: missing `sync_service` parameters/propagation.
 
-- [ ] **Step 5: Make recovery UI resolve and use SyncService**
+- [x] **Step 5: Make recovery UI resolve and use SyncService**
 
 Change signatures:
 
@@ -655,7 +655,7 @@ For callbacks:
 
 Remove the callback's direct expected-error catch and direct `_phase3_disable`; that behavior now belongs to `SyncService.sync_now()`.
 
-- [ ] **Step 6: Propagate service through command and callback routers**
+- [x] **Step 6: Propagate service through command and callback routers**
 
 Change `_handle_memory_media(..., services=None)`, pass `services` from `handle_command_route`, and call:
 
@@ -685,11 +685,11 @@ Pass it to `handle_primary_panel_callback(..., sync_service=sync_service)`.
 
 Update `handle_primary_panel_callback(..., *, sync_service=None)` and pass it only to `handle_sync_callback`.
 
-- [ ] **Step 7: Verify Task 3 GREEN**
+- [x] **Step 7: Verify Task 3 GREEN**
 
 Run the Task 3 tests again plus existing `tests.test_sync_audit`. Expected: all pass.
 
-- [ ] **Step 8: Commit Task 3**
+- [x] **Step 8: Commit Task 3**
 
 Commit:
 
@@ -711,7 +711,7 @@ refactor: route Sync UI through SyncService
 - Consumes: Task 2 `SyncService` and compatibility resolver.
 - Produces: `_phase3_worker_loop(sync_service=None)`, `start_phase3_sync_worker(sync_service=None)`, production startup using `services.sync`.
 
-- [ ] **Step 1: Add RED worker delegation test**
+- [x] **Step 1: Add RED worker delegation test**
 
 Avoid a real long-running thread by invoking the loop with a stop event whose first wait returns `False` and second returns `True`.
 
@@ -744,11 +744,11 @@ def test_worker_loop_polls_through_injected_service(self):
 
 Use a non-closing fake connection or patch `close()` as necessary so the fixture remains valid after the loop.
 
-- [ ] **Step 2: Add RED SQLite reconnect preservation test**
+- [x] **Step 2: Add RED SQLite reconnect preservation test**
 
 Provide a fake service whose first `poll()` raises `sqlite3.OperationalError` and whose second succeeds. Supply two fake connections from `db_connect`. Assert the first is closed and the second is used on the next cycle. This pins the spec's poisoned-connection behavior.
 
-- [ ] **Step 3: Add RED startup propagation test**
+- [x] **Step 3: Add RED startup propagation test**
 
 Patch `rt.start_phase3_sync_worker` during `main()` setup or isolate the startup call using the existing startup harness and assert:
 
@@ -760,15 +760,15 @@ start_sync.assert_called_once_with(
 
 The test must not require the Telegram poll loop to run indefinitely; use `--check` only if the worker would execute there, otherwise patch the shutdown event/getUpdates path so startup exits immediately.
 
-- [ ] **Step 4: Add RED legacy-resolution test**
+- [x] **Step 4: Add RED legacy-resolution test**
 
 Patch `rt.resolve_sync_service` to return a fake and invoke `_phase3_worker_loop()` without an explicit service. Assert the resolved fake receives `poll()`.
 
-- [ ] **Step 5: Verify RED**
+- [x] **Step 5: Verify RED**
 
 Run the focused Sync/composition tests. Expected: worker signatures reject `sync_service` and production startup does not inject it.
 
-- [ ] **Step 6: Implement worker injection**
+- [x] **Step 6: Implement worker injection**
 
 Change:
 
@@ -809,7 +809,7 @@ In `main()`:
 start_phase3_sync_worker(sync_service=services.sync)
 ```
 
-- [ ] **Step 7: Verify Task 4 GREEN**
+- [x] **Step 7: Verify Task 4 GREEN**
 
 Run:
 
@@ -819,7 +819,7 @@ python -m unittest   tests.test_sync_phase3   tests.test_sync_audit   tests.test
 
 Expected: all pass.
 
-- [ ] **Step 8: Commit Task 4**
+- [x] **Step 8: Commit Task 4**
 
 Commit:
 
@@ -842,7 +842,7 @@ refactor: poll realtime Sync through SyncService
 - Consumes: complete Phase 5D service/composition/UI/worker path.
 - Produces: source-boundary and final-hardening regressions proving Phase 6 behavior was not accidentally bypassed.
 
-- [ ] **Step 1: Add RED source-boundary tests**
+- [x] **Step 1: Add RED source-boundary tests**
 
 In `tests/test_sync_service.py`, inspect migrated functions with `inspect.getsource` or file slicing.
 
@@ -869,7 +869,7 @@ def test_realtime_worker_does_not_call_raw_poll_backend(self):
 
 Also assert `sync_service.py` contains no `bridge.runtime` import and no Telegram import.
 
-- [ ] **Step 2: Add final-hardened-poll identity regression**
+- [x] **Step 2: Add final-hardened-poll identity regression**
 
 Using the runtime load report and compatibility service:
 
@@ -891,7 +891,7 @@ def test_compatibility_service_uses_hardened_poll_override(self):
 
 Do not assume implementation-module import identity; assert against the final runtime symbol.
 
-- [ ] **Step 3: Add service-backed state-integrity import regression**
+- [x] **Step 3: Add service-backed state-integrity import regression**
 
 Extend `tests/test_sync_phase3.py` using the existing fake API:
 
@@ -914,7 +914,7 @@ result = rt.resolve_sync_service().sync_now(
 
 This proves the service-backed flow still reaches the final `state_integrity.py` override.
 
-- [ ] **Step 4: Retain safety regressions without rewriting them**
+- [x] **Step 4: Retain safety regressions without rewriting them**
 
 Run all existing `tests.test_sync_audit` cases unchanged. They must continue to prove:
 
@@ -928,11 +928,11 @@ Run all existing `tests.test_sync_audit` cases unchanged. They must continue to 
 
 If any fail, do not rewrite `sync_safety.py` for convenience. First add/retain the failing regression and repair the service plumbing so the final safety backend remains in use.
 
-- [ ] **Step 5: Verify runtime-stage invariant**
+- [x] **Step 5: Verify runtime-stage invariant**
 
 The Task 2 `test_sync_service_is_not_a_runtime_stage` must pass. Also inspect `DEFAULT_RUNTIME_STAGES` and assert no new allowlist entry was added for `sync_service.py`.
 
-- [ ] **Step 6: Run focused Phase 5D GREEN suite**
+- [x] **Step 6: Run focused Phase 5D GREEN suite**
 
 Run:
 
@@ -942,7 +942,7 @@ python -m unittest   tests.test_sync_service   tests.test_sync_phase3   tests.te
 
 Expected: zero failures/errors.
 
-- [ ] **Step 7: Commit Task 5**
+- [x] **Step 7: Commit Task 5**
 
 Commit:
 
@@ -962,13 +962,13 @@ test: lock SyncService safety boundaries
 - Consumes: completed Phase 5D branch.
 - Produces: exact-head verification and a Ready-for-review PR; does not merge it.
 
-- [ ] **Step 1: Run focused Sync/service verification**
+- [x] **Step 1: Run focused Sync/service verification**
 
 Run the Task 5 focused unittest command.
 
 Expected: zero failures/errors.
 
-- [ ] **Step 2: Run the repository CI-equivalent suite**
+- [x] **Step 2: Run the repository CI-equivalent suite**
 
 Run:
 
@@ -981,7 +981,7 @@ pip-audit
 
 Expected: compile success, all unittest/pytest tests pass, and no known dependency vulnerabilities.
 
-- [ ] **Step 3: Review the entire branch against baseline**
+- [x] **Step 3: Review the entire branch against baseline**
 
 Compare final Phase 5D head against:
 
@@ -1001,7 +1001,7 @@ Review specifically for:
 
 For any Critical/Important finding, add a failing regression first, verify RED, fix minimally, and rerun focused/full suites.
 
-- [ ] **Step 4: Update verified checklist state**
+- [x] **Step 4: Update verified checklist state**
 
 Mark completed plan items `[x]` only when their test/CI evidence exists. Update the approved spec only if implementation required a genuine design ruling; do not rewrite it merely to match incidental code details.
 
