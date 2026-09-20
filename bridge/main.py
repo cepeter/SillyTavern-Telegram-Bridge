@@ -15,6 +15,10 @@ from bridge.extension_registry import (
 from bridge.group_director_service import (
     GroupDirectorService as _GroupDirectorService,
 )
+from bridge.job_service import (
+    JobService as _JobService,
+    JobSubmission as _JobSubmission,
+)
 from bridge.memory_service import (
     MemoryService as _MemoryService,
 )
@@ -320,6 +324,29 @@ def restore_poll_offset(db: sqlite3.Connection, fallback: int) -> int:
         return int(fallback)
 
 
+def _compatibility_job_service(
+    background: _BackgroundRuntime,
+) -> _JobService:
+    return _JobService(
+        enqueue_backend=enqueue_job,
+        actor_backend=job_actor_id,
+        schedule_backend=mark_job_scheduled,
+        start_backend=mark_job_running,
+        finish_backend=finish_job,
+        recover_backend=recover_jobs,
+        submit_chat=background.submit_chat,
+        prepare_worker=globals().get("_guard_durable_worker"),
+    )
+
+
+def _jobs_for_services(
+    services: _BridgeServices,
+) -> _JobService:
+    if services.jobs is not None:
+        return services.jobs
+    return _compatibility_job_service(services.background)
+
+
 def submit_durable_chat_job(
     db: sqlite3.Connection,
     background: _BackgroundRuntime,
@@ -329,16 +356,17 @@ def submit_durable_chat_job(
     function,
     *args,
 ) -> bool:
-    queued = background.submit_chat(
-        label,
-        chat_id,
-        function,
-        *args,
+    jobs = _compatibility_job_service(background)
+    return jobs.submit(
+        db,
         int(job_id),
+        _JobSubmission(
+            label=str(label),
+            chat_id=str(chat_id),
+            worker=function,
+            args=tuple(args),
+        ),
     )
-    if queued:
-        mark_job_scheduled(db, int(job_id))
-    return queued
 
 
 def dispatch_recovered_jobs(
@@ -529,6 +557,21 @@ def _build_startup_services(
         api_configured=phase3_api_configured,
         expected_errors=(SillyTavernApiError, ValueError),
     )
+    background = _BackgroundRuntime(
+        submit_chat=submit_chat_background,
+        register_backlog_dispatcher=register_durable_backlog_dispatcher,
+        begin_shutdown=begin_background_shutdown,
+    )
+    jobs = _JobService(
+        enqueue_backend=enqueue_job,
+        actor_backend=job_actor_id,
+        schedule_backend=mark_job_scheduled,
+        start_backend=mark_job_running,
+        finish_backend=finish_job,
+        recover_backend=recover_jobs,
+        submit_chat=background.submit_chat,
+        prepare_worker=globals().get("_guard_durable_worker"),
+    )
     return _build_bridge_services_value(
         config,
         db_factory=_partial(db_connect, config.db_file),
@@ -536,15 +579,12 @@ def _build_startup_services(
             request=telegram_request,
             send_text=send_text,
         ),
-        background=_BackgroundRuntime(
-            submit_chat=submit_chat_background,
-            register_backlog_dispatcher=register_durable_backlog_dispatcher,
-            begin_shutdown=begin_background_shutdown,
-        ),
+        background=background,
         group_director=group_director,
         memory=memory,
         persona=persona,
         sync=sync,
+        jobs=jobs,
     )
 
 
