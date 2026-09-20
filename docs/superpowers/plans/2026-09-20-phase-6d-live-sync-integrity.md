@@ -1618,3 +1618,11 @@ If no independent reviewer/subagent capability exists in the harness, perform th
 Only after Steps 13-14 pass.
 
 Do not merge the PR. Merge is a separate user decision.
+
+
+## Execution Ledger (in progress)
+
+- Ruling: This harness has no local Git checkout/worktree. The isolated feature branch `punzer4-code:refactor/phase-6d-live-sync-integrity` is the execution workspace and Draft PR GitHub Actions is the authoritative RED -> GREEN runner. Cost if wrong: focused local commands cannot be recorded separately, but each RED/GREEN state is observed on an exact repository SHA.
+- Pre-flight: Task 1 produces `SyncSnapshotIntegrityAdapter`, consumed by Task 2; signatures match the plan/spec.
+- Pre-flight: Task 2 produces `_SYNC_SNAPSHOT_INTEGRITY` while intentionally preserving the public `state_integrity.py` owner, consumed by Task 3's atomic cutover; transition contract is explicit and consistent.
+- Pre-flight: Task 3 produces canonical `sync_core.py::apply_sync_snapshot` ownership and deletes `state_integrity.py`, consumed by Task 4 verification; acceptance criteria align.
