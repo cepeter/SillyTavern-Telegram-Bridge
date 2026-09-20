@@ -169,7 +169,7 @@ def handle_expression_callback(db, token, callback, answer_callback, data, chat_
     return True
 
 
-def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, sync_service=None):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(token, callback, data, chat_id)
@@ -187,7 +187,19 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         return True
     if handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
-    if handle_sync_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    if handle_sync_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        sync_service=sync_service,
+    ):
         return True
     return handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
 
