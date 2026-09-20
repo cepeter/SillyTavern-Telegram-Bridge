@@ -2122,3 +2122,11 @@ Do not merge the PR. Merge remains a separate user decision.
 - Task 4 Ruling: the first atomic test migration removed `test_sync_lock_is_released_when_job_query_fails` by searching for the next indented `def`, which matched nested `BrokenDb.execute` and left an invalid residual block. Remove that residual block through the next class-level test boundary; production cutover remains unchanged. Cost if wrong: test-file cleanup only; no production semantics change.
 
 - Task 4 Ruling: migrate the stale `tests/test_sync_service.py::test_compatibility_service_uses_hardened_poll_override` assertion after the final cutover. It searched for `sync_safety.py` in `RUNTIME_LOAD_REPORT`, which directly contradicts Phase 6E's approved requirement to delete that module. The replacement asserts the compatibility service binds canonical `sync_api.py::phase3_sync_poll` and that `sync_safety.py` is absent. Cost if wrong: one legacy architecture assertion changes; runtime behavior and the SyncService interface remain untouched.
+
+
+- Task 4 RED: `947c554c5227d8daa8096e2eed67d7f871fd1795`, CI #458 failed on the final owner/runtime-loader assertions while `sync_safety.py` still owned `initialize_database_schema` and `phase3_sync_poll`.
+- Task 4 source-boundary RED: `67908cc202e601894659b6586752c19dba93e46e`, CI #459 additionally failed because `sync_safety.py` and both `_ORIGINAL_*` captures still existed.
+- Task 4 cutover: `d4e84f375d2323997617d6002d79825a0b5cb9ab` deleted `sync_safety.py`, removed its runtime stage/allowlist, and delegated public `phase3_sync_poll` through `_SYNC_POLL_SAFETY`.
+- Task 4 repair: CI #460/#461 exposed a test-file edit defect (a partial fragment of the retired private helper test remained in `tests/test_sync_audit.py` and caused `IndentationError`); `70991286e92f634d2666803e9d6bc4a71b525d28` removed that fragment.
+- Task 4 compatibility-test repair: CI #462 then showed one stale Phase 5D source-boundary test still required `sync_safety.py` in `RUNTIME_LOAD_REPORT`; `078d764352e4f690fc79f668abd2652773e06a2a` migrated it to assert canonical `sync_api.py` ownership and absence of the retired module.
+- Task 4 GREEN: `30222db3674d1e4cdbd40dd6234efa035f326bc8`, CI #464 completed successfully: 579 unittest tests passed, pytest 579 passed + 117 subtests, `pip check` clean, dependency audit clean.
