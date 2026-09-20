@@ -205,6 +205,50 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
 
 
+    def test_canonical_startup_cleanup_removes_orphan_sync_binding(self):
+        valid = rt.create_session(
+            self.db,
+            "valid-chat",
+            rt.DEFAULT_MODEL,
+            session_id="valid-session",
+        )
+        rt.ensure_sync_binding(
+            self.db,
+            "valid-chat",
+            valid["session_id"],
+        )
+        self.db.execute(
+            "INSERT INTO sync_bindings("
+            "chat_id,session_id,sync_id"
+            ") VALUES(?,?,?)",
+            (
+                "orphan-chat",
+                "missing-session",
+                "stb-orphan",
+            ),
+        )
+        self.db.commit()
+
+        rt._run_startup_database_cleanup(
+            self.db,
+        )
+        self.db.commit()
+
+        self.assertIsNone(
+            self.db.execute(
+                "SELECT 1 FROM sync_bindings "
+                "WHERE chat_id='orphan-chat' "
+                "AND session_id='missing-session'"
+            ).fetchone()
+        )
+        self.assertIsNotNone(
+            self.db.execute(
+                "SELECT 1 FROM sync_bindings "
+                "WHERE chat_id='valid-chat' "
+                "AND session_id='valid-session'"
+            ).fetchone()
+        )
+
     def test_sync_startup_cleanup_removes_orphan_without_structural_ddl(self):
         self.db.execute(
             "INSERT INTO sync_bindings(chat_id,session_id,sync_id) "
