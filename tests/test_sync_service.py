@@ -169,18 +169,21 @@ class SyncSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("bridge.telegram", source)
         self.assertNotIn("telegram_request", source)
 
-    def test_compatibility_service_uses_hardened_poll_override(self):
+    def test_compatibility_service_uses_canonical_hardened_poll(self):
         service = rt.compatibility_sync_service()
         self.assertIs(service.poll_backend, rt.phase3_sync_poll)
-
-        safety_entry = next(
-            item
-            for item in rt.RUNTIME_LOAD_REPORT
-            if item["module"] == "sync_safety.py"
+        self.assertEqual(
+            Path(
+                rt.phase3_sync_poll.__code__.co_filename
+            ).name,
+            "sync_api.py",
         )
-        self.assertIn(
-            "phase3_sync_poll",
-            safety_entry["public_callable_overrides"],
+        self.assertNotIn(
+            "sync_safety.py",
+            {
+                item["module"]
+                for item in rt.RUNTIME_LOAD_REPORT
+            },
         )
 
 
