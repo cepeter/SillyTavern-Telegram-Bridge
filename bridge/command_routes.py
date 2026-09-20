@@ -132,7 +132,7 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
     return False
 
 
-def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session, fields, operation_id):
+def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session, fields, operation_id, services=None):
     """Handle memory, RAG, group, and synchronization commands."""
     if command == "/memory" or command in {"/memory on", "/memory off", "/memory status", "/memory scope"}:
         send_memory_menu(token, chat_id, db)
@@ -167,7 +167,16 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
         send_databank_menu(token, chat_id, db)
         return True
     if command == "/sync":
-        send_sync_menu(token, chat_id, db, session)
+        send_sync_menu(
+            token,
+            chat_id,
+            db,
+            session,
+            sync_service=(
+                getattr(services, "sync", None)
+                if services is not None else None
+            ),
+        )
         return True
     if command == "/group":
         if parse_topic_scope(chat_id)[1] is None:
@@ -205,11 +214,22 @@ def _handle_voice_panels(db, token, chat_id, command, session):
     return False
 
 
-def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id):
+def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id, services=None):
     """Dispatch generation, memory, voice, and panel-first commands."""
     if _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id):
         return True
-    if _handle_memory_media(db, token, api_key, chat_id, stripped, command, session, fields, operation_id):
+    if _handle_memory_media(
+        db,
+        token,
+        api_key,
+        chat_id,
+        stripped,
+        command,
+        session,
+        fields,
+        operation_id,
+        services=services,
+    ):
         return True
     return _handle_voice_panels(db, token, chat_id, command, session)
 
@@ -344,7 +364,22 @@ def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, c
         services=services,
     ):
         return True
-    if _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id):
+    if _handle_panels(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        session_id,
+        current_model,
+        current_persona,
+        operation_id,
+        services=services,
+    ):
         return True
     if _handle_entities(
         db,

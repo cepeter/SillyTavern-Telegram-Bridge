@@ -12,6 +12,11 @@ from urllib.parse import urlparse
 import urllib.error
 import urllib.request
 
+from bridge.repositories import (
+    count_session_messages as _count_session_messages,
+)
+from bridge.sync_service import SyncService as _SyncService
+
 
 PHASE3_SYNC_API_URL = ""
 PHASE3_SYNC_API_HANDLE = ""
@@ -326,6 +331,28 @@ def phase3_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: st
     return f"Live API sync: {enabled} ({configured})"
 
 
+def compatibility_sync_service() -> _SyncService:
+    """Build a late-bound SyncService over final runtime collaborators."""
+    return _SyncService(
+        load_binding=sync_binding,
+        count_messages=_count_session_messages,
+        sync_now_backend=phase3_sync_now,
+        toggle_realtime_backend=phase3_toggle_realtime,
+        poll_backend=phase3_sync_poll,
+        disable_realtime=_phase3_disable,
+        api_configured=phase3_api_configured,
+        expected_errors=(SillyTavernApiError, ValueError),
+    )
+
+
+def resolve_sync_service(sync_service=None) -> _SyncService:
+    return (
+        sync_service
+        if sync_service is not None
+        else compatibility_sync_service()
+    )
+
+
 def phase3_sync_poll(db: sqlite3.Connection) -> None:
     now = time.time()
     rows = db.execute("SELECT chat_id,session_id,realtime_failures FROM sync_bindings WHERE realtime_enabled=1 AND realtime_next_retry_at<=? LIMIT 32", (now,)).fetchall()
@@ -351,14 +378,15 @@ def phase3_sync_poll(db: sqlite3.Connection) -> None:
             run_write_txn(db, write_unexpected)
 
 
-def _phase3_worker_loop() -> None:
+def _phase3_worker_loop(sync_service=None) -> None:
+    sync_service = resolve_sync_service(sync_service)
     db = None
     try:
         while not _PHASE3_STOP_EVENT.wait(PHASE3_SYNC_INTERVAL_SECONDS):
             try:
                 if db is None:
                     db = db_connect()
-                phase3_sync_poll(db)
+                sync_service.poll(db)
             except Exception as exc:
                 if db is not None and db.in_transaction:
                     try:
@@ -376,7 +404,7 @@ def _phase3_worker_loop() -> None:
             db.close()
 
 
-def start_phase3_sync_worker() -> bool:
+def start_phase3_sync_worker(*, sync_service=None) -> bool:
     """Start one daemon worker when the loopback API is configured."""
     global _PHASE3_WORKER
     if not phase3_api_configured():
@@ -385,7 +413,12 @@ def start_phase3_sync_worker() -> bool:
         if _PHASE3_WORKER is not None and _PHASE3_WORKER.is_alive():
             return True
         _PHASE3_STOP_EVENT.clear()
-        _PHASE3_WORKER = threading.Thread(target=_phase3_worker_loop, name="sillytavern-phase3-sync", daemon=True)
+        _PHASE3_WORKER = threading.Thread(
+            target=_phase3_worker_loop,
+            args=(sync_service,),
+            name="sillytavern-phase3-sync",
+            daemon=True,
+        )
         _PHASE3_WORKER.start()
         return True
 

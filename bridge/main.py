@@ -21,8 +21,12 @@ from bridge.memory_service import (
 from bridge.persona_service import (
     PersonaService as _PersonaService,
 )
+from bridge.sync_service import (
+    SyncService as _SyncService,
+)
 from bridge.repositories import (
     count_persona_references as _count_persona_references,
+    count_session_messages as _count_session_messages,
 )
 
 _SHUTDOWN_EVENT = threading.Event()
@@ -515,6 +519,16 @@ def _build_startup_services(
         persona_reference_count=_count_persona_references,
         persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
     )
+    sync = _SyncService(
+        load_binding=sync_binding,
+        count_messages=_count_session_messages,
+        sync_now_backend=phase3_sync_now,
+        toggle_realtime_backend=phase3_toggle_realtime,
+        poll_backend=phase3_sync_poll,
+        disable_realtime=_phase3_disable,
+        api_configured=phase3_api_configured,
+        expected_errors=(SillyTavernApiError, ValueError),
+    )
     return _build_bridge_services_value(
         config,
         db_factory=_partial(db_connect, config.db_file),
@@ -530,6 +544,7 @@ def _build_startup_services(
         group_director=group_director,
         memory=memory,
         persona=persona,
+        sync=sync,
     )
 
 
@@ -584,7 +599,7 @@ def main() -> int:
         services.background.begin_shutdown
     )
     db = services.db_factory()
-    start_phase3_sync_worker()
+    start_phase3_sync_worker(sync_service=services.sync)
     services.background.register_backlog_dispatcher(
         make_durable_backlog_dispatcher(
             services,
