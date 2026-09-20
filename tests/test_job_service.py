@@ -380,7 +380,36 @@ class JobServiceTests(unittest.TestCase):
         )
 
 
+def function_chunk(source: str, function_name: str) -> str:
+    start = source.index(function_name)
+    next_function = source.find("\ndef ", start + len(function_name))
+    if next_function < 0:
+        return source[start:]
+    return source[start:next_function]
+
+
 class JobServiceSourceBoundaryTests(unittest.TestCase):
+    def test_recovery_wrappers_do_not_own_raw_repository_loop(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "main.py"
+        ).read_text(encoding="utf-8")
+        chunk = function_chunk(
+            source,
+            "def dispatch_recovered_jobs",
+        )
+        self.assertNotIn("recover_jobs(", chunk)
+        self.assertNotIn("json.loads(", chunk)
+        self.assertIn(".recover(", chunk)
+
+    def test_job_service_is_ordinary_import_boundary(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "job_service.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("bridge.runtime", source)
+        self.assertNotIn("bridge.main", source)
+        self.assertNotIn("process_message_job", source)
+        self.assertNotIn("process_image_job", source)
+
     def test_main_durable_intake_uses_job_service(self):
         source = (
             Path(__file__).parents[1] / "bridge" / "main.py"
