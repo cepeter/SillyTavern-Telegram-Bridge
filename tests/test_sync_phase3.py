@@ -421,14 +421,20 @@ class Phase3SyncTests(unittest.TestCase):
             ),
         )
         self.db.commit()
-        current = rt.load_session(
-            self.db,
-            "chat",
-            "phase3",
-            rt.DEFAULT_MODEL,
-        )
 
         with patch.object(
+            rt,
+            "get_persona",
+            side_effect=lambda persona_id: (
+                {"name": "Existing"}
+                if persona_id == "existing.png"
+                else None
+            ),
+        ), patch.object(
+            rt,
+            "safe_world_path",
+            return_value=True,
+        ), patch.object(
             rt,
             "retain_session_memory",
             return_value=None,
@@ -437,6 +443,12 @@ class Phase3SyncTests(unittest.TestCase):
             "card_fields_from_file",
             return_value={"name": "Test"},
         ):
+            current = rt.load_session(
+                self.db,
+                "chat",
+                "phase3",
+                rt.DEFAULT_MODEL,
+            )
             result = rt.apply_sync_snapshot(
                 self.db,
                 "chat",
@@ -445,13 +457,13 @@ class Phase3SyncTests(unittest.TestCase):
                 [("user", "remote transcript")],
                 {},
             )
+            refreshed = rt.load_session(
+                self.db,
+                "chat",
+                "phase3",
+                rt.DEFAULT_MODEL,
+            )
 
-        refreshed = rt.load_session(
-            self.db,
-            "chat",
-            "phase3",
-            rt.DEFAULT_MODEL,
-        )
         self.assertEqual(
             refreshed["persona_id"],
             "existing.png",
