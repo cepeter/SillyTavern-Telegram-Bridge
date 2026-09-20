@@ -2118,3 +2118,5 @@ Do not merge the PR. Merge remains a separate user decision.
 
 - Task 3 RED: `6abaf43e9be3ce8d59e8a76aa4b3bf906a28564b`, CI #455 failed because `_SYNC_POLL_SAFETY` composition was absent; the transition ownership assertion still passed with `sync_safety.py` as public owner.
 - Task 3 GREEN: `2285a75404c5051cc5cbdd4837986018f2580ec2`, CI #456 completed successfully with transition ownership preserved.
+
+- Task 4 Ruling: the first atomic test migration removed `test_sync_lock_is_released_when_job_query_fails` by searching for the next indented `def`, which matched nested `BrokenDb.execute` and left an invalid residual block. Remove that residual block through the next class-level test boundary; production cutover remains unchanged. Cost if wrong: test-file cleanup only; no production semantics change.

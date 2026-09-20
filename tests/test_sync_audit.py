@@ -64,14 +64,6 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self.db.commit()
 
 
-    def execute(self, *_args, **_kwargs):
-                raise sqlite3.OperationalError("database is locked")
-
-        lock = rt.chat_job_lock("query-error")
-        self.assertIsNone(rt._try_sync_chat_lock(BrokenDb(), "query-error"))
-        self.assertTrue(lock.acquire(blocking=False))
-        lock.release()
-
     def test_direct_poll_adapter_uses_final_runtime_sync_now(self):
         self._binding()
         calls = []
