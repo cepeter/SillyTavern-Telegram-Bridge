@@ -1,5 +1,6 @@
 from contextlib import contextmanager as _contextmanager
 
+from bridge.scheduler_safety import (\n    DatabaseConnectionGate as _DatabaseConnectionGate,\n)\n
 _DB_WRITE_LOCK = globals().get("_DB_WRITE_LOCK") or threading.RLock()
 _WRITE_SQL_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
 _DB_PRIMARY_CACHE_KIB = 64000
@@ -186,25 +187,67 @@ def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: floa
     return reclaimed
 
 
-def db_connect(database_path: Path | None = None) -> sqlite3.Connection:
-    """Open a SQLite database and initialize its schema."""
+def _database_path(database_path: Path | None = None) -> Path:
     path = Path(database_path) if database_path is not None else DB_FILE
+    return path.expanduser().resolve()
+
+
+def _open_initialized_database(
+    database_path: Path,
+) -> sqlite3.Connection:
+    path = _database_path(database_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(
         path,
         timeout=30,
         factory=_SerializedSQLiteConnection,
     )
-    _apply_connection_pragmas(db, timeout=30.0)
-    # One-time database-level setup, on the schema-init connection only and
-    # never on per-worker lightweight connections. auto_vacuum must precede
-    # WAL negotiation: switching auto_vacuum is a no-op once the file has
-    # been touched by WAL.
+    _apply_connection_pragmas(
+        db,
+        timeout=30.0,
+        cache_kib=_DB_PRIMARY_CACHE_KIB,
+        mmap_bytes=_DB_PRIMARY_MMAP_BYTES,
+    )
+    # Database-level setup happens only on the first successful open for
+    # this process/path. auto_vacuum must precede WAL negotiation.
     db.execute("PRAGMA auto_vacuum=INCREMENTAL")
     db.execute("PRAGMA journal_mode=WAL")
     _load_optional_vector_extension(db)
     initialize_database_schema(db)
     return db
+
+
+def _lightweight_db_connect(
+    database_path: Path | None = None,
+    timeout: float = 30.0,
+) -> sqlite3.Connection:
+    path = _database_path(database_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(
+        path,
+        timeout=timeout,
+        factory=_SerializedSQLiteConnection,
+    )
+    _apply_connection_pragmas(
+        db,
+        timeout=timeout,
+        cache_kib=_DB_WORKER_CACHE_KIB,
+        mmap_bytes=_DB_WORKER_MMAP_BYTES,
+    )
+    return db
+
+
+_DB_CONNECTION_GATE = _DatabaseConnectionGate(
+    _open_initialized_database,
+    _lightweight_db_connect,
+)
+
+
+def db_connect(database_path: Path | None = None) -> sqlite3.Connection:
+    """Open the canonical connection for a SQLite database path."""
+    return _DB_CONNECTION_GATE.connect(
+        _database_path(database_path)
+    )
 
 
 def get_meta(db: sqlite3.Connection, key: str, default: str = "") -> str:
