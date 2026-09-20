@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import bridge.runtime as rt
+from bridge.sync_service import SyncStatus
 
 
 class _ApiHandler(BaseHTTPRequestHandler):
@@ -75,6 +76,36 @@ class _FakeApi:
             raise self.error
         self.records = copy.deepcopy(records)
         self.saved += 1
+
+
+class _FakeSyncService:
+    def __init__(self):
+        self.calls = []
+        self.sync_result = "unchanged"
+        self.toggle_result = "realtime API sync disabled"
+        self.status_value = SyncStatus(
+            session_id="phase3",
+            message_count=9,
+            sync_id="stb-injected",
+            last_synced_at=0.0,
+            last_direction="",
+            realtime_enabled=True,
+            api_configured=False,
+        )
+
+    def status(self, db, chat_id, session_id):
+        self.calls.append(("status", db, chat_id, session_id))
+        return self.status_value
+
+    def sync_now(self, db, chat_id, session_id):
+        self.calls.append(("sync_now", db, chat_id, session_id))
+        return self.sync_result
+
+    def toggle_realtime(self, db, chat_id, session_id):
+        self.calls.append(
+            ("toggle_realtime", db, chat_id, session_id)
+        )
+        return self.toggle_result
 
 
 class Phase3SyncTests(unittest.TestCase):
@@ -193,6 +224,129 @@ class Phase3SyncTests(unittest.TestCase):
         rt.phase3_sync_poll(self.db)
         binding = rt.sync_binding(self.db, "chat", "phase3")
         self.assertEqual(binding["realtime_enabled"], 0)
+
+    def test_sync_status_text_renders_injected_service_status(self):
+        fake = _FakeSyncService()
+
+        text = rt.sync_status_text(
+            self.db,
+            "chat",
+            self.session,
+            sync_service=fake,
+        )
+
+        self.assertIn("Messages: 9", text)
+        self.assertIn("Sync ID: stb-injected", text)
+        self.assertIn(
+            "Live API sync: on (not configured)",
+            text,
+        )
+        self.assertEqual(
+            fake.calls,
+            [("status", self.db, "chat", "phase3")],
+        )
+
+    def test_sync_now_callback_uses_injected_service(self):
+        fake = _FakeSyncService()
+        answers = []
+        callback = {
+            "id": "cb",
+            "message": {"message_id": 90, "chat": {"id": "chat"}},
+        }
+        with patch.object(
+            rt,
+            "phase3_sync_now",
+            side_effect=AssertionError("raw sync bypassed service"),
+        ), patch.object(
+            rt,
+            "_phase3_disable",
+            side_effect=AssertionError("raw disable bypassed service"),
+        ), patch.object(
+            rt,
+            "send_sync_menu",
+            return_value=None,
+        ):
+            handled = rt.handle_sync_callback(
+                self.db,
+                "token",
+                callback,
+                lambda _token, _id, text: answers.append(text),
+                "sync:now",
+                "chat",
+                callback["message"],
+                self.session,
+                "phase3",
+                None,
+                sync_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(fake.calls[0][0], "sync_now")
+        self.assertEqual(fake.calls[0][2:], ("chat", "phase3"))
+        self.assertEqual(answers, ["unchanged"])
+
+    def test_sync_realtime_callback_uses_injected_service(self):
+        fake = _FakeSyncService()
+        answers = []
+        callback = {
+            "id": "cb",
+            "message": {"message_id": 90, "chat": {"id": "chat"}},
+        }
+        with patch.object(
+            rt,
+            "phase3_toggle_realtime",
+            side_effect=AssertionError("raw toggle bypassed service"),
+        ), patch.object(
+            rt,
+            "send_sync_menu",
+            return_value=None,
+        ):
+            handled = rt.handle_sync_callback(
+                self.db,
+                "token",
+                callback,
+                lambda _token, _id, text: answers.append(text),
+                "sync:realtime",
+                "chat",
+                callback["message"],
+                self.session,
+                "phase3",
+                None,
+                sync_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(fake.calls[0][0], "toggle_realtime")
+        self.assertEqual(answers, ["realtime API sync disabled"])
+
+    def test_sync_callback_preserves_service_manual_failure_feedback(self):
+        fake = _FakeSyncService()
+        fake.sync_result = "Live API unavailable: API unavailable"
+        answers = []
+        callback = {
+            "id": "cb",
+            "message": {"message_id": 90, "chat": {"id": "chat"}},
+        }
+        with patch.object(rt, "send_sync_menu", return_value=None):
+            handled = rt.handle_sync_callback(
+                self.db,
+                "token",
+                callback,
+                lambda _token, _id, text: answers.append(text),
+                "sync:now",
+                "chat",
+                callback["message"],
+                self.session,
+                "phase3",
+                None,
+                sync_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            answers,
+            ["Live API unavailable: API unavailable"],
+        )
 
     def test_sync_panel_exposes_realtime_control(self):
         calls = []
