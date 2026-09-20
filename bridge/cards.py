@@ -155,14 +155,6 @@ def build_world_info(world_names: str | list[str], context: str, fields: dict[st
     return "\n\n".join(sections)[:12000]
 
 
-def load_personas() -> dict[str, dict[str, str]]:
-    try:
-        return load_native_personas()
-    except Exception:
-        logging.warning("Could not load native SillyTavern personas", exc_info=True)
-        return {}
-
-
 def get_persona(persona_id: str) -> dict[str, str] | None:
     return load_personas().get(persona_id)
 

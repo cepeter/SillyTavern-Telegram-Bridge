@@ -60,7 +60,6 @@ DEFAULT_RUNTIME_STAGES = (
     RuntimeStage(
         "native_adapter_overrides",
         ("persona_sync.py",),
-        (("persona_sync.py", ("load_personas",)),),
     ),
     RuntimeStage(
         "identity_extensions",

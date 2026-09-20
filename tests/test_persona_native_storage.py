@@ -187,6 +187,29 @@ class NativePersonaSourceBoundaryTests(unittest.TestCase):
         )
 
 
+    def test_persona_sync_is_the_only_runtime_load_personas_definition(self):
+        root = Path(__file__).parents[1] / "bridge"
+        cards = (root / "cards.py").read_text(
+            encoding="utf-8"
+        )
+        persona_sync = (
+            root / "persona_sync.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn(
+            "def load_personas(",
+            cards,
+        )
+        self.assertIn(
+            "def load_personas(",
+            persona_sync,
+        )
+        self.assertIn(
+            "Could not load native Persona metadata",
+            persona_sync,
+        )
+
+
     def test_state_integrity_no_longer_owns_persona_storage(self):
         path = (
             Path(__file__).parents[1]

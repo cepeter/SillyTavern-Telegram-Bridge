@@ -250,6 +250,69 @@ class RuntimeLoaderTests(unittest.TestCase):
             "persona_sync.py",
         )
 
+    def test_persona_load_public_owner_is_persona_sync(self):
+        self.assertEqual(
+            Path(
+                rt.load_personas.__code__.co_filename
+            ).name,
+            "persona_sync.py",
+        )
+
+    def test_persona_sync_remains_loaded_without_public_overrides(self):
+        stage = next(
+            stage
+            for stage in DEFAULT_RUNTIME_STAGES
+            if stage.name == "native_adapter_overrides"
+        )
+        self.assertIn(
+            "persona_sync.py",
+            stage.modules,
+        )
+        self.assertEqual(
+            stage.allowed_overrides_for(
+                "persona_sync.py"
+            ),
+            frozenset(),
+        )
+
+        report = next(
+            item
+            for item in rt.RUNTIME_LOAD_REPORT
+            if item["module"] == "persona_sync.py"
+        )
+        self.assertEqual(
+            report["public_callable_overrides"],
+            (),
+        )
+
+    def test_load_personas_has_no_runtime_override_allowlist(self):
+        for stage in DEFAULT_RUNTIME_STAGES:
+            for filename, names in (
+                stage.allowed_public_callable_overrides
+            ):
+                self.assertNotIn(
+                    "load_personas",
+                    names,
+                    msg=(
+                        f"{filename} still overrides "
+                        "load_personas"
+                    ),
+                )
+
+    def test_recovery_is_only_remaining_public_override_module(self):
+        allowlisted_modules = {
+            filename
+            for stage in DEFAULT_RUNTIME_STAGES
+            for filename, names in (
+                stage.allowed_public_callable_overrides
+            )
+            if names
+        }
+        self.assertEqual(
+            allowlisted_modules,
+            {"recovery.py"},
+        )
+
     def test_hindsight_writes_are_not_state_integrity_overrides(self):
         state_stage = next(
             stage

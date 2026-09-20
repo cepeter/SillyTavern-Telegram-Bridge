@@ -426,6 +426,16 @@ class PersonaCompatibilityServiceTests(unittest.TestCase):
             create=True,
         ):
             service = rt.compatibility_persona_service()
+            self.assertEqual(
+                service.list(),
+                {
+                    "native.png": {
+                        "name": "Native",
+                        "description": "D",
+                        "sillytavern_avatar": "native.png",
+                    }
+                },
+            )
             self.assertEqual(service.name("native.png"), "Native")
             self.assertEqual(service.default_id(), "native.png")
             service.update("native.png", "Updated", "D")
