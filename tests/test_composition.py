@@ -214,6 +214,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.sent = []
         self.global_sent = []
         self.memory_service = object()
+        self.persona_service = object()
 
         config = BridgeConfig(
             bot_token="injected-token",
@@ -237,6 +238,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 begin_shutdown=lambda: None,
             ),
             memory=self.memory_service,
+            persona=self.persona_service,
         )
 
     def tearDown(self):
@@ -316,6 +318,39 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertEqual(captured["api_key"], "injected-key")
         self.assertEqual(captured["model"], "injected::model")
         self.assertIs(captured["kwargs"]["services"], self.services)
+
+    def test_process_message_propagates_injected_persona_service(self):
+        captured = {}
+        db = self._db_factory()
+        try:
+            with patch.object(
+                rt,
+                "handle_pending_input",
+                side_effect=lambda *_args, **kwargs:
+                    captured.update(kwargs) or True,
+            ):
+                rt.process_message(
+                    db,
+                    "injected-token",
+                    "injected-key",
+                    "injected::model",
+                    {"name": "Mira"},
+                    "chat",
+                    "hello",
+                    70,
+                    services=self.services,
+                )
+        finally:
+            db.close()
+
+        self.assertIs(
+            captured["persona_service"],
+            self.persona_service,
+        )
+        self.assertIs(
+            captured["memory_service"],
+            self.memory_service,
+        )
 
     def test_edit_worker_propagates_injected_memory_service(self):
         captured = {}
