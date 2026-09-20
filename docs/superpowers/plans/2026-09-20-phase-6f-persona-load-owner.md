@@ -782,3 +782,6 @@ Do not merge the PR. Merge remains a separate user decision.
 - Baseline: merged Phase 6E commit `df552d3d40b92c1016431fb4ef7eeee74bbbc284`; branch started directly from that commit and was 0 behind at execution start.
 - Pre-flight: Task 1 produces characterization tests for final loader semantics/call-time binding; Task 2 consumes those exact behaviors and changes only `cards.py` plus `runtime_loader.py`.
 - Pre-flight: Task 2 produces a no-Persona-override runtime state; Task 3 consumes that state for exact-head verification and PR readiness. No interface conflict found.
+
+- Ruling: Draft PR #47 was opened at Task 1 rather than Task 3 because fork-only commits did not trigger the authoritative upstream CI workflow. Cost if wrong: PR metadata appears earlier than planned, but the PR remains Draft and no merge/review-readiness claim is made.
+- Task 1 complete: `ffd887e5ac2731f8d87109f8b589347cb9c02b34`, CI #468 success; characterization tests passed before any production change. 2026-09-20T23:38:35.6195849Z No broken requirements found. 2026-09-20T23:38:42.6211851Z Ran 581 tests in 5.109s 2026-09-20T23:38:49.2815646Z 581 passed, 117 subtests passed in 6.14s 2026-09-20T23:38:58.9378582Z No known vulnerabilities found
