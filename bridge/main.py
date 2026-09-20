@@ -703,8 +703,33 @@ def main() -> int:
                             callback["_queued"] = True
                             callback_session = ensure_session(db, callback_chat_id, model)["session_id"]
                             callback_message_id = int(callback_message.get("message_id") or 0)
-                            job_id = enqueue_job(db, update_id, callback_chat_id, callback_session, callback_message_id, "callback", {"callback": callback, "model": model})
-                            submit_durable_chat_job(db, services.background, "callback", callback_chat_id, job_id, process_callback_job, services, callback_chat_id, callback)
+                            job_id = services.jobs.enqueue(
+                                db,
+                                update_id,
+                                callback_chat_id,
+                                callback_session,
+                                callback_message_id,
+                                "callback",
+                                {
+                                    "callback": callback,
+                                    "model": model,
+                                    "actor_id": sender,
+                                },
+                            )
+                            services.jobs.submit(
+                                db,
+                                job_id,
+                                _JobSubmission(
+                                    label="callback",
+                                    chat_id=callback_chat_id,
+                                    worker=process_callback_job,
+                                    args=(
+                                        services,
+                                        callback_chat_id,
+                                        callback,
+                                    ),
+                                ),
+                            )
                             answer_callback(token, str(callback.get("id", "")), "Queued")
                         complete_update(db, update_id, offset)
                     else:
@@ -720,8 +745,35 @@ def main() -> int:
                     if edited_sender in permitted and edited_chat_id and edited_text:
                         edited_message_id = int(edited_message.get("message_id") or 0)
                         edited_session_id = ensure_session(db, edited_chat_id, model)["session_id"]
-                        job_id = enqueue_job(db, update_id, edited_chat_id, edited_session_id, edited_message_id, "edit", {"text": str(edited_text)[:12000], "model": model, "actor_id": edited_sender})
-                        submit_durable_chat_job(db, services.background, "edit", edited_chat_id, job_id, process_edit_job, services, edited_chat_id, edited_message_id, str(edited_text)[:12000], None)
+                        job_id = services.jobs.enqueue(
+                            db,
+                            update_id,
+                            edited_chat_id,
+                            edited_session_id,
+                            edited_message_id,
+                            "edit",
+                            {
+                                "text": str(edited_text)[:12000],
+                                "model": model,
+                                "actor_id": edited_sender,
+                            },
+                        )
+                        services.jobs.submit(
+                            db,
+                            job_id,
+                            _JobSubmission(
+                                label="edit",
+                                chat_id=edited_chat_id,
+                                worker=process_edit_job,
+                                args=(
+                                    services,
+                                    edited_chat_id,
+                                    edited_message_id,
+                                    str(edited_text)[:12000],
+                                    None,
+                                ),
+                            ),
+                        )
                         services.telegram.send_text(token, edited_chat_id, "✏️ Edit queued; previous branch will be preserved until regeneration succeeds.")
                     complete_update(db, update_id, offset)
                     continue
@@ -745,8 +797,38 @@ def main() -> int:
                 if voice:
                     message_id = int(message.get("message_id"))
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "voice", {"voice": voice, "model": model, "resolve_active": True, "actor_id": sender})
-                    queued = submit_durable_chat_job(db, services.background, "voice", chat_id, job_id, process_voice_job, services, fields, chat_id, voice, message_id, None, None)
+                    job_id = services.jobs.enqueue(
+                        db,
+                        update_id,
+                        chat_id,
+                        queued_session_id,
+                        message_id,
+                        "voice",
+                        {
+                            "voice": voice,
+                            "model": model,
+                            "resolve_active": True,
+                            "actor_id": sender,
+                        },
+                    )
+                    queued = services.jobs.submit(
+                        db,
+                        job_id,
+                        _JobSubmission(
+                            label="voice",
+                            chat_id=chat_id,
+                            worker=process_voice_job,
+                            args=(
+                                services,
+                                fields,
+                                chat_id,
+                                voice,
+                                message_id,
+                                None,
+                                None,
+                            ),
+                        ),
+                    )
                     if queued:
                         services.telegram.send_text(token, chat_id, "🎙️ Voice queued for transcription.")
                     else:
@@ -757,24 +839,118 @@ def main() -> int:
                     largest = photos[-1]
                     message_id = int(message.get("message_id"))
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "image", {"file_id": str(largest.get("file_id", "")), "caption": caption, "file_size": int(largest.get("file_size") or 0), "model": model, "resolve_active": True, "actor_id": sender})
-                    queued = submit_durable_chat_job(db, services.background, "image", chat_id, job_id, process_image_job, services, chat_id, str(largest.get("file_id", "")), caption, int(largest.get("file_size") or 0), message_id, None, None)
+                    job_id = services.jobs.enqueue(
+                        db,
+                        update_id,
+                        chat_id,
+                        queued_session_id,
+                        message_id,
+                        "image",
+                        {
+                            "file_id": str(largest.get("file_id", "")),
+                            "caption": caption,
+                            "file_size": int(largest.get("file_size") or 0),
+                            "model": model,
+                            "resolve_active": True,
+                            "actor_id": sender,
+                        },
+                    )
+                    queued = services.jobs.submit(
+                        db,
+                        job_id,
+                        _JobSubmission(
+                            label="image",
+                            chat_id=chat_id,
+                            worker=process_image_job,
+                            args=(
+                                services,
+                                chat_id,
+                                str(largest.get("file_id", "")),
+                                caption,
+                                int(largest.get("file_size") or 0),
+                                message_id,
+                                None,
+                                None,
+                            ),
+                        ),
+                    )
                     services.telegram.send_text(token, chat_id, "🖼️ Image queued for analysis." if queued else "🖼️ Image saved for processing after restart.")
                     complete_update(db, update_id, offset)
                     continue
                 if document and Path(str(document.get("file_name") or "")).suffix.casefold() != ".png" and str(document.get("mime_type") or "").startswith("image/"):
                     message_id = int(message.get("message_id"))
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "image", {"file_id": str(document.get("file_id", "")), "caption": caption, "file_size": int(document.get("file_size") or 0), "model": model, "resolve_active": True, "actor_id": sender})
-                    queued = submit_durable_chat_job(db, services.background, "image", chat_id, job_id, process_image_job, services, chat_id, str(document.get("file_id", "")), caption, int(document.get("file_size") or 0), message_id, None, None)
+                    job_id = services.jobs.enqueue(
+                        db,
+                        update_id,
+                        chat_id,
+                        queued_session_id,
+                        message_id,
+                        "image",
+                        {
+                            "file_id": str(document.get("file_id", "")),
+                            "caption": caption,
+                            "file_size": int(document.get("file_size") or 0),
+                            "model": model,
+                            "resolve_active": True,
+                            "actor_id": sender,
+                        },
+                    )
+                    queued = services.jobs.submit(
+                        db,
+                        job_id,
+                        _JobSubmission(
+                            label="image",
+                            chat_id=chat_id,
+                            worker=process_image_job,
+                            args=(
+                                services,
+                                chat_id,
+                                str(document.get("file_id", "")),
+                                caption,
+                                int(document.get("file_size") or 0),
+                                message_id,
+                                None,
+                                None,
+                            ),
+                        ),
+                    )
                     services.telegram.send_text(token, chat_id, "🖼️ Image queued for analysis." if queued else "🖼️ Image saved for processing after restart.")
                     complete_update(db, update_id, offset)
                     continue
                 if document:
                     message_id = int(message.get("message_id"))
                     queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "document", {"document": document, "model": model, "resolve_active": True, "actor_id": sender})
-                    queued = submit_durable_chat_job(db, services.background, "document", chat_id, job_id, process_document_job, services, chat_id, document, message_id, None)
+                    job_id = services.jobs.enqueue(
+                        db,
+                        update_id,
+                        chat_id,
+                        queued_session_id,
+                        message_id,
+                        "document",
+                        {
+                            "document": document,
+                            "model": model,
+                            "resolve_active": True,
+                            "actor_id": sender,
+                        },
+                    )
+                    queued = services.jobs.submit(
+                        db,
+                        job_id,
+                        _JobSubmission(
+                            label="document",
+                            chat_id=chat_id,
+                            worker=process_document_job,
+                            args=(
+                                services,
+                                chat_id,
+                                document,
+                                message_id,
+                                None,
+                            ),
+                        ),
+                    )
                     services.telegram.send_text(token, chat_id, "📄 Document queued for character-card processing or Data Bank indexing." if queued else "📄 Document saved for processing after restart.")
                     complete_update(db, update_id, offset)
                     continue
@@ -793,16 +969,106 @@ def main() -> int:
                     complete_update(db, update_id, offset)
                     continue
                 if is_plain_start or is_long_running_command(str(text)):
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "command", {"text": str(text), "model": model, "resolve_active": True, "actor_id": sender})
-                    queued = submit_durable_chat_job(db, services.background, "command", chat_id, job_id, process_message_job, services, fields, chat_id, str(text), message_id, None, None)
+                    job_id = services.jobs.enqueue(
+                        db,
+                        update_id,
+                        chat_id,
+                        queued_session_id,
+                        message_id,
+                        "command",
+                        {
+                            "text": str(text),
+                            "model": model,
+                            "resolve_active": True,
+                            "actor_id": sender,
+                        },
+                    )
+                    queued = services.jobs.submit(
+                        db,
+                        job_id,
+                        _JobSubmission(
+                            label="command",
+                            chat_id=chat_id,
+                            worker=process_message_job,
+                            args=(
+                                services,
+                                fields,
+                                chat_id,
+                                str(text),
+                                message_id,
+                                None,
+                                None,
+                            ),
+                        ),
+                    )
                     services.telegram.send_text(token, chat_id, "⏳ Command queued." if queued else "⏳ Command saved for execution after restart.")
                 elif str(text).lstrip().startswith("/"):
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "command", {"text": str(text), "model": model, "resolve_active": True, "actor_id": sender})
-                    submit_durable_chat_job(db, services.background, "command", chat_id, job_id, process_message_job, services, fields, chat_id, str(text), message_id, None, None)
+                    job_id = services.jobs.enqueue(
+                        db,
+                        update_id,
+                        chat_id,
+                        queued_session_id,
+                        message_id,
+                        "command",
+                        {
+                            "text": str(text),
+                            "model": model,
+                            "resolve_active": True,
+                            "actor_id": sender,
+                        },
+                    )
+                    services.jobs.submit(
+                        db,
+                        job_id,
+                        _JobSubmission(
+                            label="command",
+                            chat_id=chat_id,
+                            worker=process_message_job,
+                            args=(
+                                services,
+                                fields,
+                                chat_id,
+                                str(text),
+                                message_id,
+                                None,
+                                None,
+                            ),
+                        ),
+                    )
                     services.telegram.send_text(token, chat_id, "⏳ Command queued.")
                 else:
-                    job_id = enqueue_job(db, update_id, chat_id, queued_session_id, message_id, "generation", {"text": str(text), "model": model, "resolve_active": True, "actor_id": sender})
-                    queued = submit_durable_chat_job(db, services.background, "generation", chat_id, job_id, process_message_job, services, fields, chat_id, str(text), message_id, None, None)
+                    job_id = services.jobs.enqueue(
+                        db,
+                        update_id,
+                        chat_id,
+                        queued_session_id,
+                        message_id,
+                        "generation",
+                        {
+                            "text": str(text),
+                            "model": model,
+                            "resolve_active": True,
+                            "actor_id": sender,
+                        },
+                    )
+                    queued = services.jobs.submit(
+                        db,
+                        job_id,
+                        _JobSubmission(
+                            label="generation",
+                            chat_id=chat_id,
+                            worker=process_message_job,
+                            args=(
+                                services,
+                                fields,
+                                chat_id,
+                                str(text),
+                                message_id,
+                                None,
+                                None,
+                            ),
+                        ),
+                    )
                     services.telegram.send_text(token, chat_id, "⏳ Message queued for generation." if queued else "⏳ Message saved for generation after restart.")
                 complete_update(db, update_id, offset)
         except urllib.error.HTTPError as exc:
