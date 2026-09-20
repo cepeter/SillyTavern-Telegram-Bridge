@@ -1,6 +1,8 @@
 import sqlite3
 import unittest
+from unittest.mock import patch
 
+import bridge.runtime as rt
 from bridge.sync_service import SyncService, SyncStatus
 
 
@@ -123,6 +125,37 @@ class SyncServiceTests(unittest.TestCase):
     def test_poll_delegates_to_injected_backend(self):
         self.service.poll(self.db)
         self.assertEqual(self.polls, [self.db])
+
+
+class SyncCompatibilityServiceTests(unittest.TestCase):
+    def test_compatibility_service_late_binds_final_poll_backend(self):
+        def final_poll(_db):
+            return None
+
+        with patch.object(
+            rt, "phase3_sync_poll", final_poll
+        ), patch.object(
+            rt, "sync_binding"
+        ) as binding, patch.object(
+            rt, "phase3_sync_now"
+        ) as sync_now, patch.object(
+            rt, "phase3_toggle_realtime"
+        ) as toggle, patch.object(
+            rt, "_phase3_disable"
+        ) as disable, patch.object(
+            rt, "phase3_api_configured", return_value=True
+        ):
+            service = rt.compatibility_sync_service()
+
+        self.assertIs(service.poll_backend, final_poll)
+        self.assertIs(service.load_binding, binding)
+        self.assertIs(service.sync_now_backend, sync_now)
+        self.assertIs(service.toggle_realtime_backend, toggle)
+        self.assertIs(service.disable_realtime, disable)
+
+    def test_resolve_sync_service_prefers_injected_service(self):
+        sentinel = object()
+        self.assertIs(rt.resolve_sync_service(sentinel), sentinel)
 
 
 if __name__ == "__main__":
