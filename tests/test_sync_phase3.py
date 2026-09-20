@@ -650,6 +650,32 @@ class SyncSnapshotOwnershipTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
+class SyncPollOwnershipTests(unittest.TestCase):
+    def test_sync_api_composes_poll_safety_adapter(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "sync_api.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "SyncPollSafetyAdapter as _SyncPollSafetyAdapter",
+            source,
+        )
+        self.assertIn(
+            "_SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(",
+            source,
+        )
+
+    def test_phase6e_transition_keeps_sync_safety_public_owner(self):
+        self.assertEqual(
+            Path(
+                rt.phase3_sync_poll.__code__.co_filename
+            ).name,
+            "sync_safety.py",
+        )
+
+
 class SyncWorkerInjectionTests(unittest.TestCase):
     class FakeStopEvent:
         def __init__(self, results):
