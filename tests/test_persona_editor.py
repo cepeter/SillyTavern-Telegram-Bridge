@@ -19,6 +19,12 @@ class FakePersonaService:
         }
         self.create_error = None
         self.update_error = None
+        self.delete_error = None
+        self.personas["other.png"] = {
+            "name": "Other",
+            "description": "Other description",
+            "sillytavern_avatar": "other.png",
+        }
 
     def get(self, persona_id):
         return self.personas.get(persona_id)
@@ -72,6 +78,45 @@ class FakePersonaService:
             "sillytavern_avatar": persona_id,
         }
         return persona_id
+
+    def select(
+        self,
+        db,
+        chat_id,
+        session_id,
+        persona_id,
+        *,
+        operation_id=None,
+    ):
+        self.calls.append(
+            (
+                "select",
+                db,
+                chat_id,
+                session_id,
+                persona_id,
+                operation_id,
+            )
+        )
+        return persona_id in self.personas
+
+    def disable(
+        self,
+        db,
+        chat_id,
+        session_id,
+        *,
+        operation_id=None,
+    ):
+        self.calls.append(
+            ("disable", db, chat_id, session_id, operation_id)
+        )
+
+    def delete_if_unused(self, db, persona_id):
+        self.calls.append(("delete_if_unused", db, persona_id))
+        if self.delete_error is not None:
+            raise self.delete_error
+        return self.personas.pop(persona_id, None) is not None
 
 
 class PersonaEditorTests(unittest.TestCase):
@@ -270,6 +315,129 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertIn("Original description", self.calls[-1][1]["text"])
         self.assertEqual(self.calls[-1][1]["parse_mode"], "HTML")
         self.assertIn("<pre>Original description</pre>", self.calls[-1][1]["text"])
+
+    def test_callback_select_uses_injected_persona_service(self):
+        fake = FakePersonaService()
+        token_value = rt.dynamic_callback_token(
+            "persona",
+            "other.png",
+            "chat",
+        )
+        answers = []
+        with patch.object(
+            rt,
+            "update_session",
+            side_effect=AssertionError("direct session mutation"),
+        ):
+            handled = rt.handle_persona_callback(
+                self.db,
+                "token",
+                {"id": "cb"},
+                lambda _t, _i, text: answers.append(text),
+                f"persona:{token_value}",
+                "chat",
+                {"message_id": 77},
+                self.session,
+                self.session["session_id"],
+                33,
+                persona_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(fake.calls[-1][0], "select")
+        self.assertEqual(fake.calls[-1][4:], ("other.png", 33))
+        self.assertEqual(answers, ["Persona selected"])
+
+    def test_callback_off_uses_injected_persona_service(self):
+        fake = FakePersonaService()
+        answers = []
+        with patch.object(
+            rt,
+            "update_session",
+            side_effect=AssertionError("direct session mutation"),
+        ):
+            handled = rt.handle_persona_callback(
+                self.db,
+                "token",
+                {"id": "cb"},
+                lambda _t, _i, text: answers.append(text),
+                "persona:off",
+                "chat",
+                {"message_id": 77},
+                self.session,
+                self.session["session_id"],
+                34,
+                persona_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(fake.calls[-1][0], "disable")
+        self.assertEqual(fake.calls[-1][-1], 34)
+        self.assertEqual(answers, ["Persona off"])
+
+    def test_callback_delete_uses_injected_persona_service(self):
+        fake = FakePersonaService()
+        token_value = rt.dynamic_callback_token(
+            "persona",
+            "other.png",
+            "chat",
+        )
+        answers = []
+        with patch.object(
+            rt,
+            "delete_native_persona",
+            side_effect=AssertionError("raw delete bypassed service"),
+        ):
+            handled = rt.handle_persona_callback(
+                self.db,
+                "token",
+                {"id": "cb"},
+                lambda _t, _i, text: answers.append(text),
+                f"personadeleteconfirm:{token_value}",
+                "chat",
+                {"message_id": 77},
+                self.session,
+                self.session["session_id"],
+                None,
+                persona_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            fake.calls[-1],
+            ("delete_if_unused", self.db, "other.png"),
+        )
+        self.assertEqual(answers, ["Deleted"])
+
+    def test_callback_delete_maps_reference_refusal_feedback(self):
+        fake = FakePersonaService()
+        fake.delete_error = ValueError(
+            "Persona is used by another session"
+        )
+        token_value = rt.dynamic_callback_token(
+            "persona",
+            "other.png",
+            "chat",
+        )
+        answers = []
+        handled = rt.handle_persona_callback(
+            self.db,
+            "token",
+            {"id": "cb"},
+            lambda _t, _i, text: answers.append(text),
+            f"personadeleteconfirm:{token_value}",
+            "chat",
+            {"message_id": 77},
+            self.session,
+            self.session["session_id"],
+            None,
+            persona_service=fake,
+        )
+        self.assertTrue(handled)
+        self.assertEqual(
+            answers,
+            ["Deletion refused: Persona is used by another session"],
+        )
 
     def test_delete_refuses_persona_referenced_by_another_chat(self):
         target = rt.upsert_native_persona("shared", "Shared", "Shared description")
