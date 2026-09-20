@@ -142,6 +142,12 @@ class RepositoryPrimitiveTests(unittest.TestCase):
                 created_at REAL NOT NULL,
                 updated_at REAL NOT NULL
             );
+            CREATE TABLE sessions(
+                chat_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                persona_id TEXT NOT NULL,
+                PRIMARY KEY(chat_id, session_id)
+            );
             """
         )
         self.db.commit()
@@ -203,6 +209,43 @@ class RepositoryPrimitiveTests(unittest.TestCase):
         self.assertFalse(accepted)
         row = repositories.load_scene_state_row(self.db, "chat", "session")
         self.assertEqual(row, ('{"v":10}', 10))
+
+    def test_count_persona_references_is_read_only(self):
+        self.db.execute(
+            "INSERT INTO sessions(chat_id,session_id,persona_id) VALUES(?,?,?)",
+            ("chat", "one", "native.png"),
+        )
+        self.db.commit()
+        traced = []
+        self.db.set_trace_callback(traced.append)
+        try:
+            self.assertEqual(
+                repositories.count_persona_references(
+                    self.db,
+                    "native.png",
+                ),
+                1,
+            )
+        finally:
+            self.db.set_trace_callback(None)
+        self.assertFalse(self.db.in_transaction)
+        self.assertFalse(
+            any(
+                sql.lstrip().upper().startswith(
+                    (
+                        "INSERT",
+                        "UPDATE",
+                        "DELETE",
+                        "REPLACE",
+                        "CREATE",
+                        "ALTER",
+                        "DROP",
+                    )
+                )
+                for sql in traced
+            ),
+            traced,
+        )
 
     def test_group_operation_claim_allows_retry_but_rejects_applied(self):
         self.assertTrue(

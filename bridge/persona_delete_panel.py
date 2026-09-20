@@ -1,5 +1,6 @@
-def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0) -> None:
-    personas = load_personas()
+def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service=None) -> None:
+    persona_service = resolve_persona_service(persona_service)
+    personas = persona_service.list()
     options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in personas.items() if persona_id != current_persona]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = [[{"text": "🗑️ " + label, "callback_data": "persona:delete:" + dynamic_callback_token("persona", persona_id, chat_id)}] for persona_id, label in page_options]

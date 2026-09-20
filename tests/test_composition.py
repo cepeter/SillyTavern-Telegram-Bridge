@@ -10,6 +10,7 @@ import bridge.runtime as rt
 
 from bridge.group_director_service import GroupDirectorService
 from bridge.memory_service import MemoryService
+from bridge.persona_service import PersonaService
 
 from bridge.composition import (
     BackgroundRuntime,
@@ -92,18 +93,21 @@ class CompositionConfigTests(unittest.TestCase):
             retain_session=lambda *_args, **_kwargs: None,
             purge_session_memory=lambda *_args, **_kwargs: 0,
         )
+        persona = object()
         services = build_bridge_services(
             config,
             db_factory=lambda: sqlite3.connect(":memory:"),
             telegram=telegram,
             background=background,
             memory=memory,
+            persona=persona,
         )
 
         self.assertIs(services.config, config)
         self.assertIs(services.telegram, telegram)
         self.assertIs(services.background, background)
         self.assertIs(services.memory, memory)
+        self.assertIs(services.persona, persona)
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
 
@@ -210,6 +214,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.sent = []
         self.global_sent = []
         self.memory_service = object()
+        self.persona_service = object()
 
         config = BridgeConfig(
             bot_token="injected-token",
@@ -233,6 +238,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 begin_shutdown=lambda: None,
             ),
             memory=self.memory_service,
+            persona=self.persona_service,
         )
 
     def tearDown(self):
@@ -312,6 +318,39 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertEqual(captured["api_key"], "injected-key")
         self.assertEqual(captured["model"], "injected::model")
         self.assertIs(captured["kwargs"]["services"], self.services)
+
+    def test_process_message_propagates_injected_persona_service(self):
+        captured = {}
+        db = self._db_factory()
+        try:
+            with patch.object(
+                rt,
+                "handle_pending_input",
+                side_effect=lambda *_args, **kwargs:
+                    captured.update(kwargs) or True,
+            ):
+                rt.process_message(
+                    db,
+                    "injected-token",
+                    "injected-key",
+                    "injected::model",
+                    {"name": "Mira"},
+                    "chat",
+                    "hello",
+                    70,
+                    services=self.services,
+                )
+        finally:
+            db.close()
+
+        self.assertIs(
+            captured["persona_service"],
+            self.persona_service,
+        )
+        self.assertIs(
+            captured["memory_service"],
+            self.memory_service,
+        )
 
     def test_edit_worker_propagates_injected_memory_service(self):
         captured = {}
@@ -455,6 +494,26 @@ class WorkerInjectionTests(unittest.TestCase):
             captured["memory_service"],
             self.memory_service,
         )
+
+    def test_callback_worker_propagates_services(self):
+        captured = {}
+        callback = {
+            "id": "callback",
+            "from": {"id": "100"},
+            "message": {"chat": {"id": "chat"}},
+        }
+        with patch.object(
+            rt,
+            "process_callback",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            rt.process_callback_job(
+                self.services,
+                "chat",
+                callback,
+            )
+
+        self.assertIs(captured["services"], self.services)
 
     def test_callback_failure_uses_injected_send_text(self):
         with patch.object(
@@ -801,6 +860,38 @@ class StartupCompositionTests(unittest.TestCase):
             MemoryService,
         )
 
+    def test_startup_builds_persona_service_from_final_runtime_collaborators(self):
+        with patch.object(
+            rt,
+            "load_personas",
+        ) as load_personas, patch.object(
+            rt,
+            "default_persona_id",
+        ) as default_persona, patch.object(
+            rt,
+            "upsert_native_persona",
+        ) as upsert_persona, patch.object(
+            rt,
+            "delete_native_persona",
+        ) as delete_persona, patch.object(
+            rt,
+            "update_session",
+        ) as update_session:
+            services = rt._build_startup_services(self.config)
+
+        self.assertIsInstance(services.persona, PersonaService)
+        self.assertIs(services.persona.load_personas, load_personas)
+        self.assertIs(
+            services.persona.load_default_persona,
+            default_persona,
+        )
+        self.assertIs(services.persona.upsert_persona, upsert_persona)
+        self.assertIs(services.persona.delete_persona, delete_persona)
+        self.assertIs(
+            services.persona.update_session_persona,
+            update_session,
+        )
+
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = rt.argparse.Namespace(check=True)
         with patch.object(
@@ -890,7 +981,7 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("get_services(", source)
         self.assertNotIn("set_services(", source)
 
-    def test_phase5_group_director_and_memory_are_the_only_extracted_services(self):
+    def test_phase5_extracted_services_stop_at_persona(self):
         root = Path(__file__).parents[1] / "bridge"
         source = "\n".join(
             path.read_text(encoding="utf-8")
@@ -898,8 +989,8 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         )
         self.assertIn("class GroupDirectorService", source)
         self.assertIn("class MemoryService", source)
+        self.assertIn("class PersonaService", source)
         for forbidden in (
-            "class PersonaService",
             "class SyncService",
             "class JobService",
         ):

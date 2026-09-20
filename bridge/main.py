@@ -18,6 +18,12 @@ from bridge.group_director_service import (
 from bridge.memory_service import (
     MemoryService as _MemoryService,
 )
+from bridge.persona_service import (
+    PersonaService as _PersonaService,
+)
+from bridge.repositories import (
+    count_persona_references as _count_persona_references,
+)
 
 _SHUTDOWN_EVENT = threading.Event()
 
@@ -215,7 +221,13 @@ def process_callback_job(
             if job_id is not None and operation_was_applied(db, job_id):
                 finish_job(db, job_id, "done")
                 return
-            process_callback(db, token, callback, operation_id=job_id)
+            process_callback(
+                db,
+                token,
+                callback,
+                operation_id=job_id,
+                services=services,
+            )
             if job_id is not None:
                 def write_callback_operation():
                     record_operation(db, job_id, "callback")
@@ -492,6 +504,14 @@ def _build_startup_services(
         retain_session=retain_session_memory,
         purge_session_memory=purge_hindsight_session,
     )
+    persona = _PersonaService(
+        load_personas=load_personas,
+        load_default_persona=default_persona_id,
+        upsert_persona=upsert_native_persona,
+        delete_persona=delete_native_persona,
+        update_session_persona=update_session,
+        persona_reference_count=_count_persona_references,
+    )
     return _build_bridge_services_value(
         config,
         db_factory=_partial(db_connect, config.db_file),
@@ -506,6 +526,7 @@ def _build_startup_services(
         ),
         group_director=group_director,
         memory=memory,
+        persona=persona,
     )
 
 

@@ -150,6 +150,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     session_id = session["session_id"]
     set_panel_session_context(session_id)
     memory_service = getattr(services, "memory", None) if services is not None else None
+    persona_service = getattr(services, "persona", None) if services is not None else None
     if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
         committed = db.execute("SELECT rowid,content FROM messages WHERE chat_id=? AND session_id=? AND role='assistant' ORDER BY rowid DESC LIMIT 1", (chat_id, session_id)).fetchone()
         if committed:
@@ -171,6 +172,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         fields=fields,
         operation_id=operation_id,
         memory_service=memory_service,
+        persona_service=persona_service,
     ):
         return
     if command == "/session":

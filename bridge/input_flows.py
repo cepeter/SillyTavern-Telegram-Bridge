@@ -164,14 +164,15 @@ def _handle_note_input(db, token: str, chat_id: str, session: dict, stripped: st
 PERSONA_EDIT_LOCK = threading.RLock()
 
 
-def _persona_input_prompt(mode: str, current_name: str = "", persona_id: str = "") -> str:
+def _persona_input_prompt(mode: str, current_name: str = "", persona_id: str = "", *, persona_service=None) -> str:
     """Return the user-facing prompt for creating or editing a persona."""
+    persona_service = resolve_persona_service(persona_service)
     if mode == "create":
         return ("Create persona\n\nSend one line in this format:\n"
                 "id | display name | persona description\n\n"
                 "Use 1–64 letters, numbers, hyphens, or underscores for id. "
                 "Description: 1–4,000 characters. Send /cancel to cancel.")
-    persona = get_persona(persona_id) or {}
+    persona = persona_service.get(persona_id) or {}
     description = str(persona.get("description") or "")
     if len(description) > 1600:
         description = description[:1600] + "…"
@@ -188,9 +189,10 @@ def _persona_input_prompt(mode: str, current_name: str = "", persona_id: str = "
             "Send: display name | new description\nSend /cancel to cancel.")
 
 
-def send_persona_edit_menu(token: str, chat_id: str, persona_id: str, message_id: int | None = None) -> None:
+def send_persona_edit_menu(token: str, chat_id: str, persona_id: str, message_id: int | None = None, *, persona_service=None) -> None:
     """Show current persona information before selecting an edit field."""
-    persona = get_persona(persona_id)
+    persona_service = resolve_persona_service(persona_service)
+    persona = persona_service.get(persona_id)
     if not persona:
         telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": "Current persona is no longer available.", "reply_markup": {"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "persona:menu"}, {"text": "❌ Close", "callback_data": "persona:cancel"}]]}})
         return
@@ -214,35 +216,51 @@ def send_persona_edit_menu(token: str, chat_id: str, persona_id: str, message_id
     telegram_request(token, "editMessageText" if message_id else "sendMessage", payload)
 
 
-def start_persona_input(db, token: str, chat_id: str, session_id: str, mode: str, persona_id: str, callback: dict) -> None:
+def start_persona_input(db, token: str, chat_id: str, session_id: str, mode: str, persona_id: str, callback: dict, *, persona_service=None) -> None:
     """Close the persona panel and start a scoped create/edit text input."""
+    persona_service = resolve_persona_service(persona_service)
     state = {"session_id": session_id, "mode": mode, "persona_id": persona_id, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
     meta_key = f"persona_input:{chat_id}"
     discard_panel_binding(db, chat_id, (callback.get("message") or {}).get("message_id"))
     close_panel_message(token, chat_id, callback)
-    state["prompt_message_ids"] = send_text(token, chat_id, _persona_input_prompt(mode, persona_name(persona_id), persona_id))
+    state["prompt_message_ids"] = send_text(
+        token,
+        chat_id,
+        _persona_input_prompt(
+            mode,
+            persona_service.name(persona_id),
+            persona_id,
+            persona_service=persona_service,
+        ),
+    )
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
 
 
-def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None) -> bool:
-    """Validate and persist one Persona directly in native SillyTavern."""
+def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None, *, persona_service=None) -> bool:
+    """Validate Persona input and delegate lifecycle changes to PersonaService."""
+    persona_service = resolve_persona_service(persona_service)
     meta_key = f"persona_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
-        send_persona_menu(token, chat_id, session.get("persona_id") or "")
+        send_persona_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            persona_service=persona_service,
+        )
         return True
     mode = str(state.get("mode") or "")
     persona_id = str(state.get("persona_id") or "")
-    current = get_persona(persona_id) if persona_id else None
+    current = persona_service.get(persona_id) if persona_id else None
     if mode == "create":
         parts = [part.strip() for part in stripped.split("|", 2)]
         if len(parts) != 3 or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", parts[0]):
             send_pending_input_message(db, token, chat_id, meta_key, state, "Use: id | display name | persona description. Try again or send /cancel.")
             return True
         requested_id, name, description = parts
-        if requested_id in load_personas() or not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
+        if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
             send_pending_input_message(db, token, chat_id, meta_key, state, "Persona ID must be new; name 1–120 characters; description 1–4,000 characters. Try again or send /cancel.")
             return True
         target_id = requested_id
@@ -263,23 +281,65 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
         target_id = persona_id
     else:
         _cancel_pending(db, token, chat_id, meta_key, state)
-        send_persona_menu(token, chat_id, session.get("persona_id") or "")
+        send_persona_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            persona_service=persona_service,
+        )
         return True
     try:
-        native_avatar = upsert_native_persona(target_id, name, description)
+        if mode == "create":
+            native_avatar = persona_service.create_and_select(
+                db,
+                chat_id,
+                session["session_id"],
+                target_id,
+                name,
+                description,
+                operation_id=operation_id,
+            )
+        else:
+            native_avatar = persona_service.update(
+                target_id,
+                name,
+                description,
+            )
+    except ValueError as exc:
+        if mode == "create" and (
+            "already exists" in str(exc)
+            or "Persona ID" in str(exc)
+            or "Persona name" in str(exc)
+            or "Persona description" in str(exc)
+        ):
+            send_pending_input_message(
+                db,
+                token,
+                chat_id,
+                meta_key,
+                state,
+                "Persona ID must be new; name 1–120 characters; description 1–4,000 characters. Try again or send /cancel.",
+            )
+            return True
+        logging.warning("Native SillyTavern Persona save failed", exc_info=True)
+        send_pending_input_message(db, token, chat_id, meta_key, state, f"Native Persona could not be saved: {exc}. Try again or send /cancel.")
+        return True
     except Exception as exc:
         logging.warning("Native SillyTavern Persona save failed", exc_info=True)
         send_pending_input_message(db, token, chat_id, meta_key, state, f"Native Persona could not be saved: {exc}. Try again or send /cancel.")
         return True
-    if mode == "create":
-        update_session(db, chat_id, session["session_id"], persona_id=native_avatar, operation_id=operation_id, operation_kind="persona_create")
     _cancel_pending(db, token, chat_id, meta_key, state)
-    send_text(token, chat_id, f"Persona {'created and selected' if mode == 'create' else 'updated'}: {persona_name(native_avatar)}")
-    send_persona_menu(token, chat_id, native_avatar if mode == "create" else session.get("persona_id") or "")
+    send_text(token, chat_id, f"Persona {'created and selected' if mode == 'create' else 'updated'}: {persona_service.name(native_avatar)}")
+    send_persona_menu(
+        token,
+        chat_id,
+        native_avatar if mode == "create" else session.get("persona_id") or "",
+        persona_service=persona_service,
+    )
     return True
 
 
-def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service=None) -> bool:
+def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service=None, persona_service=None) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
     world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
@@ -308,32 +368,56 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
         return _handle_stt_input(db, token, chat_id, stripped, stt)
     persona = _pending_state(db, f"persona_input:{chat_id}", session_id, token, chat_id)
     if persona:
-        return _handle_persona_input(db, token, chat_id, session, stripped, persona, operation_id)
+        return _handle_persona_input(
+            db,
+            token,
+            chat_id,
+            session,
+            stripped,
+            persona,
+            operation_id,
+            persona_service=persona_service,
+        )
     note = _pending_state(db, f"note_input:{chat_id}", session_id, token, chat_id)
     if note:
         return _handle_note_input(db, token, chat_id, session, stripped, note, operation_id)
     return False
 
 
-def send_persona_delete_confirm(token: str, chat_id: str, persona_id: str, message_id: int | None = None) -> None:
+def send_persona_delete_confirm(token: str, chat_id: str, persona_id: str, message_id: int | None = None, *, persona_service=None) -> None:
+    persona_service = resolve_persona_service(persona_service)
     token_value = dynamic_callback_token("persona", persona_id, chat_id)
-    payload = {"chat_id": chat_id, "text": f"Delete Persona '{persona_name(persona_id)}'? Native Persona metadata will be removed; the avatar file will be preserved. This cannot be undone from the bridge.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "personadeleteconfirm:" + token_value}], [{"text": "❌ Cancel", "callback_data": "persona:menu"}]]}}
+    payload = {"chat_id": chat_id, "text": f"Delete Persona '{persona_service.name(persona_id)}'? Native Persona metadata will be removed; the avatar file will be preserved. This cannot be undone from the bridge.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "personadeleteconfirm:" + token_value}], [{"text": "❌ Cancel", "callback_data": "persona:menu"}]]}}
     send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
-def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, persona_service=None):
     """Handle persona selection, review, field editing, disable, and deletion callbacks."""
+    persona_service = resolve_persona_service(persona_service)
     message_id = message.get("message_id")
     if data.startswith("persona:delete_page:"):
         page = max(0, int(data.rsplit(":", 1)[1]))
-        send_persona_delete_menu(token, chat_id, session.get("persona_id") or "", message_id, page)
+        send_persona_delete_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            message_id,
+            page,
+            persona_service=persona_service,
+        )
         return True
     if data.startswith("persona:delete:"):
         target = resolve_dynamic_callback_token(data.split(":", 2)[2], "persona", chat_id) or ""
         if not target or target == session.get("persona_id"):
             answer_callback(token, str(callback.get("id", "")), "Cannot delete the current Persona")
             return True
-        send_persona_delete_confirm(token, chat_id, target, message_id)
+        send_persona_delete_confirm(
+            token,
+            chat_id,
+            target,
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if data.startswith("personadeleteconfirm:"):
         persona_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "persona", chat_id) or ""
@@ -343,18 +427,27 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         if persona_id == session.get("persona_id"):
             answer_callback(token, str(callback.get("id", "")), "Disable or switch the current Persona first")
             return True
-        references = db.execute("SELECT COUNT(*) FROM sessions WHERE persona_id=?", (persona_id,)).fetchone()[0]
-        if references:
-            answer_callback(token, str(callback.get("id", "")), "Deletion refused: Persona is used by another session")
-            return True
         try:
-            deleted = delete_native_persona(persona_id)
+            deleted = persona_service.delete_if_unused(db, persona_id)
+        except ValueError as exc:
+            if "used by another session" in str(exc):
+                answer_callback(token, str(callback.get("id", "")), "Deletion refused: Persona is used by another session")
+                return True
+            logging.warning("Native Persona deletion failed", exc_info=True)
+            answer_callback(token, str(callback.get("id", "")), "Persona deletion failed")
+            return True
         except Exception:
             logging.warning("Native Persona deletion failed", exc_info=True)
             answer_callback(token, str(callback.get("id", "")), "Persona deletion failed")
             return True
         answer_callback(token, str(callback.get("id", "")), "Deleted" if deleted else "Persona not found")
-        send_persona_menu(token, chat_id, session.get("persona_id") or "", message_id)
+        send_persona_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if not data.startswith("persona:"):
         return False
@@ -365,47 +458,91 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         value = resolve_dynamic_callback_token(value, "persona", chat_id) or ""
     if value.startswith("page:"):
         answer_callback(token, str(callback.get("id", "")), "Page")
-        send_persona_menu(token, chat_id, session["persona_id"], message_id, int(value.split(":", 1)[1]))
+        send_persona_menu(
+            token,
+            chat_id,
+            session["persona_id"],
+            message_id,
+            int(value.split(":", 1)[1]),
+            persona_service=persona_service,
+        )
         return True
     if value == "menu":
         answer_callback(token, str(callback.get("id", "")), "Personas")
-        send_persona_menu(token, chat_id, session.get("persona_id") or "", message_id)
+        send_persona_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if value == "edit":
         persona_id = session.get("persona_id") or ""
-        if not get_persona(persona_id):
+        if not persona_service.get(persona_id):
             answer_callback(token, str(callback.get("id", "")), "Current persona not found")
             return True
         answer_callback(token, str(callback.get("id", "")), "Review persona")
-        send_persona_edit_menu(token, chat_id, persona_id, message_id)
+        send_persona_edit_menu(
+            token,
+            chat_id,
+            persona_id,
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if value in {"create", "edit_name", "edit_description", "edit_all"}:
         persona_id = session.get("persona_id") or "" if value != "create" else ""
-        if value != "create" and not get_persona(persona_id):
+        if value != "create" and not persona_service.get(persona_id):
             answer_callback(token, str(callback.get("id", "")), "Current persona not found")
             return True
         answer_callback(token, str(callback.get("id", "")), "Enter persona text")
-        start_persona_input(db, token, chat_id, session_id, value, persona_id, callback)
+        start_persona_input(
+            db,
+            token,
+            chat_id,
+            session_id,
+            value,
+            persona_id,
+            callback,
+            persona_service=persona_service,
+        )
         return True
     if value == "delete":
         answer_callback(token, str(callback.get("id", "")), "Choose an inactive Persona")
-        send_persona_delete_menu(token, chat_id, session.get("persona_id") or "", message_id)
+        send_persona_delete_menu(
+            token,
+            chat_id,
+            session.get("persona_id") or "",
+            message_id,
+            persona_service=persona_service,
+        )
         return True
     if value == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
         remove_inline_keyboard(token, callback)
         return True
     if value == "off":
-        update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="persona_select", persona_id="")
+        persona_service.disable(
+            db,
+            chat_id,
+            session_id,
+            operation_id=operation_id,
+        )
         answer_callback(token, str(callback.get("id", "")), "Persona off")
         remove_inline_keyboard(token, callback)
         send_text(token, chat_id, "Persona disabled for this session.")
         return True
-    if get_persona(value):
-        update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="persona_select", persona_id=value)
+    if persona_service.select(
+        db,
+        chat_id,
+        session_id,
+        value,
+        operation_id=operation_id,
+    ):
         answer_callback(token, str(callback.get("id", "")), "Persona selected")
         remove_inline_keyboard(token, callback)
-        send_text(token, chat_id, f"Persona selected: {persona_name(value)}")
+        send_text(token, chat_id, f"Persona selected: {persona_service.name(value)}")
         return True
     answer_callback(token, str(callback.get("id", "")), "Persona not found")
     return True

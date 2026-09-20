@@ -214,7 +214,7 @@ def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command
     return _handle_voice_panels(db, token, chat_id, command, session)
 
 
-def _handle_entities(db, token, model, fields, chat_id, command, session, session_id, current_model, current_persona):
+def _handle_entities(db, token, model, fields, chat_id, command, session, session_id, current_model, current_persona, services=None):
     """Handle character, session, persona, world, prompt, and provider panels."""
     if command == "/systemprompt":
         send_system_prompt_menu(token, chat_id, session.get("system_prompt") or "")
@@ -232,7 +232,15 @@ def _handle_entities(db, token, model, fields, chat_id, command, session, sessio
         send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id)
         return True
     if command == "/persona" or command.startswith("/persona "):
-        send_persona_menu(token, chat_id, current_persona)
+        send_persona_menu(
+            token,
+            chat_id,
+            current_persona,
+            persona_service=(
+                getattr(services, "persona", None)
+                if services is not None else None
+            ),
+        )
         return True
     if command == "/world" or command.startswith("/world "):
         send_world_menu(token, chat_id, session["world_file"])
@@ -334,7 +342,19 @@ def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, c
         return True
     if _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id):
         return True
-    if _handle_entities(db, token, model, fields, chat_id, command, session, session_id, current_model, current_persona):
+    if _handle_entities(
+        db,
+        token,
+        model,
+        fields,
+        chat_id,
+        command,
+        session,
+        session_id,
+        current_model,
+        current_persona,
+        services=services,
+    ):
         return True
     if _handle_chat(
         db,

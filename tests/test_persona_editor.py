@@ -2,8 +2,124 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import bridge.runtime as rt
+
+
+class FakePersonaService:
+    def __init__(self):
+        self.calls = []
+        self.personas = {
+            "bridge-user.png": {
+                "name": "Test User",
+                "description": "Original description",
+                "sillytavern_avatar": "bridge-user.png",
+            }
+        }
+        self.create_error = None
+        self.update_error = None
+        self.delete_error = None
+        self.personas["other.png"] = {
+            "name": "Other",
+            "description": "Other description",
+            "sillytavern_avatar": "other.png",
+        }
+
+    def list(self):
+        return dict(self.personas)
+
+    def get(self, persona_id):
+        return self.personas.get(persona_id)
+
+    def name(self, persona_id):
+        persona = self.get(persona_id)
+        return str(persona.get("name") or "") if persona else ""
+
+    def create_and_select(
+        self,
+        db,
+        chat_id,
+        session_id,
+        logical_id,
+        name,
+        description,
+        *,
+        operation_id=None,
+    ):
+        self.calls.append(
+            (
+                "create_and_select",
+                db,
+                chat_id,
+                session_id,
+                logical_id,
+                name,
+                description,
+                operation_id,
+            )
+        )
+        if self.create_error is not None:
+            raise self.create_error
+        avatar = f"bridge-{logical_id}.png"
+        self.personas[avatar] = {
+            "name": name,
+            "description": description,
+            "sillytavern_avatar": avatar,
+        }
+        return avatar
+
+    def update(self, persona_id, name, description):
+        self.calls.append(
+            ("update", persona_id, name, description)
+        )
+        if self.update_error is not None:
+            raise self.update_error
+        self.personas[persona_id] = {
+            "name": name,
+            "description": description,
+            "sillytavern_avatar": persona_id,
+        }
+        return persona_id
+
+    def select(
+        self,
+        db,
+        chat_id,
+        session_id,
+        persona_id,
+        *,
+        operation_id=None,
+    ):
+        self.calls.append(
+            (
+                "select",
+                db,
+                chat_id,
+                session_id,
+                persona_id,
+                operation_id,
+            )
+        )
+        return persona_id in self.personas
+
+    def disable(
+        self,
+        db,
+        chat_id,
+        session_id,
+        *,
+        operation_id=None,
+    ):
+        self.calls.append(
+            ("disable", db, chat_id, session_id, operation_id)
+        )
+
+    def delete_if_unused(self, db, persona_id):
+        self.calls.append(("delete_if_unused", db, persona_id))
+        if self.delete_error is not None:
+            raise self.delete_error
+        return self.personas.pop(persona_id, None) is not None
 
 
 class PersonaEditorTests(unittest.TestCase):
@@ -62,6 +178,206 @@ class PersonaEditorTests(unittest.TestCase):
         rt.start_persona_input(self.db, "token", "chat", self.session["session_id"], mode, persona_id, callback)
         return json.loads(rt.get_meta(self.db, "persona_input:chat"))
 
+    def test_pending_create_uses_injected_persona_service(self):
+        self._start("create")
+        fake = FakePersonaService()
+        with patch.object(
+            rt,
+            "upsert_native_persona",
+            side_effect=AssertionError("raw upsert bypassed service"),
+        ):
+            handled = rt.handle_pending_input(
+                self.db,
+                "token",
+                "chat",
+                self.session,
+                "writer | Writer | I write concise notes.",
+                operation_id=12,
+                persona_service=fake,
+            )
+
+        self.assertTrue(handled)
+        call = fake.calls[-1]
+        self.assertEqual(call[0], "create_and_select")
+        self.assertIs(call[1], self.db)
+        self.assertEqual(
+            call[2:],
+            (
+                "chat",
+                self.session["session_id"],
+                "writer",
+                "Writer",
+                "I write concise notes.",
+                12,
+            ),
+        )
+
+    def test_pending_edit_uses_injected_persona_service(self):
+        self._start("edit", "bridge-user.png")
+        fake = FakePersonaService()
+        with patch.object(
+            rt,
+            "upsert_native_persona",
+            side_effect=AssertionError("raw upsert bypassed service"),
+        ):
+            handled = rt.handle_pending_input(
+                self.db,
+                "token",
+                "chat",
+                self.session,
+                "Updated Name | Updated description",
+                persona_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            fake.calls[-1],
+            (
+                "update",
+                "bridge-user.png",
+                "Updated Name",
+                "Updated description",
+            ),
+        )
+
+    def test_invalid_pending_create_does_not_call_injected_service(self):
+        state = self._start("create")
+        fake = FakePersonaService()
+        self.assertTrue(
+            rt.handle_pending_input(
+                self.db,
+                "token",
+                "chat",
+                self.session,
+                "bad input",
+                persona_service=fake,
+            )
+        )
+        self.assertEqual(fake.calls, [])
+        current = json.loads(rt.get_meta(self.db, "persona_input:chat"))
+        self.assertEqual(current["mode"], "create")
+        self.assertEqual(
+            current["prompt_message_ids"],
+            state["prompt_message_ids"] + [501],
+        )
+
+    def test_injected_service_failure_keeps_pending_state(self):
+        self._start("create")
+        fake = FakePersonaService()
+        fake.create_error = RuntimeError("offline")
+        self.assertTrue(
+            rt.handle_pending_input(
+                self.db,
+                "token",
+                "chat",
+                self.session,
+                "writer | Writer | Description",
+                persona_service=fake,
+            )
+        )
+        self.assertTrue(
+            json.loads(rt.get_meta(self.db, "persona_input:chat"))
+        )
+
+    def test_persona_menu_reads_from_injected_service(self):
+        fake = FakePersonaService()
+        fake.personas = {
+            "injected.png": {
+                "name": "Injected Persona",
+                "description": "Injected",
+                "sillytavern_avatar": "injected.png",
+            }
+        }
+        rt.send_persona_menu(
+            "token",
+            "chat",
+            "injected.png",
+            persona_service=fake,
+        )
+        payload = self.calls[-1][1]
+        labels = [
+            button["text"]
+            for row in payload["reply_markup"]["inline_keyboard"]
+            for button in row
+        ]
+        self.assertIn("✅ Injected Persona", labels)
+        self.assertIn("Current Persona: Injected Persona", payload["text"])
+
+    def test_persona_edit_menu_reads_from_injected_service(self):
+        fake = FakePersonaService()
+        fake.personas = {
+            "injected.png": {
+                "name": "Injected Persona",
+                "description": "Injected description",
+                "sillytavern_avatar": "injected.png",
+            }
+        }
+        rt.send_persona_edit_menu(
+            "token",
+            "chat",
+            "injected.png",
+            77,
+            persona_service=fake,
+        )
+        self.assertIn("Injected Persona", self.calls[-1][1]["text"])
+        self.assertIn(
+            "Injected description",
+            self.calls[-1][1]["text"],
+        )
+
+    def test_persona_delete_menu_reads_from_injected_service(self):
+        fake = FakePersonaService()
+        fake.personas = {
+            "current.png": {
+                "name": "Current",
+                "description": "Current",
+                "sillytavern_avatar": "current.png",
+            },
+            "injected.png": {
+                "name": "Injected Persona",
+                "description": "Injected",
+                "sillytavern_avatar": "injected.png",
+            },
+        }
+        rt.send_persona_delete_menu(
+            "token",
+            "chat",
+            "current.png",
+            persona_service=fake,
+        )
+        labels = [
+            button["text"]
+            for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"]
+            for button in row
+        ]
+        self.assertIn("🗑️ Injected Persona", labels)
+        self.assertNotIn("🗑️ Current", labels)
+
+    def test_persona_command_route_forwards_injected_service(self):
+        fake = FakePersonaService()
+        services = type("Services", (), {"persona": fake})()
+        captured = {}
+        with patch.object(
+            rt,
+            "send_persona_menu",
+            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+        ):
+            handled = rt._handle_entities(
+                self.db,
+                "token",
+                "provider/model",
+                {},
+                "chat",
+                "/persona",
+                self.session,
+                self.session["session_id"],
+                "provider/model",
+                self.session.get("persona_id") or "",
+                services=services,
+            )
+        self.assertTrue(handled)
+        self.assertIs(captured["persona_service"], fake)
+
     def test_native_catalog_loads_and_create_selects_avatar(self):
         self._start("create")
         self.assertTrue(rt.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes."))
@@ -101,6 +417,129 @@ class PersonaEditorTests(unittest.TestCase):
         self.assertIn("Original description", self.calls[-1][1]["text"])
         self.assertEqual(self.calls[-1][1]["parse_mode"], "HTML")
         self.assertIn("<pre>Original description</pre>", self.calls[-1][1]["text"])
+
+    def test_callback_select_uses_injected_persona_service(self):
+        fake = FakePersonaService()
+        token_value = rt.dynamic_callback_token(
+            "persona",
+            "other.png",
+            "chat",
+        )
+        answers = []
+        with patch.object(
+            rt,
+            "update_session",
+            side_effect=AssertionError("direct session mutation"),
+        ):
+            handled = rt.handle_persona_callback(
+                self.db,
+                "token",
+                {"id": "cb"},
+                lambda _t, _i, text: answers.append(text),
+                f"persona:{token_value}",
+                "chat",
+                {"message_id": 77},
+                self.session,
+                self.session["session_id"],
+                33,
+                persona_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(fake.calls[-1][0], "select")
+        self.assertEqual(fake.calls[-1][4:], ("other.png", 33))
+        self.assertEqual(answers, ["Persona selected"])
+
+    def test_callback_off_uses_injected_persona_service(self):
+        fake = FakePersonaService()
+        answers = []
+        with patch.object(
+            rt,
+            "update_session",
+            side_effect=AssertionError("direct session mutation"),
+        ):
+            handled = rt.handle_persona_callback(
+                self.db,
+                "token",
+                {"id": "cb"},
+                lambda _t, _i, text: answers.append(text),
+                "persona:off",
+                "chat",
+                {"message_id": 77},
+                self.session,
+                self.session["session_id"],
+                34,
+                persona_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(fake.calls[-1][0], "disable")
+        self.assertEqual(fake.calls[-1][-1], 34)
+        self.assertEqual(answers, ["Persona off"])
+
+    def test_callback_delete_uses_injected_persona_service(self):
+        fake = FakePersonaService()
+        token_value = rt.dynamic_callback_token(
+            "persona",
+            "other.png",
+            "chat",
+        )
+        answers = []
+        with patch.object(
+            rt,
+            "delete_native_persona",
+            side_effect=AssertionError("raw delete bypassed service"),
+        ):
+            handled = rt.handle_persona_callback(
+                self.db,
+                "token",
+                {"id": "cb"},
+                lambda _t, _i, text: answers.append(text),
+                f"personadeleteconfirm:{token_value}",
+                "chat",
+                {"message_id": 77},
+                self.session,
+                self.session["session_id"],
+                None,
+                persona_service=fake,
+            )
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            fake.calls[-1],
+            ("delete_if_unused", self.db, "other.png"),
+        )
+        self.assertEqual(answers, ["Deleted"])
+
+    def test_callback_delete_maps_reference_refusal_feedback(self):
+        fake = FakePersonaService()
+        fake.delete_error = ValueError(
+            "Persona is used by another session"
+        )
+        token_value = rt.dynamic_callback_token(
+            "persona",
+            "other.png",
+            "chat",
+        )
+        answers = []
+        handled = rt.handle_persona_callback(
+            self.db,
+            "token",
+            {"id": "cb"},
+            lambda _t, _i, text: answers.append(text),
+            f"personadeleteconfirm:{token_value}",
+            "chat",
+            {"message_id": 77},
+            self.session,
+            self.session["session_id"],
+            None,
+            persona_service=fake,
+        )
+        self.assertTrue(handled)
+        self.assertEqual(
+            answers,
+            ["Deletion refused: Persona is used by another session"],
+        )
 
     def test_delete_refuses_persona_referenced_by_another_chat(self):
         target = rt.upsert_native_persona("shared", "Shared", "Shared description")
