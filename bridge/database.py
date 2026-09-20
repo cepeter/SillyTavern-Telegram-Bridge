@@ -1,6 +1,9 @@
 from contextlib import contextmanager as _contextmanager
 
-from bridge.scheduler_safety import (\n    DatabaseConnectionGate as _DatabaseConnectionGate,\n)\n
+from bridge.scheduler_safety import (
+    DatabaseConnectionGate as _DatabaseConnectionGate,
+)
+
 _DB_WRITE_LOCK = globals().get("_DB_WRITE_LOCK") or threading.RLock()
 _WRITE_SQL_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
 _DB_PRIMARY_CACHE_KIB = 64000
