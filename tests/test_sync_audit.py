@@ -74,6 +74,29 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self.assertTrue(lock.acquire(blocking=False))
         lock.release()
 
+    def test_direct_poll_adapter_uses_final_runtime_sync_now(self):
+        self._binding()
+        calls = []
+
+        original = rt.phase3_sync_now
+        rt.phase3_sync_now = (
+            lambda _db, chat_id, session_id:
+            calls.append(
+                (chat_id, session_id)
+            )
+        )
+        try:
+            rt._SYNC_POLL_SAFETY.poll(
+                self.db,
+            )
+        finally:
+            rt.phase3_sync_now = original
+
+        self.assertEqual(
+            calls,
+            [("chat", "session")],
+        )
+
     def test_phase3_realtime_sync_skips_chat_with_active_job_lock(self):
         self._binding()
         calls = []
