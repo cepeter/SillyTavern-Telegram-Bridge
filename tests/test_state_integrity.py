@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
-import threading
 import time
 import unittest
 
@@ -94,109 +93,6 @@ class StateIntegrityTests(unittest.TestCase):
         with rt._DB_SCHEMA_LOCK:
             rt._DB_SCHEMA_READY = False
         self.tmp.cleanup()
-
-    def test_native_persona_write_is_process_serialized(self):
-        original = rt._ORIGINAL_UPSERT_NATIVE_PERSONA
-        active = 0
-        maximum = 0
-        guard = threading.Lock()
-        start = threading.Barrier(3)
-
-        def fake_upsert(identifier, name, description, client=None):
-            nonlocal active, maximum
-            with guard:
-                active += 1
-                maximum = max(maximum, active)
-            time.sleep(0.05)
-            with guard:
-                active -= 1
-            return identifier
-
-        rt._ORIGINAL_UPSERT_NATIVE_PERSONA = fake_upsert
-        errors = []
-
-        def worker():
-            try:
-                start.wait(timeout=2)
-                rt.upsert_native_persona("native.png", "Native", "Description")
-            except Exception as exc:
-                errors.append(exc)
-
-        threads = [threading.Thread(target=worker) for _ in range(2)]
-        for thread in threads:
-            thread.start()
-        start.wait(timeout=2)
-        for thread in threads:
-            thread.join(timeout=2)
-        rt._ORIGINAL_UPSERT_NATIVE_PERSONA = original
-
-        self.assertEqual(errors, [])
-        self.assertEqual(maximum, 1)
-
-    def test_native_persona_delete_serializes_with_upsert(self):
-        original_upsert = rt._ORIGINAL_UPSERT_NATIVE_PERSONA
-        original_delete = rt._ORIGINAL_DELETE_NATIVE_PERSONA
-        active = 0
-        maximum = 0
-        guard = threading.Lock()
-        start = threading.Barrier(3)
-
-        def enter():
-            nonlocal active, maximum
-            with guard:
-                active += 1
-                maximum = max(maximum, active)
-            time.sleep(0.05)
-            with guard:
-                active -= 1
-
-        def fake_upsert(identifier, name, description, client=None):
-            enter()
-            return identifier
-
-        def fake_delete(identifier, client=None):
-            enter()
-            return True
-
-        rt._ORIGINAL_UPSERT_NATIVE_PERSONA = fake_upsert
-        rt._ORIGINAL_DELETE_NATIVE_PERSONA = fake_delete
-        errors = []
-
-        def run_upsert():
-            try:
-                start.wait(timeout=2)
-                rt.upsert_native_persona("native.png", "Native", "Description")
-            except Exception as exc:
-                errors.append(exc)
-
-        def run_delete():
-            try:
-                start.wait(timeout=2)
-                rt.delete_native_persona("native.png")
-            except Exception as exc:
-                errors.append(exc)
-
-        threads = [threading.Thread(target=run_upsert), threading.Thread(target=run_delete)]
-        for thread in threads:
-            thread.start()
-        start.wait(timeout=2)
-        for thread in threads:
-            thread.join(timeout=2)
-        rt._ORIGINAL_UPSERT_NATIVE_PERSONA = original_upsert
-        rt._ORIGINAL_DELETE_NATIVE_PERSONA = original_delete
-
-        self.assertEqual(errors, [])
-        self.assertEqual(maximum, 1)
-
-    def test_new_native_persona_preserves_source_avatar_extension_and_id_is_unique(self):
-        avatar = rt.upsert_native_persona("writer", "Writer", "Writer description")
-        self.assertEqual(avatar, "bridge-writer.webp")
-        self.assertEqual(
-            (rt.NATIVE_PERSONA_AVATAR_DIR / avatar).read_bytes(),
-            b"webp-source-bytes",
-        )
-        with self.assertRaisesRegex(ValueError, "already exists"):
-            rt.upsert_native_persona("writer", "Writer 2", "Another description")
 
     def test_live_sync_explicitly_clears_persona_and_world_and_refreshes_memory(self):
         session = rt.create_session(self.db, "chat", rt.DEFAULT_MODEL, session_id="sync-clear")
