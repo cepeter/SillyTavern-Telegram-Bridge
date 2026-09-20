@@ -101,7 +101,6 @@
 Create `tests/test_persona_integrity.py`:
 
 ```python
-from contextlib import contextmanager
 import threading
 import time
 import unittest
@@ -219,59 +218,87 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
 
 - [ ] **Step 2: Add RED concurrency tests for upsert/upsert and upsert/delete**
 
-Append:
+Append this helper and the two tests. The overlap counter lives inside the backend, so it measures work protected by the store lock:
 
 ```python
-    def _maximum_parallelism(self, actions):
+    def _maximum_backend_parallelism(self, operations):
         active = 0
         maximum = 0
         counter_lock = threading.Lock()
-        start = threading.Barrier(len(actions) + 1)
+        start = threading.Barrier(len(operations) + 1)
         errors = []
 
-        def wrap(action):
+        def backend_enter():
             nonlocal active, maximum
+            with counter_lock:
+                active += 1
+                maximum = max(maximum, active)
+            time.sleep(0.05)
+            with counter_lock:
+                active -= 1
+
+        store = IntegrityCheckedPersonaStore(
+            load_personas=lambda force=False: {},
+            upsert_backend=lambda *_args, **_kwargs: (
+                backend_enter() or "avatar.png"
+            ),
+            delete_backend=lambda *_args, **_kwargs: (
+                backend_enter() or True
+            ),
+            valid_avatar=lambda value: (
+                str(value)
+                if str(value).endswith(".png")
+                else ""
+            ),
+            edit_lock=lambda: self.lock,
+        )
+
+        def run(operation):
             try:
                 start.wait(timeout=2)
-                with counter_lock:
-                    active += 1
-                    maximum = max(maximum, active)
-                time.sleep(0.05)
-                action()
+                operation(store)
             except Exception as exc:
                 errors.append(exc)
-            finally:
-                with counter_lock:
-                    active -= 1
 
         threads = [
-            threading.Thread(target=wrap, args=(action,))
-            for action in actions
+            threading.Thread(target=run, args=(operation,))
+            for operation in operations
         ]
         for thread in threads:
             thread.start()
         start.wait(timeout=2)
         for thread in threads:
             thread.join(timeout=2)
+
         self.assertEqual(errors, [])
         return maximum
 
     def test_two_upserts_are_serialized(self):
-        maximum = self._maximum_parallelism([
-            lambda: self.store.upsert("one", "One", "Description"),
-            lambda: self.store.upsert("two", "Two", "Description"),
+        maximum = self._maximum_backend_parallelism([
+            lambda store: store.upsert(
+                "one",
+                "One",
+                "Description",
+            ),
+            lambda store: store.upsert(
+                "two",
+                "Two",
+                "Description",
+            ),
         ])
         self.assertEqual(maximum, 1)
 
     def test_upsert_and_delete_are_serialized(self):
-        maximum = self._maximum_parallelism([
-            lambda: self.store.upsert("writer", "Writer", "Description"),
-            lambda: self.store.delete("native.png"),
+        maximum = self._maximum_backend_parallelism([
+            lambda store: store.upsert(
+                "writer",
+                "Writer",
+                "Description",
+            ),
+            lambda store: store.delete("native.png"),
         ])
         self.assertEqual(maximum, 1)
 ```
-
-The counter must increment inside the backend, not outside the store lock. Implement the helper backends in these two tests as blocking callbacks if needed so `maximum` measures protected backend execution rather than thread startup.
 
 - [ ] **Step 3: Run the focused test and verify RED**
 
@@ -350,45 +377,7 @@ class IntegrityCheckedPersonaStore:
             )
 ```
 
-- [ ] **Step 5: Correct the concurrency tests so they measure backend overlap**
-
-For the concurrency cases, instantiate a store whose test backends call a shared `enter_backend()` function:
-
-```python
-        active = 0
-        maximum = 0
-        counter_lock = threading.Lock()
-        release = threading.Event()
-        entered = threading.Event()
-
-        def enter_backend():
-            nonlocal active, maximum
-            with counter_lock:
-                active += 1
-                maximum = max(maximum, active)
-                entered.set()
-            time.sleep(0.05)
-            with counter_lock:
-                active -= 1
-
-        store = IntegrityCheckedPersonaStore(
-            load_personas=lambda force=False: {},
-            upsert_backend=lambda *_args, **_kwargs: (
-                enter_backend() or "avatar.png"
-            ),
-            delete_backend=lambda *_args, **_kwargs: (
-                enter_backend() or True
-            ),
-            valid_avatar=lambda value: (
-                str(value) if str(value).endswith(".png") else ""
-            ),
-            edit_lock=lambda: self.lock,
-        )
-```
-
-Launch the two calls concurrently and assert `maximum == 1`.
-
-- [ ] **Step 6: Run Task 1 tests**
+- [ ] **Step 5: Run Task 1 tests**
 
 Run:
 
@@ -398,7 +387,7 @@ python -m unittest tests.test_persona_integrity -v
 
 Expected: all tests PASS.
 
-- [ ] **Step 7: Commit Task 1**
+- [ ] **Step 6: Commit Task 1**
 
 ```bash
 git add bridge/persona_integrity.py tests/test_persona_integrity.py
@@ -656,31 +645,45 @@ def _choose_native_avatar(
 
 Use the exact current algorithm from `state_integrity.py`; do not invent a new naming scheme.
 
-- [ ] **Step 6: Rename native persistence bodies to private backends**
+- [ ] **Step 6: Rename native persistence bodies to private backends without changing their statements**
 
-Rename the current storage functions:
+Perform these exact signature substitutions in `bridge/persona_sync.py`:
 
 ```python
+# before
+def upsert_native_persona(
+    identifier: str,
+    name: str,
+    description: str,
+    client=None,
+) -> str:
+
+# after
 def _upsert_native_persona_storage(
     identifier: str,
     name: str,
     description: str,
     client=None,
 ) -> str:
-    # current upsert_native_persona body unchanged
 ```
 
 and:
 
 ```python
+# before
+def delete_native_persona(
+    identifier: str,
+    client=None,
+) -> bool:
+
+# after
 def _delete_native_persona_storage(
     identifier: str,
     client=None,
 ) -> bool:
-    # current delete_native_persona body unchanged
 ```
 
-The bodies must preserve all existing validation, backup, optimistic settings hash checks, avatar creation, save/readback verification, and cache invalidation.
+Only the function names change in this step. Keep every statement in both existing bodies byte-for-byte equivalent so validation, backup, optimistic settings-hash checks, avatar creation, save/readback verification, deletion semantics, and cache invalidation cannot drift.
 
 - [ ] **Step 7: Compose the explicit store and add stable public delegates**
 
@@ -724,34 +727,14 @@ Leave `compatibility_persona_service()` using these public names. Python resolve
 
 - [ ] **Step 8: Add the reentrant service/store regression**
 
-Append to `tests/test_persona_native_storage.py`:
+Store `self.root = root` in `NativePersonaStorageTests.setUp`, then append:
 
 ```python
     def test_persona_service_lock_can_nest_into_integrity_store(self):
         service = rt.compatibility_persona_service()
-
-        avatar = service.create_and_select(
-            rt.db_connect(),
-            "chat",
-            rt.create_session(
-                rt.db_connect(),
-                "chat",
-                rt.DEFAULT_MODEL,
-            )["session_id"],
-            "nested",
-            "Nested",
-            "Nested lock test",
+        db = rt.db_connect(
+            self.root / "persona-service.sqlite3"
         )
-
-        self.assertTrue(
-            Path(avatar).stem.startswith("bridge-nested")
-        )
-```
-
-Implement this with one managed DB connection in the real test:
-
-```python
-        db = rt.db_connect()
         try:
             session = rt.create_session(
                 db,
@@ -768,9 +751,13 @@ Implement this with one managed DB connection in the real test:
             )
         finally:
             db.close()
+
+        self.assertTrue(
+            Path(avatar).stem.startswith("bridge-nested")
+        )
 ```
 
-The test pins the Review Focus case where `PersonaService` holds `PERSONA_EDIT_LOCK` and the integrity store re-enters it.
+This uses one isolated temporary database and pins the Review Focus case where `PersonaService` holds `PERSONA_EDIT_LOCK` and the integrity store re-enters the same production lock.
 
 - [ ] **Step 9: Run Task 1 and Task 2 focused tests**
 
