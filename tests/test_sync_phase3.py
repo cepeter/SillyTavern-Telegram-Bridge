@@ -381,5 +381,107 @@ class Phase3SyncTests(unittest.TestCase):
         self.assertEqual(rt.sync_binding(self.db, "chat", "phase3")["realtime_enabled"], 0)
 
 
+class SyncWorkerInjectionTests(unittest.TestCase):
+    class FakeStopEvent:
+        def __init__(self, results):
+            self.results = iter(results)
+
+        def wait(self, _timeout):
+            return next(self.results)
+
+    class FakeDb:
+        def __init__(self):
+            self.in_transaction = False
+            self.closed = False
+            self.rollbacks = 0
+
+        def rollback(self):
+            self.rollbacks += 1
+            self.in_transaction = False
+
+        def close(self):
+            self.closed = True
+
+    def test_worker_loop_polls_through_injected_service(self):
+        db = self.FakeDb()
+        calls = []
+
+        class FakeSync:
+            def poll(self, actual_db):
+                calls.append(actual_db)
+
+        with patch.object(
+            rt,
+            "_PHASE3_STOP_EVENT",
+            self.FakeStopEvent([False, True]),
+        ), patch.object(
+            rt,
+            "db_connect",
+            return_value=db,
+        ), patch.object(
+            rt,
+            "phase3_sync_poll",
+            side_effect=AssertionError("raw poll bypassed service"),
+        ):
+            rt._phase3_worker_loop(sync_service=FakeSync())
+
+        self.assertEqual(calls, [db])
+        self.assertTrue(db.closed)
+
+    def test_worker_reconnects_after_sqlite_poll_failure(self):
+        first = self.FakeDb()
+        second = self.FakeDb()
+        connections = iter([first, second])
+        seen = []
+
+        class FakeSync:
+            def poll(self, db):
+                seen.append(db)
+                if db is first:
+                    raise sqlite3.OperationalError("database is locked")
+
+        with patch.object(
+            rt,
+            "_PHASE3_STOP_EVENT",
+            self.FakeStopEvent([False, False, True]),
+        ), patch.object(
+            rt,
+            "db_connect",
+            side_effect=lambda: next(connections),
+        ):
+            rt._phase3_worker_loop(sync_service=FakeSync())
+
+        self.assertEqual(seen, [first, second])
+        self.assertTrue(first.closed)
+        self.assertTrue(second.closed)
+
+    def test_worker_without_injected_service_resolves_compatibility_service(self):
+        db = self.FakeDb()
+        calls = []
+
+        class FakeSync:
+            def poll(self, actual_db):
+                calls.append(actual_db)
+
+        fake = FakeSync()
+        with patch.object(
+            rt,
+            "_PHASE3_STOP_EVENT",
+            self.FakeStopEvent([False, True]),
+        ), patch.object(
+            rt,
+            "db_connect",
+            return_value=db,
+        ), patch.object(
+            rt,
+            "resolve_sync_service",
+            return_value=fake,
+        ) as resolver:
+            rt._phase3_worker_loop()
+
+        resolver.assert_called_once_with(None)
+        self.assertEqual(calls, [db])
+
+
 if __name__ == "__main__":
     unittest.main()
