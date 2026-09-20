@@ -3,6 +3,9 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
+
+import bridge.runtime as rt
 
 from bridge.scheduler_safety import DatabaseConnectionGate, DurableWorkerGuard
 
@@ -234,6 +237,57 @@ class DurableWorkerGuardTests(unittest.TestCase):
 
         self.assertEqual(self.sleeps, [0.25, 1.0])
         self.assertEqual(attempts, ["closed", "closed", "closed"])
+
+
+class CanonicalDatabaseConnectionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "canonical.sqlite3"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_canonical_gate_runs_schema_initialization_once(self):
+        original = rt.initialize_database_schema
+        calls = []
+
+        def traced(db):
+            calls.append(db)
+            return original(db)
+
+        with patch.object(
+            rt,
+            "initialize_database_schema",
+            side_effect=traced,
+        ):
+            first = rt._DB_CONNECTION_GATE.connect(self.path)
+            second = rt._DB_CONNECTION_GATE.connect(self.path)
+
+        try:
+            self.assertEqual(len(calls), 1)
+        finally:
+            first.close()
+            second.close()
+
+    def test_canonical_gate_keeps_role_specific_cache(self):
+        first = rt._DB_CONNECTION_GATE.connect(self.path)
+        second = rt._DB_CONNECTION_GATE.connect(self.path)
+        try:
+            first_cache = first.execute("PRAGMA cache_size").fetchone()[0]
+            second_cache = second.execute("PRAGMA cache_size").fetchone()[0]
+            self.assertEqual(first_cache, -rt._DB_PRIMARY_CACHE_KIB)
+            self.assertEqual(second_cache, -rt._DB_WORKER_CACHE_KIB)
+            self.assertEqual(
+                second.execute("PRAGMA foreign_keys").fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                second.execute("PRAGMA busy_timeout").fetchone()[0],
+                30000,
+            )
+        finally:
+            first.close()
+            second.close()
 
 
 if __name__ == "__main__":
