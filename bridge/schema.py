@@ -360,6 +360,14 @@ def _run_startup_database_cleanup(db: sqlite3.Connection) -> None:
         "DELETE FROM operations WHERE updated_at < ?",
         (now - 90 * 86400,),
     )
+    db.execute(
+        "DELETE FROM sync_bindings "
+        "WHERE NOT EXISTS ("
+        "SELECT 1 FROM sessions "
+        "WHERE sessions.chat_id=sync_bindings.chat_id "
+        "AND sessions.session_id=sync_bindings.session_id"
+        ")"
+    )
 
 
 def _migration_001_core_baseline(db: sqlite3.Connection) -> None:
