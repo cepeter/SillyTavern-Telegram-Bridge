@@ -16,6 +16,7 @@ from bridge.group_director_service import (
     GroupDirectorService as _GroupDirectorService,
 )
 from bridge.job_service import (
+    DurableJob as _DurableJob,
     JobService as _JobService,
     JobSubmission as _JobSubmission,
 )
@@ -381,6 +382,107 @@ def submit_durable_chat_job(
     )
 
 
+def resolve_recovered_job_submission(
+    services: _BridgeServices,
+    fields: dict,
+    job: _DurableJob,
+) -> _JobSubmission | None:
+    payload = job.payload
+    model_override = str(
+        payload.get("model") or services.config.default_model
+    )
+    session_for_job = (
+        None
+        if payload.get("resolve_active")
+        else job.session_id
+    )
+
+    if job.kind in {"generation", "command"}:
+        return _JobSubmission(
+            label=job.kind,
+            chat_id=job.chat_id,
+            worker=process_message_job,
+            args=(
+                services,
+                fields,
+                job.chat_id,
+                str(payload["text"]),
+                job.telegram_message_id,
+                session_for_job,
+                model_override,
+            ),
+        )
+    if job.kind == "callback":
+        return _JobSubmission(
+            label=job.kind,
+            chat_id=job.chat_id,
+            worker=process_callback_job,
+            args=(
+                services,
+                job.chat_id,
+                payload["callback"],
+            ),
+        )
+    if job.kind == "edit":
+        return _JobSubmission(
+            label=job.kind,
+            chat_id=job.chat_id,
+            worker=process_edit_job,
+            args=(
+                services,
+                job.chat_id,
+                job.telegram_message_id,
+                str(payload["text"]),
+                model_override,
+            ),
+        )
+    if job.kind == "voice":
+        return _JobSubmission(
+            label=job.kind,
+            chat_id=job.chat_id,
+            worker=process_voice_job,
+            args=(
+                services,
+                fields,
+                job.chat_id,
+                payload["voice"],
+                job.telegram_message_id,
+                session_for_job,
+                model_override,
+            ),
+        )
+    if job.kind == "image":
+        return _JobSubmission(
+            label=job.kind,
+            chat_id=job.chat_id,
+            worker=process_image_job,
+            args=(
+                services,
+                job.chat_id,
+                str(payload["file_id"]),
+                str(payload.get("caption") or ""),
+                int(payload.get("file_size") or 0),
+                job.telegram_message_id,
+                session_for_job,
+                model_override,
+            ),
+        )
+    if job.kind == "document":
+        return _JobSubmission(
+            label=job.kind,
+            chat_id=job.chat_id,
+            worker=process_document_job,
+            args=(
+                services,
+                job.chat_id,
+                payload["document"],
+                job.telegram_message_id,
+                model_override,
+            ),
+        )
+    return None
+
+
 def dispatch_recovered_jobs(
     db: sqlite3.Connection,
     services: _BridgeServices,
@@ -388,105 +490,16 @@ def dispatch_recovered_jobs(
     *,
     recover_running: bool = True,
 ) -> None:
-    for job_id, chat_id, session_id, message_id, kind, payload_json in recover_jobs(
+    jobs = _jobs_for_services(services)
+    jobs.recover(
         db,
+        lambda job: resolve_recovered_job_submission(
+            services,
+            fields,
+            job,
+        ),
         recover_running=recover_running,
-    ):
-        try:
-            payload = json.loads(payload_json)
-            model_override = str(
-                payload.get("model") or services.config.default_model
-            )
-            session_for_job = (
-                None if payload.get("resolve_active") else str(session_id)
-            )
-
-            if kind in {"generation", "command"}:
-                worker = process_message_job
-                worker_args = (
-                    services,
-                    fields,
-                    str(chat_id),
-                    str(payload["text"]),
-                    int(message_id),
-                    session_for_job,
-                    model_override,
-                )
-            elif kind == "callback":
-                worker = process_callback_job
-                worker_args = (
-                    services,
-                    str(chat_id),
-                    payload["callback"],
-                )
-            elif kind == "edit":
-                worker = process_edit_job
-                worker_args = (
-                    services,
-                    str(chat_id),
-                    int(message_id),
-                    str(payload["text"]),
-                    model_override,
-                )
-            elif kind == "voice":
-                worker = process_voice_job
-                worker_args = (
-                    services,
-                    fields,
-                    str(chat_id),
-                    payload["voice"],
-                    int(message_id),
-                    None if payload.get("resolve_active") else session_for_job,
-                    model_override,
-                )
-            elif kind == "image":
-                worker = process_image_job
-                worker_args = (
-                    services,
-                    str(chat_id),
-                    str(payload["file_id"]),
-                    str(payload.get("caption") or ""),
-                    int(payload.get("file_size") or 0),
-                    int(message_id),
-                    None if payload.get("resolve_active") else session_for_job,
-                    model_override,
-                )
-            elif kind == "document":
-                worker = process_document_job
-                worker_args = (
-                    services,
-                    str(chat_id),
-                    payload["document"],
-                    int(message_id),
-                    model_override,
-                )
-            else:
-                finish_job(
-                    db,
-                    int(job_id),
-                    "failed",
-                    "unsupported recovered job kind",
-                )
-                continue
-
-            queued = submit_durable_chat_job(
-                db,
-                services.background,
-                kind,
-                str(chat_id),
-                int(job_id),
-                worker,
-                *worker_args,
-            )
-            if not queued:
-                logging.warning(
-                    "Could not dispatch recovered %s job %s",
-                    kind,
-                    job_id,
-                )
-        except Exception as exc:
-            finish_job(db, int(job_id), "failed", str(exc))
-            logging.error("Could not recover job %s", job_id, exc_info=True)
+    )
 
 
 def make_durable_backlog_dispatcher(
@@ -496,10 +509,14 @@ def make_durable_backlog_dispatcher(
     def dispatch() -> None:
         db = services.db_factory()
         try:
-            dispatch_recovered_jobs(
+            jobs = _jobs_for_services(services)
+            jobs.recover(
                 db,
-                services,
-                fields,
+                lambda job: resolve_recovered_job_submission(
+                    services,
+                    fields,
+                    job,
+                ),
                 recover_running=False,
             )
         finally:
@@ -658,10 +675,14 @@ def main() -> int:
             fields,
         )
     )
-    dispatch_recovered_jobs(
+    services.jobs.recover(
         db,
-        services,
-        fields,
+        lambda job: resolve_recovered_job_submission(
+            services,
+            fields,
+            job,
+        ),
+        recover_running=True,
     )
     offset = int(get_meta(db, "telegram_offset", "0"))
     permitted = config.allowed_users
