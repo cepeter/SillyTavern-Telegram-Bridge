@@ -311,6 +311,46 @@ class RuntimeLoaderTests(unittest.TestCase):
             ("apply_sync_snapshot",),
         )
 
+    def test_sync_snapshot_public_owner_is_sync_core(self):
+        self.assertEqual(
+            Path(
+                rt.apply_sync_snapshot.__code__.co_filename
+            ).name,
+            "sync_core.py",
+        )
+
+    def test_state_integrity_is_not_a_runtime_module(self):
+        loaded = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn(
+            "state_integrity.py",
+            loaded,
+        )
+
+    def test_runtime_report_has_no_state_integrity_entry(self):
+        modules = {
+            item["module"]
+            for item in rt.RUNTIME_LOAD_REPORT
+        }
+        self.assertNotIn(
+            "state_integrity.py",
+            modules,
+        )
+
+    def test_apply_sync_snapshot_has_no_runtime_override_allowlist(self):
+        for stage in DEFAULT_RUNTIME_STAGES:
+            for filename, names in (
+                stage.allowed_public_callable_overrides
+            ):
+                self.assertNotIn(
+                    "apply_sync_snapshot",
+                    names,
+                    msg=f"{filename} still overrides apply_sync_snapshot",
+                )
+
     def test_loader_rejects_module_outside_base_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
