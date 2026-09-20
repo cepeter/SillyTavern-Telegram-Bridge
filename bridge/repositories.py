@@ -118,6 +118,18 @@ def store_meta_value(
     )
 
 
+
+def count_persona_references(
+    db: sqlite3.Connection,
+    persona_id: str,
+) -> int:
+    row = db.execute(
+        "SELECT COUNT(*) FROM sessions WHERE persona_id=?",
+        (str(persona_id),),
+    ).fetchone()
+    return int(row[0] or 0) if row else 0
+
+
 def load_group_state_row(
     db: sqlite3.Connection,
     chat_id: str,
