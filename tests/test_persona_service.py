@@ -1,6 +1,8 @@
 import sqlite3
 import unittest
+from unittest.mock import patch
 
+import bridge.runtime as rt
 from bridge.persona_service import PersonaService
 
 
@@ -257,6 +259,57 @@ class PersonaServiceTests(unittest.TestCase):
             self.service.delete_if_unused(self.db, "native.png")
         )
         self.assertEqual(self.deletes, ["native.png"])
+
+
+class PersonaCompatibilityServiceTests(unittest.TestCase):
+    def test_compatibility_service_late_binds_final_runtime_collaborators(self):
+        calls = []
+
+        with patch.object(
+            rt,
+            "load_personas",
+            return_value={
+                "native.png": {
+                    "name": "Native",
+                    "description": "D",
+                    "sillytavern_avatar": "native.png",
+                }
+            },
+        ), patch.object(
+            rt,
+            "default_persona_id",
+            return_value="native.png",
+        ), patch.object(
+            rt,
+            "upsert_native_persona",
+            side_effect=lambda *args: calls.append(("upsert", args))
+            or "native.png",
+        ), patch.object(
+            rt,
+            "delete_native_persona",
+            side_effect=lambda persona_id: calls.append(
+                ("delete", persona_id)
+            )
+            or True,
+        ), patch.object(
+            rt,
+            "_repo_count_persona_references",
+            return_value=0,
+            create=True,
+        ):
+            service = rt.compatibility_persona_service()
+            self.assertEqual(service.name("native.png"), "Native")
+            self.assertEqual(service.default_id(), "native.png")
+            service.update("native.png", "Updated", "D")
+
+        self.assertEqual(
+            calls,
+            [("upsert", ("native.png", "Updated", "D"))],
+        )
+
+    def test_resolve_persona_service_prefers_injected_service(self):
+        sentinel = object()
+        self.assertIs(rt.resolve_persona_service(sentinel), sentinel)
 
 
 if __name__ == "__main__":
