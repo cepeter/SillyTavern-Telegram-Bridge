@@ -2044,7 +2044,7 @@ Only after Steps 12-13 pass.
 Do not merge the PR. Merge is a separate user decision.
 
 
-## Execution Ledger (in progress)
+## Execution Evidence
 
 - Execution ruling: this harness has no local Git checkout/worktree. The isolated feature branch is the workspace and Draft PR GitHub Actions is the authoritative RED -> GREEN runner. Cost if wrong: focused local commands are unavailable, but every state is observed on an exact repository SHA.
 - Task 1 ruling: the approved spec explicitly requires empty-current-snapshot rejection, while the written Task 1 test body omitted it. Added `test_empty_current_snapshot_skips_retain_backend` before production code. Cost if wrong: one additional regression test only.
@@ -2054,3 +2054,11 @@ Do not merge the PR. Merge is a separate user decision.
 - Task 2 ruling: the native stale-retain test originally counted all background submissions, but post-retain hooks correctly enqueue Scene State and Memory Curator jobs. The test now asserts exactly one `hindsight_retain` submission while permitting independent hook jobs. Cost if wrong: it could hide non-Hindsight background duplication, which is outside this test's contract; duplicate Hindsight scheduling remains detected.
 - Task 2 code head: `f8c8b7a962a0236c6430d5d036ba5990cd54fa04`. All Phase 6C Task 1/2 tests passed in CI #423, but the full run later failed in unrelated `test_sync_phase3.Phase3SyncTests.test_realtime_round_trip_and_conflict_stop` during `TemporaryDirectory` cleanup with `OSError: [Errno 39] Directory not empty`.
 - CI retry ruling: the GitHub integration lacks Actions write permission for rerunning failed jobs (403). This documentation-only ledger commit intentionally triggers a fresh full CI run with identical production/test code to distinguish a transient Sync cleanup race from a Phase 6C regression. Cost if wrong: one documentation commit and one additional CI run.
+
+- Task 2 GREEN confirmation: documentation-only head `09f5fc9a558a70711fd7e6f7d8c6c5c4785cdd52`, CI #424 completed successfully with unchanged Task 2 production/test code, confirming CI #423's Sync temporary-directory cleanup error was transient.
+- Task 3 ruling: existing `tests/test_hindsight_session_cleanup.py` called the raw private `_retain_session_memory` worker twice. The cutover updates those calls to `_retain_session_memory_backend` instead of preserving an obsolete compatibility alias. Cost if wrong: only private test callers are affected; retaining the alias would preserve a symbol the migration is explicitly retiring.
+- Task 3 RED: `0ff1cdf18e0f6fe6035880b13d394af2c8b8ef50`, CI #426 failed on the expected state-integrity source guards, public-owner checks, allowlist, and runtime-report assertions while public stale-memory compatibility behavior remained covered.
+- Task 3 GREEN implementation head: `505964526d0690be47d657f947128d7ec4531493`, CI #427 completed successfully.
+- CI #427 verification: `522` unittest tests passed; pytest reported `522 passed, 111 subtests passed`; `pip check` reported `No broken requirements found.`; locked dependency audit reported `No known vulnerabilities found`.
+- Architecture/non-scope verification on `505964526d0690be47d657f947128d7ec4531493`: `apply_sync_snapshot` is byte-for-byte identical to baseline `9d623ee2edaba8e38169dde0f508a86a21eb9afd`; `bridge/sync_safety.py` is byte-for-byte identical to baseline; current upstream `main` is still `9d623ee2edaba8e38169dde0f508a86a21eb9afd`, so upstream drift is zero.
+- Final exact-head CI is intentionally run after this documentation commit. Updating this evidence after that run would create another head and recursively invalidate exact-head verification.
