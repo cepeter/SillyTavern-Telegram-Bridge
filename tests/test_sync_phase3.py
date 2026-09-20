@@ -409,6 +409,107 @@ class Phase3SyncTests(unittest.TestCase):
         self.assertEqual(refreshed["world_file"], "")
         self.assertEqual(len(retained), 1)
 
+    def test_public_snapshot_absent_persona_and_world_preserve_assignments(self):
+        rt.update_session(
+            self.db,
+            "chat",
+            "phase3",
+            persona_id="existing.png",
+            world_file='["existing.json"]',
+        )
+        current = rt.load_session(
+            self.db,
+            "chat",
+            "phase3",
+            rt.DEFAULT_MODEL,
+        )
+
+        with patch.object(
+            rt,
+            "retain_session_memory",
+            return_value=None,
+        ), patch.object(
+            rt,
+            "card_fields_from_file",
+            return_value={"name": "Test"},
+        ):
+            result = rt.apply_sync_snapshot(
+                self.db,
+                "chat",
+                current,
+                {"name": "Remote"},
+                [("user", "remote transcript")],
+                {},
+            )
+
+        refreshed = rt.load_session(
+            self.db,
+            "chat",
+            "phase3",
+            rt.DEFAULT_MODEL,
+        )
+        self.assertEqual(
+            refreshed["persona_id"],
+            "existing.png",
+        )
+        self.assertEqual(
+            refreshed["world_file"],
+            '["existing.json"]',
+        )
+        self.assertEqual(
+            result,
+            rt.sync_transcript_hash(
+                [("user", "remote transcript")]
+            ),
+        )
+
+    def test_public_snapshot_uses_final_runtime_memory_collaborators(self):
+        current = rt.load_session(
+            self.db,
+            "chat",
+            "phase3",
+            rt.DEFAULT_MODEL,
+        )
+        retained = []
+
+        with patch.object(
+            rt,
+            "retain_session_memory",
+            side_effect=lambda db, chat_id, session, fields:
+                retained.append(
+                    (
+                        db,
+                        chat_id,
+                        session["session_id"],
+                        fields["name"],
+                    )
+                ),
+        ), patch.object(
+            rt,
+            "card_fields_from_file",
+            return_value={"name": "patched-card"},
+        ):
+            rt.apply_sync_snapshot(
+                self.db,
+                "chat",
+                current,
+                {},
+                [("user", "remote transcript")],
+                {},
+            )
+
+        self.assertEqual(
+            retained,
+            [
+                (
+                    self.db,
+                    "chat",
+                    "phase3",
+                    "patched-card",
+                )
+            ],
+        )
+
     def test_sync_panel_exposes_realtime_control(self):
         calls = []
         original = rt.telegram_request
@@ -440,6 +541,28 @@ class Phase3SyncTests(unittest.TestCase):
         self.assertTrue(handled)
         self.assertIn("Live API unavailable", answers[0])
         self.assertEqual(rt.sync_binding(self.db, "chat", "phase3")["realtime_enabled"], 0)
+
+
+class SyncSnapshotOwnershipTests(unittest.TestCase):
+    def test_sync_core_composes_snapshot_integrity_adapter(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "sync_core.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "_SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(",
+            source,
+        )
+        self.assertIn(
+            "apply_backend=apply_sync_snapshot,",
+            source,
+        )
+        self.assertNotIn(
+            "def _apply_sync_snapshot_backend(",
+            source,
+        )
 
 
 class SyncWorkerInjectionTests(unittest.TestCase):
