@@ -1626,3 +1626,6 @@ Do not merge the PR. Merge is a separate user decision.
 - Pre-flight: Task 1 produces `SyncSnapshotIntegrityAdapter`, consumed by Task 2; signatures match the plan/spec.
 - Pre-flight: Task 2 produces `_SYNC_SNAPSHOT_INTEGRITY` while intentionally preserving the public `state_integrity.py` owner, consumed by Task 3's atomic cutover; transition contract is explicit and consistent.
 - Pre-flight: Task 3 produces canonical `sync_core.py::apply_sync_snapshot` ownership and deletes `state_integrity.py`, consumed by Task 4 verification; acceptance criteria align.
+
+- Task 1 RED: `631b38beee73d6d879ba14b74599863b6d269409`, CI #432 failed with `ModuleNotFoundError: No module named 'bridge.sync_integrity'`.
+- Task 1 GREEN: `3ecfb6fb04af0b0b5820435fd7381fee59f0cf0e`, CI #433 completed successfully.
