@@ -998,6 +998,73 @@ class StartupCompositionTests(unittest.TestCase):
         self.assertIs(services.sync.disable_realtime, disable)
         self.assertIs(services.sync.api_configured, configured)
 
+    def test_main_starts_sync_worker_with_injected_sync_service(self):
+        sync_service = object()
+
+        def request(_token, method, _payload=None):
+            if method == "getUpdates":
+                rt._SHUTDOWN_EVENT.set()
+                return []
+            return {}
+
+        services = BridgeServices(
+            config=self.config,
+            db_factory=lambda: rt.db_connect(self.config.db_file),
+            telegram=TelegramRuntime(
+                request=request,
+                send_text=lambda *_args, **_kwargs: None,
+            ),
+            background=BackgroundRuntime(
+                submit_chat=lambda *_args, **_kwargs: True,
+                register_backlog_dispatcher=lambda _callback: None,
+                begin_shutdown=lambda: None,
+            ),
+            sync=sync_service,
+        )
+        parsed = rt.argparse.Namespace(check=False)
+
+        with patch.object(
+            rt.argparse.ArgumentParser,
+            "parse_args",
+            return_value=parsed,
+        ), patch.object(
+            rt, "load_env_file"
+        ), patch.object(
+            rt, "refresh_phase3_config"
+        ), patch.object(
+            rt, "enforce_runtime_permissions"
+        ), patch.object(
+            rt, "_load_startup_config", return_value=self.config
+        ), patch.object(
+            rt, "_build_startup_services", return_value=services
+        ), patch.object(
+            rt, "validate_startup_credential"
+        ), patch.object(
+            rt, "set_bot_commands"
+        ), patch.object(
+            rt, "read_png_chara", return_value={}
+        ), patch.object(
+            rt, "card_fields", return_value={"name": "Mira"}
+        ), patch.object(
+            rt, "install_bridge_signal_handlers"
+        ), patch.object(
+            rt, "dispatch_recovered_jobs"
+        ), patch.object(
+            rt, "start_phase3_sync_worker"
+        ) as start_sync, patch.object(
+            rt, "stop_phase3_sync_worker", return_value=True
+        ), patch.object(
+            rt, "shutdown_background_executors", return_value=True
+        ), patch.object(
+            rt, "run_database_maintenance"
+        ):
+            self.assertEqual(rt.main(), 0)
+
+        start_sync.assert_called_once_with(
+            sync_service=sync_service
+        )
+        rt._SHUTDOWN_EVENT.clear()
+
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = rt.argparse.Namespace(check=True)
         with patch.object(
