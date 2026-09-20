@@ -363,8 +363,9 @@ def send_persona_delete_confirm(token: str, chat_id: str, persona_id: str, messa
     send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
-def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, persona_service=None):
     """Handle persona selection, review, field editing, disable, and deletion callbacks."""
+    persona_service = resolve_persona_service(persona_service)
     message_id = message.get("message_id")
     if data.startswith("persona:delete_page:"):
         page = max(0, int(data.rsplit(":", 1)[1]))
@@ -385,12 +386,15 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         if persona_id == session.get("persona_id"):
             answer_callback(token, str(callback.get("id", "")), "Disable or switch the current Persona first")
             return True
-        references = db.execute("SELECT COUNT(*) FROM sessions WHERE persona_id=?", (persona_id,)).fetchone()[0]
-        if references:
-            answer_callback(token, str(callback.get("id", "")), "Deletion refused: Persona is used by another session")
-            return True
         try:
-            deleted = delete_native_persona(persona_id)
+            deleted = persona_service.delete_if_unused(db, persona_id)
+        except ValueError as exc:
+            if "used by another session" in str(exc):
+                answer_callback(token, str(callback.get("id", "")), "Deletion refused: Persona is used by another session")
+                return True
+            logging.warning("Native Persona deletion failed", exc_info=True)
+            answer_callback(token, str(callback.get("id", "")), "Persona deletion failed")
+            return True
         except Exception:
             logging.warning("Native Persona deletion failed", exc_info=True)
             answer_callback(token, str(callback.get("id", "")), "Persona deletion failed")
@@ -415,7 +419,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         return True
     if value == "edit":
         persona_id = session.get("persona_id") or ""
-        if not get_persona(persona_id):
+        if not persona_service.get(persona_id):
             answer_callback(token, str(callback.get("id", "")), "Current persona not found")
             return True
         answer_callback(token, str(callback.get("id", "")), "Review persona")
@@ -423,7 +427,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         return True
     if value in {"create", "edit_name", "edit_description", "edit_all"}:
         persona_id = session.get("persona_id") or "" if value != "create" else ""
-        if value != "create" and not get_persona(persona_id):
+        if value != "create" and not persona_service.get(persona_id):
             answer_callback(token, str(callback.get("id", "")), "Current persona not found")
             return True
         answer_callback(token, str(callback.get("id", "")), "Enter persona text")
@@ -438,16 +442,26 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         remove_inline_keyboard(token, callback)
         return True
     if value == "off":
-        update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="persona_select", persona_id="")
+        persona_service.disable(
+            db,
+            chat_id,
+            session_id,
+            operation_id=operation_id,
+        )
         answer_callback(token, str(callback.get("id", "")), "Persona off")
         remove_inline_keyboard(token, callback)
         send_text(token, chat_id, "Persona disabled for this session.")
         return True
-    if get_persona(value):
-        update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="persona_select", persona_id=value)
+    if persona_service.select(
+        db,
+        chat_id,
+        session_id,
+        value,
+        operation_id=operation_id,
+    ):
         answer_callback(token, str(callback.get("id", "")), "Persona selected")
         remove_inline_keyboard(token, callback)
-        send_text(token, chat_id, f"Persona selected: {persona_name(value)}")
+        send_text(token, chat_id, f"Persona selected: {persona_service.name(value)}")
         return True
     answer_callback(token, str(callback.get("id", "")), "Persona not found")
     return True
