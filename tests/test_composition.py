@@ -163,14 +163,9 @@ class DatabaseFactoryPathTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.old_db_file = rt.DB_FILE
-        self.old_ready = rt._DB_SCHEMA_READY
 
     def tearDown(self):
         rt.DB_FILE = self.old_db_file
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = self.old_ready
-            if hasattr(rt, "_DB_SCHEMA_READY_PATHS"):
-                rt._DB_SCHEMA_READY_PATHS.clear()
         self.tmp.cleanup()
 
     def test_explicit_database_paths_initialize_independently(self):
@@ -178,10 +173,6 @@ class DatabaseFactoryPathTests(unittest.TestCase):
         explicit_a = self.root / "a.sqlite3"
         explicit_b = self.root / "b.sqlite3"
         rt.DB_FILE = default_path
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
-            if hasattr(rt, "_DB_SCHEMA_READY_PATHS"):
-                rt._DB_SCHEMA_READY_PATHS.clear()
 
         default_db = rt.db_connect()
         default_db.close()
