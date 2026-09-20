@@ -599,7 +599,7 @@ def main() -> int:
         services.background.begin_shutdown
     )
     db = services.db_factory()
-    start_phase3_sync_worker()
+    start_phase3_sync_worker(sync_service=services.sync)
     services.background.register_backlog_dispatcher(
         make_durable_backlog_dispatcher(
             services,
