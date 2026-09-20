@@ -92,7 +92,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         rt.hindsight_client = lambda: fake
 
         self.assertTrue(rt.remember_fact(self.db, "chat", session, {"name": "Alisha"}, "remember this"))
-        rt._retain_session_memory("chat", session, "Alisha", "conversation")
+        rt._retain_session_memory_backend("chat", session, "Alisha", "conversation")
 
         self.assertEqual(len(fake.retained), 2)
         self.assertTrue(all(item["retain_async"] is False for item in fake.retained))
@@ -144,7 +144,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         self.db.execute("DELETE FROM sessions WHERE chat_id='chat' AND session_id='gone'")
         self.db.commit()
 
-        rt._retain_session_memory("chat", session, "Alisha", "must not return")
+        rt._retain_session_memory_backend("chat", session, "Alisha", "must not return")
 
         self.assertEqual(fake.retained, [])
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM hindsight_documents WHERE session_id='gone'").fetchone()[0], 0)

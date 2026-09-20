@@ -154,7 +154,7 @@ async def _delete_hindsight_session_documents_and_close(client, bank_id: str, se
         await _close_hindsight_client_async(client)
 
 
-def purge_hindsight_session(db: sqlite3.Connection, chat_id: str, session_id: str) -> int:
+def _purge_hindsight_session_backend(db: sqlite3.Connection, chat_id: str, session_id: str) -> int:
     """Delete only documents attributable to one session, failing closed."""
     with hindsight_session_lock(chat_id, session_id):
         mapped_ids = {
@@ -367,7 +367,7 @@ def _write_hindsight_successful_purge_state(
     run_write_txn(db, write_purge_state)
 
 
-def _retain_session_memory(chat_id: str, session: dict[str, str], character_name: str, conversation: str) -> None:
+def _retain_session_memory_backend(chat_id: str, session: dict[str, str], character_name: str, conversation: str) -> None:
     session_id = str(session["session_id"])
     with hindsight_session_lock(chat_id, session_id):
         session_db = db_connect()
@@ -416,8 +416,8 @@ _HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(
     session_exists=_memory_hindsight_session_exists,
     read_epoch=_memory_hindsight_epoch,
     snapshot=_memory_hindsight_conversation_snapshot,
-    retain_backend=_retain_session_memory,
-    purge_backend=purge_hindsight_session,
+    retain_backend=_retain_session_memory_backend,
+    purge_backend=_purge_hindsight_session_backend,
     write_successful_purge_state=(
         _write_hindsight_successful_purge_state
     ),
@@ -425,16 +425,30 @@ _HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(
 )
 
 
-def retain_session_memory(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str]) -> None:
-    if memory_mode(db, chat_id) != "on":
-        return
-    rows = db.execute("SELECT role,content,created_at FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC,rowid DESC LIMIT ?", (chat_id, session["session_id"], HINDSIGHT_RETAIN_MAX_MESSAGES)).fetchall()
-    rows = list(reversed(rows))
-    if not rows:
-        return
-    conversation = json.dumps([{"role": role, "content": content, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(created_at))} for role, content, created_at in rows], ensure_ascii=False)
-    submit_background("hindsight_retain", _retain_session_memory, chat_id, session, fields["name"], conversation)
+def retain_session_memory(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+) -> None:
+    _HINDSIGHT_STALE_GUARD.retain(
+        db,
+        chat_id,
+        session,
+        fields,
+    )
 
+
+def purge_hindsight_session(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+) -> int:
+    return _HINDSIGHT_STALE_GUARD.purge(
+        db,
+        chat_id,
+        session_id,
+    )
 
 def remember_fact(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], fact: str) -> bool:
     if not fact.strip():

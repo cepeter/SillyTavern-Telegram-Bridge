@@ -402,19 +402,46 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
         self.assertEqual(fake.retained, [])
 
-    def test_guard_composition_does_not_cut_over_public_ownership_early(self):
-        self.assertEqual(
-            Path(
-                rt.retain_session_memory.__code__.co_filename
-            ).name,
-            "state_integrity.py",
+    def test_public_queued_retain_skips_deleted_session(self):
+        self._add_message()
+        queued = []
+        fake = _FakeHindsight()
+        rt.hindsight_client = lambda: fake
+
+        with patch.object(
+            rt,
+            "submit_background",
+            side_effect=lambda name, fn, *args, **kwargs: (
+                queued.append(
+                    (name, fn, args, kwargs)
+                )
+            ),
+        ):
+            rt.retain_session_memory(
+                self.db,
+                "chat",
+                self.session,
+                self.fields,
+            )
+
+        hindsight_jobs = [
+            item
+            for item in queued
+            if item[0] == "hindsight_retain"
+        ]
+        self.assertEqual(len(hindsight_jobs), 1)
+
+        self.db.execute(
+            "DELETE FROM sessions "
+            "WHERE chat_id=? AND session_id=?",
+            ("chat", self.session["session_id"]),
         )
-        self.assertEqual(
-            Path(
-                rt.purge_hindsight_session.__code__.co_filename
-            ).name,
-            "state_integrity.py",
-        )
+        self.db.commit()
+
+        _name, fn, args, kwargs = hindsight_jobs[0]
+        fn(*args, **kwargs)
+
+        self.assertEqual(fake.retained, [])
 
     def test_direct_guard_runs_post_retain_hook_when_memory_off(self):
         calls = []
