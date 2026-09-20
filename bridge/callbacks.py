@@ -72,8 +72,24 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         getattr(services, "persona", None)
         if services is not None else None
     )
+    sync_service = (
+        getattr(services, "sync", None)
+        if services is not None else None
+    )
 
-    if handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    if handle_primary_panel_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        sync_service=sync_service,
+    ):
         return
     if handle_entity_panel_callback(
         db,
