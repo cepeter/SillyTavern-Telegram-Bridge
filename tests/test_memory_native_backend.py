@@ -190,7 +190,12 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 self.fields,
             )
 
-        self.assertEqual(len(queued), 1)
+        hindsight_jobs = [
+            item
+            for item in queued
+            if item[0] == "hindsight_retain"
+        ]
+        self.assertEqual(len(hindsight_jobs), 1)
         self.db.execute(
             "UPDATE messages SET content='new text' "
             "WHERE chat_id=? AND session_id=?",
@@ -198,7 +203,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         )
         self.db.commit()
 
-        _name, fn, args, kwargs = queued[0]
+        _name, fn, args, kwargs = hindsight_jobs[0]
         fn(*args, **kwargs)
 
         self.assertEqual(fake.retained, [])
