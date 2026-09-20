@@ -47,9 +47,9 @@
 
 **Modify `bridge/sync_core.py`**
 - Import `SyncSnapshotIntegrityAdapter`.
-- Rename current raw `apply_sync_snapshot` implementation to `_apply_sync_snapshot_backend`.
-- Compose `_SYNC_SNAPSHOT_INTEGRITY` using narrow call-time lambdas for shared-runtime collaborators that tests and compatibility callers patch dynamically.
-- Expose stable public `apply_sync_snapshot` delegate.
+- In Task 2, compose `_SYNC_SNAPSHOT_INTEGRITY` around the existing raw public `apply_sync_snapshot` without changing public ownership.
+- In Task 3, atomically rename the raw implementation to `_apply_sync_snapshot_backend`, rebind the adapter, and expose the stable public delegate while deleting `state_integrity.py`.
+- Use narrow call-time lambdas for shared-runtime collaborators that tests and compatibility callers patch dynamically.
 
 **Delete `bridge/state_integrity.py`**
 - Its only remaining responsibility is replaced by the ordinary adapter.
@@ -665,9 +665,8 @@ git commit -m "refactor: add Live Sync integrity adapter"
 - Consumes:
   - `SyncSnapshotIntegrityAdapter` from Task 1.
 - Produces:
-  - `_apply_sync_snapshot_backend(db, chat_id, session, metadata, messages, variants) -> str`
-  - `_SYNC_SNAPSHOT_INTEGRITY: SyncSnapshotIntegrityAdapter`
-  - stable public `apply_sync_snapshot(db, chat_id, session, metadata, messages, variants) -> str`
+  - `_SYNC_SNAPSHOT_INTEGRITY: SyncSnapshotIntegrityAdapter` composed around the existing raw public `apply_sync_snapshot`.
+  - Task 2 deliberately preserves the existing public raw `apply_sync_snapshot` name so the still-loaded Phase 6C `state_integrity.py` continues to wrap it exactly once until Task 3.
 
 - [ ] **Step 1: Add RED public-path integration coverage for absent metadata preservation**
 
@@ -812,6 +811,10 @@ class SyncSnapshotOwnershipTests(unittest.TestCase):
             source,
         )
         self.assertIn(
+            "apply_backend=apply_sync_snapshot,",
+            source,
+        )
+        self.assertNotIn(
             "def _apply_sync_snapshot_backend(",
             source,
         )
@@ -839,29 +842,13 @@ from bridge.sync_integrity import (
 
 Do not import `bridge.runtime`, `state_integrity.py`, or `sync_safety.py`.
 
-- [ ] **Step 7: Rename the raw importer without changing its body**
+- [ ] **Step 7: Compose the adapter without cutting over the public owner yet**
 
-Change:
-
-```python
-def apply_sync_snapshot(
-```
-
-to:
-
-```python
-def _apply_sync_snapshot_backend(
-```
-
-Keep the complete function body statement-equivalent to the merged Phase 6C baseline.
-
-- [ ] **Step 8: Compose the adapter with call-time runtime collaborators**
-
-Immediately after the private backend, add:
+Immediately after the existing raw public `apply_sync_snapshot` definition, add:
 
 ```python
 _SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
-    apply_backend=_apply_sync_snapshot_backend,
+    apply_backend=apply_sync_snapshot,
     update_session=(
         lambda db, chat_id, session_id, **updates:
         update_session(
@@ -899,27 +886,72 @@ _SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
         logging.warning(message, **kwargs)
     ),
 )
-
-
-def apply_sync_snapshot(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session: dict[str, str],
-    metadata: dict,
-    messages: list[tuple[str, str]],
-    variants: dict[int, tuple[list[str], int]],
-) -> str:
-    return _SYNC_SNAPSHOT_INTEGRITY.apply(
-        db,
-        chat_id,
-        session,
-        metadata,
-        messages,
-        variants,
-    )
 ```
 
-The lambdas are intentional. They preserve the current shared-runtime behavior in which tests and compatibility callers may patch the final runtime collaborators after module execution.
+Do **not** rename the raw public `apply_sync_snapshot` and do **not** route it through the adapter in Task 2. The still-loaded `state_integrity.py` must continue to capture and wrap the raw implementation exactly once.
+
+- [ ] **Step 8: Add transition-state tests for direct adapter behavior and unchanged public ownership**
+
+Append to `Phase3SyncTests`:
+
+```python
+    def test_direct_integrity_adapter_uses_final_runtime_memory_collaborators(self):
+        current = rt.load_session(
+            self.db,
+            "chat",
+            "phase3",
+            rt.DEFAULT_MODEL,
+        )
+        retained = []
+
+        with patch.object(
+            rt,
+            "retain_session_memory",
+            side_effect=lambda db, chat_id, session, fields:
+                retained.append(
+                    (
+                        db,
+                        chat_id,
+                        session["session_id"],
+                        fields["name"],
+                    )
+                ),
+        ), patch.object(
+            rt,
+            "card_fields_from_file",
+            return_value={"name": "patched-card"},
+        ):
+            rt._SYNC_SNAPSHOT_INTEGRITY.apply(
+                self.db,
+                "chat",
+                current,
+                {},
+                [("user", "remote transcript")],
+                {},
+            )
+
+        self.assertEqual(
+            retained,
+            [
+                (
+                    self.db,
+                    "chat",
+                    "phase3",
+                    "patched-card",
+                )
+            ],
+        )
+
+    def test_task2_preserves_state_integrity_public_owner(self):
+        self.assertEqual(
+            Path(
+                rt.apply_sync_snapshot.__code__.co_filename
+            ).name,
+            "state_integrity.py",
+        )
+```
+
+The first test proves the ordinary composition works directly. The second is an intentional transition-state assertion preventing an early cutover that would double-apply integrity behavior.
 
 - [ ] **Step 9: Run Task 1 + Task 2 focused tests**
 
@@ -929,7 +961,7 @@ Run:
 python -m unittest   tests.test_sync_integrity   tests.test_sync_phase3   tests.test_sync_service -v
 ```
 
-Expected: PASS. At this point `state_integrity.py` still late-overrides the public function, so the explicit adapter exists and is tested directly, while the final runtime owner changes in Task 3.
+Expected: PASS. The ordinary adapter is composed and tested directly, while the transition-state owner assertion confirms `state_integrity.py` still owns the public runtime function until Task 3.
 
 - [ ] **Step 10: Commit Task 2**
 
@@ -943,6 +975,7 @@ git commit -m "refactor: compose Live Sync snapshot integrity"
 ### Task 3: Retire state_integrity.py and Cut Over Runtime Ownership
 
 **Files:**
+- Modify: `bridge/sync_core.py`
 - Delete: `bridge/state_integrity.py`
 - Modify: `bridge/runtime_loader.py`
 - Delete: `tests/test_state_integrity.py`
@@ -953,7 +986,8 @@ git commit -m "refactor: compose Live Sync snapshot integrity"
 - Consumes:
   - canonical `sync_core.py::apply_sync_snapshot` from Task 2.
 - Produces:
-  - runtime public `apply_sync_snapshot` owned by `sync_core.py`;
+  - `_apply_sync_snapshot_backend(db, chat_id, session, metadata, messages, variants) -> str`;
+  - stable public `sync_core.py::apply_sync_snapshot` delegate through `_SYNC_SNAPSHOT_INTEGRITY`;
   - no `state_integrity.py` runtime module;
   - no `state_integrity.py` allowlist entry;
   - no `_ORIGINAL_APPLY_SYNC_SNAPSHOT`.
@@ -1117,7 +1151,70 @@ into `tests/test_sync_phase3.py` as:
 
 Delete `tests/test_state_integrity.py` after this migration.
 
-- [ ] **Step 5: Delete state_integrity.py from the runtime**
+- [ ] **Step 5: Atomically cut sync_core.py public ownership over to the adapter**
+
+In `bridge/sync_core.py`, rename the existing raw function:
+
+```python
+# before
+def apply_sync_snapshot(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    metadata: dict,
+    messages: list[tuple[str, str]],
+    variants: dict[int, tuple[list[str], int]],
+) -> str:
+
+# after
+def _apply_sync_snapshot_backend(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    metadata: dict,
+    messages: list[tuple[str, str]],
+    variants: dict[int, tuple[list[str], int]],
+) -> str:
+```
+
+Keep the entire raw function body statement-equivalent to baseline.
+
+Update the existing adapter composition from:
+
+```python
+    apply_backend=apply_sync_snapshot,
+```
+
+to:
+
+```python
+    apply_backend=_apply_sync_snapshot_backend,
+```
+
+Then define the stable public delegate after the adapter:
+
+```python
+def apply_sync_snapshot(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    metadata: dict,
+    messages: list[tuple[str, str]],
+    variants: dict[int, tuple[list[str], int]],
+) -> str:
+    return _SYNC_SNAPSHOT_INTEGRITY.apply(
+        db,
+        chat_id,
+        session,
+        metadata,
+        messages,
+        variants,
+    )
+```
+
+Delete the Task 2 transition-state test `test_task2_preserves_state_integrity_public_owner`; Task 3 runtime-owner tests now require the opposite final ownership.
+
+- [ ] **Step 6: Delete state_integrity.py from the runtime**
 
 Delete:
 
@@ -1127,7 +1224,7 @@ bridge/state_integrity.py
 
 Do not move any code from it elsewhere; Task 2 already provides its replacement.
 
-- [ ] **Step 6: Remove state_integrity.py and its allowlist from runtime_loader.py**
+- [ ] **Step 7: Remove state_integrity.py and its allowlist from runtime_loader.py**
 
 Change the `safety_overrides` modules from:
 
@@ -1169,7 +1266,7 @@ Do not change:
 ("sync_safety.py", ("initialize_database_schema", "phase3_sync_poll"))
 ```
 
-- [ ] **Step 7: Run the focused Sync/runtime suite**
+- [ ] **Step 8: Run the focused Sync/runtime suite**
 
 Run:
 
@@ -1179,7 +1276,7 @@ python -m unittest   tests.test_sync_integrity   tests.test_sync_phase3   tests.
 
 Expected: PASS.
 
-- [ ] **Step 8: Run source/architecture guards**
+- [ ] **Step 9: Run source/architecture guards**
 
 Run:
 
@@ -1235,7 +1332,7 @@ Expected:
 Phase 6D Sync ownership verified
 ```
 
-- [ ] **Step 9: Commit Task 3**
+- [ ] **Step 10: Commit Task 3**
 
 ```bash
 git add   bridge/sync_core.py   bridge/runtime_loader.py   tests/test_sync_phase3.py   tests/test_runtime_loader.py
