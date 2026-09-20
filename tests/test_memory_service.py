@@ -678,5 +678,134 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         self.assertIs(captured["memory_service"], memory)
 
 
+
+class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
+    def test_compatibility_service_binds_current_runtime_memory_collaborators(self):
+        calls = []
+        session = {"session_id": "compat-session"}
+        fields = {"name": "Mira"}
+
+        with patch.object(
+            rt,
+            "recall_memory_context",
+            side_effect=lambda *_args: calls.append("recall") or "compat recall",
+        ), patch.object(
+            rt,
+            "session_summary_for_prompt",
+            side_effect=lambda *_args: calls.append("summary") or "compat summary",
+        ), patch.object(
+            rt,
+            "get_session_summary",
+            side_effect=lambda *_args: ("stored", 0),
+        ), patch.object(
+            rt,
+            "retain_session_memory",
+            side_effect=lambda *_args: calls.append("retain"),
+        ), patch.object(
+            rt,
+            "purge_hindsight_session",
+            side_effect=lambda *_args: calls.append("purge") or 4,
+        ):
+            service = rt.compatibility_memory_service()
+            context = service.prompt_context(
+                sqlite3.connect(":memory:"),
+                "chat",
+                session,
+                fields,
+                "query",
+            )
+            service.retain(None, "chat", session, fields)
+            purged = service.purge_session(None, "chat", "compat-session")
+
+        self.assertEqual(
+            context,
+            MemoryPromptContext(
+                recall="compat recall",
+                summary="compat summary",
+            ),
+        )
+        self.assertEqual(purged, 4)
+        self.assertEqual(calls, ["recall", "summary", "retain", "purge"])
+
+    def test_reviewed_application_paths_do_not_call_memory_backend_functions_directly(self):
+        root = Path(__file__).parents[1] / "bridge"
+        reviewed = (
+            "commands.py",
+            "generation.py",
+            "message_commands.py",
+            "recovery.py",
+        )
+        forbidden_calls = (
+            "recall_memory_context(",
+            "session_summary_for_prompt(",
+            "retain_session_memory(",
+            "purge_hindsight_session(",
+            "get_session_summary(",
+        )
+
+        for filename in reviewed:
+            source = (root / filename).read_text(encoding="utf-8")
+            for forbidden in forbidden_calls:
+                with self.subTest(filename=filename, forbidden=forbidden):
+                    self.assertNotIn(forbidden, source)
+
+    def test_reset_session_uses_memory_service_boundary(self):
+        tmp = tempfile.TemporaryDirectory()
+        old_db = rt.DB_FILE
+        try:
+            rt.DB_FILE = Path(tmp.name) / "reset.sqlite3"
+            with rt._DB_SCHEMA_LOCK:
+                rt._DB_SCHEMA_READY = False
+            db = rt.db_connect()
+            session = rt.create_session(
+                db,
+                "chat",
+                "provider::model",
+                session_id="reset-memory",
+            )
+            db.execute(
+                "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
+                "VALUES(?,?,?,?,?)",
+                ("chat", "reset-memory", "user", "hello", rt.time.time()),
+            )
+            db.commit()
+            calls = []
+
+            class FakeMemory:
+                def purge_session(self, current_db, chat_id, session_id):
+                    calls.append((current_db, chat_id, session_id))
+                    return 1
+
+            with patch.object(
+                rt,
+                "purge_hindsight_session",
+                side_effect=AssertionError("raw purge must not run"),
+            ), patch.object(
+                rt,
+                "optimize_database",
+            ):
+                rt.reset_session(
+                    db,
+                    "token",
+                    "chat",
+                    session,
+                    memory_service=FakeMemory(),
+                )
+
+            self.assertEqual(calls, [(db, "chat", "reset-memory")])
+            self.assertEqual(
+                db.execute(
+                    "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?",
+                    ("chat", "reset-memory"),
+                ).fetchone()[0],
+                0,
+            )
+            db.close()
+        finally:
+            rt.DB_FILE = old_db
+            with rt._DB_SCHEMA_LOCK:
+                rt._DB_SCHEMA_READY = False
+            tmp.cleanup()
+
 if __name__ == "__main__":
     unittest.main()
