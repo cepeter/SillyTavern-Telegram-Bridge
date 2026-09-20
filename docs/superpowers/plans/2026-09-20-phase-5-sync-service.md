@@ -159,7 +159,19 @@ Expected: import failure because `bridge.sync_service` does not exist.
 
 - [ ] **Step 3: Add RED repository test**
 
-Extend the repository test fixture's `messages` schema if required, then add:
+Extend `RepositoryPrimitiveTests.setUp()` with this exact table before adding the test:
+
+```sql
+CREATE TABLE messages(
+    chat_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+```
+
+Then add:
 
 ```python
 def test_count_session_messages_is_read_only(self):
@@ -514,7 +526,13 @@ refactor: inject SyncService at startup
 
 - [ ] **Step 1: Add RED status rendering test**
 
-In `tests/test_sync_phase3.py`, add a fake service returning an explicit `SyncStatus`:
+In `tests/test_sync_phase3.py`, ordinary-import `SyncStatus`:
+
+```python
+from bridge.sync_service import SyncStatus
+```
+
+Then add a fake service returning explicit structured status:
 
 ```python
 def test_sync_status_text_renders_injected_service_status(self):
@@ -523,7 +541,7 @@ def test_sync_status_text_renders_injected_service_status(self):
         (),
         {
             "status": lambda _self, _db, _chat, _session:
-                rt.SyncStatus(
+                SyncStatus(
                     session_id="phase3",
                     message_count=9,
                     sync_id="stb-injected",
@@ -859,9 +877,15 @@ Using the runtime load report and compatibility service:
 def test_compatibility_service_uses_hardened_poll_override(self):
     service = rt.compatibility_sync_service()
     self.assertIs(service.poll_backend, rt.phase3_sync_poll)
-    self.assertIsNot(
-        service.poll_backend,
-        rt._ORIGINAL_PHASE3_SYNC_NOW_FOR_POLL,
+
+    safety_entry = next(
+        item
+        for item in rt.RUNTIME_LOAD_REPORT
+        if item["module"] == "sync_safety.py"
+    )
+    self.assertIn(
+        "phase3_sync_poll",
+        safety_entry["public_callable_overrides"],
     )
 ```
 
