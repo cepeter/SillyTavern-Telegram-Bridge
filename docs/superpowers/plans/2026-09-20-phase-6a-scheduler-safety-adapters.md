@@ -35,11 +35,12 @@
 
 ## File Structure
 
-**Create/replace responsibility in `bridge/scheduler_safety.py`:**
+**Final responsibility in `bridge/scheduler_safety.py`:**
 - Ordinary-import infrastructure helpers only.
 - `DatabaseConnectionGate` serializes first initialization per normalized database path.
 - `DurableWorkerGuard` wraps workers and performs bounded transient SQLite requeue attempts through an injected lightweight connection opener.
-- No reference to `bridge.runtime`, `bridge.main`, runtime globals, JobService, or compatibility helpers.
+- During Tasks 1–4 only, the existing late-override code remains inside a clearly marked `if "db_connect" in globals():` compatibility block so intermediate commits preserve production behavior. Task 5 deletes that block.
+- The final module has no reference to `bridge.runtime`, `bridge.main`, runtime globals, JobService, or compatibility helpers.
 
 **Modify `bridge/database.py`:**
 - Canonical normalized path resolution.
@@ -81,7 +82,7 @@
 ### Task 1: Convert Scheduler Safety Into Ordinary-Import Collaborators
 
 **Files:**
-- Replace: `bridge/scheduler_safety.py`
+- Modify: `bridge/scheduler_safety.py`
 - Create: `tests/test_scheduler_safety_adapters.py`
 
 **Interfaces:**
@@ -206,9 +207,9 @@ python -m unittest tests.test_scheduler_safety_adapters.DatabaseConnectionGateTe
 
 Expected: import/attribute failure because the current `scheduler_safety.py` depends on shared runtime globals and does not define `DatabaseConnectionGate`.
 
-- [ ] **Step 3: Replace the old late-override module with the ordinary connection gate**
+- [ ] **Step 3: Add the ordinary connection gate without removing the active compatibility override yet**
 
-Replace the top-level architecture of `bridge/scheduler_safety.py` with ordinary imports and this implementation:
+Add ordinary imports and `DatabaseConnectionGate` before the existing late-override code:
 
 ```python
 from __future__ import annotations
@@ -253,7 +254,18 @@ class DatabaseConnectionGate:
             return connection
 ```
 
-Do not keep `_ORIGINAL_DB_CONNECT`, `db_connect`, `recover_jobs`, or `submit_durable_chat_job` in this module.
+Immediately after the new ordinary-import class definitions, wrap the existing legacy runtime code in this temporary compatibility gate:
+
+```python
+# Temporary Phase 6A migration bridge. Ordinary import skips this block;
+# the legacy shared runtime still executes it until Task 5 cuts over.
+if "db_connect" in globals():
+    # Existing scheduler_safety.py implementation remains here unchanged,
+    # including _ORIGINAL_DB_CONNECT and the current overrides.
+    ...
+```
+
+When implementing, indent the actual existing legacy code under this condition; do not use the literal ellipsis. This preserves all current production behavior during Tasks 1–4 while making `bridge.scheduler_safety` importable normally for the new collaborators. Task 5 deletes the entire compatibility block.
 
 - [ ] **Step 4: Add failing DurableWorkerGuard tests**
 
@@ -412,7 +424,7 @@ Expected: FAIL because `DurableWorkerGuard` is not yet defined.
 
 - [ ] **Step 6: Implement DurableWorkerGuard minimally**
 
-Add this collaborator to `bridge/scheduler_safety.py`:
+Add this collaborator above the temporary legacy compatibility block in `bridge/scheduler_safety.py`:
 
 ```python
 class DurableWorkerGuard:
@@ -558,7 +570,7 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_same_path_runs_schema_initialization_once(self):
+    def test_canonical_gate_runs_schema_initialization_once(self):
         original = rt.initialize_database_schema
         calls = []
 
@@ -571,8 +583,8 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
             "initialize_database_schema",
             side_effect=traced,
         ):
-            first = rt.db_connect(self.path)
-            second = rt.db_connect(self.path)
+            first = rt._DB_CONNECTION_GATE.connect(self.path)
+            second = rt._DB_CONNECTION_GATE.connect(self.path)
 
         try:
             self.assertEqual(len(calls), 1)
@@ -580,9 +592,9 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
             first.close()
             second.close()
 
-    def test_primary_and_lightweight_connections_keep_role_specific_cache(self):
-        first = rt.db_connect(self.path)
-        second = rt.db_connect(self.path)
+    def test_canonical_gate_keeps_role_specific_cache(self):
+        first = rt._DB_CONNECTION_GATE.connect(self.path)
+        second = rt._DB_CONNECTION_GATE.connect(self.path)
         try:
             first_cache = first.execute("PRAGMA cache_size").fetchone()[0]
             second_cache = second.execute("PRAGMA cache_size").fetchone()[0]
@@ -601,21 +613,7 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
             second.close()
 ```
 
-Update `tests/test_composition.py::DatabaseFactoryPathTests` to stop saving/resetting `_DB_SCHEMA_READY`, `_DB_SCHEMA_LOCK`, and `_DB_SCHEMA_READY_PATHS`. Keep its two behavioral tests using unique temporary paths:
-
-```python
-class DatabaseFactoryPathTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
-        self.old_db_file = rt.DB_FILE
-
-    def tearDown(self):
-        rt.DB_FILE = self.old_db_file
-        self.tmp.cleanup()
-```
-
-The existing `test_explicit_database_paths_initialize_independently` no longer mutates old readiness globals.
+These tests deliberately call the new canonical gate directly while the old late runtime override is still active. The final Task 5 owner test proves `rt.db_connect` itself switches to this canonical path.
 
 - [ ] **Step 2: Run the new connection tests and verify RED**
 
@@ -625,7 +623,7 @@ Run:
 python -m unittest   tests.test_scheduler_safety_adapters.CanonicalDatabaseConnectionTests   tests.test_composition.DatabaseFactoryPathTests -v
 ```
 
-Expected: at least one failure because current production connection behavior is still supplied by the late `scheduler_safety.py` implementation and the old test fixture depends on its globals.
+Expected: FAIL because `database.py` does not yet construct `_DB_CONNECTION_GATE`.
 
 - [ ] **Step 3: Import the ordinary gate into database.py**
 
@@ -721,11 +719,11 @@ Expected: PASS.
 Run:
 
 ```bash
+python -m unittest tests.test_scheduler_safety_adapters -v
 python -m unittest tests.test_composition -v
-python -m pytest -q tests/test_composition.py
 ```
 
-Expected: PASS.
+Expected: PASS. Existing composition tests still see the temporary legacy scheduler globals until Task 5, so no intermediate compatibility break is introduced.
 
 - [ ] **Step 7: Commit Task 2**
 
@@ -747,12 +745,28 @@ git commit -m "refactor: make database connection safety canonical"
 - Produces: same row tuple shape consumed by `JobService.recover`.
 - Behavioral contract: both startup and backlog calls return at most 128 queued rows ordered by `created_at`.
 
-- [ ] **Step 1: Add RED bounded-recovery integration test**
+- [ ] **Step 1: Add RED canonical-source guard plus bounded-recovery integration test**
 
 Append:
 
 ```python
 class CanonicalRecoveryTests(unittest.TestCase):
+    def test_database_recover_jobs_is_bounded_in_canonical_source(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "database.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("def recover_jobs(")
+        end = source.find("\ndef ", start + 4)
+        chunk = source[start:end if end >= 0 else None]
+        self.assertIn("LIMIT 128", chunk)
+        self.assertNotIn(
+            'limit_clause = "" if recover_running else " LIMIT 128"',
+            chunk,
+        )
+
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "recovery.sqlite3"
@@ -828,7 +842,7 @@ Run:
 python -m unittest   tests.test_scheduler_safety_adapters.CanonicalRecoveryTests -v
 ```
 
-Expected: FAIL with startup recovery returning all 130 rows from the canonical `database.py` implementation.
+Expected: the canonical-source guard FAILS because `database.py` still omits the startup limit. The behavioral integration assertion may already pass because the temporary late safety override is still active; that is intentional until Task 5.
 
 - [ ] **Step 3: Make canonical recovery always bounded**
 
@@ -1030,8 +1044,10 @@ git commit -m "refactor: inject durable worker safety explicitly"
 
 **Files:**
 - Modify: `bridge/runtime_loader.py`
+- Modify: `bridge/scheduler_safety.py`
 - Modify: `tests/test_runtime_loader.py`
 - Modify: `tests/test_scheduler_safety_adapters.py`
+- Modify: `tests/test_composition.py`
 
 **Interfaces:**
 - Consumes: canonical `database.py` owners and explicit main.py JobService composition from Tasks 2–4.
@@ -1075,7 +1091,23 @@ In `tests/test_runtime_loader.py`, add:
         )
 ```
 
-In `tests/test_scheduler_safety_adapters.py`, add the source guard:
+Update `tests/test_composition.py::DatabaseFactoryPathTests` to stop saving/resetting the temporary legacy `_DB_SCHEMA_READY`, `_DB_SCHEMA_LOCK`, and `_DB_SCHEMA_READY_PATHS` globals:
+
+```python
+class DatabaseFactoryPathTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.old_db_file = rt.DB_FILE
+
+    def tearDown(self):
+        rt.DB_FILE = self.old_db_file
+        self.tmp.cleanup()
+```
+
+Remove the readiness-global mutation from `test_explicit_database_paths_initialize_independently`; unique temporary paths provide isolation through the canonical gate.
+
+In `tests/test_scheduler_safety_adapters.py`, add the final source guard:
 
 ```python
 class SchedulerSafetySourceBoundaryTests(unittest.TestCase):
@@ -1102,11 +1134,11 @@ python -m unittest   tests.test_runtime_loader.RuntimeLoaderTests.test_scheduler
 ```
 
 Expected:
-- source-boundary test PASS after Task 1;
+- source-boundary test FAIL because the temporary compatibility block still contains `_ORIGINAL_DB_CONNECT` and the legacy functions;
 - runtime-stage test FAIL because `scheduler_safety.py` is still listed;
-- canonical-owner test may still report `scheduler_safety.py` until the stage is removed.
+- canonical-owner test reports the legacy scheduler owner until the cutover.
 
-- [ ] **Step 3: Remove scheduler_safety.py and its allowlist from runtime_loader.py**
+- [ ] **Step 3: Delete the temporary scheduler compatibility block and remove the module from runtime_loader.py**
 
 Change the `safety_overrides` module tuple from:
 
@@ -1141,6 +1173,17 @@ Delete the complete allowlist entry:
     ("db_connect", "recover_jobs", "submit_durable_chat_job"),
 ),
 ```
+
+In `bridge/scheduler_safety.py`, delete the entire temporary `if "db_connect" in globals():` compatibility block, including:
+- `_ORIGINAL_DB_CONNECT`,
+- `_DB_SCHEMA_READY`, `_DB_SCHEMA_READY_PATHS`, and `_DB_SCHEMA_LOCK`,
+- the legacy private database opener/path helpers,
+- the replacement `db_connect`,
+- the replacement `recover_jobs`,
+- the legacy `_guard_durable_worker`,
+- the replacement `submit_durable_chat_job`.
+
+The final file contains only the ordinary-import `DatabaseConnectionGate`, `DurableWorkerGuard`, their stdlib imports, and internal methods.
 
 Leave all remaining Phase 6B+ safety modules unchanged.
 
@@ -1181,7 +1224,7 @@ Expected: `Phase 6A source boundaries verified`.
 - [ ] **Step 6: Commit Task 5**
 
 ```bash
-git add bridge/runtime_loader.py tests/test_runtime_loader.py tests/test_scheduler_safety_adapters.py
+git add bridge/runtime_loader.py bridge/scheduler_safety.py tests/test_runtime_loader.py tests/test_scheduler_safety_adapters.py tests/test_composition.py
 git commit -m "refactor: retire scheduler safety runtime overrides"
 ```
 
