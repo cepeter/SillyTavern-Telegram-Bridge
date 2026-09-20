@@ -1,6 +1,6 @@
 # Phase 5C PersonaService Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Extract Persona lifecycle orchestration into an injected `PersonaService` while preserving native SillyTavern persistence behavior and the existing state-integrity safety overrides.
 
@@ -43,7 +43,7 @@
 - Consumes: native Persona load/default/upsert/delete callables, existing `update_session`-compatible callable, and `count_persona_references(db, persona_id)`.
 - Produces: `PersonaService.list()`, `get()`, `name()`, `default_id()`, `create_and_select()`, `update()`, `select()`, `disable()`, and `delete_if_unused()`.
 
-- [ ] **Step 1: Add RED service tests for reads and lifecycle behavior**
+- [x] **Step 1: Add RED service tests for reads and lifecycle behavior**
 
 Create `tests/test_persona_service.py` with a fake collaborator fixture and tests equivalent to:
 
@@ -191,7 +191,7 @@ class PersonaServiceTests(unittest.TestCase):
 
 Also cover successful `update()`, successful `select()`, successful unused deletion, duplicate logical ID rejection when the current catalog already exposes that ID/avatar, and name/description bounds.
 
-- [ ] **Step 2: Verify service tests are RED**
+- [x] **Step 2: Verify service tests are RED**
 
 Run:
 
@@ -201,7 +201,7 @@ python -m unittest tests.test_persona_service -v
 
 Expected: import failure because `bridge.persona_service` does not exist.
 
-- [ ] **Step 3: Add a RED repository test for Persona references**
+- [x] **Step 3: Add a RED repository test for Persona references**
 
 Extend the in-memory schema in `RepositoryPrimitiveTests.setUp()` with:
 
@@ -240,7 +240,7 @@ def test_count_persona_references_is_read_only(self):
     )
 ```
 
-- [ ] **Step 4: Verify repository test is RED**
+- [x] **Step 4: Verify repository test is RED**
 
 Run:
 
@@ -250,7 +250,7 @@ python -m unittest tests.test_repository_transactions.RepositoryPrimitiveTests.t
 
 Expected: `AttributeError` because `count_persona_references` does not exist.
 
-- [ ] **Step 5: Implement the repository primitive**
+- [x] **Step 5: Implement the repository primitive**
 
 Add to `bridge/repositories.py`:
 
@@ -268,7 +268,7 @@ def count_persona_references(
 
 It must contain no commit/rollback/transaction ownership.
 
-- [ ] **Step 6: Implement minimal `PersonaService`**
+- [x] **Step 6: Implement minimal `PersonaService`**
 
 Create a frozen dataclass in `bridge/persona_service.py`. Validation rules:
 
@@ -299,7 +299,7 @@ Behavior:
 
 Do not import Telegram, `bridge.runtime`, or native settings paths.
 
-- [ ] **Step 7: Verify Task 1 GREEN**
+- [x] **Step 7: Verify Task 1 GREEN**
 
 Run:
 
@@ -309,7 +309,7 @@ python -m unittest tests.test_persona_service tests.test_repository_transactions
 
 Expected: all tests pass.
 
-- [ ] **Step 8: Commit Task 1**
+- [x] **Step 8: Commit Task 1**
 
 Commit:
 
@@ -333,7 +333,7 @@ refactor: add PersonaService application contract
 - Consumes: `PersonaService` and `repositories.count_persona_references`.
 - Produces: `compatibility_persona_service()`, `resolve_persona_service()`, `BridgeServices.persona`, and production startup injection.
 
-- [ ] **Step 1: Add RED compatibility tests**
+- [x] **Step 1: Add RED compatibility tests**
 
 In `tests/test_persona_service.py`, using `bridge.runtime as rt`, patch final runtime collaborators after runtime loading and assert the compatibility service sees the patches:
 
@@ -363,7 +363,7 @@ For the deletion call, patch the repository collaborator used by the compatibili
 
 Also assert `resolve_persona_service(fake)` returns the injected fake unchanged.
 
-- [ ] **Step 2: Add RED composition tests**
+- [x] **Step 2: Add RED composition tests**
 
 Extend `tests/test_composition.py`:
 
@@ -384,7 +384,7 @@ Add a startup test that patches the runtime-resolved Persona collaborators, call
 
 Update the Phase 5 source guard so `GroupDirectorService`, `MemoryService`, and `PersonaService` are allowed while `SyncService` and `JobService` remain absent.
 
-- [ ] **Step 3: Add RED runtime-loader guard**
+- [x] **Step 3: Add RED runtime-loader guard**
 
 Add:
 
@@ -396,7 +396,7 @@ def test_persona_service_is_not_a_runtime_stage(self):
     self.assertNotIn("persona_service.py", loaded)
 ```
 
-- [ ] **Step 4: Verify Task 2 tests are RED**
+- [x] **Step 4: Verify Task 2 tests are RED**
 
 Run:
 
@@ -406,7 +406,7 @@ python -m unittest   tests.test_persona_service   tests.test_composition   tests
 
 Expected failures: missing compatibility helpers, missing `BridgeServices.persona`, missing startup construction, and/or Phase 5 guard rejecting the new service.
 
-- [ ] **Step 5: Implement the late-bound compatibility adapter**
+- [x] **Step 5: Implement the late-bound compatibility adapter**
 
 In `bridge/persona_sync.py`, ordinary-import:
 
@@ -441,7 +441,7 @@ def resolve_persona_service(persona_service=None) -> _PersonaService:
 
 These global names must be resolved inside the function body at call time so the later `state_integrity.py` overrides remain effective.
 
-- [ ] **Step 6: Wire composition**
+- [x] **Step 6: Wire composition**
 
 In `bridge/composition.py`:
 
@@ -469,11 +469,11 @@ persona = _PersonaService(
 
 Pass `persona=persona` to `_build_bridge_services_value()`.
 
-- [ ] **Step 7: Verify Task 2 GREEN**
+- [x] **Step 7: Verify Task 2 GREEN**
 
 Run the same unittest command from Step 4. Expected: all pass.
 
-- [ ] **Step 8: Commit Task 2**
+- [x] **Step 8: Commit Task 2**
 
 Commit:
 
@@ -495,7 +495,7 @@ refactor: inject PersonaService at startup
 - Consumes: injected or compatibility `PersonaService`.
 - Produces: service-owned create/edit behavior for pending Persona input.
 
-- [ ] **Step 1: Add RED create/edit service-boundary tests**
+- [x] **Step 1: Add RED create/edit service-boundary tests**
 
 In `tests/test_persona_editor.py`, create a fake service exposing `get()`, `create_and_select()`, `update()`, and `name()`. Start pending Persona state with the existing helper and call:
 
@@ -518,7 +518,7 @@ Assert:
 - invalid input does not call the service and leaves pending state intact,
 - a service exception keeps pending state and sends the existing retry feedback.
 
-- [ ] **Step 2: Add RED production propagation test**
+- [x] **Step 2: Add RED production propagation test**
 
 In `tests/test_composition.py`, give `BridgeServices` a sentinel Persona service, patch `rt.handle_pending_input`, invoke `rt.process_message(..., services=services)`, and assert:
 
@@ -528,7 +528,7 @@ self.assertIs(captured["persona_service"], services.persona)
 
 Keep existing `memory_service` propagation assertion intact.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run:
 
@@ -538,7 +538,7 @@ python -m unittest   tests.test_persona_editor   tests.test_composition.WorkerIn
 
 Expected: `handle_pending_input` rejects `persona_service` and/or production does not propagate it.
 
-- [ ] **Step 4: Thread the injected service into pending input**
+- [x] **Step 4: Thread the injected service into pending input**
 
 In `bridge/message_commands.py`:
 
@@ -570,11 +570,11 @@ Replace application decisions:
 
 Keep parsing, pending-state mutation, messages, and Telegram menu operations in the UI function.
 
-- [ ] **Step 5: Verify native-save failure compatibility**
+- [x] **Step 5: Verify native-save failure compatibility**
 
 Run the existing `test_save_failure_keeps_native_settings_and_pending_state` with no injected service. It must still pass because the compatibility service late-binds the patched final `upsert_native_persona`.
 
-- [ ] **Step 6: Verify Task 3 GREEN**
+- [x] **Step 6: Verify Task 3 GREEN**
 
 Run:
 
@@ -584,7 +584,7 @@ python -m unittest tests.test_persona_editor tests.test_composition -v
 
 Expected: all pass.
 
-- [ ] **Step 7: Commit Task 3**
+- [x] **Step 7: Commit Task 3**
 
 Commit:
 
@@ -608,7 +608,7 @@ refactor: route Persona input through PersonaService
 - Consumes: `BridgeServices.persona`.
 - Produces: injected Persona selection, disable, and deletion through `PersonaService`.
 
-- [ ] **Step 1: Add RED callback-worker propagation test**
+- [x] **Step 1: Add RED callback-worker propagation test**
 
 In `tests/test_composition.py`, patch `rt.process_callback`, call `rt.process_callback_job(self.services, "chat", callback)`, and assert the worker passes:
 
@@ -618,7 +618,7 @@ services=self.services
 
 without changing the worker's public positional signature.
 
-- [ ] **Step 2: Add RED callback application tests**
+- [x] **Step 2: Add RED callback application tests**
 
 In `tests/test_persona_editor.py`, use a fake Persona service and call `handle_persona_callback(..., persona_service=fake)`.
 
@@ -633,7 +633,7 @@ Cover:
 
 Patch raw `rt.delete_native_persona` / direct session-update paths to raise in injected-service tests so accidental bypasses fail loudly.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run:
 
@@ -643,7 +643,7 @@ python -m unittest   tests.test_persona_editor   tests.test_composition.WorkerIn
 
 Expected: callback signatures do not yet accept/propagate services.
 
-- [ ] **Step 4: Propagate services through callback dispatch**
+- [x] **Step 4: Propagate services through callback dispatch**
 
 In `bridge/main.py`:
 
@@ -668,7 +668,7 @@ In `bridge/panel_callback_routes.py`:
 - add optional keyword `persona_service=None`,
 - pass it only to `handle_persona_callback`; character/session/world paths remain unchanged.
 
-- [ ] **Step 5: Replace callback application decisions**
+- [x] **Step 5: Replace callback application decisions**
 
 At the top of `handle_persona_callback`:
 
@@ -685,7 +685,7 @@ Use:
 
 Remove the direct SQL reference count from this function; that decision now belongs to the service. Preserve the exact current feedback strings.
 
-- [ ] **Step 6: Verify Task 4 GREEN**
+- [x] **Step 6: Verify Task 4 GREEN**
 
 Run:
 
@@ -695,7 +695,7 @@ python -m unittest tests.test_persona_editor tests.test_composition -v
 
 Expected: all pass.
 
-- [ ] **Step 7: Commit Task 4**
+- [x] **Step 7: Commit Task 4**
 
 Commit:
 
@@ -720,7 +720,7 @@ refactor: route Persona callbacks through PersonaService
 - Consumes: optional injected Persona service or `resolve_persona_service()`.
 - Produces: menus/prompts backed by the same application read boundary and regression guards against raw lifecycle calls.
 
-- [ ] **Step 1: Add RED UI-read tests**
+- [x] **Step 1: Add RED UI-read tests**
 
 Add focused tests proving:
 
@@ -731,7 +731,7 @@ Add focused tests proving:
 
 Use fake service data that differs from `rt.load_personas()` so the test proves the injected read boundary rather than merely matching existing global data.
 
-- [ ] **Step 2: Add RED source-boundary regression tests**
+- [x] **Step 2: Add RED source-boundary regression tests**
 
 In `tests/test_persona_service.py`, inspect the migrated application/UI sources.
 
@@ -748,7 +748,7 @@ Extract `send_persona_menu` and assert its body does not contain `"load_personas
 
 These guards apply only to the migrated application/UI owners; `persona_sync.py` and `state_integrity.py` are expected to keep native backend calls in Phase 5C.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run:
 
@@ -758,7 +758,7 @@ python -m unittest   tests.test_persona_service   tests.test_persona_editor   te
 
 Expected: optional Persona-service parameters and source-boundary conditions are not yet satisfied.
 
-- [ ] **Step 4: Route Persona presentation reads through the service**
+- [x] **Step 4: Route Persona presentation reads through the service**
 
 Change these functions to accept keyword-only `persona_service=None`, resolve it at call time, and use service reads:
 
@@ -768,7 +768,7 @@ Change these functions to accept keyword-only `persona_service=None`, resolve it
 
 Propagate the same service from pending-input and callback workflows into these presentation helpers.
 
-- [ ] **Step 5: Propagate service through the `/persona` command route**
+- [x] **Step 5: Propagate service through the `/persona` command route**
 
 Change `_handle_entities(..., services=None)`, pass `services` from `handle_command_route`, and call:
 
@@ -786,7 +786,7 @@ send_persona_menu(
 
 Do not change unrelated entity routes.
 
-- [ ] **Step 6: Verify native synchronization behavior remains unchanged**
+- [x] **Step 6: Verify native synchronization behavior remains unchanged**
 
 Run:
 
@@ -796,7 +796,7 @@ python -m unittest   tests.test_persona_editor   tests.test_persona_native_sync 
 
 Expected: all pass, including existing native settings preservation and avatar tests.
 
-- [ ] **Step 7: Commit Task 5**
+- [x] **Step 7: Commit Task 5**
 
 Commit:
 
@@ -816,7 +816,7 @@ refactor: unify Persona UI service boundary
 - Consumes: completed Phase 5C branch.
 - Produces: review evidence and a Ready-for-review PR; does not merge it.
 
-- [ ] **Step 1: Run focused Persona and integrity tests**
+- [x] **Step 1: Run focused Persona and integrity tests**
 
 Run:
 
@@ -826,7 +826,7 @@ python -m unittest   tests.test_persona_service   tests.test_persona_editor   te
 
 Expected: zero failures/errors.
 
-- [ ] **Step 2: Run the complete repository test suite**
+- [x] **Step 2: Run the complete repository test suite**
 
 Run the repository's CI-equivalent commands used by `.github/workflows`:
 
@@ -839,7 +839,7 @@ pip-audit
 
 Expected: compile success, all unittest/pytest tests pass, and no known dependency vulnerabilities.
 
-- [ ] **Step 3: Review the whole branch against the approved spec**
+- [x] **Step 3: Review the whole branch against the approved spec**
 
 Compare the Phase 5C head against base `e73b3bb4e055a7f228cbdcb831caca934ce1139e`.
 
@@ -853,7 +853,7 @@ Review specifically for:
 
 If a Critical or Important issue is found, add a failing regression test first, verify RED, fix minimally, and rerun the focused and full suites. Minor findings may be documented for a later phase.
 
-- [ ] **Step 4: Update the plan checklist and spec only from verified reality**
+- [x] **Step 4: Update the plan checklist and spec only from verified reality**
 
 Mark each completed plan item `[x]` only after the corresponding test/CI evidence exists. If implementation required a ruling that changed the design, update the spec with that exact ruling; otherwise leave the approved spec unchanged.
 
