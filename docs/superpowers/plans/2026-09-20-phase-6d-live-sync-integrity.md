@@ -1640,3 +1640,17 @@ Do not merge the PR. Merge is a separate user decision.
 
 - Task 3 RED: `5b83f45eea5feb6f15726f922114cc74f2dce4f6`, CI #444 failed on exactly six final ownership/retirement assertions while the migrated explicit-clear + Hindsight-refresh integration test passed.
 - Task 3 Ruling: two older Phase 6B/6C source-boundary tests must treat deletion of `state_integrity.py` as the stronger final condition instead of opening the retired file and scanning it. CI #445 showed only these two `FileNotFoundError` regressions after the cutover; all new Phase 6D ownership/behavior tests passed. Cost if wrong: the tests no longer enumerate old forbidden symbols inside a file that no longer exists; file absence is a stricter boundary.
+
+
+## Execution Evidence
+
+- Task 3 cutover: `f444d96592cfac98fc6f69dd8ef58366f1ea90d4` retired `state_integrity.py`, moved canonical public snapshot ownership into `sync_core.py`, and removed the runtime-loader module/allowlist entry.
+- Task 3 regression repair: `3e3a56aeb64510129d418d23e4c62af252831902` updated two older Phase 6B/6C source-boundary tests to recognize deletion of `state_integrity.py` as the stronger final condition. CI #446 completed successfully.
+- Final review finding: the approved Phase 6D design called for persistent source-boundary coverage proving `sync_integrity.py` does not import runtime/sync/UI modules. Production code already satisfied the boundary, but the regression test was missing. Added test-only coverage in `0092f99e04e5470878af230f014a971fac8c926d`.
+- Final review verification on `0092f99e04e5470878af230f014a971fac8c926d`: CI #447 completed successfully; unittest ran 546 tests; pytest reported 546 passed plus 109 subtests; `pip check` reported no broken requirements; locked dependency audit reported no known vulnerabilities.
+- Architecture verification: public `apply_sync_snapshot` resolves to `sync_core.py`; `state_integrity.py` is absent; runtime stages and load report contain no `state_integrity.py`; no override allowlist contains `apply_sync_snapshot`; production source contains no `_ORIGINAL_APPLY_SYNC_SNAPSHOT`; `sync_integrity.py` contains no import of `bridge.runtime`, `bridge.sync_core`, `bridge.sync_api`, `bridge.sync_safety`, `bridge.state_integrity`, or `bridge.telegram`.
+- Baseline equivalence: final `sync_core.py::_apply_sync_snapshot_backend` is statement-equivalent to baseline `sync_core.py::apply_sync_snapshot` apart from the function name; `sync_api.py::phase3_sync_now` is byte-for-byte identical to baseline; `bridge/sync_safety.py` and `bridge/sync_service.py` are byte-for-byte identical to baseline.
+- Upstream drift: current upstream `main` remains `e23d9750610bd2b6987d3a59933ff574f1b0523f`; feature branch is 0 behind.
+- PR review state before the final evidence commit: PR #45 has no comments, no submitted reviews, and no unresolved review threads.
+- Final review: self-review (no independent reviewer/subagent capability is exposed in this harness). After the source-boundary coverage addition, no Critical or Important findings remain.
+- Final evidence-commit CI is intentionally not claimed here: this documentation update creates a new exact head. The PR body will record the exact final head and its CI result after GitHub Actions completes on that SHA.
