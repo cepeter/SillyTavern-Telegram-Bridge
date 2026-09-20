@@ -568,9 +568,8 @@ def compatibility_memory_service() -> _MemoryService:
     """Build a short-lived MemoryService from the final shared-runtime collaborators.
 
     This is the compatibility adapter for direct legacy callers. The function
-    resolves collaborators at call time so late-loaded safety overrides remain
-    effective without letting application workflows call backend functions
-    directly.
+    resolves the canonical shared-runtime collaborators at call time without
+    letting application workflows call backend functions directly.
     """
     return _MemoryService(
         recall_context=recall_memory_context,
