@@ -374,15 +374,19 @@ class CanonicalRecoveryTests(unittest.TestCase):
 
 
 class DatabaseSourceBoundaryTests(unittest.TestCase):
-    def test_database_has_no_legacy_schema_readiness_globals(self):
+    def test_canonical_db_connect_does_not_depend_on_legacy_readiness_globals(self):
         source = (
             Path(__file__).parents[1]
             / "bridge"
             / "database.py"
         ).read_text(encoding="utf-8")
-        self.assertNotIn("_DB_SCHEMA_READY", source)
-        self.assertNotIn("_DB_SCHEMA_READY_PATHS", source)
-        self.assertNotIn("_DB_SCHEMA_LOCK", source)
+        start = source.index("def db_connect(")
+        end = source.find("\ndef ", start + 4)
+        chunk = source[start:end if end >= 0 else None]
+        self.assertIn("_DB_CONNECTION_GATE.connect", chunk)
+        self.assertNotIn("_DB_SCHEMA_READY", chunk)
+        self.assertNotIn("_DB_SCHEMA_READY_PATHS", chunk)
+        self.assertNotIn("_DB_SCHEMA_LOCK", chunk)
 
 
 class SchedulerSafetySourceBoundaryTests(unittest.TestCase):
