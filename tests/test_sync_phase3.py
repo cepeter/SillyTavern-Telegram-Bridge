@@ -526,6 +526,61 @@ class Phase3SyncTests(unittest.TestCase):
             ],
         )
 
+    def test_direct_integrity_adapter_uses_final_runtime_memory_collaborators(self):
+        current = rt.load_session(
+            self.db,
+            "chat",
+            "phase3",
+            rt.DEFAULT_MODEL,
+        )
+        retained = []
+
+        with patch.object(
+            rt,
+            "retain_session_memory",
+            side_effect=lambda db, chat_id, session, fields:
+                retained.append(
+                    (
+                        db,
+                        chat_id,
+                        session["session_id"],
+                        fields["name"],
+                    )
+                ),
+        ), patch.object(
+            rt,
+            "card_fields_from_file",
+            return_value={"name": "patched-card"},
+        ):
+            rt._SYNC_SNAPSHOT_INTEGRITY.apply(
+                self.db,
+                "chat",
+                current,
+                {},
+                [("user", "remote transcript")],
+                {},
+            )
+
+        self.assertEqual(
+            retained,
+            [
+                (
+                    self.db,
+                    "chat",
+                    "phase3",
+                    "patched-card",
+                )
+            ],
+        )
+
+    def test_task2_preserves_state_integrity_public_owner(self):
+        self.assertEqual(
+            Path(
+                rt.apply_sync_snapshot.__code__.co_filename
+            ).name,
+            "state_integrity.py",
+        )
+
     def test_sync_panel_exposes_realtime_control(self):
         calls = []
         original = rt.telegram_request
