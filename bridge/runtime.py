@@ -109,6 +109,23 @@ from bridge.panel_utils import (
     panel_page,
 )
 
+from bridge.memory_backend import (
+    close_hindsight_client,
+    hindsight_bank_id,
+    hindsight_client,
+    hindsight_conversation_document_id,
+    hindsight_explicit_document_id,
+    hindsight_session_lock,
+    hindsight_session_prefix,
+    hindsight_tags,
+    memory_mode,
+    memory_recall_filter,
+    memory_scope,
+    recall_memory_context,
+    recall_memory_results,
+    remember_fact,
+)
+
 from bridge.network_security import (
     strict_urlopen,
     validate_provider_endpoint,
