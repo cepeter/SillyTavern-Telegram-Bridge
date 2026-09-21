@@ -13,25 +13,6 @@ _ORIGINAL_PROCESS_MESSAGE = process_message
 
 
 
-def begin_operation(db, operation_id, kind):
-    """Persist the prepared marker immediately; never keep a writer lock over I/O."""
-    if operation_id is None:
-        return True
-    def write():
-        now = time.time()
-        cursor = db.execute(
-            "INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?, 'in_progress',?,?)",
-            (str(operation_id), kind, now, now),
-        )
-        if cursor.rowcount == 1:
-            db.commit()
-            return True
-        return False
-    inserted = run_write_txn(db, write)
-    if inserted:
-        return True
-    return not operation_was_applied(db, operation_id)
-
 
 def _operation_payload_key(operation_id):
     return f"operation_payload:{operation_id}"
