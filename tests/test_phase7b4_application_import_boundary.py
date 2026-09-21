@@ -96,11 +96,32 @@ def _referenced_globals(source: str, filename: str) -> set[str]:
     return result
 
 
+def _module_defined_names(source: str) -> set[str]:
+    tree = ast.parse(source)
+    names: set[str] = set()
+
+    def bind_target(node):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, (ast.Tuple, ast.List)):
+            for child in node.elts:
+                bind_target(child)
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                bind_target(target)
+    return names
+
+
 def _owner_index() -> dict[str, list[str]]:
     owners: dict[str, list[str]] = {}
     for path in sorted(BRIDGE_DIR.glob("*.py")):
         source = path.read_text(encoding="utf-8")
-        for name in _module_bound_names(source):
+        for name in _module_defined_names(source):
             owners.setdefault(name, []).append(path.name)
     return owners
 
