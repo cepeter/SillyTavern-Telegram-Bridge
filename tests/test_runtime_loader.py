@@ -445,7 +445,7 @@ class RuntimeLoaderTests(unittest.TestCase):
                     )
 
 
-    def test_recovery_allowlist_is_sync_ui_only(self):
+    def test_recovery_allowlist_is_callback_only_during_phase_6h_cutover(self):
         recovery_stage = next(
             stage
             for stage in DEFAULT_RUNTIME_STAGES
@@ -455,8 +455,6 @@ class RuntimeLoaderTests(unittest.TestCase):
             recovery_stage.allowed_overrides_for("recovery.py"),
             frozenset(
                 {
-                    "sync_status_text",
-                    "send_sync_menu",
                     "handle_sync_callback",
                 }
             ),
