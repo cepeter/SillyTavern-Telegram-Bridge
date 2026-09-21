@@ -180,12 +180,8 @@ class SyncSourceBoundaryTests(unittest.TestCase):
             ).name,
             "sync_api.py",
         )
-        self.assertNotIn(
-            "sync_safety.py",
-            {
-                item["module"]
-                for item in rt.RUNTIME_LOAD_REPORT
-            },
+        self.assertFalse(
+            (Path(__file__).parents[1] / "bridge" / "runtime_loader.py").exists()
         )
 
 

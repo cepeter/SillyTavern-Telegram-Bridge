@@ -645,35 +645,14 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         )
 
 
-    def test_phase_7b2_foundations_are_never_exec_loaded(self):
-        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
-
-        loaded = {
-            module
-            for stage in DEFAULT_RUNTIME_STAGES
-            for module in stage.modules
-        }
-        self.assertTrue(
-            {
-                "runtime_context.py",
-                "panel_utils.py",
-                "card_content.py",
-                "callback_tokens.py",
-            }.isdisjoint(loaded)
-        )
+    def test_phase_7b2_foundations_remain_ordinary_after_final_cutover(self):
+        self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
 
 
-    def test_cards_shell_remains_exec_loaded(self):
+    def test_cards_shell_is_ordinary_after_final_cutover(self):
         import bridge.cards as cards
         import bridge.runtime as rt
-        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
 
-        loaded = {
-            module
-            for stage in DEFAULT_RUNTIME_STAGES
-            for module in stage.modules
-        }
-        self.assertNotIn("cards.py", loaded)
         self.assertIs(rt.send_character_menu, cards.send_character_menu)
         self.assertIs(rt.send_session_menu, cards.send_session_menu)
 
