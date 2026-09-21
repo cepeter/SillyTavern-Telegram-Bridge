@@ -41,26 +41,29 @@ Those are Phase 7C responsibilities.
 
 ## Ordinary-import rules
 
-1. A migrated module must import all collaborators explicitly from canonical owners.
-2. No migrated module may import `bridge.runtime`.
-3. Import order must not alter function identity or behavior.
-4. Existing services (`MemoryService`, `PersonaService`, `SyncService`, `JobService`, `GroupDirectorService`) remain the preferred workflow seams.
-5. Shared low-level helpers may be imported from `bridge.common` during this transitional phase; new domain ownership must not be added there.
-6. Existing canonical modules from 7A–7B3 remain authoritative and must not be duplicated.
+1. Every collaborator must have an explicit canonical owner. Acyclic dependencies use normal imports; the residual circular application/UI graph is declared in `bridge.ordinary_dependencies` and completed deterministically after ordinary module import.
+2. The declared dependency table is transitional composition metadata, not a new source of domain ownership, and it may not point to `bridge.runtime` or `bridge.main`.
+3. No migrated module may import `bridge.runtime`.
+4. Import order must not alter canonical function identity or behavior.
+5. Existing services (`MemoryService`, `PersonaService`, `SyncService`, `JobService`, `GroupDirectorService`) remain the preferred workflow seams.
+6. Shared low-level helpers may be imported from `bridge.common` during this transitional phase; new domain ownership must not be added there.
+7. Existing canonical modules from 7A–7B3 remain authoritative and must not be duplicated.
 
 ## Explicit extension registration
 
 `scene_state.py`, `director_goals.py`, and `memory_curator.py` currently register hooks as import/exec side effects.
 
-In 7B4 each exposes an idempotent explicit registration function. `bridge.runtime` resets the compatibility extension registry and invokes those registration functions in deterministic order before loading `main.py`.
+In 7B4 each exposes an idempotent explicit registration function. The remaining `main.py` compatibility load resets the registry; immediately after that load, `bridge.runtime` invokes the three registration functions in deterministic order.
 
-This keeps behavior stable on runtime reload and removes dependence on exec ordering.
+This keeps behavior stable on runtime reload and removes dependence on the former extension exec stages.
 
 ## Runtime facade
 
 `bridge.runtime` ordinary-imports migrated modules and republishes their compatibility surface. Existing tests and callers may continue importing `bridge.runtime` during 7B4.
 
 The facade must expose the exact canonical function objects for migrated public APIs.
+
+Because the existing test suite and external compatibility callers still mutate `bridge.runtime` attributes, 7B4 retains a temporary facade bridge: writes are mirrored to already-loaded ordinary modules and reads of mutable compatibility state resolve from the live ordinary owner. This reproduces the old shared-namespace mutation semantics without making `bridge.runtime` a production dependency. Phase 7C removes this bridge with the facade.
 
 ## Loader endpoint
 
@@ -98,7 +101,8 @@ A static global-dependency diagnostic is used during the migration to expose nam
 6. `DEFAULT_RUNTIME_STAGES` contains only `main.py`.
 7. No new public-callable override allowlist exists.
 8. Full unittest/audit, pytest, dependency validation, and dependency audit pass.
-9. Whole-branch review finds no Critical or Important issue.
+9. Runtime-facade mutation/read compatibility is covered by regression tests while ordinary modules remain the production owners.
+10. Whole-branch review finds no Critical or Important issue.
 
 ## Later sequencing
 
