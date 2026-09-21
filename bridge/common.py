@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """Telegram bridge for SillyTavern character cards.
 
 This keeps the configured character card data and per-Telegram-user chat
 history locally, then sends the assembled conversation to an
 OpenAI-compatible backend.
 """
+from __future__ import annotations
+
 import argparse
 import asyncio
 import base64
