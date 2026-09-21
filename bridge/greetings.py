@@ -1,3 +1,4 @@
+"""Character-card opening greeting helpers."""
 from __future__ import annotations
 
 from bridge.card_content import (
@@ -20,7 +21,6 @@ from bridge.database import (
     record_operation,
 )
 
-"""Character-card opening greeting helpers."""
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
 
 
