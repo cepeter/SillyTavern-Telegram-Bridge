@@ -11,6 +11,52 @@ from unittest.mock import patch
 REPO_ROOT = Path(__file__).parents[1]
 
 
+
+DATABASE_PUBLIC_FUNCTIONS = (
+    "run_write_txn",
+    "write_transaction",
+    "optimize_database",
+    "run_database_maintenance",
+    "db_connect",
+    "get_meta",
+    "set_meta",
+    "record_failed_turn",
+    "latest_failed_turn",
+    "clear_failed_turn",
+    "committed_assistant_for_message",
+    "bind_panel_session",
+    "panel_session_for_message",
+    "panel_owner_for_message",
+    "operation_phase",
+    "set_operation_phase",
+    "begin_operation",
+    "operation_was_applied",
+    "record_operation",
+    "enqueue_job",
+    "job_actor_id",
+    "mark_job_scheduled",
+    "mark_job_running",
+    "finish_job",
+    "recover_jobs",
+    "task_model_key",
+    "task_model_for_session",
+    "set_task_model",
+    "model_target_selection_key",
+    "set_model_target_selection",
+    "get_model_target_selection",
+    "clear_model_target_selection",
+    "get_generation_settings",
+    "update_generation_settings",
+    "preset_names",
+    "save_generation_preset",
+    "load_generation_preset",
+    "delete_generation_preset",
+    "format_generation_settings",
+    "parse_generation_setting",
+    "sync_transcript_hash",
+    "ensure_sync_binding",
+)
+
 class PersistenceImportIslandTests(unittest.TestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -154,6 +200,52 @@ class PersistenceImportIslandTests(unittest.TestCase):
                 ),
                 "patched::model",
             )
+
+
+    def test_runtime_facade_exports_complete_canonical_database_api(self):
+        import bridge.database as database
+        import bridge.runtime as rt
+
+        actual_public_functions = {
+            name
+            for name, value in vars(database).items()
+            if not name.startswith("_")
+            and callable(value)
+            and getattr(value, "__module__", None) == "bridge.database"
+        }
+        self.assertEqual(
+            actual_public_functions,
+            set(DATABASE_PUBLIC_FUNCTIONS),
+        )
+        for name in DATABASE_PUBLIC_FUNCTIONS:
+            with self.subTest(name=name):
+                self.assertIs(
+                    getattr(rt, name),
+                    getattr(database, name),
+                )
+
+    def test_database_and_config_are_absent_from_runtime_stages(self):
+        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
+
+        loaded = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertTrue(
+            {"database.py", "config.py"}.isdisjoint(loaded)
+        )
+
+    def test_runtime_load_report_excludes_database_and_config(self):
+        import bridge.runtime as rt
+
+        loaded = {
+            entry["module"]
+            for entry in rt.RUNTIME_LOAD_REPORT
+        }
+        self.assertTrue(
+            {"database.py", "config.py"}.isdisjoint(loaded)
+        )
 
 
 if __name__ == "__main__":
