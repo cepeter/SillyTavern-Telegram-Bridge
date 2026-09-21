@@ -242,7 +242,7 @@ class SqliteContentionTests(unittest.TestCase):
 
     def test_explicit_path_workers_still_use_serialized_connection(self):
         path = Path(self.tmp.name) / "explicit-worker.sqlite3"
-        db = rt.db_connect(path)
+        db = database.db_connect(path)
         try:
             self.assertIsInstance(db, database._SerializedSQLiteConnection)
             self.assertEqual(
