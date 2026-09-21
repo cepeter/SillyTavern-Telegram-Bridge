@@ -11,6 +11,7 @@ No declaration may point at bridge.runtime or bridge.main.
 from __future__ import annotations
 
 import importlib
+import sys
 from types import ModuleType
 from typing import MutableMapping
 
@@ -443,13 +444,25 @@ def declared_dependencies_for(module_name: str) -> dict[str, DependencySpec]:
     return dict(DECLARED_DEPENDENCIES.get(module_name, {}))
 
 
-def _resolve_dependency(spec: DependencySpec):
+_MISSING = object()
+
+
+def _resolve_dependency(spec: DependencySpec, *, defer_cycles: bool = False):
     module_name, attribute = spec
     if module_name == "urllib" and attribute is None:
         importlib.import_module("urllib.error")
         importlib.import_module("urllib.parse")
         importlib.import_module("urllib.request")
-    module = importlib.import_module(module_name)
+
+    if defer_cycles and module_name in DECLARED_DEPENDENCIES:
+        module = sys.modules.get(module_name)
+        if module is None:
+            return _MISSING
+        if attribute is not None and not hasattr(module, attribute):
+            return _MISSING
+    else:
+        module = importlib.import_module(module_name)
+
     return module if attribute is None else getattr(module, attribute)
 
 
@@ -457,7 +470,12 @@ def bind_module_dependencies(
     module_name: str,
     namespace: MutableMapping[str, object],
 ) -> None:
-    """Bind only the dependencies explicitly declared for one ordinary module."""
+    """Bind safe dependencies during one module's ordinary import.
+
+    Dependencies on another Phase 7B4 compatibility module are deferred when
+    that peer is not fully initialized yet. The runtime facade completes those
+    declared edges after all ordinary modules have imported.
+    """
     declarations = DECLARED_DEPENDENCIES.get(module_name, {})
     for name, spec in declarations.items():
         if name in namespace:
@@ -467,7 +485,21 @@ def bind_module_dependencies(
             raise RuntimeError(
                 f"{module_name} declares forbidden dependency {name} from {source_module}"
             )
-        namespace[name] = _resolve_dependency(spec)
+        value = _resolve_dependency(spec, defer_cycles=True)
+        if value is not _MISSING:
+            namespace[name] = value
+
+
+def complete_module_dependencies(module: ModuleType) -> None:
+    """Complete every declared dependency after the import graph is loaded."""
+    declarations = DECLARED_DEPENDENCIES.get(module.__name__, {})
+    for name, spec in declarations.items():
+        source_module = spec[0]
+        if source_module in {"bridge.runtime", "bridge.main"}:
+            raise RuntimeError(
+                f"{module.__name__} declares forbidden dependency {name} from {source_module}"
+            )
+        setattr(module, name, _resolve_dependency(spec))
 
 
 def publish_compatibility_namespace(
