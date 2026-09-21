@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 from bridge.group_core import (
     group_state,
     group_user_turn_allowed,
@@ -316,3 +320,6 @@ def handle_summary_command(db: sqlite3.Connection, token: str, chat_id: str, ses
         send_text(token, chat_id, "Session summary updated:\n\n" + summary)
     else:
         send_text(token, chat_id, "No chat messages are available to summarize.")
+
+
+_bind_module_dependencies(__name__, globals())
