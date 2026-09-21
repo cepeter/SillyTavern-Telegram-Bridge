@@ -13,9 +13,12 @@ class WorldManagementTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.old_world = rt.WORLD_DIR
+        self.old_config_world = config.WORLD_DIR
         self.old_db = config.DB_FILE
-        rt.WORLD_DIR = root / "worlds"
-        rt.WORLD_DIR.mkdir()
+        world_dir = root / "worlds"
+        rt.WORLD_DIR = world_dir
+        config.WORLD_DIR = world_dir
+        world_dir.mkdir()
         config.DB_FILE = root / "bridge.sqlite3"
         self.db = rt.db_connect()
         self.session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
@@ -23,6 +26,7 @@ class WorldManagementTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
         rt.WORLD_DIR = self.old_world
+        config.WORLD_DIR = self.old_config_world
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
