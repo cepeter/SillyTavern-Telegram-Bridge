@@ -527,6 +527,26 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self.assertEqual(rt.operation_phase(self.db, operation_id), "applied")
 
 
+class DurableRecoveryOwnershipTests(unittest.TestCase):
+    def test_database_begin_operation_uses_serialized_short_write(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "database.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("def begin_operation")
+        end = source.index(
+            "\ndef operation_was_applied",
+            start,
+        )
+        chunk = source[start:end]
+        self.assertIn("run_write_txn(db, write)", chunk)
+
+    def test_recovery_no_longer_defines_begin_operation(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "recovery.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("\ndef begin_operation(", source)
+
+
 class OperationRecoveryUnitTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
