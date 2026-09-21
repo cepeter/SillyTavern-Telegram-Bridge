@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 import bridge.config as config
+import bridge.memory_backend as memory_backend
 import bridge.runtime as rt
 
 
@@ -489,13 +490,13 @@ class AuditRegressionTests(unittest.TestCase):
                 calls.append(kwargs)
                 return type("Result", (), {"results": []})()
 
-        original_client = rt.hindsight_client
-        rt.hindsight_client = FakeClient
+        original_client = memory_backend.hindsight_client
+        memory_backend.hindsight_client = FakeClient
         try:
             self.assertEqual(rt.memory_scope(self.db, "chat"), "session")
             self.assertEqual(rt.recall_memory_results(self.db, "chat", session, "old fact", "Test"), [])
         finally:
-            rt.hindsight_client = original_client
+            memory_backend.hindsight_client = original_client
         self.assertEqual(calls[0]["tags"], [f"session:{session['session_id']}"])
         self.assertEqual(calls[0]["tags_match"], "any_strict")
 
