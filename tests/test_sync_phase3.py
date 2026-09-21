@@ -8,6 +8,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
+import bridge.config as config
 import bridge.runtime as rt
 from bridge.sync_service import SyncStatus
 
@@ -112,7 +113,7 @@ class _FakeSyncService:
 class Phase3SyncTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = rt.DB_FILE
+        self.old_db = config.DB_FILE
         self.old_url = rt.PHASE3_SYNC_API_URL
         self.old_handle = rt.PHASE3_SYNC_API_HANDLE
         self.old_password = rt.PHASE3_SYNC_API_PASSWORD
@@ -120,11 +121,9 @@ class Phase3SyncTests(unittest.TestCase):
         self.old_timeout = rt.PHASE3_SYNC_TIMEOUT_SECONDS
         self.old_client = rt.phase3_client
         self.old_card = rt.card_fields_from_file
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         rt.PHASE3_SYNC_API_URL = "http://127.0.0.1:8000"
         rt.card_fields_from_file = lambda _name: {"name": "Test", "first_mes": "", "description": "", "personality": "", "scenario": ""}
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
         self.db = rt.db_connect()
         self.session = rt.create_session(self.db, "chat", "provider/model", session_id="phase3")
         self.fake = _FakeApi()
@@ -132,7 +131,7 @@ class Phase3SyncTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
-        rt.DB_FILE = self.old_db
+        config.DB_FILE = self.old_db
         rt.PHASE3_SYNC_API_URL = self.old_url
         rt.PHASE3_SYNC_API_HANDLE = self.old_handle
         rt.PHASE3_SYNC_API_PASSWORD = self.old_password

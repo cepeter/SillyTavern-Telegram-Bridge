@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
@@ -126,14 +127,14 @@ class PersonaEditorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
-        self.old_db = rt.DB_FILE
+        self.old_db = config.DB_FILE
         self.old_settings = rt.NATIVE_PERSONA_SETTINGS_FILE
         self.old_avatars = rt.NATIVE_PERSONA_AVATAR_DIR
         self.old_backups = rt.NATIVE_PERSONA_BACKUP_DIR
         self.old_cache = rt._NATIVE_PERSONA_CACHE
         self.old_cache_time = rt._NATIVE_PERSONA_CACHE_LAST_REFRESH
         self.old_phase3 = rt.phase3_api_configured
-        rt.DB_FILE = root / "bridge.sqlite3"
+        config.DB_FILE = root / "bridge.sqlite3"
         rt.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
         rt.NATIVE_PERSONA_AVATAR_DIR = root / "User Avatars"
         rt.NATIVE_PERSONA_BACKUP_DIR = root / "backups"
@@ -144,8 +145,6 @@ class PersonaEditorTests(unittest.TestCase):
         rt._NATIVE_PERSONA_CACHE = {}
         rt._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
         rt.phase3_api_configured = lambda: False
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
         self.db = rt.db_connect()
         self.session = rt.create_session(self.db, "chat", "provider/model", session_id="persona-session")
         self.calls = []
@@ -164,7 +163,7 @@ class PersonaEditorTests(unittest.TestCase):
         rt._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
         rt.phase3_api_configured = self.old_phase3
         self.db.close()
-        rt.DB_FILE = self.old_db
+        config.DB_FILE = self.old_db
         rt.NATIVE_PERSONA_SETTINGS_FILE = self.old_settings
         rt.NATIVE_PERSONA_AVATAR_DIR = self.old_avatars
         rt.NATIVE_PERSONA_BACKUP_DIR = self.old_backups

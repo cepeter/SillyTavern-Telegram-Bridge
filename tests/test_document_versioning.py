@@ -2,16 +2,15 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
 class DocumentVersioningTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = rt.DB_FILE
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        self.old_db = config.DB_FILE
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
         self.old_batch = rt.embed_rag_batch
         self.old_cached = rt.cached_rag_embedding
@@ -22,9 +21,7 @@ class DocumentVersioningTests(unittest.TestCase):
         rt.embed_rag_batch = self.old_batch
         rt.cached_rag_embedding = self.old_cached
         self.db.close()
-        rt.DB_FILE = self.old_db
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def test_same_filename_creates_new_active_version(self):

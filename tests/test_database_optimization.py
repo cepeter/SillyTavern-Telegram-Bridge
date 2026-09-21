@@ -5,28 +5,28 @@ import types
 import unittest
 from pathlib import Path
 
+import bridge.config as config
+import bridge.database as database
 import bridge.runtime as rt
 
 
 class DatabaseOptimizationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.original_db = rt.DB_FILE
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
-        self.db = rt.db_connect()
+        self.original_db = config.DB_FILE
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = database.db_connect()
 
     def tearDown(self):
         self.db.close()
-        rt.DB_FILE = self.original_db
+        config.DB_FILE = self.original_db
         self.tmp.cleanup()
 
     def test_connection_pragmas_on_primary_and_lightweight_connect(self):
-        worker = rt._lightweight_db_connect(timeout=15.0)
+        worker = database._lightweight_db_connect(timeout=15.0)
         for conn, expected_cache_kib in (
-            (self.db, rt._DB_PRIMARY_CACHE_KIB),
-            (worker, rt._DB_WORKER_CACHE_KIB),
+            (self.db, database._DB_PRIMARY_CACHE_KIB),
+            (worker, database._DB_WORKER_CACHE_KIB),
         ):
             try:
                 synchronous = conn.execute("PRAGMA synchronous").fetchone()[0]
@@ -44,22 +44,22 @@ class DatabaseOptimizationTests(unittest.TestCase):
                 if conn is worker:
                     conn.close()
         self.assertEqual(self.db.execute("PRAGMA journal_mode").fetchone()[0].casefold(), "wal")
-        self.assertLess(rt._DB_WORKER_CACHE_KIB, rt._DB_PRIMARY_CACHE_KIB)
+        self.assertLess(database._DB_WORKER_CACHE_KIB, database._DB_PRIMARY_CACHE_KIB)
 
     def test_lightweight_connect_does_not_negotiate_journal_mode(self):
         # Worker startup must stay connection-local: a brand-new database file
         # touched only by _lightweight_db_connect must not be switched to WAL.
         fresh = Path(self.tmp.name) / "fresh.sqlite3"
-        rt.DB_FILE = fresh
+        config.DB_FILE = fresh
         try:
-            conn = rt._lightweight_db_connect(timeout=5.0)
+            conn = database._lightweight_db_connect(timeout=5.0)
             try:
                 journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
                 self.assertEqual(journal_mode.casefold(), "delete")
             finally:
                 conn.close()
         finally:
-            rt.DB_FILE = self.original_db
+            config.DB_FILE = self.original_db
 
     def test_auto_vacuum_incremental_initialized(self):
         auto_vacuum = self.db.execute("PRAGMA auto_vacuum").fetchone()[0]
@@ -101,7 +101,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         reclaimed = rt.run_database_maintenance(vacuum_freelist_threshold=1)
         self.assertTrue(reclaimed)
 
-        conn = rt._lightweight_db_connect(timeout=5.0)
+        conn = database._lightweight_db_connect(timeout=5.0)
         try:
             freelist = conn.execute("PRAGMA freelist_count").fetchone()[0]
             self.assertEqual(freelist, 0)
@@ -167,7 +167,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.assertTrue(connections[0].closed)
 
     def test_load_optional_vector_extension_safe(self):
-        loaded = rt._load_optional_vector_extension(self.db)
+        loaded = database._load_optional_vector_extension(self.db)
         self.assertIsInstance(loaded, bool)
 
     def test_vector_extension_failure_disables_extension_loading(self):
@@ -182,7 +182,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         original = sys.modules.get("sqlite_vec")
         sys.modules["sqlite_vec"] = fake
         try:
-            loaded = rt._load_optional_vector_extension(self.db)
+            loaded = database._load_optional_vector_extension(self.db)
             self.assertFalse(loaded)
             with self.assertRaises(sqlite3.OperationalError) as ctx:
                 self.db.execute("SELECT load_extension('no_such_extension')")
@@ -195,12 +195,12 @@ class DatabaseOptimizationTests(unittest.TestCase):
 
     def test_db_connect_runs_database_wide_schema_setup_once_per_process(self):
         self.assertIn(
-            Path(rt.DB_FILE).expanduser().resolve(),
-            rt._DB_CONNECTION_GATE._ready_paths,
+            Path(config.DB_FILE).expanduser().resolve(),
+            database._DB_CONNECTION_GATE._ready_paths,
         )
 
         traced = []
-        second = rt._lightweight_db_connect(timeout=5.0)
+        second = database._lightweight_db_connect(timeout=5.0)
         second.set_trace_callback(traced.append)
         try:
             self.assertEqual(

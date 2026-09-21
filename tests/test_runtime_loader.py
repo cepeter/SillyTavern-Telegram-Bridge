@@ -145,6 +145,38 @@ class RuntimeLoaderTests(unittest.TestCase):
             }.isdisjoint(loaded_modules)
         )
 
+    def test_phase_7b1_persistence_island_is_never_exec_loaded(self):
+        loaded_modules = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertTrue(
+            {"database.py", "config.py"}.isdisjoint(loaded_modules)
+        )
+
+    def test_phase_7b1_preserves_remaining_core_order(self):
+        core = next(
+            stage
+            for stage in DEFAULT_RUNTIME_STAGES
+            if stage.name == "core"
+        )
+        self.assertEqual(
+            core.modules,
+            (
+                "common.py", "cards.py", "memory.py",
+                "rag.py", "groups.py", "telegram.py",
+                "persona_delete_panel.py", "language.py",
+                "greetings.py", "help_details.py", "help.py",
+                "input_flows.py", "catalog.py", "update.py",
+                "image_generation.py", "expressions.py",
+                "media.py", "generation.py", "commands.py",
+                "status_panels.py", "command_routes.py",
+                "message_commands.py", "callbacks.py",
+                "panel_callback_routes.py", "main.py",
+            ),
+        )
+
     def test_composition_module_is_not_a_runtime_stage(self):
         loaded_modules = {
             module

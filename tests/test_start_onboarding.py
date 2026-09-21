@@ -2,15 +2,14 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
 class StartOnboardingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
         self.session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
         self.fields = {

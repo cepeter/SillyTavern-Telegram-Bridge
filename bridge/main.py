@@ -1,5 +1,7 @@
 from functools import partial as _partial
 
+from bridge import database as _database
+
 from bridge.composition import (
     BackgroundRuntime as _BackgroundRuntime,
     BridgeConfig as _BridgeConfig,
@@ -38,7 +40,7 @@ from bridge.scheduler_safety import (
 )
 
 _DURABLE_WORKER_GUARD = _DurableWorkerGuard(
-    _lightweight_db_connect
+    _database._lightweight_db_connect
 )
 
 _SHUTDOWN_EVENT = threading.Event()

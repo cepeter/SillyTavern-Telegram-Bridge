@@ -2,21 +2,20 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
 class PanelExpiryFeedbackTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.original_db = rt.DB_FILE
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        self.original_db = config.DB_FILE
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
 
     def tearDown(self):
         self.db.close()
-        rt.DB_FILE = self.original_db
+        config.DB_FILE = self.original_db
         self.tmp.cleanup()
 
     def test_queued_expired_panel_sends_visible_feedback_and_purges_binding(self):

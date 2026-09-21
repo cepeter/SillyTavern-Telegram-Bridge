@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
+import bridge.config as config
 import bridge.runtime as rt
 from bridge import repositories
 
@@ -324,17 +325,13 @@ class RepositoryPrimitiveTests(unittest.TestCase):
 class GenerationSettingsTransactionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = rt.DB_FILE
-        rt.DB_FILE = Path(self.tmp.name) / "settings.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        self.old_db = config.DB_FILE
+        config.DB_FILE = Path(self.tmp.name) / "settings.sqlite3"
         self.db = rt.db_connect()
 
     def tearDown(self):
         self.db.close()
-        rt.DB_FILE = self.old_db
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def test_get_generation_settings_returns_defaults_without_inserting(self):
@@ -390,10 +387,8 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
 class GroupTransactionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = rt.DB_FILE
-        rt.DB_FILE = Path(self.tmp.name) / "group.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        self.old_db = config.DB_FILE
+        config.DB_FILE = Path(self.tmp.name) / "group.sqlite3"
         self.db = rt.db_connect()
         self.chat_id = "group-chat"
         self.session_id = "group-session"
@@ -416,9 +411,7 @@ class GroupTransactionTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
-        rt.DB_FILE = self.old_db
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def test_group_persistence_helpers_no_longer_expose_commit_flag(self):
@@ -489,7 +482,7 @@ class GroupTransactionTests(unittest.TestCase):
 
     def _assert_group_reply_transaction_committed(self):
         self.assertFalse(self.db.in_transaction)
-        observer = sqlite3.connect(rt.DB_FILE)
+        observer = sqlite3.connect(config.DB_FILE)
         try:
             self.assertEqual(
                 observer.execute(
