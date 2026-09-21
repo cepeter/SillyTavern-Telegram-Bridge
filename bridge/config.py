@@ -15,6 +15,47 @@ DEFAULT_MODEL = os.environ.get("SILLYTAVERN_MODEL", "").strip()
 DEFAULT_MAX_TOKENS = 1800
 PENDING_SETTINGS_TTL_SECONDS = 600
 
+SILLYTAVERN_DIR = Path(
+    os.environ.get(
+        "SILLYTAVERN_DIR",
+        str(BRIDGE_HOME.parent / "SillyTavern"),
+    )
+)
+CHARACTER_DIR = Path(
+    os.environ.get(
+        "SILLYTAVERN_CHARACTER_DIR",
+        str(SILLYTAVERN_DIR / "data/default-user/characters"),
+    )
+)
+DEFAULT_CHARACTER_FILE = os.environ.get(
+    "SILLYTAVERN_DEFAULT_CHARACTER",
+    "",
+).strip()
+CARD_FILE = CHARACTER_DIR / DEFAULT_CHARACTER_FILE
+WORLD_DIR = Path(
+    os.environ.get(
+        "SILLYTAVERN_WORLD_DIR",
+        str(SILLYTAVERN_DIR / "data/default-user/worlds"),
+    )
+)
+SYSTEM_PROMPTS_DIR = Path(
+    os.environ.get(
+        "SILLYTAVERN_SYSTEM_PROMPTS_DIR",
+        str(SILLYTAVERN_DIR / "data/default-user/sysprompt"),
+    )
+)
+SYSTEM_PROMPTS_FILE = os.environ.get(
+    "SILLYTAVERN_SYSTEM_PROMPTS_FILE",
+    "",
+)
+DEFAULT_USER_NAME = os.environ.get(
+    "SILLYTAVERN_DEFAULT_USER_NAME",
+    "",
+).strip()
+CATALOG_MAX_ITEMS = 40
+CARD_FIELD_MAX_CHARS = 20000
+CARD_TOTAL_MAX_CHARS = 60000
+
 REASONING_LEVELS = {
     "none": 0,
     "low": 1024,
