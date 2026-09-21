@@ -30,7 +30,7 @@ DEFAULT_RUNTIME_STAGES = (
     RuntimeStage(
         "core",
         (
-            "common.py", "performance.py", "native_cache.py", "cards.py", "schema.py", "database.py", "memory.py",
+            "common.py", "cards.py", "database.py", "memory.py",
             "rag.py", "groups.py", "telegram.py", "persona_delete_panel.py",
             "language.py", "greetings.py", "help_details.py", "help.py", "input_flows.py",
             "catalog.py", "update.py", "image_generation.py", "expressions.py",

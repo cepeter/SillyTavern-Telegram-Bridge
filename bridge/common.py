@@ -36,6 +36,10 @@ import zipfile
 from defusedxml import ElementTree as ET
 from pathlib import Path
 
+from bridge.runtime_defaults import (
+    PROCESSED_UPDATE_RETENTION_SECONDS,
+)
+
 TOPIC_SCOPE_SEPARATOR = "|topic:"
 
 
@@ -80,7 +84,6 @@ TTS_MAX_CHARS = 4000
 STT_MAX_BYTES = 20 * 1024 * 1024
 STT_DEFAULT_MODEL = "base"
 DB_FILE = BRIDGE_HOME / "scripts" / "sillytavern_telegram.sqlite3"
-PROCESSED_UPDATE_RETENTION_SECONDS = 30 * 86400
 LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
 DEFAULT_ALLOWED_USER = os.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", "")
 DEFAULT_MODEL = os.environ.get("SILLYTAVERN_MODEL", "").strip()
