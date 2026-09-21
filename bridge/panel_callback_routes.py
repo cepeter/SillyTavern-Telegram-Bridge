@@ -1,9 +1,9 @@
+"""Handle System Prompt selection, disable, and pagination callbacks."""
 from __future__ import annotations
 
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
 
 def handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
-    """Handle System Prompt selection, disable, and pagination callbacks."""
     if data.startswith("systemprompt:"):
         value = data.split(":", 1)[1]
         if value.startswith("page:"):
