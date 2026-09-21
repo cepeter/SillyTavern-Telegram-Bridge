@@ -1,3 +1,4 @@
+"""Resolve a configured media tool to an existing executable."""
 from __future__ import annotations
 
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
@@ -13,7 +14,6 @@ from bridge.composition import BridgeServices as _BridgeServices
 
 
 def _resolve_media_command(configured: str, label: str) -> str:
-    """Resolve a configured media tool to an existing executable."""
     candidate = Path(configured).expanduser()
     resolved = str(candidate) if candidate.is_absolute() else shutil.which(configured)
     if not resolved or not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
