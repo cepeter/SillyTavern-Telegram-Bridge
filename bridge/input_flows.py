@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
 
+import threading
+
 def _decode_pending_state(raw: str, meta_key: str) -> dict:
     try:
         return json.loads(raw) if raw else {}
