@@ -404,20 +404,13 @@ class SyncUiOwnershipTests(unittest.TestCase):
             source,
         )
 
-    def test_recovery_no_longer_defines_sync_status_or_menu(self):
-        source = (
+    def test_recovery_compatibility_file_is_absent(self):
+        recovery = (
             Path(__file__).parents[1]
             / "bridge"
             / "recovery.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn(
-            "\ndef sync_status_text(",
-            source,
         )
-        self.assertNotIn(
-            "\ndef send_sync_menu(",
-            source,
-        )
+        self.assertFalse(recovery.exists())
 
 
     def test_panel_callback_routes_owns_sync_callback(self):
@@ -431,16 +424,6 @@ class SyncUiOwnershipTests(unittest.TestCase):
             source,
         )
 
-    def test_recovery_no_longer_defines_sync_callback(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "recovery.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn(
-            "\ndef handle_sync_callback(",
-            source,
-        )
 
 
 if __name__ == "__main__":
