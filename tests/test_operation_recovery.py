@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import bridge.runtime as rt
 from bridge.operation_recovery import OperationRecovery
+from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
 
 
 class DurableRecoveryCharacterizationTests(unittest.TestCase):
@@ -624,6 +625,37 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
         self.assertNotIn("\ndef process_message(", source)
         self.assertNotIn("_ORIGINAL_PROCESS_MESSAGE", source)
         self.assertNotIn("_OPERATION_CONTEXT", source)
+
+
+    def test_recovery_contains_no_durable_recovery_residue(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "recovery.py"
+        ).read_text(encoding="utf-8")
+        forbidden = (
+            "begin_operation",
+            "regenerate_last",
+            "continue_last",
+            "regenerate_edited_turn",
+            "process_message",
+            "_operation_payload_key",
+            "_set_operation_payload",
+            "_get_operation_payload",
+            "_finish_operation",
+            "_begin_durable_operation",
+            "_OPERATION_CONTEXT",
+            "_ORIGINAL_PROCESS_MESSAGE",
+        )
+        for name in forbidden:
+            with self.subTest(name=name):
+                self.assertNotIn(name, source)
+
+    def test_operation_recovery_is_not_a_runtime_stage(self):
+        modules = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn("operation_recovery.py", modules)
 
 
 class OperationRecoveryUnitTests(unittest.TestCase):
