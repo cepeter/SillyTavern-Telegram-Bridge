@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 import bridge.runtime as rt
+import bridge.schema as schema
 
 
 class SyncAuditHardeningTests(unittest.TestCase):
@@ -273,7 +274,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
         self.db.commit()
 
-        rt._run_startup_database_cleanup(
+        schema._run_startup_database_cleanup(
             self.db,
         )
         self.db.commit()
