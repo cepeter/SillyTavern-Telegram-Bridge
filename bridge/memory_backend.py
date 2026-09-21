@@ -41,9 +41,6 @@ def hindsight_client():
 
 
 _HINDSIGHT_SESSION_LOCKS: dict[tuple[str, str], threading.RLock] = {}
-
-
-_HINDSIGHT_SESSION_LOCKS: dict[tuple[str, str], threading.RLock] = {}
 _HINDSIGHT_SESSION_LOCKS_GUARD = threading.Lock()
 
 
