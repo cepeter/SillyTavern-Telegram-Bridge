@@ -116,5 +116,84 @@ class RuntimeImportIslandTests(unittest.TestCase):
         )
 
 
+    def test_ordinary_modules_before_runtime_keep_canonical_identity(self):
+        completed = self._run_python(
+            "import bridge.performance as performance\n"
+            "import bridge.native_cache as native_cache\n"
+            "import bridge.schema as schema\n"
+            "import bridge.runtime as rt\n"
+            "assert rt.perf_span is performance.perf_span\n"
+            "assert rt.cached_json is native_cache.cached_json\n"
+            "assert rt.initialize_database_schema is schema.initialize_database_schema\n"
+        )
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stdout + completed.stderr,
+        )
+
+    def test_runtime_before_ordinary_modules_keeps_canonical_identity(self):
+        completed = self._run_python(
+            "import bridge.runtime as rt\n"
+            "import bridge.performance as performance\n"
+            "import bridge.native_cache as native_cache\n"
+            "import bridge.schema as schema\n"
+            "assert rt.perf_span is performance.perf_span\n"
+            "assert rt.cached_json is native_cache.cached_json\n"
+            "assert rt.initialize_database_schema is schema.initialize_database_schema\n"
+        )
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stdout + completed.stderr,
+        )
+
+    def test_runtime_and_native_cache_share_one_text_cache(self):
+        import bridge.native_cache as native_cache
+        import bridge.runtime as rt
+
+        key = "phase-7a-single-cache-state"
+        native_cache._TEXT_CACHE.pop(key, None)
+        try:
+            first = rt.cached_text(
+                key,
+                lambda: "from-runtime",
+            )
+            second = native_cache.cached_text(
+                key,
+                lambda: "from-module",
+            )
+        finally:
+            native_cache._TEXT_CACHE.pop(key, None)
+
+        self.assertEqual(first, "from-runtime")
+        self.assertEqual(second, "from-runtime")
+        self.assertIs(rt.cached_text, native_cache.cached_text)
+
+    def test_migrated_modules_do_not_import_bridge_runtime(self):
+        for filename in (
+            "runtime_defaults.py",
+            "performance.py",
+            "native_cache.py",
+            "schema.py",
+        ):
+            with self.subTest(filename=filename):
+                source = (
+                    REPO_ROOT
+                    / "bridge"
+                    / filename
+                ).read_text(encoding="utf-8")
+                self.assertNotIn(
+                    "import bridge.runtime",
+                    source,
+                )
+                self.assertNotIn(
+                    "from bridge.runtime import",
+                    source,
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
