@@ -445,5 +445,34 @@ class RuntimeLoaderTests(unittest.TestCase):
                     )
 
 
+    def test_recovery_allowlist_is_sync_ui_only(self):
+        recovery_stage = next(
+            stage
+            for stage in DEFAULT_RUNTIME_STAGES
+            if stage.name == "recovery_overrides"
+        )
+        self.assertEqual(
+            recovery_stage.allowed_overrides_for("recovery.py"),
+            frozenset(
+                {
+                    "sync_status_text",
+                    "send_sync_menu",
+                    "handle_sync_callback",
+                }
+            ),
+        )
+
+    def test_runtime_report_recovery_has_no_actual_overrides(self):
+        report = next(
+            entry
+            for entry in rt.RUNTIME_LOAD_REPORT
+            if entry["module"] == "recovery.py"
+        )
+        self.assertEqual(
+            report["public_callable_overrides"],
+            (),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
