@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
     method = "editMessageText" if message_id else "sendMessage"
     payload = {
@@ -324,3 +328,6 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         memory_service=memory_service,
         persona_service=persona_service,
     )
+
+
+_bind_module_dependencies(__name__, globals())
