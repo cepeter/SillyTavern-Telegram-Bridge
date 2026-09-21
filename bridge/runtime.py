@@ -109,6 +109,20 @@ from bridge.panel_utils import (
     panel_page,
 )
 
+from bridge.group_core import (
+    group_state,
+    group_user_turn_allowed,
+    claim_group_user_turn,
+    pass_group_user_turn,
+    group_setup_state,
+    group_character_option_label,
+    save_group_state,
+    resolve_character_file,
+    group_member_labels,
+    group_current_speaker,
+    advance_group_turn,
+)
+
 from bridge.memory_backend import (
     close_hindsight_client,
     hindsight_bank_id,
