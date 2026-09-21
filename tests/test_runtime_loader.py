@@ -16,7 +16,6 @@ class RuntimeLoaderTests(unittest.TestCase):
             stages,
             {
                 "core",
-                "recovery_overrides",
                 "sync_extensions",
                 "native_adapter_overrides",
                 "identity_extensions",
@@ -24,7 +23,6 @@ class RuntimeLoaderTests(unittest.TestCase):
             },
         )
         by_module = {entry["module"]: entry["public_callable_overrides"] for entry in rt.RUNTIME_LOAD_REPORT}
-        self.assertEqual(by_module["recovery.py"], ())
         self.assertEqual(by_module["scene_state.py"], ())
         self.assertEqual(by_module["memory_curator.py"], ())
         self.assertEqual(by_module["director_goals.py"], ())
@@ -445,26 +443,37 @@ class RuntimeLoaderTests(unittest.TestCase):
                     )
 
 
-    def test_recovery_stage_has_no_override_allowlist_during_phase_6h_cutover(self):
-        recovery_stage = next(
-            stage
-            for stage in DEFAULT_RUNTIME_STAGES
-            if stage.name == "recovery_overrides"
+    def test_recovery_stage_and_module_are_absent(self):
+        self.assertNotIn(
+            "recovery_overrides",
+            {
+                stage.name
+                for stage in DEFAULT_RUNTIME_STAGES
+            },
         )
-        self.assertEqual(
-            recovery_stage.allowed_overrides_for("recovery.py"),
-            frozenset(),
+        self.assertNotIn(
+            "recovery.py",
+            {
+                module
+                for stage in DEFAULT_RUNTIME_STAGES
+                for module in stage.modules
+            },
         )
 
-    def test_runtime_report_recovery_has_no_actual_overrides(self):
-        report = next(
-            entry
-            for entry in rt.RUNTIME_LOAD_REPORT
-            if entry["module"] == "recovery.py"
+    def test_runtime_report_has_no_recovery_entry(self):
+        self.assertNotIn(
+            "recovery_overrides",
+            {
+                entry["stage"]
+                for entry in rt.RUNTIME_LOAD_REPORT
+            },
         )
-        self.assertEqual(
-            report["public_callable_overrides"],
-            (),
+        self.assertNotIn(
+            "recovery.py",
+            {
+                entry["module"]
+                for entry in rt.RUNTIME_LOAD_REPORT
+            },
         )
 
 
