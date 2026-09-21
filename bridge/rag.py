@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from bridge.common import (
+    sqlite3,
+)
+
+from bridge.database import (
+    set_meta,
+)
+
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
 
 from bridge.rag_core import (
