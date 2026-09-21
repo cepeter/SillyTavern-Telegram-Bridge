@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+from bridge.callback_tokens import (
+    dynamic_callback_token,
+)
+
+from bridge.panel_utils import (
+    panel_navigation,
+    panel_page,
+)
+
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
 
 def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service=None) -> None:
