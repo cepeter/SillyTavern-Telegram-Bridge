@@ -1,4 +1,10 @@
 """SillyTavern-compatible expression sprites for Telegram delivery."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
+
+import re
 
 EXPRESSION_META = "expression"
 EXPRESSION_MODES = {"auto", "off", "manual"}
@@ -151,3 +157,6 @@ def send_expression_menu(token: str, chat_id: str, session: dict, db: sqlite3.Co
         method = "editMessageText"
         payload["message_id"] = message_id
     telegram_request(token, method, payload)
+
+
+_bind_module_dependencies(__name__, globals())
