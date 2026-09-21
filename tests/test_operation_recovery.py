@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import bridge.runtime as rt
+from bridge.operation_recovery import OperationRecovery
 
 
 class DurableRecoveryCharacterizationTests(unittest.TestCase):
@@ -524,6 +525,114 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self.assertEqual(count, 2)
         memory.purge_session.assert_not_called()
         self.assertEqual(rt.operation_phase(self.db, operation_id), "applied")
+
+
+class OperationRecoveryUnitTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "adapter.sqlite3"
+        self.db = rt.db_connect(self.path)
+        self.telegram = Mock(return_value={})
+        self.log_info = Mock()
+        self.adapter = OperationRecovery(
+            operation_phase=rt.operation_phase,
+            begin_operation=rt.begin_operation,
+            record_operation=rt.record_operation,
+            run_write_txn=rt.run_write_txn,
+            get_meta=rt.get_meta,
+            telegram_request=self.telegram,
+            delete_outgoing_message_row=Mock(),
+            log_info=self.log_info,
+        )
+
+    def tearDown(self):
+        self.db.close()
+        self.tmp.cleanup()
+
+    def test_payload_missing_malformed_and_non_object_are_empty(self):
+        self.assertEqual(self.adapter.get_payload(self.db, 701), {})
+        rt.set_meta(self.db, "operation_payload:701", "{bad")
+        self.assertEqual(self.adapter.get_payload(self.db, 701), {})
+        rt.set_meta(self.db, "operation_payload:701", "[1,2]")
+        self.assertEqual(self.adapter.get_payload(self.db, 701), {})
+
+    def test_message_id_decoder_preserves_order_and_deduplicates(self):
+        rows = [
+            ("10", '["11","10",null,""]'),
+            (None, '["12","11"]'),
+            ("", "not-json"),
+        ]
+        self.assertEqual(
+            self.adapter.message_ids_from_rows(rows),
+            ["10", "11", "12"],
+        )
+
+    def test_local_committed_delivery_failure_does_not_finish(self):
+        now = rt.time.time()
+        self.db.execute(
+            "INSERT INTO operations("
+            "operation_id,kind,state,created_at,updated_at"
+            ") VALUES(?,?,?,?,?)",
+            ("702", "regen", "local_committed", now, now),
+        )
+        self.db.commit()
+
+        def fail_delivery():
+            raise RuntimeError("delivery failed")
+
+        with self.assertRaisesRegex(RuntimeError, "delivery failed"):
+            self.adapter.begin_or_recover(
+                self.db,
+                702,
+                "regen",
+                fail_delivery,
+            )
+        self.assertEqual(
+            rt.operation_phase(self.db, 702),
+            "local_committed",
+        )
+
+    def test_finish_marks_applied_and_removes_payload(self):
+        now = rt.time.time()
+        self.db.execute(
+            "INSERT INTO operations("
+            "operation_id,kind,state,created_at,updated_at"
+            ") VALUES(?,?,?,?,?)",
+            ("703", "regen", "local_committed", now, now),
+        )
+        self.db.commit()
+        self.adapter.set_payload(
+            self.db,
+            703,
+            {"old_message_ids": ["9"]},
+        )
+
+        self.adapter.finish(self.db, 703, "regen")
+
+        self.assertEqual(rt.operation_phase(self.db, 703), "applied")
+        self.assertEqual(
+            rt.get_meta(self.db, "operation_payload:703", ""),
+            "",
+        )
+
+    def test_cleanup_failure_is_logged_and_next_id_is_attempted(self):
+        self.telegram.side_effect = [
+            RuntimeError("delete failed"),
+            {},
+        ]
+
+        self.adapter.delete_stored_telegram_ids(
+            "token",
+            "chat",
+            ["9", "10"],
+        )
+
+        self.assertEqual(self.telegram.call_count, 2)
+        self.log_info.assert_called_once_with(
+            "Recovery cleanup could not delete Telegram message %s",
+            "9",
+            exc_info=True,
+        )
 
 
 if __name__ == "__main__":
