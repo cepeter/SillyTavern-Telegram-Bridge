@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import bridge.extension_registry as registry
 import bridge.config as config
+import bridge.memory_backend as memory_backend
 import bridge.runtime as rt
 
 
@@ -80,7 +81,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
-        self.old_hindsight = rt.hindsight_client
+        self.old_hindsight = memory_backend.hindsight_client
         config.DB_FILE = (
             Path(self.tmp.name) / "bridge.sqlite3"
         )
@@ -94,7 +95,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self.fields = {"name": "Mira"}
 
     def tearDown(self):
-        rt.hindsight_client = self.old_hindsight
+        memory_backend.hindsight_client = self.old_hindsight
         self.db.close()
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
@@ -115,28 +116,28 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self.db.commit()
 
     def test_memory_module_owns_guard_and_persistence_helpers(self):
-        source = (
+        shell_source = (
             Path(__file__).parents[1]
             / "bridge"
             / "memory.py"
         ).read_text(encoding="utf-8")
+        backend_source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "memory_backend.py"
+        ).read_text(encoding="utf-8")
 
         self.assertIn(
             "_HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(",
-            source,
+            shell_source,
         )
-        self.assertIn(
-            "def _memory_hindsight_conversation_snapshot(",
-            source,
-        )
-        self.assertIn(
-            "def _memory_hindsight_epoch(",
-            source,
-        )
-        self.assertIn(
-            "def _memory_hindsight_session_exists(",
-            source,
-        )
+        for name in (
+            "_memory_hindsight_conversation_snapshot",
+            "_memory_hindsight_epoch",
+            "_memory_hindsight_session_exists",
+        ):
+            self.assertIn(f"def {name}(", backend_source)
+            self.assertNotIn(f"def {name}(", shell_source)
 
     def test_malformed_and_negative_epoch_values_read_as_zero(self):
         key = (
@@ -169,7 +170,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self._add_message()
         queued = []
         fake = _FakeHindsight()
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
             rt,
@@ -228,7 +229,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         fake.documents.documents[mapped] = [
             f"session:{self.session['session_id']}"
         ]
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         old_epoch = (
             rt._HINDSIGHT_STALE_GUARD.read_epoch(
@@ -293,7 +294,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
         fake = _FakeHindsight()
         fake.documents = BrokenDocuments()
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         with self.assertRaisesRegex(
             RuntimeError,
@@ -322,7 +323,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self._add_message()
         queued = []
         fake = _FakeHindsight()
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
             rt,
@@ -363,7 +364,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self._add_message()
         queued = []
         fake = _FakeHindsight()
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
             rt,
@@ -403,7 +404,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self._add_message()
         queued = []
         fake = _FakeHindsight()
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
             rt,
