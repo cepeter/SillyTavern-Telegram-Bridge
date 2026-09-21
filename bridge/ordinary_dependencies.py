@@ -131,7 +131,7 @@ DECLARED_DEPENDENCIES: dict[str, dict[str, DependencySpec]] = {
         _from("bridge.config", "GENERATION_DEFAULTS", "PENDING_SETTINGS_TTL_SECONDS", "REASONING_LEVELS"),
         _from("bridge.language", "RESPONSE_LANGUAGES", "normalize_stt_language", "stt_language_label"),
         _from("bridge.common", "STT_DEFAULT_MODEL", "chat_job_lock"),
-        _from("bridge.job_runtime", "jobs_for_services"),
+        {"_jobs_for_services": ("bridge.job_runtime", "jobs_for_services")},
         _from("bridge.rag_core", "activate_data_bank_version", "data_bank_document_versions", "data_bank_documents", "rag_embedding_coverage", "rag_mode", "reindex_data_bank_documents"),
         _from("bridge.commands", "apply_preset_action"),
         _from("bridge.callbacks", "close_panel_message", "discard_panel_binding"),
