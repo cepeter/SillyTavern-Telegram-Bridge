@@ -1,7 +1,7 @@
 import sqlite3
 import time
 
-from bridge.common import (
+from bridge.runtime_defaults import (
     PROCESSED_UPDATE_RETENTION_SECONDS as _PROCESSED_UPDATE_RETENTION_SECONDS,
 )
 from bridge.migrations import (
