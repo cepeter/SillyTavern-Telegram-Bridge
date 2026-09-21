@@ -1,4 +1,8 @@
 """Optional near-real-time sync through SillyTavern's loopback HTTP API."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import json
 import logging
@@ -466,3 +470,6 @@ def stop_phase3_sync_worker(timeout: float = 5.0) -> bool:
     if stopped:
         _PHASE3_WORKER = None
     return stopped
+
+
+_bind_module_dependencies(__name__, globals())
