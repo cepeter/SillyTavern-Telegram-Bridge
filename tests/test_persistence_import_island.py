@@ -61,5 +61,39 @@ class PersistenceImportIslandTests(unittest.TestCase):
         )
 
 
+    def test_database_imports_without_runtime_or_common(self):
+        completed = self._run_python(
+            "import sys\n"
+            "import bridge.database as database\n"
+            "assert 'bridge.runtime' not in sys.modules\n"
+            "assert 'bridge.common' not in sys.modules\n"
+            "assert database._DB_WRITE_LOCK is not None\n"
+            "assert database._DB_CONNECTION_GATE is not None\n"
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stdout + completed.stderr,
+        )
+
+    def test_database_has_no_obsolete_schema_ready_fixture_state(self):
+        import bridge.database as database
+
+        self.assertFalse(hasattr(database, "_DB_SCHEMA_LOCK"))
+        self.assertFalse(hasattr(database, "_DB_SCHEMA_READY"))
+        self.assertFalse(hasattr(database, "_DB_SCHEMA_READY_PATHS"))
+
+    def test_database_source_has_no_exec_state_preservation_or_runtime_dependency(self):
+        source = (
+            REPO_ROOT / "bridge" / "database.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn('globals().get("_DB_WRITE_LOCK")', source)
+        self.assertNotIn("import bridge.runtime", source)
+        self.assertNotIn("from bridge.runtime import", source)
+        self.assertNotIn("import bridge.common", source)
+        self.assertNotIn("from bridge.common import", source)
+
+
 if __name__ == "__main__":
     unittest.main()
