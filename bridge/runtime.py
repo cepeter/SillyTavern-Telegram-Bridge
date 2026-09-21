@@ -7,6 +7,8 @@ without another domain migration.
 from __future__ import annotations
 
 from pathlib import Path as _RuntimePath
+import sys as _runtime_sys
+import types as _runtime_types
 
 from bridge.database import (
     begin_operation,
@@ -268,6 +270,35 @@ RUNTIME_LOAD_REPORT = _load_runtime_namespace(
 _scene_state.register_scene_state_extensions()
 _director_goals.register_director_goal_extensions()
 _memory_curator.register_memory_curator_extensions()
+
+
+class _RuntimeFacadeModule(_runtime_types.ModuleType):
+    """Temporary 7B4 compatibility for callers that patch bridge.runtime.
+
+    Ordinary modules own production execution now. Existing tests and external
+    callers may still replace facade attributes at runtime, so mirror those
+    replacements into already-loaded bridge modules until Phase 7C removes the
+    compatibility facade.
+    """
+
+    def __setattr__(self, name: str, value) -> None:
+        _runtime_types.ModuleType.__setattr__(self, name, value)
+        if name.startswith("__"):
+            return
+        for module in tuple(_runtime_sys.modules.values()):
+            module_name = getattr(module, "__name__", "")
+            if (
+                module is self
+                or not module_name.startswith("bridge.")
+                or module_name == "bridge.runtime"
+            ):
+                continue
+            namespace = getattr(module, "__dict__", None)
+            if namespace is not None and name in namespace:
+                namespace[name] = value
+
+
+_runtime_sys.modules[__name__].__class__ = _RuntimeFacadeModule
 
 del _module
 del _APPLICATION_COMPATIBILITY_MODULES
