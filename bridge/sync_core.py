@@ -9,7 +9,7 @@ from pathlib import Path
 import sqlite3
 import time
 
-from bridge.config import SYNC_MAX_BYTES
+from bridge.config import DEFAULT_MODEL, SYNC_MAX_BYTES
 
 from bridge.sync_integrity import (
     SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter,
