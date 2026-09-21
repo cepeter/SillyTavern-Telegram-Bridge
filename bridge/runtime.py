@@ -1,14 +1,10 @@
-"""Compatibility facade over ordinary bridge application modules.
+"""Plain compatibility facade over ordinary bridge modules.
 
-Phase 7B4 ordinary-imports every domain/adapter module. Only main.py remains
-temporarily exec-loaded so Phase 7C can perform the final composition cutover
-without another domain migration.
+Production startup is owned by bridge.main. This module only republishes
+canonical objects for import compatibility; it performs no source loading and
+does not intercept or propagate attribute mutation.
 """
 from __future__ import annotations
-
-from pathlib import Path as _RuntimePath
-import sys as _runtime_sys
-import types as _runtime_types
 
 from bridge.database import (
     begin_operation,
@@ -191,6 +187,7 @@ from bridge import (
     image_generation as _image_generation,
     input_flows as _input_flows,
     language as _language,
+    main as _main,
     media as _media,
     memory as _memory,
     memory_curator as _memory_curator,
@@ -221,6 +218,7 @@ _APPLICATION_COMPATIBILITY_MODULES = (
     _telegram,
     _persona_delete_panel,
     _language,
+    _main,
     _greetings,
     _help_details,
     _help,
@@ -247,85 +245,16 @@ _APPLICATION_COMPATIBILITY_MODULES = (
     _memory_curator,
 )
 
-_RUNTIME_COMPAT_OWNER_BY_NAME = {}
-
+# bridge.main already performs final application composition. Re-completing the
+# imported modules here is idempotent and keeps this legacy facade independently
+# importable without owning startup.
 for _module in _APPLICATION_COMPATIBILITY_MODULES:
     _complete_module_dependencies(_module)
 
 for _module in _APPLICATION_COMPATIBILITY_MODULES:
-    for _compat_name in vars(_module):
-        if not _compat_name.startswith("__"):
-            _RUNTIME_COMPAT_OWNER_BY_NAME[_compat_name] = _module
     _publish_compatibility_namespace(globals(), _module)
 
-from bridge.runtime_loader import (
-    DEFAULT_RUNTIME_STAGES as _DEFAULT_RUNTIME_STAGES,
-    load_runtime_namespace as _load_runtime_namespace,
-)
-
-
-RUNTIME_LOAD_REPORT = _load_runtime_namespace(
-    globals(),
-    _RuntimePath(__file__).parent,
-    _DEFAULT_RUNTIME_STAGES,
-)
-
-# Runtime loading resets the compatibility registry. Re-register ordinary
-# extension modules explicitly after main.py has been loaded.
-_scene_state.register_scene_state_extensions()
-_director_goals.register_director_goal_extensions()
-_memory_curator.register_memory_curator_extensions()
-
-
-class _RuntimeFacadeModule(_runtime_types.ModuleType):
-    """Temporary 7B4 compatibility for callers that patch bridge.runtime.
-
-    Ordinary modules own production execution now. Existing tests and external
-    callers may still replace facade attributes at runtime, so reads resolve
-    from the live ordinary owner and writes mirror into loaded bridge modules
-    until Phase 7C removes the compatibility facade.
-    """
-
-    def __getattribute__(self, name: str):
-        if name not in {
-            "_RUNTIME_COMPAT_OWNER_BY_NAME",
-            "__dict__",
-            "__class__",
-            "__name__",
-        }:
-            namespace = _runtime_types.ModuleType.__getattribute__(
-                self,
-                "__dict__",
-            )
-            owners = namespace.get("_RUNTIME_COMPAT_OWNER_BY_NAME", {})
-            owner = owners.get(name)
-            if owner is not None:
-                owner_namespace = getattr(owner, "__dict__", {})
-                if name in owner_namespace:
-                    return owner_namespace[name]
-        return _runtime_types.ModuleType.__getattribute__(self, name)
-
-    def __setattr__(self, name: str, value) -> None:
-        _runtime_types.ModuleType.__setattr__(self, name, value)
-        if name.startswith("__"):
-            return
-        for module in tuple(_runtime_sys.modules.values()):
-            module_name = getattr(module, "__name__", "")
-            if (
-                module is self
-                or not module_name.startswith("bridge.")
-                or module_name == "bridge.runtime"
-            ):
-                continue
-            namespace = getattr(module, "__dict__", None)
-            if namespace is not None and name in namespace:
-                namespace[name] = value
-
-_runtime_sys.modules[__name__].__class__ = _RuntimeFacadeModule
-
-del _compat_name
 del _module
 del _APPLICATION_COMPATIBILITY_MODULES
 del _complete_module_dependencies
 del _publish_compatibility_namespace
-del _RuntimePath, _DEFAULT_RUNTIME_STAGES, _load_runtime_namespace
