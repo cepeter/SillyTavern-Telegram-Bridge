@@ -77,6 +77,11 @@ from bridge.runtime_context import (
     set_panel_session_context,
 )
 
+from bridge.callback_tokens import (
+    dynamic_callback_token,
+    resolve_dynamic_callback_token,
+)
+
 from bridge.card_content import (
     active_world_files,
     build_system_prompt,
