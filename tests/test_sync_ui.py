@@ -420,5 +420,28 @@ class SyncUiOwnershipTests(unittest.TestCase):
         )
 
 
+    def test_panel_callback_routes_owns_sync_callback(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "panel_callback_routes.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "\ndef handle_sync_callback(",
+            source,
+        )
+
+    def test_recovery_no_longer_defines_sync_callback(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "recovery.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "\ndef handle_sync_callback(",
+            source,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
