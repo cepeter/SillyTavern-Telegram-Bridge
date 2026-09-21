@@ -131,6 +131,32 @@ from bridge.network_security import (
     validate_provider_endpoint,
 )
 
+from bridge.rag_core import (
+    extract_pdf_data_bank_text,
+    extract_data_bank_text,
+    split_data_bank_chunks,
+    rag_embedding_namespace,
+    embedding_norm,
+    rag_embedding_headers,
+    embed_rag_text,
+    embed_rag_batch,
+    rag_semantic_candidate_limit,
+    backfill_rag_embedding_signatures,
+    add_data_bank_document,
+    cached_rag_embedding,
+    retrieve_data_bank,
+    rag_mode,
+    rag_retrieval_bundle,
+    rag_context_for_prompt,
+    rag_citation_footer,
+    data_bank_documents,
+    data_bank_document_versions,
+    activate_data_bank_version,
+    delete_data_bank_documents,
+    rag_embedding_coverage,
+    reindex_data_bank_documents,
+)
+
 from bridge.runtime_loader import (
     DEFAULT_RUNTIME_STAGES as _DEFAULT_RUNTIME_STAGES,
     load_runtime_namespace as _load_runtime_namespace,
