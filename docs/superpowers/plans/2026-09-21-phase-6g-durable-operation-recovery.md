@@ -69,6 +69,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import bridge.runtime as rt
+from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
 
 
 class DurableRecoveryCharacterizationTests(unittest.TestCase):
@@ -290,7 +291,156 @@ Add these tests. The first pins no provider re-entry, selected variant reuse, cl
         )
 ```
 
-Add equivalent focused tests for continue and edited-turn recovery using persisted assistant rows, with `generate_text` patched to raise if called. Assert the visible prefixes remain `↪️ Continued response` and `✏️ Edited message regenerated.` and that successful delivery ends at `applied`.
+Add the concrete continue/edit recovery tests:
+
+```python
+    def test_continue_local_committed_redelivers_without_generation(self):
+        operation_id = 607
+        self._turns("question", "committed continuation")
+        self._operation(operation_id, "local_committed", "continue")
+        self._payload(
+            operation_id,
+            {
+                "old_message_ids": ["51"],
+                "assistant_rowid": 1,
+            },
+        )
+
+        with patch.object(
+            rt,
+            "generate_text",
+            side_effect=AssertionError("provider must not run"),
+        ), patch.object(
+            rt,
+            "delete_outgoing_message_row",
+        ), patch.object(
+            rt,
+            "telegram_request",
+            return_value={},
+        ), patch.object(
+            rt,
+            "send_reply",
+        ) as send_reply:
+            rt.continue_last(
+                self.db,
+                "token",
+                "key",
+                self.session,
+                self.fields,
+                "chat",
+                operation_id=operation_id,
+            )
+
+        self.assertIn(
+            "↪️ Continued response",
+            send_reply.call_args.args[2],
+        )
+        self.assertIn(
+            "committed continuation",
+            send_reply.call_args.args[2],
+        )
+        self.assertEqual(
+            rt.operation_phase(self.db, operation_id),
+            "applied",
+        )
+
+    def test_edit_local_committed_redelivers_without_generation(self):
+        operation_id = 608
+        self._turns("edited user", "committed edit")
+        self._operation(operation_id, "local_committed", "edit")
+        self._payload(
+            operation_id,
+            {"old_message_ids": ["61"], "user_rowid": 1},
+        )
+
+        with patch.object(
+            rt,
+            "generate_text",
+            side_effect=AssertionError("provider must not run"),
+        ), patch.object(
+            rt,
+            "delete_outgoing_message_row",
+        ), patch.object(
+            rt,
+            "telegram_request",
+            return_value={},
+        ), patch.object(
+            rt,
+            "send_reply",
+        ) as send_reply:
+            rt.regenerate_edited_turn(
+                self.db,
+                "token",
+                "key",
+                self.session,
+                self.fields,
+                "chat",
+                1,
+                "replacement",
+                operation_id=operation_id,
+            )
+
+        self.assertIn(
+            "✏️ Edited message regenerated.",
+            send_reply.call_args.args[2],
+        )
+        self.assertIn(
+            "committed edit",
+            send_reply.call_args.args[2],
+        )
+        self.assertEqual(
+            rt.operation_phase(self.db, operation_id),
+            "applied",
+        )
+
+    def test_continue_incomplete_recovery_raises_without_finishing(self):
+        operation_id = 609
+        self._operation(operation_id, "local_committed", "continue")
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "continue recovery state is incomplete",
+        ):
+            rt.continue_last(
+                self.db,
+                "token",
+                "key",
+                self.session,
+                self.fields,
+                "chat",
+                operation_id=operation_id,
+            )
+
+        self.assertEqual(
+            rt.operation_phase(self.db, operation_id),
+            "local_committed",
+        )
+
+    def test_edit_incomplete_recovery_raises_without_finishing(self):
+        operation_id = 610
+        self._operation(operation_id, "local_committed", "edit")
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "edit recovery state is incomplete",
+        ):
+            rt.regenerate_edited_turn(
+                self.db,
+                "token",
+                "key",
+                self.session,
+                self.fields,
+                "chat",
+                1,
+                "replacement",
+                operation_id=operation_id,
+            )
+
+        self.assertEqual(
+            rt.operation_phase(self.db, operation_id),
+            "local_committed",
+        )
+```
 
 - [ ] **Step 4: Characterize command-specific routing before generic recovery**
 
@@ -1092,60 +1242,372 @@ def regenerate_last(
         return
 ```
 
-Continue with the current effective body from `recovery.py`, not the older canonical body. Specifically:
+Complete `regenerate_last` with this exact flow after the phase guard:
 
-- pass `persona_service=persona_service` to `build_chat_messages`;
-- collect `old_message_ids` before local mutation;
-- call `set_payload` before the local write;
-- persist message deletion/insertion, response variant, and `local_committed` in one `run_write_txn` callback with `save_response_variant(..., commit=False)`;
-- call `delete_stored_telegram_ids` after local commit;
-- retain memory;
-- deliver;
-- call `finish` last.
+```python
+    rows = db.execute(
+        "SELECT rowid,role,content FROM messages "
+        "WHERE chat_id=? AND session_id=? "
+        "ORDER BY created_at,rowid",
+        (chat_id, session_id),
+    ).fetchall()
+    last_user_index = next(
+        (
+            i
+            for i in range(len(rows) - 1, -1, -1)
+            if rows[i][1] == "user"
+        ),
+        None,
+    )
+    if last_user_index is None:
+        send_text(
+            token,
+            chat_id,
+            "Tidak ada pesan user untuk di-regenerate.",
+        )
+        return
+
+    user_text = rows[last_user_index][2]
+    history_rows = [
+        (row[1], row[2])
+        for row in rows[:last_user_index]
+    ]
+    rag_bundle = rag_retrieval_bundle(
+        db,
+        chat_id,
+        user_text,
+    )
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        user_text,
+    )
+    messages = build_chat_messages(
+        session,
+        fields,
+        user_text,
+        history_rows,
+        memory_context=memory_prompt.recall,
+        session_summary=memory_prompt.summary,
+        persona_service=persona_service,
+        rag_context=rag_context_for_prompt(
+            db,
+            chat_id,
+            user_text,
+            rag_bundle,
+        ),
+    )
+    reply = _generate_rendered_reply(
+        db,
+        token,
+        api_key,
+        session,
+        chat_id,
+        messages,
+        user_text,
+        rag_bundle,
+    )
+    last_user_rowid = int(rows[last_user_index][0])
+    old_message_ids = (
+        _GENERATION_OPERATION_RECOVERY.outgoing_ids_after(
+            db,
+            chat_id,
+            session_id,
+            last_user_rowid,
+        )
+    )
+    _GENERATION_OPERATION_RECOVERY.set_payload(
+        db,
+        operation_id,
+        {
+            "old_message_ids": old_message_ids,
+            "user_rowid": last_user_rowid,
+        },
+    )
+
+    def persist_regeneration():
+        db.execute(
+            "DELETE FROM messages "
+            "WHERE chat_id=? AND session_id=? AND rowid>?",
+            (chat_id, session_id, last_user_rowid),
+        )
+        assistant_cursor = db.execute(
+            "INSERT INTO messages("
+            "chat_id,session_id,role,content,created_at"
+            ") VALUES(?,?,?,?,?)",
+            (
+                chat_id,
+                session_id,
+                "assistant",
+                reply,
+                time.time(),
+            ),
+        )
+        assistant_rowid = int(assistant_cursor.lastrowid)
+        variant = save_response_variant(
+            db,
+            chat_id,
+            session_id,
+            user_text,
+            reply,
+            user_rowid=last_user_rowid,
+            commit=False,
+        )
+        if operation_id is not None:
+            set_operation_phase(
+                db,
+                operation_id,
+                "regen",
+                "local_committed",
+            )
+        db.commit()
+        return assistant_rowid, variant
+
+    assistant_rowid, variant = run_write_txn(
+        db,
+        persist_regeneration,
+    )
+    _GENERATION_OPERATION_RECOVERY.delete_stored_telegram_ids(
+        token,
+        chat_id,
+        old_message_ids,
+    )
+    memory_service.retain(
+        db,
+        chat_id,
+        session,
+        fields,
+    )
+    send_reply(
+        token,
+        chat_id,
+        f"♻️ Regenerated response (variant {variant})\n\n{reply}",
+        db,
+        session_id,
+        assistant_rowid,
+    )
+    _GENERATION_OPERATION_RECOVERY.finish(
+        db,
+        operation_id,
+        "regen",
+    )
+```
 
 - [ ] **Step 6: Replace canonical `continue_last` with the effective recovery-aware flow**
 
-Use the same adapter and public signature with `persona_service=None`.
-
-The local write must update the selected response variant by `user_rowid`, not by matching `user_content`:
+Use the same adapter and public signature with `persona_service=None`, and replace the function body with:
 
 ```python
-db.execute(
-    "UPDATE response_variants SET response=? "
-    "WHERE chat_id=? AND session_id=? "
-    "AND user_rowid=? AND selected=1",
-    (
-        combined,
-        chat_id,
-        session_id,
-        int(user_row[0]),
-    ),
-)
-```
-
-Before local mutation, persist:
-
-```python
-old_message_ids = (
-    _GENERATION_OPERATION_RECOVERY.message_ids_from_rows(
-        db.execute(
-            "SELECT telegram_message_id,telegram_message_ids "
-            "FROM messages WHERE rowid=?",
-            (int(assistant_row[0]),),
-        ).fetchall()
-    )
-)
-_GENERATION_OPERATION_RECOVERY.set_payload(
+def continue_last(
     db,
-    operation_id,
-    {
-        "old_message_ids": old_message_ids,
-        "assistant_rowid": int(assistant_row[0]),
-    },
-)
-```
+    token,
+    api_key,
+    session,
+    fields,
+    chat_id,
+    operation_id=None,
+    *,
+    memory_service=None,
+    persona_service=None,
+):
+    memory_service = resolve_memory_service(memory_service)
+    session_id = session["session_id"]
 
-After local commit use `prepare_delivery`, then retain, send, and `finish`.
+    def deliver_recovered_continue():
+        assistant_row = (
+            _GENERATION_OPERATION_RECOVERY.latest_assistant_row(
+                db,
+                chat_id,
+                session_id,
+            )
+        )
+        if not assistant_row:
+            raise RuntimeError(
+                "continue recovery state is incomplete"
+            )
+        _GENERATION_OPERATION_RECOVERY.prepare_delivery(
+            db,
+            token,
+            chat_id,
+            assistant_row[0],
+            operation_id,
+        )
+        send_reply(
+            token,
+            chat_id,
+            "↪️ Continued response\n\n"
+            + assistant_row[1],
+            db,
+            session_id,
+            int(assistant_row[0]),
+        )
+        _GENERATION_OPERATION_RECOVERY.finish(
+            db,
+            operation_id,
+            "continue",
+        )
+
+    if not _GENERATION_OPERATION_RECOVERY.begin_or_recover(
+        db,
+        operation_id,
+        "continue",
+        deliver_recovered_continue,
+    ):
+        return
+
+    rows = db.execute(
+        "SELECT rowid,role,content FROM messages "
+        "WHERE chat_id=? AND session_id=? "
+        "ORDER BY created_at,rowid",
+        (chat_id, session_id),
+    ).fetchall()
+    assistant_row = next(
+        (
+            row
+            for row in reversed(rows)
+            if row[1] == "assistant"
+        ),
+        None,
+    )
+    if assistant_row is None:
+        send_text(
+            token,
+            chat_id,
+            "Belum ada response untuk dilanjutkan.",
+        )
+        return
+
+    instruction = (
+        "Continue the previous assistant response from its exact "
+        "ending. Do not repeat any existing text. "
+        "Output only the continuation."
+    )
+    history_rows = [(row[1], row[2]) for row in rows]
+    rag_bundle = rag_retrieval_bundle(
+        db,
+        chat_id,
+        instruction,
+    )
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        instruction,
+    )
+    messages = build_chat_messages(
+        session,
+        fields,
+        instruction,
+        history_rows,
+        memory_context=memory_prompt.recall,
+        session_summary=memory_prompt.summary,
+        persona_service=persona_service,
+        rag_context=rag_context_for_prompt(
+            db,
+            chat_id,
+            instruction,
+            rag_bundle,
+        ),
+    )
+    reply = _generate_rendered_reply(
+        db,
+        token,
+        api_key,
+        session,
+        chat_id,
+        messages,
+        instruction,
+        rag_bundle,
+    )
+    combined = (
+        assistant_row[2].rstrip()
+        + " "
+        + reply.lstrip()
+    )
+    old_message_ids = (
+        _GENERATION_OPERATION_RECOVERY.message_ids_from_rows(
+            db.execute(
+                "SELECT telegram_message_id,telegram_message_ids "
+                "FROM messages WHERE rowid=?",
+                (int(assistant_row[0]),),
+            ).fetchall()
+        )
+    )
+    _GENERATION_OPERATION_RECOVERY.set_payload(
+        db,
+        operation_id,
+        {
+            "old_message_ids": old_message_ids,
+            "assistant_rowid": int(assistant_row[0]),
+        },
+    )
+
+    def persist_continuation():
+        db.execute(
+            "UPDATE messages SET content=? WHERE rowid=?",
+            (combined, assistant_row[0]),
+        )
+        user_row = next(
+            (
+                row
+                for row in reversed(rows)
+                if row[1] == "user"
+                and row[0] < assistant_row[0]
+            ),
+            None,
+        )
+        if user_row:
+            db.execute(
+                "UPDATE response_variants SET response=? "
+                "WHERE chat_id=? AND session_id=? "
+                "AND user_rowid=? AND selected=1",
+                (
+                    combined,
+                    chat_id,
+                    session_id,
+                    int(user_row[0]),
+                ),
+            )
+        if operation_id is not None:
+            set_operation_phase(
+                db,
+                operation_id,
+                "continue",
+                "local_committed",
+            )
+        db.commit()
+
+    run_write_txn(db, persist_continuation)
+    _GENERATION_OPERATION_RECOVERY.prepare_delivery(
+        db,
+        token,
+        chat_id,
+        assistant_row[0],
+        operation_id,
+    )
+    memory_service.retain(
+        db,
+        chat_id,
+        session,
+        fields,
+    )
+    send_reply(
+        token,
+        chat_id,
+        f"↪️ Continued response\n\n{combined}",
+        db,
+        session_id,
+        int(assistant_row[0]),
+    )
+    _GENERATION_OPERATION_RECOVERY.finish(
+        db,
+        operation_id,
+        "continue",
+    )
+```
 
 - [ ] **Step 7: Delete `regenerate_last` and `continue_last` from `recovery.py` and shrink the allowlist**
 
@@ -1299,52 +1761,191 @@ def deliver_recovered_edit():
     )
 ```
 
-Then use `begin_or_recover` before any transcript/prompt work.
-
-The normal prompt path must pass both injected contexts:
+Complete the function after the recovery hook with this concrete normal path:
 
 ```python
-messages = build_chat_messages(
-    session,
-    fields,
-    new_text,
-    history_rows,
-    memory_context=memory_prompt.recall,
-    session_summary=memory_prompt.summary,
-    persona_service=persona_service,
-    rag_context=rag_context_for_prompt(
+    if not _COMMAND_OPERATION_RECOVERY.begin_or_recover(
+        db,
+        operation_id,
+        "edit",
+        deliver_recovered_edit,
+    ):
+        return
+
+    rows = db.execute(
+        "SELECT rowid,role,content FROM messages "
+        "WHERE chat_id=? AND session_id=? "
+        "ORDER BY created_at,rowid",
+        (chat_id, session_id),
+    ).fetchall()
+    target_index = next(
+        (
+            i
+            for i, row in enumerate(rows)
+            if int(row[0]) == int(user_rowid)
+            and row[1] == "user"
+        ),
+        None,
+    )
+    if target_index is None:
+        raise ValueError(
+            "Telegram message is not a user turn in the active session"
+        )
+
+    history_rows = [
+        (row[1], row[2])
+        for row in rows[:target_index]
+    ]
+    memory_prompt = memory_service.prompt_context(
+        db,
+        chat_id,
+        session,
+        fields,
+        new_text,
+        edited_user_rowid=int(user_rowid),
+    )
+    rag_bundle = rag_retrieval_bundle(
         db,
         chat_id,
         new_text,
+    )
+    messages = build_chat_messages(
+        session,
+        fields,
+        new_text,
+        history_rows,
+        memory_context=memory_prompt.recall,
+        session_summary=memory_prompt.summary,
+        persona_service=persona_service,
+        rag_context=rag_context_for_prompt(
+            db,
+            chat_id,
+            new_text,
+            rag_bundle,
+        ),
+    )
+    reply = _generate_rendered_reply(
+        db,
+        token,
+        api_key,
+        session,
+        chat_id,
+        messages,
+        new_text,
         rag_bundle,
-    ),
-)
-```
+    )
+    old_message_ids = (
+        _COMMAND_OPERATION_RECOVERY.outgoing_ids_after(
+            db,
+            chat_id,
+            session_id,
+            int(user_rowid),
+        )
+    )
+    _COMMAND_OPERATION_RECOVERY.set_payload(
+        db,
+        operation_id,
+        {
+            "old_message_ids": old_message_ids,
+            "user_rowid": int(user_rowid),
+        },
+    )
 
-Persist the payload before mutation:
+    def persist_edit():
+        db.execute(
+            "DELETE FROM session_summaries "
+            "WHERE chat_id=? AND session_id=?",
+            (chat_id, session_id),
+        )
+        db.execute(
+            "UPDATE messages SET content=? WHERE rowid=?",
+            (new_text, int(user_rowid)),
+        )
+        db.execute(
+            "DELETE FROM messages "
+            "WHERE chat_id=? AND session_id=? AND rowid>?",
+            (chat_id, session_id, int(user_rowid)),
+        )
+        assistant_cursor = db.execute(
+            "INSERT INTO messages("
+            "chat_id,session_id,role,content,created_at"
+            ") VALUES(?,?,?,?,?)",
+            (
+                chat_id,
+                session_id,
+                "assistant",
+                reply,
+                time.time(),
+            ),
+        )
+        assistant_rowid = int(assistant_cursor.lastrowid)
+        save_response_variant(
+            db,
+            chat_id,
+            session_id,
+            new_text,
+            reply,
+            user_rowid=int(user_rowid),
+            commit=False,
+        )
+        if operation_id is not None:
+            set_operation_phase(
+                db,
+                operation_id,
+                "edit",
+                "local_committed",
+            )
+        db.commit()
+        return assistant_rowid
 
-```python
-old_message_ids = (
-    _COMMAND_OPERATION_RECOVERY.outgoing_ids_after(
+    assistant_rowid = run_write_txn(
+        db,
+        persist_edit,
+    )
+    _COMMAND_OPERATION_RECOVERY.delete_stored_telegram_ids(
+        token,
+        chat_id,
+        old_message_ids,
+    )
+    memory_service.retain(
         db,
         chat_id,
-        session_id,
-        int(user_rowid),
+        session,
+        fields,
     )
-)
-_COMMAND_OPERATION_RECOVERY.set_payload(
-    db,
-    operation_id,
-    {
-        "old_message_ids": old_message_ids,
-        "user_rowid": int(user_rowid),
-    },
-)
+    send_reply(
+        token,
+        chat_id,
+        f"✏️ Edited message regenerated.\n\n{reply}",
+        db,
+        session_id,
+        assistant_rowid,
+    )
+    _COMMAND_OPERATION_RECOVERY.finish(
+        db,
+        operation_id,
+        "edit",
+    )
 ```
 
-The local transaction must contain summary deletion, user update, later-message deletion, assistant insertion, `save_response_variant(..., commit=False)`, `set_operation_phase(..., "local_committed")`, and the commit.
+The public signature must be:
 
-After local commit: delete old stored IDs best-effort, retain memory, send, finish.
+```python
+def regenerate_edited_turn(
+    db,
+    token,
+    api_key,
+    session,
+    fields,
+    chat_id,
+    user_rowid,
+    new_text,
+    operation_id=None,
+    *,
+    memory_service=None,
+    persona_service=None,
+):
+```
 
 - [ ] **Step 5: Ensure callers retain the effective public signature**
 
@@ -1577,7 +2178,7 @@ In `tests/test_operation_recovery.py`:
     def test_operation_recovery_is_not_a_runtime_stage(self):
         modules = {
             module
-            for stage in rt.DEFAULT_RUNTIME_STAGES
+            for stage in DEFAULT_RUNTIME_STAGES
             for module in stage.modules
         }
         self.assertNotIn("operation_recovery.py", modules)
