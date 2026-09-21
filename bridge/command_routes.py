@@ -1,3 +1,4 @@
+"""Handle onboarding, status, retry, and prompt inspection commands."""
 from __future__ import annotations
 
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
@@ -5,7 +6,6 @@ from bridge.ordinary_dependencies import bind_module_dependencies as _bind_modul
 from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
 
 def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id, services=None):
-    """Handle onboarding, status, retry, and prompt inspection commands."""
     if command.startswith("/help "):
         send_help_command(token, chat_id, stripped)
         return True
