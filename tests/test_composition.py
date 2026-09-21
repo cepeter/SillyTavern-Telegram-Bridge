@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+import bridge.config as bridge_config
 import bridge.runtime as rt
 
 from bridge.group_director_service import GroupDirectorService
@@ -162,17 +163,17 @@ class DatabaseFactoryPathTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.old_db_file = rt.DB_FILE
+        self.old_db_file = bridge_config.DB_FILE
 
     def tearDown(self):
-        rt.DB_FILE = self.old_db_file
+        bridge_config.DB_FILE = self.old_db_file
         self.tmp.cleanup()
 
     def test_explicit_database_paths_initialize_independently(self):
         default_path = self.root / "default.sqlite3"
         explicit_a = self.root / "a.sqlite3"
         explicit_b = self.root / "b.sqlite3"
-        rt.DB_FILE = default_path
+        bridge_config.DB_FILE = default_path
 
         default_db = rt.db_connect()
         default_db.close()
@@ -196,11 +197,11 @@ class DatabaseFactoryPathTests(unittest.TestCase):
         self.assertTrue(explicit_b.is_file())
 
     def test_explicit_factory_does_not_mutate_global_db_file(self):
-        original = rt.DB_FILE
+        original = bridge_config.DB_FILE
         explicit = self.root / "factory.sqlite3"
         db = rt.db_connect(explicit)
         db.close()
-        self.assertEqual(rt.DB_FILE, original)
+        self.assertEqual(bridge_config.DB_FILE, original)
 
 
 class WorkerInjectionTests(unittest.TestCase):
@@ -910,8 +911,8 @@ class RecoveryCompositionTests(unittest.TestCase):
             begin_shutdown=lambda: None,
         )
 
-        old_db_file = rt.DB_FILE
-        rt.DB_FILE = Path(self.tmp.name) / "wrong.sqlite3"
+        old_db_file = bridge_config.DB_FILE
+        bridge_config.DB_FILE = Path(self.tmp.name) / "wrong.sqlite3"
         try:
             with patch.object(rt.time, "sleep", return_value=None):
                 with self.assertRaisesRegex(
@@ -934,7 +935,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                         None,
                     )
         finally:
-            rt.DB_FILE = old_db_file
+            bridge_config.DB_FILE = old_db_file
 
         state = self.db.execute(
             "SELECT state FROM jobs WHERE job_id=?",
