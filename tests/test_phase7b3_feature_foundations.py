@@ -254,20 +254,22 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
             }.isdisjoint(loaded)
         )
 
+
     def test_legacy_feature_shell_order_is_unchanged(self):
         from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
 
-        core = next(stage for stage in DEFAULT_RUNTIME_STAGES if stage.name == "core")
-        self.assertEqual(
-            core.modules[:6],
-            (
-                "common.py",
-                "cards.py",
+        core = next(
+            stage
+            for stage in DEFAULT_RUNTIME_STAGES
+            if stage.name == "core"
+        )
+        self.assertEqual(core.modules, ("main.py",))
+        self.assertTrue(
+            {
                 "memory.py",
                 "rag.py",
                 "groups.py",
-                "telegram.py",
-            ),
+            }.isdisjoint(core.modules)
         )
 
 
