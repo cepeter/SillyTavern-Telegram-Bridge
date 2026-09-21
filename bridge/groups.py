@@ -1,3 +1,42 @@
+from __future__ import annotations
+
+from bridge.callback_tokens import (
+    dynamic_callback_token,
+    resolve_dynamic_callback_token,
+)
+
+from bridge.card_content import (
+    card_fields_from_file,
+    character_card_paths,
+    safe_character_path,
+)
+
+from bridge.common import (
+    Path,
+    json,
+    logging,
+    sqlite3,
+    time,
+)
+
+from bridge.config import (
+    DEFAULT_CHARACTER_FILE,
+    DEFAULT_MODEL,
+    PENDING_SETTINGS_TTL_SECONDS,
+)
+
+from bridge.database import (
+    get_generation_settings,
+    set_meta,
+)
+
+from bridge.panel_utils import (
+    panel_label,
+    panel_page,
+)
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 from bridge.group_core import (
     group_state,
     group_user_turn_allowed,
@@ -316,3 +355,6 @@ def handle_summary_command(db: sqlite3.Connection, token: str, chat_id: str, ses
         send_text(token, chat_id, "Session summary updated:\n\n" + summary)
     else:
         send_text(token, chat_id, "No chat messages are available to summarize.")
+
+
+_bind_module_dependencies(__name__, globals())

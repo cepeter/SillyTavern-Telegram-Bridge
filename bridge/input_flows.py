@@ -1,3 +1,10 @@
+"""Open one scoped free-form input action and close its originating panel."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
+import threading
+
 def _decode_pending_state(raw: str, meta_key: str) -> dict:
     try:
         return json.loads(raw) if raw else {}
@@ -22,7 +29,6 @@ def _cancel_pending(db, token: str, chat_id: str, meta_key: str, state: dict) ->
 
 
 def start_text_action_input(db, token: str, chat_id: str, session_id: str, action: str, prompt: str, callback: dict | None = None) -> None:
-    """Open one scoped free-form input action and close its originating panel."""
     state = {"session_id": session_id, "action": action, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
     meta_key = f"text_action_input:{chat_id}"
     if callback:
@@ -546,3 +552,6 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         return True
     answer_callback(token, str(callback.get("id", "")), "Persona not found")
     return True
+
+
+_bind_module_dependencies(__name__, globals())

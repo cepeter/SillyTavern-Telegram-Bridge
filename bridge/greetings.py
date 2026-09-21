@@ -1,4 +1,28 @@
 """Character-card opening greeting helpers."""
+from __future__ import annotations
+
+from bridge.card_content import (
+    replace_macros,
+)
+
+from bridge.common import (
+    json,
+    sqlite3,
+    time,
+)
+
+from bridge.config import (
+    CARD_FIELD_MAX_CHARS,
+)
+
+from bridge.database import (
+    begin_operation,
+    operation_was_applied,
+    record_operation,
+)
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import random
 
@@ -34,3 +58,6 @@ def send_character_greeting(db: sqlite3.Connection, token: str, chat_id: str, fi
         record_operation(db, operation_id, operation_kind)
     db.commit()
     return True
+
+
+_bind_module_dependencies(__name__, globals())

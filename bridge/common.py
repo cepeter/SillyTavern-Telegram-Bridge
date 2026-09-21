@@ -69,6 +69,7 @@ from bridge.config import (
     SUMMARY_RECENT_MESSAGES,
     SUMMARY_TRIGGER_MESSAGES,
     SUMMARY_UPDATE_INTERVAL,
+    SYNC_MAX_BYTES,
     PENDING_SETTINGS_TTL_SECONDS,
     REASONING_LEVELS,
     SILLYTAVERN_DIR,
@@ -118,7 +119,6 @@ PROVIDER_CONFIG_FILE = Path(os.environ.get("SILLYTAVERN_PROVIDER_CONFIG", str(BR
 MODEL_CACHE_FILE = Path(os.environ.get("SILLYTAVERN_MODEL_CACHE", str(BRIDGE_HOME / "model_catalog_cache.json")))
 MODEL_REFRESH_SECONDS = int(os.environ.get("SILLYTAVERN_MODEL_REFRESH_SECONDS", "3600"))
 CHARACTER_BACKUP_DIR = Path(os.environ.get("SILLYTAVERN_CHARACTER_BACKUP_DIR", str(BRIDGE_HOME / "backups/sillytavern/characters")))
-SYNC_MAX_BYTES = 10 * 1024 * 1024
 IMAGE_MAX_BYTES = 8 * 1024 * 1024
 TTS_MAX_CHARS = 4000
 STT_MAX_BYTES = 20 * 1024 * 1024
@@ -368,6 +368,10 @@ def enforce_runtime_permissions() -> None:
 
 def delete_pending_input_prompts(token: str, chat_id: str, state: dict) -> None:
     """Remove prompt messages created for a pending text-input transition."""
+    # Local import avoids making the foundational runtime-support module depend
+    # on the Telegram adapter during ordinary module import.
+    from bridge.telegram import telegram_request
+
     message_ids = state.get("prompt_message_ids") or []
     if isinstance(message_ids, (int, str)):
         message_ids = [message_ids]

@@ -5,6 +5,10 @@ final retain_session_memory implementation, keeps scene extraction off the
 foreground response path, and injects the latest validated state into the
 continuity context used by every build_chat_messages caller.
 """
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import json
 import logging
@@ -18,6 +22,7 @@ from bridge.repositories import (
 )
 
 from bridge.extension_registry import (
+    extension_registry_snapshot as _extension_registry_snapshot,
     register_command_route as _register_command_route,
     register_post_retain_hook as _register_post_retain_hook,
     register_summary_clear_hook as _register_summary_clear_hook,
@@ -357,7 +362,17 @@ def _scene_state_command_route(
     return False
 
 
-_register_post_retain_hook("scene_state", _scene_state_post_retain)
-_register_summary_context_hook("scene_state", _scene_state_summary_context)
-_register_summary_clear_hook("scene_state", _scene_state_summary_clear)
-_register_command_route("scene_state", _scene_state_command_route)
+def register_scene_state_extensions() -> None:
+    """Register Scene State hooks once in the compatibility extension registry."""
+    snapshot = _extension_registry_snapshot()
+    if "scene_state" not in snapshot["post_retain"]:
+        _register_post_retain_hook("scene_state", _scene_state_post_retain)
+    if "scene_state" not in snapshot["summary_context"]:
+        _register_summary_context_hook("scene_state", _scene_state_summary_context)
+    if "scene_state" not in snapshot["summary_clear"]:
+        _register_summary_clear_hook("scene_state", _scene_state_summary_clear)
+    if "scene_state" not in snapshot["command_routes"]:
+        _register_command_route("scene_state", _scene_state_command_route)
+
+
+_bind_module_dependencies(__name__, globals())

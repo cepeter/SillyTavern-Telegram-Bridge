@@ -1,10 +1,8 @@
-"""Validated loader for the legacy shared runtime namespace.
+"""Validated final compatibility loader used only for bridge/main.py.
 
-The bridge still exposes one compatibility namespace, but load order and
-intentional extension overrides are described explicitly here instead of
-being an implicit property of a flat exec() loop. Core/extension modules are
-not allowed to silently replace public callables. Only explicitly declared
-adapter/safety stages may replace public callables.
+Phase 7B4 moved every domain and adapter module to ordinary imports. Phase 7C
+will remove this final production exec boundary when main becomes the ordinary
+composition entry point.
 """
 from __future__ import annotations
 
@@ -27,31 +25,7 @@ class RuntimeStage:
 
 
 DEFAULT_RUNTIME_STAGES = (
-    RuntimeStage(
-        "core",
-        (
-            "common.py", "cards.py", "memory.py",
-            "rag.py", "groups.py", "telegram.py", "persona_delete_panel.py",
-            "language.py", "greetings.py", "help_details.py", "help.py", "input_flows.py",
-            "catalog.py", "update.py", "image_generation.py", "expressions.py",
-            "media.py", "generation.py", "commands.py", "status_panels.py", "command_routes.py",
-            "message_commands.py", "callbacks.py", "panel_callback_routes.py",
-            "main.py",
-        ),
-    ),
-    RuntimeStage("sync_extensions", ("sync_core.py", "sync_api.py")),
-    RuntimeStage(
-        "native_adapter_overrides",
-        ("persona_sync.py",),
-    ),
-    RuntimeStage(
-        "identity_extensions",
-        ("character_identity.py", "session_naming.py"),
-    ),
-    RuntimeStage(
-        "safety_overrides",
-        ("scene_state.py", "director_goals.py", "memory_curator.py"),
-    ),
+    RuntimeStage("core", ("main.py",)),
 )
 
 

@@ -1,4 +1,8 @@
 """Recover session character references after native SillyTavern renames."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import hashlib
 import logging
@@ -78,3 +82,6 @@ def reconcile_session_character(db: sqlite3.Connection, chat_id: str, session: d
     updated["character_file"] = replacement
     logging.info("Rebound renamed character for session %s: %s -> %s", session["session_id"], old_name, replacement)
     return updated
+
+
+_bind_module_dependencies(__name__, globals())

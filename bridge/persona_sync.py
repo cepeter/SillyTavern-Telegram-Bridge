@@ -1,4 +1,8 @@
 """Explicit bridge/native SillyTavern persona interoperability."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import copy
 import hashlib
@@ -8,6 +12,8 @@ import os
 import re
 import time
 from pathlib import Path
+
+from bridge.config import BRIDGE_HOME, SILLYTAVERN_DIR
 
 from bridge.persona_integrity import (
     IntegrityCheckedPersonaStore as _IntegrityCheckedPersonaStore,
@@ -339,3 +345,6 @@ def delete_native_persona(identifier: str, client=None) -> bool:
         identifier,
         client=client,
     )
+
+
+_bind_module_dependencies(__name__, globals())

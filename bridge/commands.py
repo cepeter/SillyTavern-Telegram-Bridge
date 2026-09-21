@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 from bridge.operation_recovery import (
     OperationRecovery as _OperationRecovery,
 )
@@ -416,3 +420,6 @@ def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, 
             f"Data Bank: {rag_mode(db, chat_id)} / {len(docs)} documents\n"
             f"Group: {'on' if group['enabled'] else 'off'} / mode={group['mode']} / members={len(group['members'])}\n"
             "Macro support: char, user, random, pick, time, date, weekday\nWorld Info recursion: maximum 3 passes")
+
+
+_bind_module_dependencies(__name__, globals())

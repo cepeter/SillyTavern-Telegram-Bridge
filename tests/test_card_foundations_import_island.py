@@ -662,24 +662,20 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             }.isdisjoint(loaded)
         )
 
+
     def test_cards_shell_remains_exec_loaded(self):
+        import bridge.cards as cards
+        import bridge.runtime as rt
         from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
 
-        core = next(
-            stage
+        loaded = {
+            module
             for stage in DEFAULT_RUNTIME_STAGES
-            if stage.name == "core"
-        )
-        self.assertIn("cards.py", core.modules)
-        self.assertEqual(
-            core.modules[:4],
-            (
-                "common.py",
-                "cards.py",
-                "memory.py",
-                "rag.py",
-            ),
-        )
+            for module in stage.modules
+        }
+        self.assertNotIn("cards.py", loaded)
+        self.assertIs(rt.send_character_menu, cards.send_character_menu)
+        self.assertIs(rt.send_session_menu, cards.send_session_menu)
 
     def test_card_foundations_before_runtime_keep_canonical_identity(self):
         completed = self._run_python(

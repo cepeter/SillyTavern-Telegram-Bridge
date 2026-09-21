@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 from bridge.composition import BridgeServices as _BridgeServices
 
 HELP_CATEGORIES = {
@@ -553,3 +557,6 @@ def set_bot_commands(token: str) -> None:
         })
     except Exception:
         logging.warning("Could not register Telegram command menu", exc_info=True)
+
+
+_bind_module_dependencies(__name__, globals())

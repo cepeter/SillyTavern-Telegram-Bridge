@@ -1,3 +1,76 @@
+from __future__ import annotations
+
+from bridge.callback_tokens import (
+    dynamic_callback_token,
+)
+
+from bridge.card_content import (
+    active_world_files,
+    card_fields,
+    card_fields_from_file,
+    encode_world_files,
+    parse_png_chara_bytes,
+    safe_world_path,
+)
+
+from bridge.common import (
+    Path,
+    hashlib,
+    json,
+    logging,
+    os,
+    re,
+    sqlite3,
+    time,
+    urllib,
+)
+
+from bridge.config import (
+    CATALOG_MAX_ITEMS,
+    CHARACTER_DIR,
+    DEFAULT_CHARACTER_FILE,
+    RAG_MAX_FILE_BYTES,
+    RAG_SUPPORTED_SUFFIXES,
+)
+
+from bridge.database import (
+    begin_operation,
+    bind_panel_session,
+    db_connect,
+    get_generation_settings,
+    get_meta,
+    optimize_database,
+    record_operation,
+    run_write_txn,
+    set_meta,
+)
+
+from bridge.memory_backend import (
+    hindsight_session_lock,
+)
+
+from bridge.panel_utils import (
+    panel_label,
+    panel_navigation,
+    panel_page,
+)
+
+from bridge.rag_core import (
+    add_data_bank_document,
+    data_bank_document_versions,
+    rag_mode,
+)
+
+from bridge.runtime_context import (
+    db_connection_context,
+    panel_actor_context,
+    panel_session_context,
+)
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+from bridge.config import SYNC_MAX_BYTES
+from bridge.common import MAX_TELEGRAM_LENGTH
+
 _SESSION_COLUMNS = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
 _SESSION_COLUMN_SQL = ", ".join(_SESSION_COLUMNS)
 
@@ -480,3 +553,6 @@ def send_text(token: str, chat_id: str, text: str) -> list[int]:
         if result.get("message_id") is not None:
             message_ids.append(int(result["message_id"]))
     return message_ids
+
+
+_bind_module_dependencies(__name__, globals())

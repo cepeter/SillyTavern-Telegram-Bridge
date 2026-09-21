@@ -1,8 +1,16 @@
+"""Load editable Help descriptions from the adjacent JSON data file."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
+import json
+import logging
+from pathlib import Path
+
 HELP_DETAILS_FILE = Path(__file__).with_name("help_details.json")
 
 
 def _load_command_details() -> dict:
-    """Load editable Help descriptions from the adjacent JSON data file."""
     try:
         payload = json.loads(HELP_DETAILS_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -180,3 +188,6 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
             send_help_menu(token, chat_id, None, message.get("message_id"))
         return True
     return False
+
+
+_bind_module_dependencies(__name__, globals())

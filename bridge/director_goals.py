@@ -4,6 +4,10 @@ Director goals are session-local coordination objectives. They are never written
 into the roleplay transcript; they influence the invisible speaker-selection
 call and the bounded group speaker prompt only while director mode is active.
 """
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import re
 import time
@@ -16,6 +20,7 @@ from bridge.repositories import (
 
 from bridge.extension_registry import (
     DirectorCustomization as _DirectorCustomization,
+    extension_registry_snapshot as _extension_registry_snapshot,
     register_command_route as _register_command_route,
     register_director_customization_provider as _register_director_customization_provider,
 )
@@ -137,8 +142,19 @@ def _director_goal_command_route(
     return False
 
 
-_register_director_customization_provider(
-    "director_goals",
-    _director_goal_customization,
-)
-_register_command_route("director_goals", _director_goal_command_route)
+def register_director_goal_extensions() -> None:
+    """Register Director Goal hooks once in the compatibility registry."""
+    snapshot = _extension_registry_snapshot()
+    if "director_goals" not in snapshot["director_customization"]:
+        _register_director_customization_provider(
+            "director_goals",
+            _director_goal_customization,
+        )
+    if "director_goals" not in snapshot["command_routes"]:
+        _register_command_route(
+            "director_goals",
+            _director_goal_command_route,
+        )
+
+
+_bind_module_dependencies(__name__, globals())

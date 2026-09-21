@@ -1,3 +1,28 @@
+from __future__ import annotations
+
+from bridge.common import (
+    logging,
+    sqlite3,
+    time,
+)
+
+from bridge.config import (
+    SUMMARY_MAX_CHARS,
+    SUMMARY_MAX_OUTPUT_TOKENS,
+    SUMMARY_RECENT_MESSAGES,
+    SUMMARY_TRIGGER_MESSAGES,
+    SUMMARY_UPDATE_INTERVAL,
+)
+
+from bridge.database import (
+    db_connect,
+    get_generation_settings,
+    set_meta,
+    task_model_for_session,
+)
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 from bridge.memory_backend import (
     _memory_hindsight_conversation_snapshot,
     _memory_hindsight_epoch,
@@ -203,3 +228,6 @@ def compatibility_memory_service() -> _MemoryService:
 def resolve_memory_service(memory_service=None) -> _MemoryService:
     """Return an injected service or the compatibility adapter."""
     return memory_service if memory_service is not None else compatibility_memory_service()
+
+
+_bind_module_dependencies(__name__, globals())

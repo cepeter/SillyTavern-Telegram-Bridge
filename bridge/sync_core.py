@@ -1,9 +1,15 @@
 """Shared transcript and checkpoint primitives for Live API Sync."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import json
 from pathlib import Path
 import sqlite3
 import time
+
+from bridge.config import DEFAULT_MODEL, SYNC_MAX_BYTES
 
 from bridge.sync_integrity import (
     SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter,
@@ -254,3 +260,6 @@ def set_sync_state(
         (local_hash, direction, time.time(), conflict, error[:1000], time.time(), chat_id, session_id),
     )
     db.commit()
+
+
+_bind_module_dependencies(__name__, globals())
