@@ -6,10 +6,6 @@ legacy implementations without holding SQLite writer transactions across slow
 provider or Telegram I/O.
 """
 
-import contextvars
-
-_OPERATION_CONTEXT = contextvars.ContextVar("bridge_operation_id", default=None)
-_ORIGINAL_PROCESS_MESSAGE = process_message
 
 
 
@@ -152,83 +148,6 @@ def _begin_durable_operation(db, operation_id, kind, deliver_recovered):
 
 
 
-
-def _operation_command(text):
-    parts = str(text or "").strip().split(None, 1)
-    if not parts:
-        return ""
-    command = parts[0].casefold()
-    if command.startswith("@") and len(parts) > 1:
-        command = parts[1].split(None, 1)[0].casefold()
-    if command.startswith("/") and "@" in command:
-        command = command.split("@", 1)[0]
-    return command
-
-
-def process_message(db, token, api_key, model, fields, chat_id, text, telegram_message_id=None, queued_session_id=None, operation_id=None, *, services=None):
-    memory_service = resolve_memory_service(
-        getattr(services, "memory", None) if services is not None else None
-    )
-    # Command-specific local_committed recovery must run before the legacy
-    # generic recovery shortcut, otherwise cleanup/variant work is skipped.
-    if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
-        command = _operation_command(text)
-        session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
-        session_fields = card_fields_from_file(session["character_file"])
-        if command == "/regen":
-            return regenerate_last(
-                db,
-                token,
-                api_key,
-                session,
-                session_fields,
-                chat_id,
-                operation_id=operation_id,
-                memory_service=memory_service,
-            )
-        if command == "/continue":
-            return continue_last(
-                db,
-                token,
-                api_key,
-                session,
-                session_fields,
-                chat_id,
-                operation_id=operation_id,
-                memory_service=memory_service,
-            )
-        if command == "/edit":
-            edited_text = str(text or "").strip().split(None, 1)
-            edited_text = edited_text[1].strip() if len(edited_text) > 1 else ""
-            return edit_last_user(
-                db,
-                token,
-                api_key,
-                session,
-                session_fields,
-                chat_id,
-                edited_text,
-                operation_id=operation_id,
-                memory_service=memory_service,
-            )
-
-    context_token = _OPERATION_CONTEXT.set(operation_id)
-    try:
-        return _ORIGINAL_PROCESS_MESSAGE(
-            db,
-            token,
-            api_key,
-            model,
-            fields,
-            chat_id,
-            text,
-            telegram_message_id,
-            queued_session_id=queued_session_id,
-            operation_id=operation_id,
-            services=services,
-        )
-    finally:
-        _OPERATION_CONTEXT.reset(context_token)
 
 
 def sync_status_text(db: sqlite3.Connection, chat_id: str, session: dict[str, str], *, sync_service=None) -> str:
