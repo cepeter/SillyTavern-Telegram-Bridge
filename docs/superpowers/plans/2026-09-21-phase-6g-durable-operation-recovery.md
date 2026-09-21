@@ -1824,15 +1824,31 @@ Complete the function after the recovery hook with this concrete normal path:
             rag_bundle,
         ),
     )
-    reply = _generate_rendered_reply(
+    send_typing(token, chat_id)
+    generation_settings = get_generation_settings(
         db,
-        token,
-        api_key,
-        session,
         chat_id,
+        session_id,
+    )
+    reply = generate_text(
+        api_key,
+        session["model_id"],
         messages,
+        session_id=f"telegram:{chat_id}:{session_id}",
+        settings=generation_settings,
+    )
+    reply += rag_citation_footer(
+        db,
+        chat_id,
         new_text,
         rag_bundle,
+    )
+    reply = render_session_response(
+        api_key,
+        session,
+        reply,
+        chat_id,
+        generation_settings,
     )
     old_message_ids = (
         _COMMAND_OPERATION_RECOVERY.outgoing_ids_after(
