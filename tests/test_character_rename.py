@@ -27,12 +27,18 @@ class CharacterRenameTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.old_dir = rt.CHARACTER_DIR
+        self.old_config_dir = config.CHARACTER_DIR
         self.old_backup = rt.CHARACTER_BACKUP_DIR
         self.old_card = rt.CARD_FILE
+        self.old_config_card = config.CARD_FILE
         self.old_db = config.DB_FILE
-        rt.CHARACTER_DIR = root / "characters"
+        character_dir = root / "characters"
+        card_file = character_dir / "Default.png"
+        rt.CHARACTER_DIR = character_dir
+        config.CHARACTER_DIR = character_dir
         rt.CHARACTER_BACKUP_DIR = root / "backups"
-        rt.CARD_FILE = rt.CHARACTER_DIR / "Default.png"
+        rt.CARD_FILE = card_file
+        config.CARD_FILE = card_file
         config.DB_FILE = root / "bridge.sqlite3"
         rt.CHARACTER_DIR.mkdir()
         rt.CHARACTER_BACKUP_DIR.mkdir()
@@ -43,8 +49,10 @@ class CharacterRenameTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
         rt.CHARACTER_DIR = self.old_dir
+        config.CHARACTER_DIR = self.old_config_dir
         rt.CHARACTER_BACKUP_DIR = self.old_backup
         rt.CARD_FILE = self.old_card
+        config.CARD_FILE = self.old_config_card
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
 

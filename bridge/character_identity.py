@@ -6,13 +6,7 @@ from pathlib import Path
 import sqlite3
 import struct
 
-
-def character_display_name(path: Path) -> str:
-    """Return the embedded card name with a safe filename fallback."""
-    try:
-        return str(card_fields(read_png_chara(path)).get("name") or path.stem)
-    except Exception:
-        return path.stem
+from bridge.card_content import character_display_name
 
 
 def character_image_fingerprint(path: Path) -> str:

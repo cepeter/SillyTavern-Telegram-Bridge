@@ -38,12 +38,31 @@ from pathlib import Path
 
 from bridge.config import (
     BRIDGE_HOME,
+    CARD_FIELD_MAX_CHARS,
+    CARD_FILE,
+    CARD_TOTAL_MAX_CHARS,
+    CATALOG_MAX_ITEMS,
+    CHARACTER_DIR,
     DB_FILE,
+    DEFAULT_CHARACTER_FILE,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
+    DEFAULT_USER_NAME,
     GENERATION_DEFAULTS,
     PENDING_SETTINGS_TTL_SECONDS,
     REASONING_LEVELS,
+    SILLYTAVERN_DIR,
+    SYSTEM_PROMPTS_DIR,
+    SYSTEM_PROMPTS_FILE,
+    WORLD_DIR,
+)
+from bridge.runtime_context import (
+    db_connection_context,
+    panel_actor_context,
+    panel_session_context,
+    set_db_connection_context,
+    set_panel_actor_context,
+    set_panel_session_context,
 )
 from bridge.runtime_defaults import (
     PROCESSED_UPDATE_RETENTION_SECONDS,
@@ -78,14 +97,7 @@ ENV_FILE = Path(os.environ.get("SILLYTAVERN_ENV_FILE", str(BRIDGE_HOME / ".env")
 PROVIDER_CONFIG_FILE = Path(os.environ.get("SILLYTAVERN_PROVIDER_CONFIG", str(BRIDGE_HOME / "sillytavern_telegram_providers.yaml")))
 MODEL_CACHE_FILE = Path(os.environ.get("SILLYTAVERN_MODEL_CACHE", str(BRIDGE_HOME / "model_catalog_cache.json")))
 MODEL_REFRESH_SECONDS = int(os.environ.get("SILLYTAVERN_MODEL_REFRESH_SECONDS", "3600"))
-SILLYTAVERN_DIR = Path(os.environ.get("SILLYTAVERN_DIR", str(BRIDGE_HOME.parent / "SillyTavern")))
-CHARACTER_DIR = Path(os.environ.get("SILLYTAVERN_CHARACTER_DIR", str(SILLYTAVERN_DIR / "data/default-user/characters")))
 CHARACTER_BACKUP_DIR = Path(os.environ.get("SILLYTAVERN_CHARACTER_BACKUP_DIR", str(BRIDGE_HOME / "backups/sillytavern/characters")))
-DEFAULT_CHARACTER_FILE = os.environ.get("SILLYTAVERN_DEFAULT_CHARACTER", "").strip()
-CARD_FILE = CHARACTER_DIR / DEFAULT_CHARACTER_FILE
-WORLD_DIR = Path(os.environ.get("SILLYTAVERN_WORLD_DIR", str(SILLYTAVERN_DIR / "data/default-user/worlds")))
-SYSTEM_PROMPTS_DIR = Path(os.environ.get("SILLYTAVERN_SYSTEM_PROMPTS_DIR", str(SILLYTAVERN_DIR / "data/default-user/sysprompt")))
-SYSTEM_PROMPTS_FILE = os.environ.get("SILLYTAVERN_SYSTEM_PROMPTS_FILE", "")
 SYNC_MAX_BYTES = 10 * 1024 * 1024
 IMAGE_MAX_BYTES = 8 * 1024 * 1024
 TTS_MAX_CHARS = 4000
@@ -93,7 +105,6 @@ STT_MAX_BYTES = 20 * 1024 * 1024
 STT_DEFAULT_MODEL = "base"
 LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
 DEFAULT_ALLOWED_USER = os.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", "")
-DEFAULT_USER_NAME = os.environ.get("SILLYTAVERN_DEFAULT_USER_NAME", "").strip()
 HINDSIGHT_DEFAULT_URL = "http://127.0.0.1:8890"
 HINDSIGHT_RECALL_MAX_TOKENS = 1200
 HINDSIGHT_CONTEXT_MAX_CHARS = 6000
@@ -117,9 +128,6 @@ RAG_PDF_PARSE_TIMEOUT_SECONDS = int(os.environ.get("SILLYTAVERN_RAG_PDF_PARSE_TI
 DEFAULT_PROVIDER_URL = ""
 MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
-CATALOG_MAX_ITEMS = 40
-CARD_FIELD_MAX_CHARS = 20000
-CARD_TOTAL_MAX_CHARS = 60000
 MODEL_CHOICES = []
 
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -128,36 +136,6 @@ logging.basicConfig(
     handlers=[RotatingFileHandler(str(LOG_FILE), maxBytes=10 * 1024 * 1024, backupCount=5)],
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
-
-_PANEL_SESSION_CONTEXT = threading.local()
-
-
-def set_panel_session_context(session_id: str | None) -> None:
-    _PANEL_SESSION_CONTEXT.session_id = str(session_id) if session_id else ""
-
-
-def panel_session_context() -> str:
-    return str(getattr(_PANEL_SESSION_CONTEXT, "session_id", "") or "")
-
-
-def set_panel_actor_context(user_id: str | None) -> None:
-    _PANEL_SESSION_CONTEXT.user_id = str(user_id) if user_id else ""
-
-
-def panel_actor_context() -> str:
-    return str(getattr(_PANEL_SESSION_CONTEXT, "user_id", "") or "")
-
-
-_DB_CONNECTION_CONTEXT = threading.local()
-
-
-def set_db_connection_context(db: sqlite3.Connection | None) -> None:
-    _DB_CONNECTION_CONTEXT.connection = db
-
-
-def db_connection_context() -> sqlite3.Connection | None:
-    return getattr(_DB_CONNECTION_CONTEXT, "connection", None)
-
 
 _BACKGROUND_MAX_QUEUED_PER_CHAT = 256
 _BACKGROUND_MAX_SCOPED_QUEUES = 1024

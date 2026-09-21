@@ -177,6 +177,42 @@ class RuntimeLoaderTests(unittest.TestCase):
             ),
         )
 
+    def test_phase_7b2_preserves_legacy_core_order_and_cards_shell(self):
+        core = next(
+            stage
+            for stage in DEFAULT_RUNTIME_STAGES
+            if stage.name == "core"
+        )
+        self.assertEqual(
+            core.modules,
+            (
+                "common.py", "cards.py", "memory.py",
+                "rag.py", "groups.py", "telegram.py",
+                "persona_delete_panel.py", "language.py",
+                "greetings.py", "help_details.py", "help.py",
+                "input_flows.py", "catalog.py", "update.py",
+                "image_generation.py", "expressions.py",
+                "media.py", "generation.py", "commands.py",
+                "status_panels.py", "command_routes.py",
+                "message_commands.py", "callbacks.py",
+                "panel_callback_routes.py", "main.py",
+            ),
+        )
+
+        loaded = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertTrue(
+            {
+                "runtime_context.py",
+                "panel_utils.py",
+                "card_content.py",
+                "callback_tokens.py",
+            }.isdisjoint(loaded)
+        )
+
     def test_composition_module_is_not_a_runtime_stage(self):
         loaded_modules = {
             module
