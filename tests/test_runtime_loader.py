@@ -23,18 +23,8 @@ class RuntimeLoaderTests(unittest.TestCase):
                 "safety_overrides",
             },
         )
-        self.assertTrue(
-            any(
-                entry["public_callable_overrides"]
-                for entry in rt.RUNTIME_LOAD_REPORT
-                if entry["stage"] in {
-                    "recovery_overrides",
-                    "native_adapter_overrides",
-                    "safety_overrides",
-                }
-            )
-        )
         by_module = {entry["module"]: entry["public_callable_overrides"] for entry in rt.RUNTIME_LOAD_REPORT}
+        self.assertEqual(by_module["recovery.py"], ())
         self.assertEqual(by_module["scene_state.py"], ())
         self.assertEqual(by_module["memory_curator.py"], ())
         self.assertEqual(by_module["director_goals.py"], ())
@@ -453,6 +443,35 @@ class RuntimeLoaderTests(unittest.TestCase):
                             f"{name}"
                         ),
                     )
+
+
+    def test_recovery_allowlist_is_sync_ui_only(self):
+        recovery_stage = next(
+            stage
+            for stage in DEFAULT_RUNTIME_STAGES
+            if stage.name == "recovery_overrides"
+        )
+        self.assertEqual(
+            recovery_stage.allowed_overrides_for("recovery.py"),
+            frozenset(
+                {
+                    "sync_status_text",
+                    "send_sync_menu",
+                    "handle_sync_callback",
+                }
+            ),
+        )
+
+    def test_runtime_report_recovery_has_no_actual_overrides(self):
+        report = next(
+            entry
+            for entry in rt.RUNTIME_LOAD_REPORT
+            if entry["module"] == "recovery.py"
+        )
+        self.assertEqual(
+            report["public_callable_overrides"],
+            (),
+        )
 
 
 if __name__ == "__main__":

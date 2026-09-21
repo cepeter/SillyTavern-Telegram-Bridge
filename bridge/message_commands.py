@@ -135,6 +135,19 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
     send_reply(token, chat_id, stored_reply, db, session_id, assistant_rowid)
 
 
+
+def _operation_command(text):
+    parts = str(text or "").strip().split(None, 1)
+    if not parts:
+        return ""
+    command = parts[0].casefold()
+    if command.startswith("@") and len(parts) > 1:
+        command = parts[1].split(None, 1)[0].casefold()
+    if command.startswith("/") and "@" in command:
+        command = command.split("@", 1)[0]
+    return command
+
+
 def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None, *, services=None) -> None:
     stripped = text.strip()
     command = stripped.lower()
@@ -152,6 +165,53 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     memory_service = getattr(services, "memory", None) if services is not None else None
     persona_service = getattr(services, "persona", None) if services is not None else None
     if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
+        recovery_command = _operation_command(text)
+        recovery_fields = card_fields_from_file(
+            session["character_file"]
+        )
+        if recovery_command == "/regen":
+            return regenerate_last(
+                db,
+                token,
+                api_key,
+                session,
+                recovery_fields,
+                chat_id,
+                operation_id=operation_id,
+                memory_service=memory_service,
+            )
+        if recovery_command == "/continue":
+            return continue_last(
+                db,
+                token,
+                api_key,
+                session,
+                recovery_fields,
+                chat_id,
+                operation_id=operation_id,
+                memory_service=memory_service,
+            )
+        if recovery_command == "/edit":
+            edited = str(text or "").strip().split(None, 1)
+            edited_text = (
+                edited[1].strip()
+                if len(edited) > 1
+                else ""
+            )
+            return edit_last_user(
+                db,
+                token,
+                api_key,
+                session,
+                recovery_fields,
+                chat_id,
+                edited_text,
+                operation_id=operation_id,
+                memory_service=memory_service,
+            )
+
+        # Generic committed-response recovery remains the fallback for
+        # non-special operations.
         committed = db.execute("SELECT rowid,content FROM messages WHERE chat_id=? AND session_id=? AND role='assistant' ORDER BY rowid DESC LIMIT 1", (chat_id, session_id)).fetchone()
         if committed:
             send_reply(token, chat_id, str(committed[1]), db, session_id, int(committed[0]))

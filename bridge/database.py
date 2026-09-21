@@ -333,12 +333,23 @@ def set_operation_phase(db: sqlite3.Connection, operation_id: int | str | None, 
 
 
 def begin_operation(db: sqlite3.Connection, operation_id: int | str | None, kind: str) -> bool:
+    """Persist the prepared marker immediately without spanning external I/O."""
     if operation_id is None:
         return True
-    now = time.time()
-    cursor = db.execute("INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?, 'in_progress',?,?)", (str(operation_id), kind, now, now))
-    db.commit()
-    if cursor.rowcount == 1:
+
+    def write():
+        now = time.time()
+        cursor = db.execute(
+            "INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?, 'in_progress',?,?)",
+            (str(operation_id), kind, now, now),
+        )
+        if cursor.rowcount == 1:
+            db.commit()
+            return True
+        return False
+
+    inserted = run_write_txn(db, write)
+    if inserted:
         return True
     return not operation_was_applied(db, operation_id)
 

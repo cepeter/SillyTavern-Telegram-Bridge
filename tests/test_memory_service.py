@@ -402,11 +402,19 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             side_effect=build_messages,
         ), patch.object(
             rt,
-            "_generate_rendered_reply",
+            "send_typing",
+        ), patch.object(
+            rt,
+            "generate_text",
             return_value="new reply",
         ), patch.object(
             rt,
-            "_delete_stored_telegram_ids",
+            "rag_citation_footer",
+            return_value="",
+        ), patch.object(
+            rt,
+            "render_session_response",
+            side_effect=lambda _api_key, _session, reply, _chat_id, _settings: reply,
         ), patch.object(
             rt,
             "save_response_variant",

@@ -1,3 +1,54 @@
+from bridge.operation_recovery import (
+    OperationRecovery as _OperationRecovery,
+)
+
+
+_COMMAND_OPERATION_RECOVERY = _OperationRecovery(
+    operation_phase=lambda db, operation_id: operation_phase(
+        db,
+        operation_id,
+    ),
+    begin_operation=lambda db, operation_id, kind: begin_operation(
+        db,
+        operation_id,
+        kind,
+    ),
+    record_operation=lambda db, operation_id, kind: record_operation(
+        db,
+        operation_id,
+        kind,
+    ),
+    run_write_txn=lambda db, operation: run_write_txn(
+        db,
+        operation,
+    ),
+    get_meta=lambda db, key, default="": get_meta(
+        db,
+        key,
+        default,
+    ),
+    telegram_request=lambda token, method, payload: telegram_request(
+        token,
+        method,
+        payload,
+    ),
+    delete_outgoing_message_row=(
+        lambda db, token, chat_id, rowid:
+        delete_outgoing_message_row(
+            db,
+            token,
+            chat_id,
+            rowid,
+        )
+    ),
+    log_info=lambda message, *args, **kwargs: logging.info(
+        message,
+        *args,
+        **kwargs,
+    ),
+)
+
+
 
 def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service=None, persona_service=None) -> None:
     memory_service = resolve_memory_service(memory_service)
@@ -45,17 +96,91 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
     send_reply(token, chat_id, stored_reply, db, session["session_id"], assistant_rowid)
 
 
-def regenerate_edited_turn(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, user_rowid: int, new_text: str, operation_id: int | str | None = None, *, memory_service=None) -> None:
+
+def regenerate_edited_turn(
+    db: sqlite3.Connection,
+    token: str,
+    api_key: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+    chat_id: str,
+    user_rowid: int,
+    new_text: str,
+    operation_id: int | str | None = None,
+    *,
+    memory_service=None,
+    persona_service=None,
+) -> None:
     memory_service = resolve_memory_service(memory_service)
-    if operation_id is not None:
-        if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "edit"):
-            return
     session_id = session["session_id"]
-    rows = db.execute("SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session_id)).fetchall()
-    target_index = next((i for i, row in enumerate(rows) if int(row[0]) == int(user_rowid) and row[1] == "user"), None)
+
+    def deliver_recovered_edit():
+        user_row = _COMMAND_OPERATION_RECOVERY.latest_user_row(
+            db,
+            chat_id,
+            session_id,
+        )
+        assistant_row = (
+            _COMMAND_OPERATION_RECOVERY.latest_assistant_row(
+                db,
+                chat_id,
+                session_id,
+            )
+        )
+        if not user_row or not assistant_row:
+            raise RuntimeError("edit recovery state is incomplete")
+        _COMMAND_OPERATION_RECOVERY.prepare_delivery(
+            db,
+            token,
+            chat_id,
+            assistant_row[0],
+            operation_id,
+        )
+        send_reply(
+            token,
+            chat_id,
+            f"✏️ Edited message regenerated.\n\n{assistant_row[1]}",
+            db,
+            session_id,
+            int(assistant_row[0]),
+        )
+        _COMMAND_OPERATION_RECOVERY.finish(
+            db,
+            operation_id,
+            "edit",
+        )
+
+    if not _COMMAND_OPERATION_RECOVERY.begin_or_recover(
+        db,
+        operation_id,
+        "edit",
+        deliver_recovered_edit,
+    ):
+        return
+
+    rows = db.execute(
+        "SELECT rowid,role,content FROM messages "
+        "WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
+        (chat_id, session_id),
+    ).fetchall()
+    target_index = next(
+        (
+            i
+            for i, row in enumerate(rows)
+            if int(row[0]) == int(user_rowid)
+            and row[1] == "user"
+        ),
+        None,
+    )
     if target_index is None:
-        raise ValueError("Telegram message is not a user turn in the active session")
-    history_rows = [(row[1], row[2]) for row in rows[:target_index]]
+        raise ValueError(
+            "Telegram message is not a user turn in the active session"
+        )
+
+    history_rows = [
+        (row[1], row[2])
+        for row in rows[:target_index]
+    ]
     memory_prompt = memory_service.prompt_context(
         db,
         chat_id,
@@ -64,32 +189,144 @@ def regenerate_edited_turn(db: sqlite3.Connection, token: str, api_key: str, ses
         new_text,
         edited_user_rowid=int(user_rowid),
     )
-    memory_context = memory_prompt.recall
-    session_summary = memory_prompt.summary
-    rag_bundle = rag_retrieval_bundle(db, chat_id, new_text)
-    rag_context = rag_context_for_prompt(db, chat_id, new_text, rag_bundle)
-    generation_settings = get_generation_settings(db, chat_id, session_id)
-    messages = build_chat_messages(session, fields, new_text, history_rows, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context)
+    rag_bundle = rag_retrieval_bundle(
+        db,
+        chat_id,
+        new_text,
+    )
+    messages = build_chat_messages(
+        session,
+        fields,
+        new_text,
+        history_rows,
+        memory_context=memory_prompt.recall,
+        session_summary=memory_prompt.summary,
+        persona_service=persona_service,
+        rag_context=rag_context_for_prompt(
+            db,
+            chat_id,
+            new_text,
+            rag_bundle,
+        ),
+    )
     send_typing(token, chat_id)
-    reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session_id}", settings=generation_settings)
-    reply += rag_citation_footer(db, chat_id, new_text, rag_bundle)
-    reply = render_session_response(api_key, session, reply, chat_id, generation_settings)
-    clear_session_summary(db, chat_id, session_id)
-    db.execute("UPDATE messages SET content=? WHERE rowid=?", (new_text, user_rowid))
-    db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?", (chat_id, session_id, user_rowid))
-    assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session_id, "assistant", reply, time.time()))
-    assistant_rowid = assistant_cursor.lastrowid
-    db.commit()
-    if operation_id is not None:
-        set_operation_phase(db, operation_id, "edit", "local_committed")
+    generation_settings = get_generation_settings(
+        db,
+        chat_id,
+        session_id,
+    )
+    reply = generate_text(
+        api_key,
+        session["model_id"],
+        messages,
+        session_id=f"telegram:{chat_id}:{session_id}",
+        settings=generation_settings,
+    )
+    reply += rag_citation_footer(
+        db,
+        chat_id,
+        new_text,
+        rag_bundle,
+    )
+    reply = render_session_response(
+        api_key,
+        session,
+        reply,
+        chat_id,
+        generation_settings,
+    )
+    old_message_ids = (
+        _COMMAND_OPERATION_RECOVERY.outgoing_ids_after(
+            db,
+            chat_id,
+            session_id,
+            int(user_rowid),
+        )
+    )
+    _COMMAND_OPERATION_RECOVERY.set_payload(
+        db,
+        operation_id,
+        {
+            "old_message_ids": old_message_ids,
+            "user_rowid": int(user_rowid),
+        },
+    )
+
+    def persist_edit():
+        db.execute(
+            "DELETE FROM session_summaries "
+            "WHERE chat_id=? AND session_id=?",
+            (chat_id, session_id),
+        )
+        db.execute(
+            "UPDATE messages SET content=? WHERE rowid=?",
+            (new_text, int(user_rowid)),
+        )
+        db.execute(
+            "DELETE FROM messages "
+            "WHERE chat_id=? AND session_id=? AND rowid>?",
+            (chat_id, session_id, int(user_rowid)),
+        )
+        assistant_cursor = db.execute(
+            "INSERT INTO messages("
+            "chat_id,session_id,role,content,created_at"
+            ") VALUES(?,?,?,?,?)",
+            (
+                chat_id,
+                session_id,
+                "assistant",
+                reply,
+                time.time(),
+            ),
+        )
+        assistant_rowid = int(assistant_cursor.lastrowid)
+        save_response_variant(
+            db,
+            chat_id,
+            session_id,
+            new_text,
+            reply,
+            user_rowid=int(user_rowid),
+            commit=False,
+        )
+        if operation_id is not None:
+            set_operation_phase(
+                db,
+                operation_id,
+                "edit",
+                "local_committed",
+            )
         db.commit()
-    delete_outgoing_messages(db, token, chat_id, session_id, user_rowid)
-    save_response_variant(db, chat_id, session_id, new_text, reply)
-    memory_service.retain(db, chat_id, session, fields)
-    send_reply(token, chat_id, f"✏️ Edited message regenerated.\n\n{reply}", db, session_id, assistant_rowid)
-    if operation_id is not None:
-        record_operation(db, operation_id, "edit")
-        db.commit()
+        return assistant_rowid
+
+    assistant_rowid = run_write_txn(
+        db,
+        persist_edit,
+    )
+    _COMMAND_OPERATION_RECOVERY.delete_stored_telegram_ids(
+        token,
+        chat_id,
+        old_message_ids,
+    )
+    memory_service.retain(
+        db,
+        chat_id,
+        session,
+        fields,
+    )
+    send_reply(
+        token,
+        chat_id,
+        f"✏️ Edited message regenerated.\n\n{reply}",
+        db,
+        session_id,
+        assistant_rowid,
+    )
+    _COMMAND_OPERATION_RECOVERY.finish(
+        db,
+        operation_id,
+        "edit",
+    )
 
 
 def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, memory_service=None, persona_service=None) -> None:
