@@ -1,10 +1,10 @@
+from __future__ import annotations
+
 """Persona and Telegram-facing card/panel compatibility shell.
 
 Content, callback-token state, and pure panel helpers live in ordinary
 modules. This file remains exec-loaded until the Phase 7 UI migration.
 """
-from __future__ import annotations
-
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
 
 
