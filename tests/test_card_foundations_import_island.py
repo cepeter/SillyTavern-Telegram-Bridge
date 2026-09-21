@@ -110,7 +110,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             self.assertEqual(config.CARD_FILE, original_card)
 
     def test_runtime_context_facade_exports_canonical_functions(self):
-        import bridge.runtime as rt
+        from runtime_test_facade import runtime as rt
         import bridge.runtime_context as context
 
         for name in RUNTIME_CONTEXT_EXPORTS:

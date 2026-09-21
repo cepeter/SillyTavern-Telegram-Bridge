@@ -2,7 +2,7 @@ from pathlib import Path
 import unittest
 
 import bridge.config as config
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class DefaultCharacterNameTests(unittest.TestCase):
