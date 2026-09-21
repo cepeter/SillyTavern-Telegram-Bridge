@@ -250,6 +250,34 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
                 with self.subTest(module=module.__name__, name=name):
                     self.assertIs(getattr(rt, name), getattr(module, name))
 
+
+    def test_runtime_patch_compatibility_mirrors_to_ordinary_owner(self):
+        import bridge.runtime as rt
+        import bridge.telegram as telegram
+
+        original = rt.send_text
+        sentinel = lambda *_args, **_kwargs: []
+        try:
+            rt.send_text = sentinel
+            self.assertIs(telegram.send_text, sentinel)
+            self.assertIs(rt.send_text, sentinel)
+        finally:
+            rt.send_text = original
+
+    def test_runtime_reads_mutable_state_from_live_ordinary_owner(self):
+        import bridge.common as common
+        import bridge.runtime as rt
+
+        original = common._BACKGROUND_ACCEPTING
+        try:
+            common._BACKGROUND_ACCEPTING = not original
+            self.assertEqual(
+                rt._BACKGROUND_ACCEPTING,
+                common._BACKGROUND_ACCEPTING,
+            )
+        finally:
+            common._BACKGROUND_ACCEPTING = original
+
     def test_extension_modules_expose_explicit_registration(self):
         import bridge.director_goals as director_goals
         import bridge.memory_curator as memory_curator
