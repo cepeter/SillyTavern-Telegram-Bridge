@@ -10,29 +10,25 @@ from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES, RuntimeStage, load_run
 
 
 class RuntimeLoaderTests(unittest.TestCase):
+
     def test_runtime_exposes_structured_load_report(self):
-        stages = {entry["stage"] for entry in rt.RUNTIME_LOAD_REPORT}
         self.assertEqual(
-            stages,
-            {
-                "core",
-                "sync_extensions",
-                "native_adapter_overrides",
-                "identity_extensions",
-                "safety_overrides",
-            },
+            tuple(
+                (entry["stage"], entry["module"], entry["public_callable_overrides"])
+                for entry in rt.RUNTIME_LOAD_REPORT
+            ),
+            (("core", "main.py", ()),),
         )
-        by_module = {entry["module"]: entry["public_callable_overrides"] for entry in rt.RUNTIME_LOAD_REPORT}
-        self.assertEqual(by_module["scene_state.py"], ())
-        self.assertEqual(by_module["memory_curator.py"], ())
-        self.assertEqual(by_module["director_goals.py"], ())
 
         extensions = extension_registry_snapshot()
         self.assertEqual(
             extensions["command_routes"],
             ("scene_state", "director_goals", "memory_curator"),
         )
-        self.assertEqual(extensions["post_retain"], ("scene_state", "memory_curator"))
+        self.assertEqual(
+            extensions["post_retain"],
+            ("scene_state", "memory_curator"),
+        )
         self.assertEqual(extensions["summary_context"], ("scene_state",))
         self.assertEqual(extensions["summary_clear"], ("scene_state",))
         self.assertEqual(
@@ -40,9 +36,19 @@ class RuntimeLoaderTests(unittest.TestCase):
             ("director_goals",),
         )
 
+
     def test_director_goals_not_allowlisted_for_public_callable_overrides(self):
-        safety = next(stage for stage in DEFAULT_RUNTIME_STAGES if stage.name == "safety_overrides")
-        self.assertEqual(safety.allowed_overrides_for("director_goals.py"), frozenset())
+        loaded = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn("director_goals.py", loaded)
+        for stage in DEFAULT_RUNTIME_STAGES:
+            self.assertEqual(
+                stage.allowed_public_callable_overrides,
+                (),
+            )
 
     def test_runtime_reload_resets_extension_registry_deterministically(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -155,27 +161,15 @@ class RuntimeLoaderTests(unittest.TestCase):
             {"database.py", "config.py"}.isdisjoint(loaded_modules)
         )
 
+
     def test_phase_7b1_preserves_remaining_core_order(self):
         core = next(
             stage
             for stage in DEFAULT_RUNTIME_STAGES
             if stage.name == "core"
         )
-        self.assertEqual(
-            core.modules,
-            (
-                "common.py", "cards.py", "memory.py",
-                "rag.py", "groups.py", "telegram.py",
-                "persona_delete_panel.py", "language.py",
-                "greetings.py", "help_details.py", "help.py",
-                "input_flows.py", "catalog.py", "update.py",
-                "image_generation.py", "expressions.py",
-                "media.py", "generation.py", "commands.py",
-                "status_panels.py", "command_routes.py",
-                "message_commands.py", "callbacks.py",
-                "panel_callback_routes.py", "main.py",
-            ),
-        )
+        self.assertEqual(core.modules, ("main.py",))
+
 
     def test_phase_7b2_preserves_legacy_core_order_and_cards_shell(self):
         core = next(
@@ -183,21 +177,7 @@ class RuntimeLoaderTests(unittest.TestCase):
             for stage in DEFAULT_RUNTIME_STAGES
             if stage.name == "core"
         )
-        self.assertEqual(
-            core.modules,
-            (
-                "common.py", "cards.py", "memory.py",
-                "rag.py", "groups.py", "telegram.py",
-                "persona_delete_panel.py", "language.py",
-                "greetings.py", "help_details.py", "help.py",
-                "input_flows.py", "catalog.py", "update.py",
-                "image_generation.py", "expressions.py",
-                "media.py", "generation.py", "commands.py",
-                "status_panels.py", "command_routes.py",
-                "message_commands.py", "callbacks.py",
-                "panel_callback_routes.py", "main.py",
-            ),
-        )
+        self.assertEqual(core.modules, ("main.py",))
 
         loaded = {
             module
@@ -210,6 +190,7 @@ class RuntimeLoaderTests(unittest.TestCase):
                 "panel_utils.py",
                 "card_content.py",
                 "callback_tokens.py",
+                "cards.py",
             }.isdisjoint(loaded)
         )
 
@@ -288,24 +269,12 @@ class RuntimeLoaderTests(unittest.TestCase):
             "main.py",
         )
 
-    def test_persona_integrity_writes_are_not_state_integrity_overrides(self):
-        state_stage = next(
-            stage
-            for stage in DEFAULT_RUNTIME_STAGES
-            if stage.name == "safety_overrides"
-        )
-        allowed = state_stage.allowed_overrides_for(
-            "state_integrity.py"
-        )
 
-        self.assertNotIn(
-            "upsert_native_persona",
-            allowed,
-        )
-        self.assertNotIn(
-            "delete_native_persona",
-            allowed,
-        )
+    def test_persona_integrity_writes_are_not_state_integrity_overrides(self):
+        for stage in DEFAULT_RUNTIME_STAGES:
+            for _filename, names in stage.allowed_public_callable_overrides:
+                self.assertNotIn("upsert_native_persona", names)
+                self.assertNotIn("delete_native_persona", names)
 
     def test_persona_write_owners_are_persona_sync(self):
         self.assertEqual(
@@ -329,31 +298,20 @@ class RuntimeLoaderTests(unittest.TestCase):
             "persona_sync.py",
         )
 
-    def test_persona_sync_remains_loaded_without_public_overrides(self):
-        stage = next(
-            stage
-            for stage in DEFAULT_RUNTIME_STAGES
-            if stage.name == "native_adapter_overrides"
-        )
-        self.assertIn(
-            "persona_sync.py",
-            stage.modules,
-        )
-        self.assertEqual(
-            stage.allowed_overrides_for(
-                "persona_sync.py"
-            ),
-            frozenset(),
-        )
 
-        report = next(
-            item
-            for item in rt.RUNTIME_LOAD_REPORT
-            if item["module"] == "persona_sync.py"
-        )
-        self.assertEqual(
-            report["public_callable_overrides"],
-            (),
+    def test_persona_sync_remains_loaded_without_public_overrides(self):
+        loaded = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertNotIn("persona_sync.py", loaded)
+        self.assertNotIn(
+            "persona_sync.py",
+            {
+                item["module"]
+                for item in rt.RUNTIME_LOAD_REPORT
+            },
         )
 
     def test_load_personas_has_no_runtime_override_allowlist(self):
@@ -384,18 +342,12 @@ class RuntimeLoaderTests(unittest.TestCase):
             set(),
         )
 
+
     def test_hindsight_writes_are_not_state_integrity_overrides(self):
-        state_stage = next(
-            stage
-            for stage in DEFAULT_RUNTIME_STAGES
-            if stage.name == "safety_overrides"
-        )
-        self.assertEqual(
-            state_stage.allowed_overrides_for(
-                "state_integrity.py"
-            ),
-            frozenset(),
-        )
+        for stage in DEFAULT_RUNTIME_STAGES:
+            for _filename, names in stage.allowed_public_callable_overrides:
+                self.assertNotIn("retain_session_memory", names)
+                self.assertNotIn("purge_hindsight_session", names)
 
     def test_hindsight_public_owners_are_memory_module(self):
         self.assertEqual(
