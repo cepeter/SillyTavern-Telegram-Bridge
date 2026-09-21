@@ -5,6 +5,10 @@ extension adds a second, deterministic curated document per session containing a
 small canonical set of durable facts. Extraction runs after persisted turns on
 the background executor and uses the session utility-model route.
 """
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import hashlib
 import json
@@ -18,6 +22,7 @@ from bridge.repositories import (
 )
 
 from bridge.extension_registry import (
+    extension_registry_snapshot as _extension_registry_snapshot,
     register_command_route as _register_command_route,
     register_post_retain_hook as _register_post_retain_hook,
 )
@@ -383,5 +388,19 @@ def _memory_curator_command_route(
     return False
 
 
-_register_post_retain_hook("memory_curator", _memory_curator_post_retain)
-_register_command_route("memory_curator", _memory_curator_command_route)
+def register_memory_curator_extensions() -> None:
+    """Register Memory Curator hooks once in the compatibility registry."""
+    snapshot = _extension_registry_snapshot()
+    if "memory_curator" not in snapshot["post_retain"]:
+        _register_post_retain_hook(
+            "memory_curator",
+            _memory_curator_post_retain,
+        )
+    if "memory_curator" not in snapshot["command_routes"]:
+        _register_command_route(
+            "memory_curator",
+            _memory_curator_command_route,
+        )
+
+
+_bind_module_dependencies(__name__, globals())
