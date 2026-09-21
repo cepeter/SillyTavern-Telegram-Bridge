@@ -206,6 +206,7 @@ from bridge import (
     update as _update,
 )
 from bridge.ordinary_dependencies import (
+    complete_module_dependencies as _complete_module_dependencies,
     publish_compatibility_namespace as _publish_compatibility_namespace,
 )
 
@@ -245,6 +246,9 @@ _APPLICATION_COMPATIBILITY_MODULES = (
 )
 
 for _module in _APPLICATION_COMPATIBILITY_MODULES:
+    _complete_module_dependencies(_module)
+
+for _module in _APPLICATION_COMPATIBILITY_MODULES:
     _publish_compatibility_namespace(globals(), _module)
 
 from bridge.runtime_loader import (
@@ -267,5 +271,6 @@ _memory_curator.register_memory_curator_extensions()
 
 del _module
 del _APPLICATION_COMPATIBILITY_MODULES
+del _complete_module_dependencies
 del _publish_compatibility_namespace
 del _RuntimePath, _DEFAULT_RUNTIME_STAGES, _load_runtime_namespace
