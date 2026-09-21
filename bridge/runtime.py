@@ -247,10 +247,15 @@ _APPLICATION_COMPATIBILITY_MODULES = (
     _memory_curator,
 )
 
+_RUNTIME_COMPAT_OWNER_BY_NAME = {}
+
 for _module in _APPLICATION_COMPATIBILITY_MODULES:
     _complete_module_dependencies(_module)
 
 for _module in _APPLICATION_COMPATIBILITY_MODULES:
+    for _compat_name in vars(_module):
+        if not _compat_name.startswith("__"):
+            _RUNTIME_COMPAT_OWNER_BY_NAME[_compat_name] = _module
     _publish_compatibility_namespace(globals(), _module)
 
 from bridge.runtime_loader import (
@@ -276,10 +281,29 @@ class _RuntimeFacadeModule(_runtime_types.ModuleType):
     """Temporary 7B4 compatibility for callers that patch bridge.runtime.
 
     Ordinary modules own production execution now. Existing tests and external
-    callers may still replace facade attributes at runtime, so mirror those
-    replacements into already-loaded bridge modules until Phase 7C removes the
-    compatibility facade.
+    callers may still replace facade attributes at runtime, so reads resolve
+    from the live ordinary owner and writes mirror into loaded bridge modules
+    until Phase 7C removes the compatibility facade.
     """
+
+    def __getattribute__(self, name: str):
+        if name not in {
+            "_RUNTIME_COMPAT_OWNER_BY_NAME",
+            "__dict__",
+            "__class__",
+            "__name__",
+        }:
+            namespace = _runtime_types.ModuleType.__getattribute__(
+                self,
+                "__dict__",
+            )
+            owners = namespace.get("_RUNTIME_COMPAT_OWNER_BY_NAME", {})
+            owner = owners.get(name)
+            if owner is not None:
+                owner_namespace = getattr(owner, "__dict__", {})
+                if name in owner_namespace:
+                    return owner_namespace[name]
+        return _runtime_types.ModuleType.__getattribute__(self, name)
 
     def __setattr__(self, name: str, value) -> None:
         _runtime_types.ModuleType.__setattr__(self, name, value)
@@ -297,9 +321,9 @@ class _RuntimeFacadeModule(_runtime_types.ModuleType):
             if namespace is not None and name in namespace:
                 namespace[name] = value
 
-
 _runtime_sys.modules[__name__].__class__ = _RuntimeFacadeModule
 
+del _compat_name
 del _module
 del _APPLICATION_COMPATIBILITY_MODULES
 del _complete_module_dependencies
