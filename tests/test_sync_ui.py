@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -385,6 +386,38 @@ class SyncUiBehaviorTests(unittest.TestCase):
         )
         self.service.toggle_realtime.assert_not_called()
         self.service.sync_now.assert_not_called()
+
+
+class SyncUiOwnershipTests(unittest.TestCase):
+    def test_status_panels_owns_sync_status_and_menu(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "status_panels.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "\ndef sync_status_text(",
+            source,
+        )
+        self.assertIn(
+            "\ndef send_sync_menu(",
+            source,
+        )
+
+    def test_recovery_no_longer_defines_sync_status_or_menu(self):
+        source = (
+            Path(__file__).parents[1]
+            / "bridge"
+            / "recovery.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "\ndef sync_status_text(",
+            source,
+        )
+        self.assertNotIn(
+            "\ndef send_sync_menu(",
+            source,
+        )
 
 
 if __name__ == "__main__":
