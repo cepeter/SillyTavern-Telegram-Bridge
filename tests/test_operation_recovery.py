@@ -576,6 +576,33 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
         self.assertNotIn("\ndef continue_last(", source)
 
 
+    def test_commands_owns_edited_turn_recovery_adapter(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "commands.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "from bridge.operation_recovery import",
+            source,
+        )
+        self.assertIn(
+            "_COMMAND_OPERATION_RECOVERY",
+            source,
+        )
+        self.assertIn(
+            "def regenerate_edited_turn(",
+            source,
+        )
+
+    def test_recovery_no_longer_defines_edited_turn(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "recovery.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn(
+            "\ndef regenerate_edited_turn(",
+            source,
+        )
+
+
 class OperationRecoveryUnitTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
