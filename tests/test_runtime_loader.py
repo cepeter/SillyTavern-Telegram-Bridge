@@ -289,7 +289,7 @@ class RuntimeLoaderTests(unittest.TestCase):
                     ),
                 )
 
-    def test_recovery_is_only_remaining_public_override_module(self):
+    def test_no_public_override_allowlist_remains_during_phase_6h_cutover(self):
         allowlisted_modules = {
             filename
             for stage in DEFAULT_RUNTIME_STAGES
@@ -300,7 +300,7 @@ class RuntimeLoaderTests(unittest.TestCase):
         }
         self.assertEqual(
             allowlisted_modules,
-            {"recovery.py"},
+            set(),
         )
 
     def test_hindsight_writes_are_not_state_integrity_overrides(self):
@@ -445,7 +445,7 @@ class RuntimeLoaderTests(unittest.TestCase):
                     )
 
 
-    def test_recovery_allowlist_is_callback_only_during_phase_6h_cutover(self):
+    def test_recovery_stage_has_no_override_allowlist_during_phase_6h_cutover(self):
         recovery_stage = next(
             stage
             for stage in DEFAULT_RUNTIME_STAGES
@@ -453,11 +453,7 @@ class RuntimeLoaderTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_stage.allowed_overrides_for("recovery.py"),
-            frozenset(
-                {
-                    "handle_sync_callback",
-                }
-            ),
+            frozenset(),
         )
 
     def test_runtime_report_recovery_has_no_actual_overrides(self):
