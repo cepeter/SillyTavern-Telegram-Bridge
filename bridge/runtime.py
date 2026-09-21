@@ -1,8 +1,8 @@
-"""Compatibility facade for the staged bridge runtime.
+"""Compatibility facade over ordinary bridge application modules.
 
-Domain files still share one namespace so existing handlers keep their call-time
-late binding semantics. The loader now validates load phases and makes
-intentional recovery/safety overrides explicit and auditable.
+Phase 7B4 ordinary-imports every domain/adapter module. Only main.py remains
+temporarily exec-loaded so Phase 7C can perform the final composition cutover
+without another domain migration.
 """
 from __future__ import annotations
 
@@ -171,6 +171,82 @@ from bridge.rag_core import (
     reindex_data_bank_documents,
 )
 
+from bridge import (
+    callbacks as _callbacks,
+    cards as _cards,
+    catalog as _catalog,
+    character_identity as _character_identity,
+    command_routes as _command_routes,
+    commands as _commands,
+    common as _common,
+    director_goals as _director_goals,
+    expressions as _expressions,
+    generation as _generation,
+    greetings as _greetings,
+    groups as _groups,
+    help as _help,
+    help_details as _help_details,
+    image_generation as _image_generation,
+    input_flows as _input_flows,
+    language as _language,
+    media as _media,
+    memory as _memory,
+    memory_curator as _memory_curator,
+    message_commands as _message_commands,
+    panel_callback_routes as _panel_callback_routes,
+    persona_delete_panel as _persona_delete_panel,
+    persona_sync as _persona_sync,
+    rag as _rag,
+    scene_state as _scene_state,
+    session_naming as _session_naming,
+    status_panels as _status_panels,
+    sync_api as _sync_api,
+    sync_core as _sync_core,
+    telegram as _telegram,
+    update as _update,
+)
+from bridge.ordinary_dependencies import (
+    publish_compatibility_namespace as _publish_compatibility_namespace,
+)
+
+_APPLICATION_COMPATIBILITY_MODULES = (
+    _common,
+    _cards,
+    _memory,
+    _rag,
+    _groups,
+    _telegram,
+    _persona_delete_panel,
+    _language,
+    _greetings,
+    _help_details,
+    _help,
+    _input_flows,
+    _catalog,
+    _update,
+    _image_generation,
+    _expressions,
+    _media,
+    _generation,
+    _commands,
+    _status_panels,
+    _command_routes,
+    _message_commands,
+    _callbacks,
+    _panel_callback_routes,
+    _sync_core,
+    _sync_api,
+    _persona_sync,
+    _character_identity,
+    _session_naming,
+    _scene_state,
+    _director_goals,
+    _memory_curator,
+)
+
+for _module in _APPLICATION_COMPATIBILITY_MODULES:
+    _publish_compatibility_namespace(globals(), _module)
+
 from bridge.runtime_loader import (
     DEFAULT_RUNTIME_STAGES as _DEFAULT_RUNTIME_STAGES,
     load_runtime_namespace as _load_runtime_namespace,
@@ -183,4 +259,13 @@ RUNTIME_LOAD_REPORT = _load_runtime_namespace(
     _DEFAULT_RUNTIME_STAGES,
 )
 
+# Runtime loading resets the compatibility registry. Re-register ordinary
+# extension modules explicitly after main.py has been loaded.
+_scene_state.register_scene_state_extensions()
+_director_goals.register_director_goal_extensions()
+_memory_curator.register_memory_curator_extensions()
+
+del _module
+del _APPLICATION_COMPATIBILITY_MODULES
+del _publish_compatibility_namespace
 del _RuntimePath, _DEFAULT_RUNTIME_STAGES, _load_runtime_namespace
