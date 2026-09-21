@@ -21,7 +21,6 @@ from bridge.memory_backend import (
     recall_memory_results,
     remember_fact,
 )
-
 from bridge.extension_registry import (
     apply_summary_context_hooks as _apply_summary_context_hooks,
     run_post_retain_hooks as _run_post_retain_hooks,
@@ -31,35 +30,8 @@ from bridge.hindsight_integrity import (
     HindsightStaleGuard as _HindsightStaleGuard,
 )
 from bridge.memory_service import MemoryService as _MemoryService
-def hindsight_bank_id(chat_id: str) -> str:
-def hindsight_tags(chat_id: str, session_id: str, character_name: str) -> list[str]:
-def hindsight_client():
-_HINDSIGHT_SESSION_LOCKS_GUARD = threading.Lock()
 
-async def _close_hindsight_client_async(client) -> None:
-def close_hindsight_client(client) -> None:
-def hindsight_session_lock(chat_id: str, session_id: str) -> threading.RLock:
-def hindsight_session_prefix(session_id: str) -> str:
-def hindsight_conversation_document_id(session_id: str) -> str:
-def hindsight_explicit_document_id(session_id: str, fact: str) -> str:
-def _record_hindsight_document(chat_id: str, session_id: str, document_id: str, kind: str) -> None:
-def _hindsight_not_found(exc: Exception) -> bool:
-async def _listed_hindsight_document_ids(api, bank_id: str, **filters) -> set[str]:
-async def _delete_hindsight_session_documents(client, bank_id: str, session_id: str, mapped_ids: set[str]) -> int:
-async def _delete_hindsight_session_documents_and_close(client, bank_id: str, session_id: str, mapped_ids: set[str]) -> int:
-def _purge_hindsight_session_backend(db: sqlite3.Connection, chat_id: str, session_id: str) -> int:
-def memory_mode(db: sqlite3.Connection, chat_id: str) -> str:
-def memory_scope(db: sqlite3.Connection, chat_id: str) -> str:
-def memory_recall_filter(db: sqlite3.Connection, chat_id: str, session: dict[str, str], character_name: str) -> list[str]:
-def recall_memory_results(db: sqlite3.Connection, chat_id: str, session: dict[str, str], query: str, character_name: str = "", max_tokens: int = HINDSIGHT_RECALL_MAX_TOKENS):
-def recall_memory_context(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], query: str) -> str:
-def _retain_with_client(chat_id: str, session_id: str, document_id: str, character_name: str,
-def _memory_hindsight_epoch_key(
-def _memory_hindsight_epoch(
-def _memory_hindsight_session_exists(
-def _memory_hindsight_conversation_snapshot(
-def _write_hindsight_successful_purge_state(
-def _retain_session_memory_backend(chat_id: str, session: dict[str, str], character_name: str, conversation: str) -> None:
+
 _HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(
     open_db=lambda: db_connect(),
     session_lock=lambda chat_id, session_id: (
@@ -116,7 +88,8 @@ def purge_hindsight_session(
         chat_id,
         session_id,
     )
-def remember_fact(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], fact: str) -> bool:
+
+
 def handle_memory_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict[str, str], command_text: str) -> None:
     parts = command_text.split(None, 2)
     argument = parts[1].casefold() if len(parts) > 1 else "status"
