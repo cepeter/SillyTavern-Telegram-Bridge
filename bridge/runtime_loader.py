@@ -1,10 +1,10 @@
 """Validated loader for the legacy shared runtime namespace.
 
 The bridge still exposes one compatibility namespace, but load order and
-intentional late overrides are described explicitly here instead of being an
-implicit property of a flat exec() loop. Core/extension modules are not allowed
-to silently replace public callables. Recovery/safety stages may replace them
-because those modules intentionally harden earlier implementations.
+intentional extension overrides are described explicitly here instead of
+being an implicit property of a flat exec() loop. Core/extension modules are
+not allowed to silently replace public callables. Only explicitly declared
+adapter/safety stages may replace public callables.
 """
 from __future__ import annotations
 
@@ -38,10 +38,6 @@ DEFAULT_RUNTIME_STAGES = (
             "message_commands.py", "callbacks.py", "panel_callback_routes.py",
             "main.py",
         ),
-    ),
-    RuntimeStage(
-        "recovery_overrides",
-        ("recovery.py",),
     ),
     RuntimeStage("sync_extensions", ("sync_core.py", "sync_api.py")),
     RuntimeStage(
