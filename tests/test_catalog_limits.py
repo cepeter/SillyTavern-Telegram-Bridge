@@ -12,9 +12,13 @@ class CatalogLimitTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.old_character = rt.CHARACTER_DIR
+        self.old_config_character = config.CHARACTER_DIR
         self.old_world = rt.WORLD_DIR
+        self.old_config_world = config.WORLD_DIR
         self.old_prompts = rt.SYSTEM_PROMPTS_DIR
+        self.old_config_prompts = config.SYSTEM_PROMPTS_DIR
         self.old_prompt_file = rt.SYSTEM_PROMPTS_FILE
+        self.old_config_prompt_file = config.SYSTEM_PROMPTS_FILE
         self.old_native_settings = rt.NATIVE_PERSONA_SETTINGS_FILE
         self.old_native_avatars = rt.NATIVE_PERSONA_AVATAR_DIR
         self.old_native_cache = rt._NATIVE_PERSONA_CACHE
@@ -22,9 +26,13 @@ class CatalogLimitTests(unittest.TestCase):
         self.old_phase3 = rt.phase3_api_configured
         self.old_db = config.DB_FILE
         rt.CHARACTER_DIR = root / "characters"
+        config.CHARACTER_DIR = rt.CHARACTER_DIR
         rt.WORLD_DIR = root / "worlds"
+        config.WORLD_DIR = rt.WORLD_DIR
         rt.SYSTEM_PROMPTS_DIR = root / "prompts"
+        config.SYSTEM_PROMPTS_DIR = rt.SYSTEM_PROMPTS_DIR
         rt.SYSTEM_PROMPTS_FILE = ""
+        config.SYSTEM_PROMPTS_FILE = ""
         rt.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
         rt.NATIVE_PERSONA_AVATAR_DIR = root / "avatars"
         rt.NATIVE_PERSONA_AVATAR_DIR.mkdir()
@@ -42,9 +50,13 @@ class CatalogLimitTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
         rt.CHARACTER_DIR = self.old_character
+        config.CHARACTER_DIR = self.old_config_character
         rt.WORLD_DIR = self.old_world
+        config.WORLD_DIR = self.old_config_world
         rt.SYSTEM_PROMPTS_DIR = self.old_prompts
+        config.SYSTEM_PROMPTS_DIR = self.old_config_prompts
         rt.SYSTEM_PROMPTS_FILE = self.old_prompt_file
+        config.SYSTEM_PROMPTS_FILE = self.old_config_prompt_file
         rt.NATIVE_PERSONA_SETTINGS_FILE = self.old_native_settings
         rt.NATIVE_PERSONA_AVATAR_DIR = self.old_native_avatars
         rt._NATIVE_PERSONA_CACHE = self.old_native_cache
