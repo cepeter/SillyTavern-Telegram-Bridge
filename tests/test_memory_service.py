@@ -755,7 +755,6 @@ class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
             "commands.py",
             "generation.py",
             "message_commands.py",
-            "recovery.py",
         )
         forbidden_calls = (
             "recall_memory_context(",

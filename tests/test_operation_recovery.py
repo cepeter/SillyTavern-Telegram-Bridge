@@ -529,6 +529,12 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
 
 
 class DurableRecoveryOwnershipTests(unittest.TestCase):
+    def test_recovery_compatibility_file_is_absent(self):
+        recovery = (
+            Path(__file__).parents[1] / "bridge" / "recovery.py"
+        )
+        self.assertFalse(recovery.exists())
+
     def test_database_begin_operation_uses_serialized_short_write(self):
         source = (
             Path(__file__).parents[1] / "bridge" / "database.py"
@@ -540,13 +546,6 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
         )
         chunk = source[start:end]
         self.assertIn("run_write_txn(db, write)", chunk)
-
-    def test_recovery_no_longer_defines_begin_operation(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "recovery.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("\ndef begin_operation(", source)
-
 
     def test_generation_owns_regen_and_continue_recovery_adapter(self):
         source = (
@@ -569,14 +568,6 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
             source,
         )
 
-    def test_recovery_no_longer_defines_regen_or_continue(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "recovery.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("\ndef regenerate_last(", source)
-        self.assertNotIn("\ndef continue_last(", source)
-
-
     def test_commands_owns_edited_turn_recovery_adapter(self):
         source = (
             Path(__file__).parents[1] / "bridge" / "commands.py"
@@ -594,16 +585,6 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
             source,
         )
 
-    def test_recovery_no_longer_defines_edited_turn(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "recovery.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn(
-            "\ndef regenerate_edited_turn(",
-            source,
-        )
-
-
     def test_operation_command_normalizes_bot_addressed_command(self):
         cases = {
             "/regen@BridgeBot": "/regen",
@@ -617,37 +598,6 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
                     rt._operation_command(raw),
                     expected,
                 )
-
-    def test_recovery_no_longer_wraps_process_message(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "recovery.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("\ndef process_message(", source)
-        self.assertNotIn("_ORIGINAL_PROCESS_MESSAGE", source)
-        self.assertNotIn("_OPERATION_CONTEXT", source)
-
-
-    def test_recovery_contains_no_durable_recovery_residue(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "recovery.py"
-        ).read_text(encoding="utf-8")
-        forbidden = (
-            "begin_operation",
-            "regenerate_last",
-            "continue_last",
-            "regenerate_edited_turn",
-            "process_message",
-            "_operation_payload_key",
-            "_set_operation_payload",
-            "_get_operation_payload",
-            "_finish_operation",
-            "_begin_durable_operation",
-            "_OPERATION_CONTEXT",
-            "_ORIGINAL_PROCESS_MESSAGE",
-        )
-        for name in forbidden:
-            with self.subTest(name=name):
-                self.assertNotIn(name, source)
 
     def test_operation_recovery_is_not_a_runtime_stage(self):
         modules = {

@@ -136,7 +136,9 @@ class SyncSourceBoundaryTests(unittest.TestCase):
 
     def test_sync_callback_does_not_call_raw_execution_backends(self):
         source = (
-            Path(__file__).parents[1] / "bridge" / "recovery.py"
+            Path(__file__).parents[1]
+            / "bridge"
+            / "panel_callback_routes.py"
         ).read_text(encoding="utf-8")
         chunk = self._function_chunk(
             source,
