@@ -527,6 +527,7 @@ DECLARED_DEPENDENCIES: dict[str, dict[str, DependencySpec]] = {
         ),
         _from("bridge.help_details", "handle_help_callback", "is_help_callback", "send_help_command"),
         _from("bridge.callbacks", "process_callback"),
+        _from("bridge.message_commands", "process_message"),
         _from("bridge.help", "process_document_job", "set_bot_commands"),
         _from("bridge.memory_backend", "recall_memory_context"),
         _from("bridge.runtime_context", "set_db_connection_context", "set_panel_actor_context"),
