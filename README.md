@@ -756,37 +756,46 @@ and restarts the service.
 
 ## 🏗️ Architecture
 
-The bridge keeps a shared runtime namespace for compatibility, but loading is
-split into validated stages. Core modules cannot silently replace public
-callables; recovery and safety overrides are explicitly declared and reported.
-New cross-cutting feature composition uses an explicit extension registry instead
-of late function replacement. Scene State, Director Goals, and Memory Curator now
-register command routes and memory/summary hooks directly. Pure retrieval helpers
-are also moving to normal imports. Here are the main boundaries (not exhaustive):
+The bridge now uses ordinary Python imports and explicit module-local dependency
+composition. Production startup enters through `bridge.main`; repository source
+is no longer executed into a shared runtime namespace. Circular application/UI
+dependencies are declared against canonical owners in
+`bridge/ordinary_dependencies.py`, and cross-cutting features register through
+the explicit extension registry. `bridge.runtime` remains only as a plain
+read-compatible facade for older imports; production startup does not depend on
+it.
+
+Scene State, Director Goals, and Memory Curator register command routes and
+memory/summary hooks deterministically during startup. Here are the main
+boundaries (not exhaustive):
 
 ```text
-sillytavern_telegram_bridge.py  launcher
-bridge/runtime.py               compatibility runtime facade
-bridge/runtime_loader.py        validated load stages and override reporting
+sillytavern_telegram_bridge.py   launcher; imports bridge.main directly
+bridge/main.py                   production composition, polling, durable job dispatch
+bridge/runtime.py                plain legacy import/re-export facade
+bridge/ordinary_dependencies.py explicit module-local application dependency graph
 bridge/extension_registry.py     explicit command and memory/summary extension hooks
-bridge/common.py                configuration, queues, permissions
-bridge/cards.py                 cards, Persona display, prompts, World Info
-bridge/database.py              sessions and generation settings
-bridge/memory.py                Hindsight and summaries
-bridge/rag.py                   Data Bank ingestion and retrieval orchestration
-bridge/rag_retrieval.py         bounded semantic candidate selection
-bridge/catalog.py               provider catalog and health
-bridge/generation.py            adapters, streaming, continuation
-bridge/telegram.py              Telegram transport and splitting
-bridge/help*.py/json            help menus and command details
-bridge/sync_*.py                Live Sync primitives and API
-bridge/groups.py                Forum Topic orchestration
-bridge/media.py                 voice, STT, TTS, Telegram media
-bridge/main.py                  polling and durable job dispatch
-bridge/recovery.py              idempotent operation recovery
-bridge/state_integrity.py       native/Hindsight consistency hardening
-bridge/scheduler_safety.py      SQLite and durable-job hardening
-bridge/pdf_parser.py            isolated PDF worker for Data Bank
+bridge/common.py                 queues, permissions, shared runtime support
+bridge/config.py                 canonical startup and feature defaults
+bridge/cards.py                  cards, Persona display, prompts, World Info
+bridge/database.py               sessions, persistence, generation settings
+bridge/memory.py                 Hindsight orchestration and summaries
+bridge/memory_backend.py         canonical Hindsight backend
+bridge/rag.py                    Data Bank command/orchestration shell
+bridge/rag_core.py               Data Bank ingestion, indexing, and retrieval core
+bridge/catalog.py                provider catalog and health
+bridge/generation.py             adapters, streaming, continuation
+bridge/telegram.py               Telegram transport and session helpers
+bridge/help*.py/json             help menus and command details
+bridge/sync_*.py                 Live Sync primitives and API
+bridge/groups.py                 Forum Topic orchestration
+bridge/group_core.py             canonical group state and turn logic
+bridge/media.py                  voice, STT, TTS, Telegram media
+bridge/job_runtime.py            durable-job compatibility construction
+bridge/recovery.py               idempotent operation recovery
+bridge/state_integrity.py        native/Hindsight consistency hardening
+bridge/scheduler_safety.py       SQLite and durable-job hardening
+bridge/pdf_parser.py             isolated PDF worker for Data Bank
 ```
 
 ---
