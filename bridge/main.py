@@ -49,25 +49,14 @@ from bridge.scheduler_safety import (
 from bridge.ordinary_dependencies import (
     complete_application_dependencies as _complete_application_dependencies,
 )
-from bridge.extension_registry import (
-    reset_extension_registry as _reset_extension_registry,
+from bridge.application_composition import (
+    initialize_extensions as _initialize_extensions,
 )
 
 # Complete every declared module-local dependency before startup state is
 # constructed. This is ordinary module composition; no source is exec-loaded
 # into this namespace.
 _complete_application_dependencies(__name__, globals())
-
-from bridge import (
-    director_goals as _director_goals,
-    memory_curator as _memory_curator,
-    scene_state as _scene_state,
-)
-
-_reset_extension_registry()
-_scene_state.register_scene_state_extensions()
-_director_goals.register_director_goal_extensions()
-_memory_curator.register_memory_curator_extensions()
 
 _SHUTDOWN_EVENT = threading.Event()
 
@@ -652,6 +641,8 @@ def run_check(services: _BridgeServices) -> int:
 
 
 def main() -> int:
+    _initialize_extensions()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
