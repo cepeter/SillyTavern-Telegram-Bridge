@@ -5,6 +5,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
+import bridge.database as database
 import bridge.runtime as rt
 
 from bridge.scheduler_safety import DatabaseConnectionGate, DurableWorkerGuard
@@ -248,7 +249,7 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_canonical_gate_runs_schema_initialization_once(self):
-        original = rt.initialize_database_schema
+        original = database.initialize_database_schema
         calls = []
 
         def traced(db):
@@ -256,12 +257,12 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
             return original(db)
 
         with patch.object(
-            rt,
+            database,
             "initialize_database_schema",
             side_effect=traced,
         ):
-            first = rt._DB_CONNECTION_GATE.connect(self.path)
-            second = rt._DB_CONNECTION_GATE.connect(self.path)
+            first = database._DB_CONNECTION_GATE.connect(self.path)
+            second = database._DB_CONNECTION_GATE.connect(self.path)
 
         try:
             self.assertEqual(len(calls), 1)
@@ -270,13 +271,13 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
             second.close()
 
     def test_canonical_gate_keeps_role_specific_cache(self):
-        first = rt._DB_CONNECTION_GATE.connect(self.path)
-        second = rt._DB_CONNECTION_GATE.connect(self.path)
+        first = database._DB_CONNECTION_GATE.connect(self.path)
+        second = database._DB_CONNECTION_GATE.connect(self.path)
         try:
             first_cache = first.execute("PRAGMA cache_size").fetchone()[0]
             second_cache = second.execute("PRAGMA cache_size").fetchone()[0]
-            self.assertEqual(first_cache, -rt._DB_PRIMARY_CACHE_KIB)
-            self.assertEqual(second_cache, -rt._DB_WORKER_CACHE_KIB)
+            self.assertEqual(first_cache, -database._DB_PRIMARY_CACHE_KIB)
+            self.assertEqual(second_cache, -database._DB_WORKER_CACHE_KIB)
             self.assertEqual(
                 second.execute("PRAGMA foreign_keys").fetchone()[0],
                 1,
