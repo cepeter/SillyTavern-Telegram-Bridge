@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service=None) -> None:
     persona_service = resolve_persona_service(persona_service)
     personas = persona_service.list()
@@ -10,3 +14,6 @@ def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, mes
     rows.append([{"text": "⬅️ Back", "callback_data": "persona:menu"}, {"text": "❌ Cancel", "callback_data": "persona:cancel"}])
     payload = {"chat_id": chat_id, "text": "Choose an inactive Persona to delete:", "reply_markup": {"inline_keyboard": rows}}
     send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
+
+
+_bind_module_dependencies(__name__, globals())
