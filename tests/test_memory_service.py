@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import bridge.config as config
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 from bridge.memory_service import MemoryPromptContext, MemoryService
 

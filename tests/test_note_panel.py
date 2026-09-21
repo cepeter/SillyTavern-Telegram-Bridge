@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 import bridge.config as config
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class NotePanelTests(unittest.TestCase):

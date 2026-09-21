@@ -64,27 +64,13 @@ class RuntimeImportIslandTests(unittest.TestCase):
         )
 
 
-    def test_first_import_island_is_absent_from_runtime_stages(self):
-        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
-
-        loaded = {
-            module
-            for stage in DEFAULT_RUNTIME_STAGES
-            for module in stage.modules
-        }
-        self.assertTrue(
-            {
-                "performance.py",
-                "native_cache.py",
-                "schema.py",
-                "runtime_defaults.py",
-            }.isdisjoint(loaded)
-        )
+    def test_first_import_island_remains_ordinary_after_final_cutover(self):
+        self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
 
     def test_runtime_facade_uses_canonical_import_island_objects(self):
         import bridge.native_cache as native_cache
         import bridge.performance as performance
-        import bridge.runtime as rt
+        from runtime_test_facade import runtime as rt
         import bridge.schema as schema
 
         self.assertIs(rt.performance_enabled, performance.performance_enabled)
@@ -99,21 +85,10 @@ class RuntimeImportIslandTests(unittest.TestCase):
             schema.initialize_database_schema,
         )
 
-    def test_runtime_load_report_has_no_import_island_sources(self):
+    def test_runtime_has_no_loader_report_after_final_cutover(self):
         import bridge.runtime as rt
 
-        loaded = {
-            entry["module"]
-            for entry in rt.RUNTIME_LOAD_REPORT
-        }
-        self.assertTrue(
-            {
-                "performance.py",
-                "native_cache.py",
-                "schema.py",
-                "runtime_defaults.py",
-            }.isdisjoint(loaded)
-        )
+        self.assertFalse(hasattr(rt, "RUNTIME_LOAD_REPORT"))
 
 
     def test_ordinary_modules_before_runtime_keep_canonical_identity(self):

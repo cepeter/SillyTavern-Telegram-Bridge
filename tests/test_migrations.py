@@ -5,7 +5,7 @@ import time
 import unittest
 
 import bridge.config as config
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 import bridge.schema as schema
 from bridge.migrations import Migration, MigrationError, run_migrations
 

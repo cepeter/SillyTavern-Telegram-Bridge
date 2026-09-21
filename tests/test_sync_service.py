@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 from unittest.mock import patch
 
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 from bridge.sync_service import SyncService, SyncStatus
 
 
@@ -180,12 +180,8 @@ class SyncSourceBoundaryTests(unittest.TestCase):
             ).name,
             "sync_api.py",
         )
-        self.assertNotIn(
-            "sync_safety.py",
-            {
-                item["module"]
-                for item in rt.RUNTIME_LOAD_REPORT
-            },
+        self.assertFalse(
+            (Path(__file__).parents[1] / "bridge" / "runtime_loader.py").exists()
         )
 
 

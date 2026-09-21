@@ -5,9 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 from bridge.operation_recovery import OperationRecovery
-from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
 
 
 class DurableRecoveryCharacterizationTests(unittest.TestCase):
@@ -599,13 +598,10 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
                     expected,
                 )
 
-    def test_operation_recovery_is_not_a_runtime_stage(self):
-        modules = {
-            module
-            for stage in DEFAULT_RUNTIME_STAGES
-            for module in stage.modules
-        }
-        self.assertNotIn("operation_recovery.py", modules)
+    def test_operation_recovery_is_not_exec_loaded(self):
+        self.assertFalse(
+            (Path(__file__).parents[1] / "bridge" / "runtime_loader.py").exists()
+        )
 
 
 class OperationRecoveryUnitTests(unittest.TestCase):

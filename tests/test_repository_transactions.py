@@ -7,7 +7,7 @@ from pathlib import Path
 
 import bridge.config as config
 import bridge.group_core as group_core
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 from bridge import repositories
 
 

@@ -29,7 +29,7 @@ def bootstrap_env() -> None:
 
 
 bootstrap_env()
-from bridge.runtime import main
+from bridge.main import main
 
 if __name__ == "__main__":
     main()

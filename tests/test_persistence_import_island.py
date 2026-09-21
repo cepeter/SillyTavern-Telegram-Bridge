@@ -204,7 +204,7 @@ class PersistenceImportIslandTests(unittest.TestCase):
 
     def test_runtime_facade_exports_complete_canonical_database_api(self):
         import bridge.database as database
-        import bridge.runtime as rt
+        from runtime_test_facade import runtime as rt
 
         actual_public_functions = {
             name
@@ -224,28 +224,13 @@ class PersistenceImportIslandTests(unittest.TestCase):
                     getattr(database, name),
                 )
 
-    def test_database_and_config_are_absent_from_runtime_stages(self):
-        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
+    def test_database_and_config_remain_ordinary_after_final_cutover(self):
+        self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
 
-        loaded = {
-            module
-            for stage in DEFAULT_RUNTIME_STAGES
-            for module in stage.modules
-        }
-        self.assertTrue(
-            {"database.py", "config.py"}.isdisjoint(loaded)
-        )
-
-    def test_runtime_load_report_excludes_database_and_config(self):
+    def test_runtime_has_no_loader_report_after_final_cutover(self):
         import bridge.runtime as rt
 
-        loaded = {
-            entry["module"]
-            for entry in rt.RUNTIME_LOAD_REPORT
-        }
-        self.assertTrue(
-            {"database.py", "config.py"}.isdisjoint(loaded)
-        )
+        self.assertFalse(hasattr(rt, "RUNTIME_LOAD_REPORT"))
 
 
     def test_database_before_runtime_keeps_canonical_identity(self):

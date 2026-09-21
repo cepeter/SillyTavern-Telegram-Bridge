@@ -225,7 +225,7 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
         import bridge.memory_backend as memory_backend
         import bridge.network_security as network_security
         import bridge.rag_core as rag_core
-        import bridge.runtime as rt
+        from runtime_test_facade import runtime as rt
 
         for module, names in (
             (network_security, NETWORK_EXPORTS),
@@ -237,40 +237,14 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
                 with self.subTest(module=module.__name__, name=name):
                     self.assertIs(getattr(rt, name), getattr(module, name))
 
-    def test_phase_7b3_foundations_are_never_exec_loaded(self):
-        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
-
-        loaded = {
-            module
-            for stage in DEFAULT_RUNTIME_STAGES
-            for module in stage.modules
-        }
-        self.assertTrue(
-            {
-                "network_security.py",
-                "memory_backend.py",
-                "rag_core.py",
-                "group_core.py",
-            }.isdisjoint(loaded)
-        )
+    def test_phase_7b3_foundations_remain_ordinary_after_final_cutover(self):
+        self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
 
 
-    def test_legacy_feature_shell_order_is_unchanged(self):
-        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
-
-        core = next(
-            stage
-            for stage in DEFAULT_RUNTIME_STAGES
-            if stage.name == "core"
-        )
-        self.assertEqual(core.modules, ("main.py",))
-        self.assertTrue(
-            {
-                "memory.py",
-                "rag.py",
-                "groups.py",
-            }.isdisjoint(core.modules)
-        )
+    def test_feature_shells_are_ordinary_after_final_cutover(self):
+        for module_name in ("bridge.memory", "bridge.rag", "bridge.groups"):
+            with self.subTest(module=module_name):
+                __import__(module_name)
 
 
 if __name__ == "__main__":

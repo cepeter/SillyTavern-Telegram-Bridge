@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import bridge.extension_registry as extension_registry
 import bridge.config as config
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class GroupDirectorTests(unittest.TestCase):

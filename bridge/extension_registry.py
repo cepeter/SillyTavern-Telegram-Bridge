@@ -1,9 +1,9 @@
-"""Explicit extension points for compatibility-runtime feature modules.
+"""Explicit extension points for ordinary bridge feature modules.
 
-Feature modules may still be loaded through bridge.runtime for compatibility,
-but cross-cutting composition should be declared here rather than implemented by
-replacing previously loaded functions. Named registrations are deterministic and
-introspectable, which makes extension order visible to tests and diagnostics.
+Cross-cutting composition is declared here rather than implemented by replacing
+functions after load. Named registrations are deterministic and introspectable,
+which makes extension order visible to production composition, tests, and
+diagnostics.
 """
 from __future__ import annotations
 

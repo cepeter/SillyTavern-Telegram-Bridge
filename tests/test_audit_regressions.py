@@ -5,7 +5,7 @@ import unittest
 
 import bridge.config as config
 import bridge.memory_backend as memory_backend
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class AuditRegressionTests(unittest.TestCase):

@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import bridge.config as bridge_config
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 from bridge.group_director_service import GroupDirectorService
 from bridge.job_service import DurableJob, JobService, JobSubmission

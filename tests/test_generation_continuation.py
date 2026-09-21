@@ -1,7 +1,7 @@
 import json
 import unittest
 
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class _FakeResponse:

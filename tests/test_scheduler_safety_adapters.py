@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import bridge.database as database
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 from bridge.scheduler_safety import DatabaseConnectionGate, DurableWorkerGuard
 

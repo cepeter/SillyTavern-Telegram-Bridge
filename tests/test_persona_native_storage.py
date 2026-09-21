@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class NativePersonaStorageTests(unittest.TestCase):
