@@ -334,6 +334,7 @@ DECLARED_DEPENDENCIES: dict[str, dict[str, DependencySpec]] = {
         _from("bridge.panel_callback_routes", "handle_entity_panel_callback", "handle_primary_panel_callback", "handle_provider_model_callback"),
         _from("bridge.help", "handle_enum_callback"),
         _from("bridge.groups", "handle_group_panel_callback"),
+        _from("bridge.catalog", "answer_callback"),
         _from("bridge.common", "parse_topic_scope"),
         _from("bridge.media", "remove_inline_keyboard"),
         _from("bridge.callback_tokens", "resolve_dynamic_callback_token"),
