@@ -1122,7 +1122,7 @@ bridge/runtime.py
 
 `bridge/runtime_loader.py` should not require a production-stage change in this phase.
 
-Test-only changes may be broader where existing tests patch card/world/prompt configuration or inspect state through shared runtime globals. Those tests must be retargeted to canonical owners without weakening behavior assertions.
+Test-only changes may be broader where existing tests patch card/world/prompt configuration or inspect state through shared runtime globals. Tests that exercise the newly ordinary modules must target canonical owners. Tests that exercise still-legacy production modules such as `telegram.py` may temporarily retain runtime compatibility patch points until those production owners migrate, provided no new runtime-global dependency is introduced.
 
 Any production need to modify Telegram, Persona, memory, generation, command routing, callbacks, or main composition indicates hidden architectural scope and requires returning to the design gate before proceeding.
 
@@ -1227,7 +1227,7 @@ Phase 7B2 is complete when all of the following are true:
 20. `runtime_context.py`, `panel_utils.py`, `card_content.py`, and `callback_tokens.py` never appear in runtime stages.
 21. `cards.py` remains in the core runtime stage.
 22. the relative order of all existing legacy runtime files is unchanged.
-23. relevant tests no longer depend on rebinding extracted `rt.*` configuration or private state instead of canonical owners.
+23. tests for newly ordinary config/content/context/token owners patch or inspect those canonical owners rather than newly creating runtime-global test dependencies; existing tests for still-legacy modules may keep compatibility patch points until those modules migrate.
 24. card parsing, World Info, prompts, macros, callback tokens, panels, Persona UI, character UI, and session UI behavior remain unchanged.
 25. complete repository CI passes at the exact branch head.
 
