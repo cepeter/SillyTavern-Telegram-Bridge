@@ -49,6 +49,12 @@ CARD_CONTENT_EXPORTS = (
     "character_display_name",
 )
 
+CALLBACK_TOKEN_EXPORTS = (
+    "dynamic_callback_token",
+    "resolve_dynamic_callback_token",
+)
+
+
 
 
 class CardFoundationsImportIslandTests(unittest.TestCase):
@@ -365,6 +371,278 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             )
 
         self.assertRegex(result, r"^\d{2}:\d{2}$")
+
+
+    def test_callback_tokens_imports_without_runtime_or_common(self):
+        completed = self._run_python(
+            "import sys\n"
+            "import bridge.callback_tokens as callback_tokens\n"
+            "assert 'bridge.runtime' not in sys.modules\n"
+            "assert 'bridge.common' not in sys.modules\n"
+            "assert callback_tokens._CALLBACK_TOKEN_TTL_SECONDS == 900\n"
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stdout + completed.stderr,
+        )
+
+    def test_runtime_facade_exports_canonical_callback_token_functions(self):
+        import bridge.callback_tokens as callback_tokens
+        import bridge.runtime as rt
+
+        for name in CALLBACK_TOKEN_EXPORTS:
+            with self.subTest(name=name):
+                self.assertIs(
+                    getattr(rt, name),
+                    getattr(callback_tokens, name),
+                )
+
+    def test_runtime_and_module_share_one_callback_cache(self):
+        import bridge.callback_tokens as callback_tokens
+        import bridge.runtime as rt
+
+        callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+        db = sqlite3.connect(":memory:")
+        try:
+            db.execute(
+                "CREATE TABLE callback_tokens("
+                "token TEXT PRIMARY KEY,"
+                "kind TEXT NOT NULL,"
+                "value TEXT NOT NULL,"
+                "chat_id TEXT NOT NULL,"
+                "expires_at REAL NOT NULL)"
+            )
+
+            token = rt.dynamic_callback_token(
+                "character",
+                "mira.png",
+                "chat",
+                db=db,
+            )
+            self.assertEqual(
+                callback_tokens.resolve_dynamic_callback_token(
+                    token,
+                    "character",
+                    "chat",
+                ),
+                "mira.png",
+            )
+
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+            token2 = callback_tokens.dynamic_callback_token(
+                "world",
+                "lore.json",
+                "chat",
+                db=db,
+            )
+            self.assertEqual(
+                rt.resolve_dynamic_callback_token(
+                    token2,
+                    "world",
+                    "chat",
+                ),
+                "lore.json",
+            )
+        finally:
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+            db.close()
+
+    def test_callback_token_format_remains_stable(self):
+        import hashlib
+        import bridge.callback_tokens as callback_tokens
+
+        db = sqlite3.connect(":memory:")
+        try:
+            db.execute(
+                "CREATE TABLE callback_tokens("
+                "token TEXT PRIMARY KEY,"
+                "kind TEXT NOT NULL,"
+                "value TEXT NOT NULL,"
+                "chat_id TEXT NOT NULL,"
+                "expires_at REAL NOT NULL)"
+            )
+            token = callback_tokens.dynamic_callback_token(
+                "character",
+                "mira.png",
+                "chat",
+                db=db,
+            )
+        finally:
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+            db.close()
+
+        expected = (
+            "t"
+            + hashlib.sha256(
+                b"character|chat|mira.png"
+            ).hexdigest()[:16]
+        )
+        self.assertEqual(token, expected)
+
+    def test_callback_token_scope_mismatch_invalidates_cache_and_database(self):
+        import bridge.callback_tokens as callback_tokens
+        import bridge.runtime_context as runtime_context
+
+        db = sqlite3.connect(":memory:")
+        try:
+            db.execute(
+                "CREATE TABLE callback_tokens("
+                "token TEXT PRIMARY KEY,"
+                "kind TEXT NOT NULL,"
+                "value TEXT NOT NULL,"
+                "chat_id TEXT NOT NULL,"
+                "expires_at REAL NOT NULL)"
+            )
+            runtime_context.set_db_connection_context(db)
+            token = callback_tokens.dynamic_callback_token(
+                "world",
+                "lore.json",
+                "chat-a",
+                db=db,
+            )
+
+            self.assertIsNone(
+                callback_tokens.resolve_dynamic_callback_token(
+                    token,
+                    "world",
+                    "chat-b",
+                )
+            )
+            self.assertNotIn(
+                token,
+                callback_tokens._CALLBACK_TOKEN_VALUES,
+            )
+            self.assertIsNone(
+                db.execute(
+                    "SELECT 1 FROM callback_tokens WHERE token=?",
+                    (token,),
+                ).fetchone()
+            )
+        finally:
+            runtime_context.set_db_connection_context(None)
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+            db.close()
+
+    def test_callback_token_persistent_fallback_restores_cache(self):
+        import bridge.callback_tokens as callback_tokens
+        import bridge.runtime_context as runtime_context
+
+        callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+        db = sqlite3.connect(":memory:")
+        try:
+            db.execute(
+                "CREATE TABLE callback_tokens("
+                "token TEXT PRIMARY KEY,"
+                "kind TEXT NOT NULL,"
+                "value TEXT NOT NULL,"
+                "chat_id TEXT NOT NULL,"
+                "expires_at REAL NOT NULL)"
+            )
+            runtime_context.set_db_connection_context(db)
+            token = callback_tokens.dynamic_callback_token(
+                "persona",
+                "p1",
+                "chat",
+                db=db,
+            )
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+
+            self.assertEqual(
+                callback_tokens.resolve_dynamic_callback_token(
+                    token,
+                    "persona",
+                    "chat",
+                ),
+                "p1",
+            )
+            self.assertIn(
+                token,
+                callback_tokens._CALLBACK_TOKEN_VALUES,
+            )
+        finally:
+            runtime_context.set_db_connection_context(None)
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+            db.close()
+
+    def test_callback_token_expiry_invalidates_memory_and_database(self):
+        import bridge.callback_tokens as callback_tokens
+        import bridge.runtime_context as runtime_context
+
+        db = sqlite3.connect(":memory:")
+        try:
+            db.execute(
+                "CREATE TABLE callback_tokens("
+                "token TEXT PRIMARY KEY,"
+                "kind TEXT NOT NULL,"
+                "value TEXT NOT NULL,"
+                "chat_id TEXT NOT NULL,"
+                "expires_at REAL NOT NULL)"
+            )
+            runtime_context.set_db_connection_context(db)
+            token = "texpired"
+            callback_tokens._CALLBACK_TOKEN_VALUES[token] = (
+                "world",
+                "lore.json",
+                "chat",
+                0.0,
+            )
+            db.execute(
+                "INSERT INTO callback_tokens("
+                "token,kind,value,chat_id,expires_at"
+                ") VALUES(?,?,?,?,?)",
+                (
+                    token,
+                    "world",
+                    "lore.json",
+                    "chat",
+                    0.0,
+                ),
+            )
+            db.commit()
+
+            self.assertIsNone(
+                callback_tokens.resolve_dynamic_callback_token(
+                    token,
+                    "world",
+                    "chat",
+                )
+            )
+            self.assertNotIn(
+                token,
+                callback_tokens._CALLBACK_TOKEN_VALUES,
+            )
+            self.assertIsNone(
+                db.execute(
+                    "SELECT 1 FROM callback_tokens WHERE token=?",
+                    (token,),
+                ).fetchone()
+            )
+        finally:
+            runtime_context.set_db_connection_context(None)
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+            db.close()
+
+    def test_runtime_does_not_republish_private_callback_cache(self):
+        import bridge.runtime as rt
+
+        self.assertFalse(hasattr(rt, "_CALLBACK_TOKEN_VALUES"))
+        self.assertFalse(
+            hasattr(rt, "_CALLBACK_TOKEN_TTL_SECONDS")
+        )
+
+    def test_cards_shell_does_not_define_callback_token_state_or_functions(self):
+        source = (
+            REPO_ROOT / "bridge" / "cards.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("_CALLBACK_TOKEN_VALUES", source)
+        self.assertNotIn("_CALLBACK_TOKEN_TTL_SECONDS", source)
+        self.assertNotIn("def dynamic_callback_token(", source)
+        self.assertNotIn(
+            "def resolve_dynamic_callback_token(",
+            source,
+        )
 
 
 if __name__ == "__main__":
