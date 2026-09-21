@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 _SESSION_COLUMNS = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
 _SESSION_COLUMN_SQL = ", ".join(_SESSION_COLUMNS)
 
@@ -480,3 +484,6 @@ def send_text(token: str, chat_id: str, text: str) -> list[int]:
         if result.get("message_id") is not None:
             message_ids.append(int(result["message_id"]))
     return message_ids
+
+
+_bind_module_dependencies(__name__, globals())
