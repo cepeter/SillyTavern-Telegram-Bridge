@@ -2,6 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import bridge.card_content as card_content
 import bridge.config as config
 import bridge.runtime as rt
 
@@ -141,6 +142,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         original_resolve = rt.resolve_dynamic_callback_token
         original_char_path = rt.safe_character_path
         original_world_path = rt.safe_world_path
+        original_canonical_world_path = card_content.safe_world_path
         original_fields = rt.card_fields_from_file
         original_close = rt.close_panel_message
         original_world_menu = rt.send_world_menu
@@ -151,6 +153,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         rt.resolve_dynamic_callback_token = lambda _value, kind, _chat: "chosen.png" if kind == "character" else "lore.json"
         rt.safe_character_path = lambda _name: Path("/tmp/chosen.png")
         rt.safe_world_path = lambda _name: Path("/tmp/lore.json")
+        card_content.safe_world_path = lambda _name: Path("/tmp/lore.json")
         rt.card_fields_from_file = lambda _name: {"name": "Chosen"}
         rt.close_panel_message = lambda *_args, **_kwargs: None
         rt.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
@@ -171,6 +174,7 @@ class GroupTurnGatingTests(unittest.TestCase):
             rt.resolve_dynamic_callback_token = original_resolve
             rt.safe_character_path = original_char_path
             rt.safe_world_path = original_world_path
+            card_content.safe_world_path = original_canonical_world_path
             rt.card_fields_from_file = original_fields
             rt.close_panel_message = original_close
             rt.send_world_menu = original_world_menu
