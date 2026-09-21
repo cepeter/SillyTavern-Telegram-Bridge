@@ -603,6 +603,29 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
         )
 
 
+    def test_operation_command_normalizes_bot_addressed_command(self):
+        cases = {
+            "/regen@BridgeBot": "/regen",
+            "/continue@BridgeBot": "/continue",
+            "@someone /regen": "/regen",
+            "@someone /continue": "/continue",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(
+                    rt._operation_command(raw),
+                    expected,
+                )
+
+    def test_recovery_no_longer_wraps_process_message(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "recovery.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("\ndef process_message(", source)
+        self.assertNotIn("_ORIGINAL_PROCESS_MESSAGE", source)
+        self.assertNotIn("_OPERATION_CONTEXT", source)
+
+
 class OperationRecoveryUnitTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
