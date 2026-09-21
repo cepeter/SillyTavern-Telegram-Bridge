@@ -156,6 +156,17 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         self.assertEqual(config.CARD_FIELD_MAX_CHARS, 20000)
         self.assertEqual(config.CARD_TOTAL_MAX_CHARS, 60000)
 
+    def test_card_file_remains_startup_derived(self):
+        import bridge.config as config
+
+        original_card = config.CARD_FILE
+        with patch.object(
+            config,
+            "DEFAULT_CHARACTER_FILE",
+            "temporary.png",
+        ):
+            self.assertEqual(config.CARD_FILE, original_card)
+
     def test_runtime_context_facade_exports_canonical_functions(self):
         import bridge.runtime as rt
         import bridge.runtime_context as context
@@ -654,6 +665,61 @@ Append:
                     worlds / "lore.json",
                 )
 ```
+
+    def test_deterministic_system_prompt_uses_canonical_text_cache(self):
+        import bridge.card_content as card_content
+
+        fields = {
+            "system_prompt": "Hello {{char}}",
+            "description": "",
+            "personality": "",
+            "scenario": "",
+            "mes_example": "",
+            "name": "Mira",
+        }
+        calls = []
+
+        def fake_cached_text(key, builder):
+            calls.append(key)
+            return builder()
+
+        with patch.object(
+            card_content,
+            "cached_text",
+            side_effect=fake_cached_text,
+        ):
+            result = card_content.build_system_prompt(
+                fields,
+                "User",
+            )
+
+        self.assertEqual(result, "Hello Mira")
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(calls[0].startswith("system-prompt:"))
+
+    def test_dynamic_system_prompt_macros_bypass_text_cache(self):
+        import bridge.card_content as card_content
+
+        fields = {
+            "system_prompt": "{{time}}",
+            "description": "",
+            "personality": "",
+            "scenario": "",
+            "mes_example": "",
+            "name": "Mira",
+        }
+        with patch.object(
+            card_content,
+            "cached_text",
+            side_effect=AssertionError("dynamic prompt used cache"),
+        ):
+            result = card_content.build_system_prompt(
+                fields,
+                "User",
+            )
+
+        self.assertRegex(result, r"^\\d{2}:\\d{2}$")
+
 
 - [ ] **Step 3: Run Task 2 tests and verify RED**
 
@@ -1345,6 +1411,83 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         )
 ```
 
+    def test_callback_token_format_remains_stable(self):
+        import hashlib
+        import bridge.callback_tokens as callback_tokens
+
+        db = sqlite3.connect(":memory:")
+        try:
+            db.execute(
+                "CREATE TABLE callback_tokens("
+                "token TEXT PRIMARY KEY,"
+                "kind TEXT NOT NULL,"
+                "value TEXT NOT NULL,"
+                "chat_id TEXT NOT NULL,"
+                "expires_at REAL NOT NULL)"
+            )
+            token = callback_tokens.dynamic_callback_token(
+                "character",
+                "mira.png",
+                "chat",
+                db=db,
+            )
+        finally:
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+            db.close()
+
+        expected = (
+            "t"
+            + hashlib.sha256(
+                b"character|chat|mira.png"
+            ).hexdigest()[:16]
+        )
+        self.assertEqual(token, expected)
+
+    def test_callback_token_scope_mismatch_invalidates_cache_and_database(self):
+        import bridge.callback_tokens as callback_tokens
+        import bridge.runtime_context as runtime_context
+
+        db = sqlite3.connect(":memory:")
+        try:
+            db.execute(
+                "CREATE TABLE callback_tokens("
+                "token TEXT PRIMARY KEY,"
+                "kind TEXT NOT NULL,"
+                "value TEXT NOT NULL,"
+                "chat_id TEXT NOT NULL,"
+                "expires_at REAL NOT NULL)"
+            )
+            runtime_context.set_db_connection_context(db)
+            token = callback_tokens.dynamic_callback_token(
+                "world",
+                "lore.json",
+                "chat-a",
+                db=db,
+            )
+
+            self.assertIsNone(
+                callback_tokens.resolve_dynamic_callback_token(
+                    token,
+                    "world",
+                    "chat-b",
+                )
+            )
+            self.assertNotIn(
+                token,
+                callback_tokens._CALLBACK_TOKEN_VALUES,
+            )
+            self.assertIsNone(
+                db.execute(
+                    "SELECT 1 FROM callback_tokens WHERE token=?",
+                    (token,),
+                ).fetchone()
+            )
+        finally:
+            runtime_context.set_db_connection_context(None)
+            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
+            db.close()
+
+
 - [ ] **Step 2: Run Task 3 tests and verify RED**
 
 Run:
@@ -1677,13 +1820,11 @@ Append:
         import bridge.runtime_context as context
 
         self.assertIs(
-            context.db_connection_context.__globals__(
-            )["_DB_CONNECTION_CONTEXT"],
+            context.db_connection_context.__globals__["_DB_CONNECTION_CONTEXT"],
             context._DB_CONNECTION_CONTEXT,
         )
         self.assertIs(
-            context.panel_session_context.__globals__(
-            )["_PANEL_SESSION_CONTEXT"],
+            context.panel_session_context.__globals__["_PANEL_SESSION_CONTEXT"],
             context._PANEL_SESSION_CONTEXT,
         )
 
@@ -1691,13 +1832,11 @@ Append:
         import bridge.callback_tokens as callback_tokens
 
         self.assertIs(
-            callback_tokens.dynamic_callback_token.__globals__(
-            )["_CALLBACK_TOKEN_VALUES"],
+            callback_tokens.dynamic_callback_token.__globals__["_CALLBACK_TOKEN_VALUES"],
             callback_tokens._CALLBACK_TOKEN_VALUES,
         )
         self.assertIs(
-            callback_tokens.resolve_dynamic_callback_token.__globals__(
-            )["_CALLBACK_TOKEN_VALUES"],
+            callback_tokens.resolve_dynamic_callback_token.__globals__["_CALLBACK_TOKEN_VALUES"],
             callback_tokens._CALLBACK_TOKEN_VALUES,
         )
 ```
@@ -1742,6 +1881,30 @@ Append:
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, source)
 ```
+
+    def test_cards_shell_keeps_telegram_and_persona_collaborators_late_bound(self):
+        source = (
+            REPO_ROOT / "bridge" / "cards.py"
+        ).read_text(encoding="utf-8")
+
+        for forbidden in (
+            "import bridge.telegram",
+            "from bridge.telegram import",
+            "import bridge.persona_sync",
+            "from bridge.persona_sync import",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+        for collaborator in (
+            "telegram_request",
+            "resolve_persona_service",
+            "load_personas",
+            "_native_settings",
+        ):
+            with self.subTest(collaborator=collaborator):
+                self.assertIn(collaborator, source)
+
 
 - [ ] **Step 5: Add exact core-order guard to `tests/test_runtime_loader.py`**
 
