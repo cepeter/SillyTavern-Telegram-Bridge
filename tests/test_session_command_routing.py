@@ -2,25 +2,22 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
 class SessionCommandRoutingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = rt.DB_FILE
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        self.old_db = config.DB_FILE
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
         self.session = rt.create_session(self.db, "chat", "provider/model", session_id="active")
         rt.update_session(self.db, "chat", "active", character_file="missing.png")
 
     def tearDown(self):
         self.db.close()
-        rt.DB_FILE = self.old_db
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def test_session_command_routes_before_character_card_load(self):
