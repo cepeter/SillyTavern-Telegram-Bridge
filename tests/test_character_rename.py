@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import zlib
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
@@ -28,15 +29,13 @@ class CharacterRenameTests(unittest.TestCase):
         self.old_dir = rt.CHARACTER_DIR
         self.old_backup = rt.CHARACTER_BACKUP_DIR
         self.old_card = rt.CARD_FILE
-        self.old_db = rt.DB_FILE
+        self.old_db = config.DB_FILE
         rt.CHARACTER_DIR = root / "characters"
         rt.CHARACTER_BACKUP_DIR = root / "backups"
         rt.CARD_FILE = rt.CHARACTER_DIR / "Default.png"
-        rt.DB_FILE = root / "bridge.sqlite3"
+        config.DB_FILE = root / "bridge.sqlite3"
         rt.CHARACTER_DIR.mkdir()
         rt.CHARACTER_BACKUP_DIR.mkdir()
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
         self.db = rt.db_connect()
         self.session = rt.create_session(self.db, "chat", "provider/model", session_id="active")
         rt.update_session(self.db, "chat", "active", character_file="Old.png")
@@ -46,9 +45,7 @@ class CharacterRenameTests(unittest.TestCase):
         rt.CHARACTER_DIR = self.old_dir
         rt.CHARACTER_BACKUP_DIR = self.old_backup
         rt.CARD_FILE = self.old_card
-        rt.DB_FILE = self.old_db
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def test_unique_visual_fingerprint_rebinds_renamed_card(self):
