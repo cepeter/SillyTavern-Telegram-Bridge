@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class SyncUiBehaviorTests(unittest.TestCase):
