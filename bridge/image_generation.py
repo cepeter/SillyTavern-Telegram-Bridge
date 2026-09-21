@@ -1,4 +1,8 @@
 """Opt-in OpenAI-compatible image generation for Telegram."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 IMAGE_PROMPT_MAX_CHARS = 4000
 IMAGE_DEFAULT_SIZE = "1024x1024"
@@ -122,3 +126,6 @@ def handle_imagine_prompt(token: str, chat_id: str, prompt: str, selection: str 
     if revised and revised != prompt:
         caption += f"\nRevised: {revised[:250]}"
     _multipart_photo(token, chat_id, raw, caption)
+
+
+_bind_module_dependencies(__name__, globals())
