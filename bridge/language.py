@@ -1,4 +1,8 @@
 """Per-session model response language selection."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import re
 
@@ -126,3 +130,6 @@ def handle_language_command(db: sqlite3.Connection, token: str, chat_id: str, se
         send_text(token, chat_id, f"Invalid response language: {exc}")
         return
     send_text(token, chat_id, f"Model response language set to: {response_language_label(language)}.")
+
+
+_bind_module_dependencies(__name__, globals())
