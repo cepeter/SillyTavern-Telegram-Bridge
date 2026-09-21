@@ -3,6 +3,7 @@ import tempfile
 import unittest
 
 import bridge.config as config
+import bridge.rag_core as rag_core
 import bridge.runtime as rt
 
 
@@ -12,14 +13,14 @@ class DocumentVersioningTests(unittest.TestCase):
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
-        self.old_batch = rt.embed_rag_batch
-        self.old_cached = rt.cached_rag_embedding
-        rt.embed_rag_batch = lambda texts: [None] * len(texts)
-        rt.cached_rag_embedding = lambda _db, _text: None
+        self.old_batch = rag_core.embed_rag_batch
+        self.old_cached = rag_core.cached_rag_embedding
+        rag_core.embed_rag_batch = lambda texts: [None] * len(texts)
+        rag_core.cached_rag_embedding = lambda _db, _text: None
 
     def tearDown(self):
-        rt.embed_rag_batch = self.old_batch
-        rt.cached_rag_embedding = self.old_cached
+        rag_core.embed_rag_batch = self.old_batch
+        rag_core.cached_rag_embedding = self.old_cached
         self.db.close()
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
