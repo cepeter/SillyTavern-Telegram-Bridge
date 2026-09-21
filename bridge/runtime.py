@@ -109,6 +109,68 @@ from bridge.panel_utils import (
     panel_page,
 )
 
+from bridge.group_core import (
+    group_state,
+    group_user_turn_allowed,
+    claim_group_user_turn,
+    pass_group_user_turn,
+    group_setup_state,
+    group_character_option_label,
+    save_group_state,
+    resolve_character_file,
+    group_member_labels,
+    group_current_speaker,
+    advance_group_turn,
+)
+
+from bridge.memory_backend import (
+    close_hindsight_client,
+    hindsight_bank_id,
+    hindsight_client,
+    hindsight_conversation_document_id,
+    hindsight_explicit_document_id,
+    hindsight_session_lock,
+    hindsight_session_prefix,
+    hindsight_tags,
+    memory_mode,
+    memory_recall_filter,
+    memory_scope,
+    recall_memory_context,
+    recall_memory_results,
+    remember_fact,
+)
+
+from bridge.network_security import (
+    strict_urlopen,
+    validate_provider_endpoint,
+)
+
+from bridge.rag_core import (
+    extract_pdf_data_bank_text,
+    extract_data_bank_text,
+    split_data_bank_chunks,
+    rag_embedding_namespace,
+    embedding_norm,
+    rag_embedding_headers,
+    embed_rag_text,
+    embed_rag_batch,
+    rag_semantic_candidate_limit,
+    backfill_rag_embedding_signatures,
+    add_data_bank_document,
+    cached_rag_embedding,
+    retrieve_data_bank,
+    rag_mode,
+    rag_retrieval_bundle,
+    rag_context_for_prompt,
+    rag_citation_footer,
+    data_bank_documents,
+    data_bank_document_versions,
+    activate_data_bank_version,
+    delete_data_bank_documents,
+    rag_embedding_coverage,
+    reindex_data_bank_documents,
+)
+
 from bridge.runtime_loader import (
     DEFAULT_RUNTIME_STAGES as _DEFAULT_RUNTIME_STAGES,
     load_runtime_namespace as _load_runtime_namespace,

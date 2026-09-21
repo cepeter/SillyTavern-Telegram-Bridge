@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 import bridge.config as config
+import bridge.memory_backend as memory_backend
 import bridge.runtime as rt
 
 
@@ -64,12 +65,12 @@ class HindsightSessionCleanupTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
-        self.old_client = rt.hindsight_client
+        self.old_client = memory_backend.hindsight_client
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
 
     def tearDown(self):
-        rt.hindsight_client = self.old_client
+        memory_backend.hindsight_client = self.old_client
         self.db.close()
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
@@ -86,7 +87,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
     def test_explicit_and_conversation_retain_are_mapped_synchronously(self):
         session = rt.create_session(self.db, "chat", rt.DEFAULT_MODEL, session_id="memory-session")
         fake = _FakeHindsight()
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         self.assertTrue(rt.remember_fact(self.db, "chat", session, {"name": "Alisha"}, "remember this"))
         rt._retain_session_memory_backend("chat", session, "Alisha", "conversation")
@@ -117,7 +118,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
             legacy_id: ["session:delete-me"],
             other_id: ["session:keep-me"],
         })
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
         self.db.execute(
             "INSERT INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
             ("chat", "delete-me", mapped_id, "conversation", rt.time.time()),
@@ -137,7 +138,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
     def test_late_background_retain_skips_deleted_session(self):
         session = rt.create_session(self.db, "chat", rt.DEFAULT_MODEL, session_id="gone")
         fake = _FakeHindsight()
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
         self.db.execute("DELETE FROM sessions WHERE chat_id='chat' AND session_id='gone'")
         self.db.commit()
 
@@ -149,7 +150,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
     def test_real_purge_helper_fails_closed_when_document_api_is_unavailable(self):
         rt.create_session(self.db, "chat", rt.DEFAULT_MODEL, session_id="unavailable")
         fake = _FakeHindsight(fail_list=True)
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         with self.assertRaisesRegex(RuntimeError, "Hindsight session memory cleanup failed"):
             rt.purge_hindsight_session(self.db, "chat", "unavailable")
@@ -167,7 +168,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         }
         target_docs["other-session"] = ["session:other", "character:shared"]
         fake = _FakeHindsight(target_docs)
-        rt.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda: fake
 
         deleted = rt.purge_hindsight_session(self.db, "chat", "many")
 
