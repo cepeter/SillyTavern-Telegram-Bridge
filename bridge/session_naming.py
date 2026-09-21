@@ -1,4 +1,8 @@
 """Scoped session-name input flow shared by all new-session entry points."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import json
 from pathlib import Path
@@ -103,3 +107,6 @@ def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, s
     suffix = f"\nCharacter: {pending_character.get('character_name') or Path(pending_character['character_file']).stem}" if pending_character else ""
     send_text(token, chat_id, f"New session started: {title}{suffix}")
     return True
+
+
+_bind_module_dependencies(__name__, globals())
