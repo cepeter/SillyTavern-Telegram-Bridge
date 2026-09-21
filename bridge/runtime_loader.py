@@ -42,12 +42,6 @@ DEFAULT_RUNTIME_STAGES = (
     RuntimeStage(
         "recovery_overrides",
         ("recovery.py",),
-        ((
-            "recovery.py",
-            (
-                "handle_sync_callback",
-            ),
-        ),),
     ),
     RuntimeStage("sync_extensions", ("sync_core.py", "sync_api.py")),
     RuntimeStage(
