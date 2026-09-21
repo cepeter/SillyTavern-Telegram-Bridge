@@ -130,6 +130,21 @@ class RuntimeLoaderTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "extra"):
                 load_runtime_namespace(namespace, root, stages, reset_extensions=False)
 
+    def test_phase_7a_import_island_is_never_exec_loaded(self):
+        loaded_modules = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertTrue(
+            {
+                "performance.py",
+                "native_cache.py",
+                "schema.py",
+                "runtime_defaults.py",
+            }.isdisjoint(loaded_modules)
+        )
+
     def test_composition_module_is_not_a_runtime_stage(self):
         loaded_modules = {
             module
