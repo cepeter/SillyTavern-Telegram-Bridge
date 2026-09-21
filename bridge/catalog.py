@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
     import yaml
     config = yaml.safe_load(PROVIDER_CONFIG_FILE.read_text(encoding="utf-8")) or {}
@@ -307,3 +311,6 @@ def answer_callback(token: str, callback_id: str, text: str) -> None:
         "callback_query_id": callback_id,
         "text": text[:200],
     })
+
+
+_bind_module_dependencies(__name__, globals())
