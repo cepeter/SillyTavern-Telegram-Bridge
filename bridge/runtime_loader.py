@@ -45,8 +45,6 @@ DEFAULT_RUNTIME_STAGES = (
         ((
             "recovery.py",
             (
-                "sync_status_text",
-                "send_sync_menu",
                 "handle_sync_callback",
             ),
         ),),
