@@ -95,5 +95,66 @@ class PersistenceImportIslandTests(unittest.TestCase):
         self.assertNotIn("from bridge.common import", source)
 
 
+    def test_database_default_path_follows_canonical_config(self):
+        import bridge.config as config
+        import bridge.database as database
+
+        with tempfile.TemporaryDirectory() as directory:
+            expected = Path(directory) / "default.sqlite3"
+            with patch.object(config, "DB_FILE", expected):
+                db = database.db_connect()
+                try:
+                    self.assertEqual(
+                        Path(
+                            db.execute("PRAGMA database_list").fetchone()[2]
+                        ).resolve(),
+                        expected.resolve(),
+                    )
+                finally:
+                    db.close()
+
+    def test_database_explicit_path_overrides_canonical_default(self):
+        import bridge.config as config
+        import bridge.database as database
+
+        with tempfile.TemporaryDirectory() as directory:
+            configured = Path(directory) / "configured.sqlite3"
+            explicit = Path(directory) / "explicit.sqlite3"
+            with patch.object(config, "DB_FILE", configured):
+                db = database.db_connect(explicit)
+                try:
+                    self.assertEqual(
+                        Path(
+                            db.execute("PRAGMA database_list").fetchone()[2]
+                        ).resolve(),
+                        explicit.resolve(),
+                    )
+                finally:
+                    db.close()
+
+    def test_task_model_default_reads_current_canonical_config(self):
+        import bridge.config as config
+        import bridge.database as database
+
+        class EmptyMetaDb:
+            def execute(self, *_args, **_kwargs):
+                class Cursor:
+                    def fetchone(self):
+                        return None
+                return Cursor()
+
+        session = {"session_id": "s", "model_id": ""}
+        with patch.object(config, "DEFAULT_MODEL", "patched::model"):
+            self.assertEqual(
+                database.task_model_for_session(
+                    EmptyMetaDb(),
+                    "chat",
+                    session,
+                    "summary",
+                ),
+                "patched::model",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
