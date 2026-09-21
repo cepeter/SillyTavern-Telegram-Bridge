@@ -5,6 +5,8 @@ import threading
 import time
 import unittest
 
+import bridge.config as config
+import bridge.database as database
 import bridge.runtime as rt
 
 
@@ -22,20 +24,15 @@ class _FakeTelegramResponse:
 class SqliteContentionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db_file = rt.DB_FILE
-        self.old_schema_ready = rt._DB_SCHEMA_READY
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        self.old_db_file = config.DB_FILE
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
         rt.set_db_connection_context(self.db)
 
     def tearDown(self):
         rt.set_db_connection_context(None)
         self.db.close()
-        rt.DB_FILE = self.old_db_file
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = self.old_schema_ready
+        config.DB_FILE = self.old_db_file
         self.tmp.cleanup()
 
     def test_failed_poll_update_restores_durable_offset(self):
@@ -247,7 +244,7 @@ class SqliteContentionTests(unittest.TestCase):
         path = Path(self.tmp.name) / "explicit-worker.sqlite3"
         db = rt.db_connect(path)
         try:
-            self.assertIsInstance(db, rt._SerializedSQLiteConnection)
+            self.assertIsInstance(db, database._SerializedSQLiteConnection)
             self.assertEqual(
                 db.execute("PRAGMA journal_mode").fetchone()[0].lower(),
                 "wal",
