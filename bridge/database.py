@@ -8,7 +8,13 @@ import sqlite3
 import threading
 import time
 
-from bridge import config as _config
+from bridge.config import (
+    DB_FILE,
+    DEFAULT_MODEL,
+    GENERATION_DEFAULTS,
+    PENDING_SETTINGS_TTL_SECONDS,
+    REASONING_LEVELS,
+)
 from bridge.scheduler_safety import (
     DatabaseConnectionGate as _DatabaseConnectionGate,
 )
@@ -205,7 +211,7 @@ def _database_path(database_path: Path | None = None) -> Path:
     path = (
         Path(database_path)
         if database_path is not None
-        else _config.DB_FILE
+        else DB_FILE
     )
     return path.expanduser().resolve()
 
@@ -468,7 +474,7 @@ def task_model_for_session(
     model = get_meta(db, task_model_key(chat_id, session_id, task_name), "").strip()
     if not model and task_name != "utility":
         model = get_meta(db, task_model_key(chat_id, session_id, "utility"), "").strip()
-    return model or str(session.get("model_id") or _config.DEFAULT_MODEL)
+    return model or str(session.get("model_id") or DEFAULT_MODEL)
 
 
 def set_task_model(
@@ -495,7 +501,7 @@ def model_target_selection_key(chat_id: str, session_id: str) -> str:
 def set_model_target_selection(db: sqlite3.Connection, chat_id: str, session_id: str, target: str) -> None:
     if target not in {"story", "utility"}:
         raise ValueError("invalid model target")
-    set_meta(db, model_target_selection_key(chat_id, session_id), json.dumps({"target": target, "expires_at": time.time() + _config.PENDING_SETTINGS_TTL_SECONDS}))
+    set_meta(db, model_target_selection_key(chat_id, session_id), json.dumps({"target": target, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}))
 
 
 def get_model_target_selection(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
@@ -523,7 +529,7 @@ def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: st
         (chat_id, session_id),
     ).fetchone()
     if row is None:
-        return dict(_config.GENERATION_DEFAULTS)
+        return dict(GENERATION_DEFAULTS)
     return dict(
         zip(
             (
@@ -541,7 +547,7 @@ def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: st
 
 
 def update_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str, **values: object) -> dict[str, object]:
-    allowed = set(_config.GENERATION_DEFAULTS)
+    allowed = set(GENERATION_DEFAULTS)
     values = {key: value for key, value in values.items() if key in allowed}
     with write_transaction(db):
         db.execute(
@@ -552,19 +558,19 @@ def update_generation_settings(db: sqlite3.Connection, chat_id: str, session_id:
             (
                 chat_id,
                 session_id,
-                _config.GENERATION_DEFAULTS["temperature"],
-                _config.GENERATION_DEFAULTS["max_tokens"],
-                _config.GENERATION_DEFAULTS["top_p"],
-                _config.GENERATION_DEFAULTS["frequency_penalty"],
-                _config.GENERATION_DEFAULTS["presence_penalty"],
-                _config.GENERATION_DEFAULTS["reasoning_budget"],
-                _config.GENERATION_DEFAULTS["stop_sequences"],
+                GENERATION_DEFAULTS["temperature"],
+                GENERATION_DEFAULTS["max_tokens"],
+                GENERATION_DEFAULTS["top_p"],
+                GENERATION_DEFAULTS["frequency_penalty"],
+                GENERATION_DEFAULTS["presence_penalty"],
+                GENERATION_DEFAULTS["reasoning_budget"],
+                GENERATION_DEFAULTS["stop_sequences"],
             ),
         )
         if values:
             assignments = ", ".join(f"{key}=?" for key in values)
             db.execute(
-                f"UPDATE generation_settings SET {assignments} "  # nosec B608 - assignments are filtered against _config.GENERATION_DEFAULTS
+                f"UPDATE generation_settings SET {assignments} "  # nosec B608 - assignments are filtered against GENERATION_DEFAULTS
                 "WHERE chat_id=? AND session_id=?",
                 (*values.values(), chat_id, session_id),
             )
@@ -602,7 +608,7 @@ def delete_generation_preset(db: sqlite3.Connection, chat_id: str, name: str) ->
 def format_generation_settings(settings: dict[str, object]) -> str:
     stop = str(settings.get("stop_sequences") or "") or "off"
     reasoning_budget = int(settings.get("reasoning_budget") or 0)
-    reasoning_level = next((name for name, value in _config.REASONING_LEVELS.items() if value == reasoning_budget), "custom")
+    reasoning_level = next((name for name, value in REASONING_LEVELS.items() if value == reasoning_budget), "custom")
     return (f"temperature={settings['temperature']}\nmax_tokens={settings['max_tokens']}\n"
             f"top_p={settings['top_p']}\nfrequency_penalty={settings['frequency_penalty']}\n"
             f"presence_penalty={settings['presence_penalty']}\nreasoning={reasoning_level} ({reasoning_budget})\n"
@@ -612,7 +618,7 @@ def format_generation_settings(settings: dict[str, object]) -> str:
 def parse_generation_setting(key: str, raw_value: str) -> tuple[str, object]:
     aliases = {"temp": "temperature", "max": "max_tokens", "top-p": "top_p", "frequency": "frequency_penalty", "presence": "presence_penalty", "reasoning": "reasoning_budget", "stop": "stop_sequences"}
     key = aliases.get(key.casefold(), key.casefold())
-    if key not in _config.GENERATION_DEFAULTS:
+    if key not in GENERATION_DEFAULTS:
         raise ValueError("unknown setting")
     if key == "stop_sequences":
         if raw_value.casefold() in {"off", "none", "clear"}:
@@ -621,8 +627,8 @@ def parse_generation_setting(key: str, raw_value: str) -> tuple[str, object]:
         if len(values) > 4 or any(len(item) > 100 for item in values):
             raise ValueError("stop supports up to 4 sequences of 100 characters")
         return key, "\n".join(values)
-    if key == "reasoning_budget" and raw_value.casefold() in _config.REASONING_LEVELS:
-        return key, _config.REASONING_LEVELS[raw_value.casefold()]
+    if key == "reasoning_budget" and raw_value.casefold() in REASONING_LEVELS:
+        return key, REASONING_LEVELS[raw_value.casefold()]
     try:
         if key in {"max_tokens", "reasoning_budget"}:
             value = int(raw_value)
