@@ -17,6 +17,11 @@ from bridge.extension_registry import (
 from bridge.group_director_service import (
     GroupDirectorService as _GroupDirectorService,
 )
+from bridge.job_runtime import (
+    DURABLE_WORKER_GUARD as _DURABLE_WORKER_GUARD,
+    compatibility_job_service as _compatibility_job_service,
+    jobs_for_services as _jobs_for_services,
+)
 from bridge.job_service import (
     DurableJob as _DurableJob,
     JobService as _JobService,
@@ -37,10 +42,6 @@ from bridge.repositories import (
 )
 from bridge.scheduler_safety import (
     DurableWorkerGuard as _DurableWorkerGuard,
-)
-
-_DURABLE_WORKER_GUARD = _DurableWorkerGuard(
-    _database._lightweight_db_connect
 )
 
 _SHUTDOWN_EVENT = threading.Event()
@@ -344,29 +345,6 @@ def restore_poll_offset(db: sqlite3.Connection, fallback: int) -> int:
         return int(get_meta(db, "telegram_offset", str(fallback)) or fallback)
     except (TypeError, ValueError, sqlite3.Error):
         return int(fallback)
-
-
-def _compatibility_job_service(
-    background: _BackgroundRuntime,
-) -> _JobService:
-    return _JobService(
-        enqueue_backend=enqueue_job,
-        actor_backend=job_actor_id,
-        schedule_backend=mark_job_scheduled,
-        start_backend=mark_job_running,
-        finish_backend=finish_job,
-        recover_backend=recover_jobs,
-        submit_chat=background.submit_chat,
-        prepare_worker=_DURABLE_WORKER_GUARD.prepare,
-    )
-
-
-def _jobs_for_services(
-    services: _BridgeServices,
-) -> _JobService:
-    if services.jobs is not None:
-        return services.jobs
-    return _compatibility_job_service(services.background)
 
 
 def submit_durable_chat_job(
