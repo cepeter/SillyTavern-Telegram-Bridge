@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 def close_panel_message(token: str, chat_id: str, callback: dict) -> None:
     message = callback.get("message") or callback
     message_id = message.get("message_id")
@@ -121,3 +125,6 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         handle_group_panel_callback(db, token, chat_id, session, data, message, operation_id, sender_id=sender)
         return
     handle_provider_model_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
+
+
+_bind_module_dependencies(__name__, globals())
