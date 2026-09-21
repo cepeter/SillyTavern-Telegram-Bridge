@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 from bridge.operation_recovery import OperationRecovery
 from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
 
