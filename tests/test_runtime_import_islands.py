@@ -1,4 +1,6 @@
-"""Phase 7A ordinary-import boundary regression tests."""\n\nfrom pathlib import Path
+"""Phase 7A ordinary-import boundary regression tests."""
+
+from pathlib import Path
 import subprocess
 import sys
 import unittest
