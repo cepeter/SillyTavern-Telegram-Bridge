@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
 
+import threading
+
 import os
 from pathlib import Path
 import shutil
