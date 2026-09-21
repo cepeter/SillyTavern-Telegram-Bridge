@@ -36,6 +36,15 @@ import zipfile
 from defusedxml import ElementTree as ET
 from pathlib import Path
 
+from bridge.config import (
+    BRIDGE_HOME,
+    DB_FILE,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL,
+    GENERATION_DEFAULTS,
+    PENDING_SETTINGS_TTL_SECONDS,
+    REASONING_LEVELS,
+)
 from bridge.runtime_defaults import (
     PROCESSED_UPDATE_RETENTION_SECONDS,
 )
@@ -65,7 +74,6 @@ def topic_scope_from_message(chat_id: str, message: dict | None) -> str:
     return topic_scope_id(chat_id, (message or {}).get("message_thread_id"))
 
 
-BRIDGE_HOME = Path(os.environ.get("SILLYTAVERN_BRIDGE_HOME", Path.home() / ".local/share/sillytavern-telegram"))
 ENV_FILE = Path(os.environ.get("SILLYTAVERN_ENV_FILE", str(BRIDGE_HOME / ".env")))
 PROVIDER_CONFIG_FILE = Path(os.environ.get("SILLYTAVERN_PROVIDER_CONFIG", str(BRIDGE_HOME / "sillytavern_telegram_providers.yaml")))
 MODEL_CACHE_FILE = Path(os.environ.get("SILLYTAVERN_MODEL_CACHE", str(BRIDGE_HOME / "model_catalog_cache.json")))
@@ -83,12 +91,9 @@ IMAGE_MAX_BYTES = 8 * 1024 * 1024
 TTS_MAX_CHARS = 4000
 STT_MAX_BYTES = 20 * 1024 * 1024
 STT_DEFAULT_MODEL = "base"
-DB_FILE = BRIDGE_HOME / "scripts" / "sillytavern_telegram.sqlite3"
 LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
 DEFAULT_ALLOWED_USER = os.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", "")
-DEFAULT_MODEL = os.environ.get("SILLYTAVERN_MODEL", "").strip()
 DEFAULT_USER_NAME = os.environ.get("SILLYTAVERN_DEFAULT_USER_NAME", "").strip()
-DEFAULT_MAX_TOKENS = 1800
 HINDSIGHT_DEFAULT_URL = "http://127.0.0.1:8890"
 HINDSIGHT_RECALL_MAX_TOKENS = 1200
 HINDSIGHT_CONTEXT_MAX_CHARS = 6000
@@ -109,26 +114,9 @@ RAG_EMBEDDING_DIMENSIONS = int(os.environ.get("SILLYTAVERN_RAG_EMBEDDING_DIMENSI
 RAG_MAX_EXTRACTED_CHARS = int(os.environ.get("SILLYTAVERN_RAG_MAX_EXTRACTED_CHARS", "1000000"))
 RAG_MAX_PDF_PAGES = int(os.environ.get("SILLYTAVERN_RAG_MAX_PDF_PAGES", "200"))
 RAG_PDF_PARSE_TIMEOUT_SECONDS = int(os.environ.get("SILLYTAVERN_RAG_PDF_PARSE_TIMEOUT_SECONDS", "45"))
-REASONING_LEVELS = {
-    "none": 0,
-    "low": 1024,
-    "medium": 4096,
-    "high": 8192,
-    "max": 16384,
-}
-GENERATION_DEFAULTS = {
-    "temperature": 0.85,
-    "max_tokens": DEFAULT_MAX_TOKENS,
-    "top_p": 1.0,
-    "frequency_penalty": 0.0,
-    "presence_penalty": 0.0,
-    "reasoning_budget": 0,
-    "stop_sequences": "",
-}
 DEFAULT_PROVIDER_URL = ""
 MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
-PENDING_SETTINGS_TTL_SECONDS = 600
 CATALOG_MAX_ITEMS = 40
 CARD_FIELD_MAX_CHARS = 20000
 CARD_TOTAL_MAX_CHARS = 60000
