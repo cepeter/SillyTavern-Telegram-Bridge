@@ -6,6 +6,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 import bridge.config as config
+import bridge.group_core as group_core
 import bridge.runtime as rt
 from bridge import repositories
 
@@ -452,7 +453,7 @@ class GroupTransactionTests(unittest.TestCase):
         changed["title"] = "Must rollback"
 
         with patch.object(
-            rt,
+            group_core,
             "_repo_mark_group_operation_applied",
             side_effect=RuntimeError("marker failed"),
         ):
