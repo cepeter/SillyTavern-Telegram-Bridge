@@ -3,7 +3,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_persona_sync = dependency_module("bridge.persona_sync")
+_m_cards = dependency_module("bridge.cards")
 from bridge.persona_service import PersonaService
 
 
@@ -335,7 +339,7 @@ class PersonaServiceTests(unittest.TestCase):
 
         session = {"persona_id": "native.png", "system_prompt": "", "author_note": "", "world_file": "", "response_language": "auto"}
         fields = {"name": "Character", "description": "", "personality": "", "scenario": "", "first_mes": "", "mes_example": "", "system_prompt": "", "post_history_instructions": ""}
-        messages = rt.build_chat_messages(
+        messages = _m_message_commands.build_chat_messages(
             session,
             fields,
             "Hello",
@@ -394,7 +398,7 @@ class PersonaCompatibilityServiceTests(unittest.TestCase):
         calls = []
 
         with patch.object(
-            rt,
+            _m_persona_sync,
             "load_personas",
             return_value={
                 "native.png": {
@@ -404,28 +408,28 @@ class PersonaCompatibilityServiceTests(unittest.TestCase):
                 }
             },
         ), patch.object(
-            rt,
+            _m_cards,
             "default_persona_id",
             return_value="native.png",
         ), patch.object(
-            rt,
+            _m_persona_sync,
             "upsert_native_persona",
             side_effect=lambda *args: calls.append(("upsert", args))
             or "native.png",
         ), patch.object(
-            rt,
+            _m_persona_sync,
             "delete_native_persona",
             side_effect=lambda persona_id: calls.append(
                 ("delete", persona_id)
             )
             or True,
         ), patch.object(
-            rt,
+            _m_persona_sync,
             "_repo_count_persona_references",
             return_value=0,
             create=True,
         ):
-            service = rt.compatibility_persona_service()
+            service = _m_persona_sync.compatibility_persona_service()
             self.assertEqual(
                 service.list(),
                 {
@@ -447,7 +451,7 @@ class PersonaCompatibilityServiceTests(unittest.TestCase):
 
     def test_resolve_persona_service_prefers_injected_service(self):
         sentinel = object()
-        self.assertIs(rt.resolve_persona_service(sentinel), sentinel)
+        self.assertIs(_m_persona_sync.resolve_persona_service(sentinel), sentinel)
 
 
 if __name__ == "__main__":

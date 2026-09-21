@@ -202,122 +202,8 @@ class PersistenceImportIslandTests(unittest.TestCase):
             )
 
 
-    def test_runtime_facade_exports_complete_canonical_database_api(self):
-        import bridge.database as database
-        from runtime_test_facade import runtime as rt
-
-        actual_public_functions = {
-            name
-            for name, value in vars(database).items()
-            if not name.startswith("_")
-            and callable(value)
-            and getattr(value, "__module__", None) == "bridge.database"
-        }
-        self.assertEqual(
-            actual_public_functions,
-            set(DATABASE_PUBLIC_FUNCTIONS),
-        )
-        for name in DATABASE_PUBLIC_FUNCTIONS:
-            with self.subTest(name=name):
-                self.assertIs(
-                    getattr(rt, name),
-                    getattr(database, name),
-                )
-
     def test_database_and_config_remain_ordinary_after_final_cutover(self):
         self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
-
-    def test_runtime_has_no_loader_report_after_final_cutover(self):
-        import bridge.runtime as rt
-
-        self.assertFalse(hasattr(rt, "RUNTIME_LOAD_REPORT"))
-
-
-    def test_database_before_runtime_keeps_canonical_identity(self):
-        completed = self._run_python(
-            "import bridge.database as database\n"
-            "write_lock = database._DB_WRITE_LOCK\n"
-            "connection_gate = database._DB_CONNECTION_GATE\n"
-            "import bridge.runtime as rt\n"
-            "assert rt.db_connect is database.db_connect\n"
-            "assert rt.run_write_txn is database.run_write_txn\n"
-            "assert rt.enqueue_job is database.enqueue_job\n"
-            "assert database._DB_WRITE_LOCK is write_lock\n"
-            "assert database._DB_CONNECTION_GATE is connection_gate\n"
-        )
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
-
-    def test_runtime_before_database_keeps_canonical_identity(self):
-        completed = self._run_python(
-            "import bridge.runtime as rt\n"
-            "import bridge.database as database\n"
-            "assert rt.db_connect is database.db_connect\n"
-            "assert rt.run_write_txn is database.run_write_txn\n"
-            "assert rt.enqueue_job is database.enqueue_job\n"
-            "assert rt.ensure_sync_binding is database.ensure_sync_binding\n"
-        )
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
-
-    def test_runtime_database_functions_resolve_canonical_write_lock(self):
-        import bridge.database as database
-        import bridge.runtime as rt
-
-        self.assertIs(rt.run_write_txn, database.run_write_txn)
-        self.assertIs(
-            database.run_write_txn.__globals__["_DB_WRITE_LOCK"],
-            database._DB_WRITE_LOCK,
-        )
-        self.assertFalse(hasattr(rt, "_DB_WRITE_LOCK"))
-
-    def test_database_connection_gate_has_one_canonical_owner(self):
-        import bridge.database as database
-        import bridge.runtime as rt
-
-        self.assertIs(
-            database.db_connect.__globals__["_DB_CONNECTION_GATE"],
-            database._DB_CONNECTION_GATE,
-        )
-        self.assertFalse(hasattr(rt, "_DB_CONNECTION_GATE"))
-
-    def test_runtime_does_not_republish_database_private_state(self):
-        import bridge.runtime as rt
-
-        for name in (
-            "_DB_WRITE_LOCK",
-            "_DB_CONNECTION_GATE",
-            "_DB_SCHEMA_LOCK",
-            "_DB_SCHEMA_READY",
-            "_DB_SCHEMA_READY_PATHS",
-            "_DB_PRIMARY_CACHE_KIB",
-            "_DB_WORKER_CACHE_KIB",
-            "_DB_PRIMARY_MMAP_BYTES",
-            "_DB_WORKER_MMAP_BYTES",
-            "_lightweight_db_connect",
-            "_SerializedSQLiteConnection",
-        ):
-            with self.subTest(name=name):
-                self.assertFalse(hasattr(rt, name))
-
-    def test_runtime_mutable_defaults_share_canonical_config_objects(self):
-        import bridge.config as config
-        import bridge.runtime as rt
-
-        self.assertIs(
-            rt.GENERATION_DEFAULTS,
-            config.GENERATION_DEFAULTS,
-        )
-        self.assertIs(
-            rt.REASONING_LEVELS,
-            config.REASONING_LEVELS,
-        )
 
     def test_database_maintenance_uses_current_canonical_default_path(self):
         import bridge.config as config
@@ -347,6 +233,32 @@ class PersistenceImportIslandTests(unittest.TestCase):
                 )
                 self.assertTrue(path.is_file())
 
+
+    def test_database_and_config_have_direct_canonical_ownership(self):
+        import bridge.main  # completes transitional ordinary dependency bindings
+        import bridge.config as config
+        import bridge.database as database
+        import bridge.help as help_module
+        import bridge.sync_core as sync_core
+
+        actual_public_functions = {
+            name
+            for name, value in vars(database).items()
+            if not name.startswith("_")
+            and callable(value)
+            and getattr(value, "__module__", None) == "bridge.database"
+        }
+        self.assertEqual(actual_public_functions, set(DATABASE_PUBLIC_FUNCTIONS))
+        self.assertIs(
+            database.run_write_txn.__globals__["_DB_WRITE_LOCK"],
+            database._DB_WRITE_LOCK,
+        )
+        self.assertIs(
+            database.db_connect.__globals__["_DB_CONNECTION_GATE"],
+            database._DB_CONNECTION_GATE,
+        )
+        self.assertIs(sync_core.GENERATION_DEFAULTS, config.GENERATION_DEFAULTS)
+        self.assertIs(help_module.REASONING_LEVELS, config.REASONING_LEVELS)
 
 if __name__ == "__main__":
     unittest.main()

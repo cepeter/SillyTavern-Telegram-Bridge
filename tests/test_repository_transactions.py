@@ -7,7 +7,22 @@ from pathlib import Path
 
 import bridge.config as config
 import bridge.group_core as group_core
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_commands = dependency_module("bridge.commands")
+_m_groups = dependency_module("bridge.groups")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_session_naming = dependency_module("bridge.session_naming")
+_m_sync_api = dependency_module("bridge.sync_api")
+_m_sync_core = dependency_module("bridge.sync_core")
+_m_card_content = dependency_module("bridge.card_content")
+_m_generation = dependency_module("bridge.generation")
+_m_group_core = dependency_module("bridge.group_core")
+_m_media = dependency_module("bridge.media")
+_m_memory = dependency_module("bridge.memory")
+_m_memory_backend = dependency_module("bridge.memory_backend")
+_m_rag_core = dependency_module("bridge.rag_core")
 from bridge import repositories
 
 
@@ -24,7 +39,7 @@ class WriteTransactionTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_owned_transaction_commits(self):
-        with rt.write_transaction(self.db):
+        with _m_memory_curator.write_transaction(self.db):
             self.db.execute("INSERT INTO values_table VALUES('committed')")
 
         observer = sqlite3.connect(self.path)
@@ -38,7 +53,7 @@ class WriteTransactionTests(unittest.TestCase):
 
     def test_owned_transaction_rolls_back_on_exception(self):
         with self.assertRaisesRegex(RuntimeError, "boom"):
-            with rt.write_transaction(self.db):
+            with _m_memory_curator.write_transaction(self.db):
                 self.db.execute("INSERT INTO values_table VALUES('rolled-back')")
                 raise RuntimeError("boom")
 
@@ -49,7 +64,7 @@ class WriteTransactionTests(unittest.TestCase):
 
     def test_nested_scope_does_not_commit_outer_transaction(self):
         self.db.execute("BEGIN")
-        with rt.write_transaction(self.db):
+        with _m_memory_curator.write_transaction(self.db):
             self.db.execute("INSERT INTO values_table VALUES('pending')")
 
         self.assertTrue(self.db.in_transaction)
@@ -73,7 +88,7 @@ class WriteTransactionTests(unittest.TestCase):
         self.db.execute("INSERT INTO values_table VALUES('outer')")
 
         with self.assertRaisesRegex(RuntimeError, "nested"):
-            with rt.write_transaction(self.db):
+            with _m_memory_curator.write_transaction(self.db):
                 self.db.execute("INSERT INTO values_table VALUES('inner')")
                 raise RuntimeError("nested")
 
@@ -328,7 +343,7 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "settings.sqlite3"
-        self.db = rt.db_connect()
+        self.db = _m_memory_curator.db_connect()
 
     def tearDown(self):
         self.db.close()
@@ -342,7 +357,7 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
         traced = []
         self.db.set_trace_callback(traced.append)
         try:
-            settings = rt.get_generation_settings(
+            settings = _m_memory_curator.get_generation_settings(
                 self.db,
                 chat_id,
                 session_id,
@@ -350,7 +365,7 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
         finally:
             self.db.set_trace_callback(None)
 
-        self.assertEqual(settings, dict(rt.GENERATION_DEFAULTS))
+        self.assertEqual(settings, dict(_m_sync_core.GENERATION_DEFAULTS))
         self.assertIsNone(
             self.db.execute(
                 "SELECT 1 FROM generation_settings "
@@ -370,7 +385,7 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
         )
 
     def test_update_generation_settings_materializes_row_explicitly(self):
-        updated = rt.update_generation_settings(
+        updated = _m_sync_core.update_generation_settings(
             self.db,
             "settings-write",
             "session",
@@ -390,7 +405,7 @@ class GroupTransactionTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "group.sqlite3"
-        self.db = rt.db_connect()
+        self.db = _m_memory_curator.db_connect()
         self.chat_id = "group-chat"
         self.session_id = "group-session"
         self.initial = {
@@ -403,7 +418,7 @@ class GroupTransactionTests(unittest.TestCase):
             "turn_user_id": "",
             "turn_users": [],
         }
-        rt.save_group_state(
+        _m_groups.save_group_state(
             self.db,
             self.chat_id,
             self.session_id,
@@ -418,11 +433,11 @@ class GroupTransactionTests(unittest.TestCase):
     def test_group_persistence_helpers_no_longer_expose_commit_flag(self):
         self.assertNotIn(
             "commit",
-            inspect.signature(rt.save_group_state).parameters,
+            inspect.signature(_m_groups.save_group_state).parameters,
         )
         self.assertNotIn(
             "commit",
-            inspect.signature(rt.advance_group_turn).parameters,
+            inspect.signature(_m_message_commands.advance_group_turn).parameters,
         )
 
     def test_save_group_state_joins_outer_transaction(self):
@@ -430,7 +445,7 @@ class GroupTransactionTests(unittest.TestCase):
         changed["title"] = "Pending"
 
         self.db.execute("BEGIN")
-        rt.save_group_state(
+        _m_groups.save_group_state(
             self.db,
             self.chat_id,
             self.session_id,
@@ -440,7 +455,7 @@ class GroupTransactionTests(unittest.TestCase):
         self.db.rollback()
 
         self.assertEqual(
-            rt.group_state(
+            _m_sync_api.group_state(
                 self.db,
                 self.chat_id,
                 self.session_id,
@@ -458,7 +473,7 @@ class GroupTransactionTests(unittest.TestCase):
             side_effect=RuntimeError("marker failed"),
         ):
             with self.assertRaisesRegex(RuntimeError, "marker failed"):
-                rt.save_group_state(
+                _m_groups.save_group_state(
                     self.db,
                     self.chat_id,
                     self.session_id,
@@ -467,7 +482,7 @@ class GroupTransactionTests(unittest.TestCase):
                 )
 
         self.assertEqual(
-            rt.group_state(
+            _m_sync_api.group_state(
                 self.db,
                 self.chat_id,
                 self.session_id,
@@ -513,14 +528,14 @@ class GroupTransactionTests(unittest.TestCase):
             observer.close()
 
     def test_group_text_reply_use_case_commits_compound_transaction(self):
-        rt.set_meta(
+        _m_session_naming.set_meta(
             self.db,
             f"stream_mode:{self.chat_id}",
             "off",
         )
         group_turn = (
             "one.png",
-            rt.group_state(self.db, self.chat_id, self.session_id),
+            _m_sync_api.group_state(self.db, self.chat_id, self.session_id),
         )
         session = {
             "session_id": self.session_id,
@@ -529,31 +544,31 @@ class GroupTransactionTests(unittest.TestCase):
         fields = {"name": "One"}
 
         with patch.object(
-            rt, "rag_retrieval_bundle", return_value={}
+            _m_rag_core, "rag_retrieval_bundle", return_value={}
         ), patch.object(
-            rt, "build_chat_messages", return_value=[]
+            _m_generation, "build_chat_messages", return_value=[]
         ), patch.object(
-            rt, "recall_memory_context", return_value=""
+            _m_memory_backend, "recall_memory_context", return_value=""
         ), patch.object(
-            rt, "session_summary_for_prompt", return_value=""
+            _m_memory, "session_summary_for_prompt", return_value=""
         ), patch.object(
-            rt, "rag_context_for_prompt", return_value=""
+            _m_rag_core, "rag_context_for_prompt", return_value=""
         ), patch.object(
-            rt, "send_typing", return_value=None
+            _m_media, "send_typing", return_value=None
         ), patch.object(
-            rt, "generate_text", return_value="Reply"
+            _m_generation, "generate_text", return_value="Reply"
         ), patch.object(
-            rt, "rag_citation_footer", return_value=""
+            _m_rag_core, "rag_citation_footer", return_value=""
         ), patch.object(
-            rt, "render_response_language", return_value="Reply"
+            _m_generation, "render_response_language", return_value="Reply"
         ), patch.object(
-            rt, "retain_session_memory", return_value=None
+            _m_memory, "retain_session_memory", return_value=None
         ), patch.object(
-            rt, "queue_user_quote_tts", return_value=None
+            _m_media, "queue_user_quote_tts", return_value=None
         ), patch.object(
-            rt, "send_reply", return_value=None
+            _m_media, "send_reply", return_value=None
         ):
-            rt.generate_and_store_reply(
+            _m_message_commands.generate_and_store_reply(
                 self.db,
                 "token",
                 "key",
@@ -574,7 +589,7 @@ class GroupTransactionTests(unittest.TestCase):
     def test_group_image_reply_use_case_commits_compound_transaction(self):
         group_turn = (
             "one.png",
-            rt.group_state(self.db, self.chat_id, self.session_id),
+            _m_sync_api.group_state(self.db, self.chat_id, self.session_id),
         )
         session = {
             "session_id": self.session_id,
@@ -582,35 +597,35 @@ class GroupTransactionTests(unittest.TestCase):
         }
 
         with patch.object(
-            rt, "group_current_speaker", return_value=group_turn
+            _m_group_core, "group_current_speaker", return_value=group_turn
         ), patch.object(
-            rt, "card_fields_from_file", return_value={"name": "One"}
+            _m_card_content, "card_fields_from_file", return_value={"name": "One"}
         ), patch.object(
-            rt, "group_prompt_context", return_value=""
+            _m_groups, "group_prompt_context", return_value=""
         ), patch.object(
-            rt, "rag_retrieval_bundle", return_value={}
+            _m_rag_core, "rag_retrieval_bundle", return_value={}
         ), patch.object(
-            rt, "build_chat_messages", return_value=[]
+            _m_generation, "build_chat_messages", return_value=[]
         ), patch.object(
-            rt, "recall_memory_context", return_value=""
+            _m_memory_backend, "recall_memory_context", return_value=""
         ), patch.object(
-            rt, "session_summary_for_prompt", return_value=""
+            _m_memory, "session_summary_for_prompt", return_value=""
         ), patch.object(
-            rt, "rag_context_for_prompt", return_value=""
+            _m_rag_core, "rag_context_for_prompt", return_value=""
         ), patch.object(
-            rt, "send_typing", return_value=None
+            _m_media, "send_typing", return_value=None
         ), patch.object(
-            rt, "generate_text", return_value="Reply"
+            _m_generation, "generate_text", return_value="Reply"
         ), patch.object(
-            rt, "rag_citation_footer", return_value=""
+            _m_rag_core, "rag_citation_footer", return_value=""
         ), patch.object(
-            rt, "render_session_response", return_value="Reply"
+            _m_generation, "render_session_response", return_value="Reply"
         ), patch.object(
-            rt, "retain_session_memory", return_value=None
+            _m_memory, "retain_session_memory", return_value=None
         ), patch.object(
-            rt, "send_reply", return_value=None
+            _m_media, "send_reply", return_value=None
         ):
-            rt.process_image_message(
+            _m_commands.process_image_message(
                 self.db,
                 "token",
                 "key",
@@ -628,7 +643,7 @@ class GroupTransactionTests(unittest.TestCase):
         changed["title"] = "Committed"
 
         self.assertTrue(
-            rt.save_group_state(
+            _m_groups.save_group_state(
                 self.db,
                 self.chat_id,
                 self.session_id,
@@ -638,7 +653,7 @@ class GroupTransactionTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            rt.group_state(
+            _m_sync_api.group_state(
                 self.db,
                 self.chat_id,
                 self.session_id,

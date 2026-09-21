@@ -67,86 +67,6 @@ class RuntimeImportIslandTests(unittest.TestCase):
     def test_first_import_island_remains_ordinary_after_final_cutover(self):
         self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
 
-    def test_runtime_facade_uses_canonical_import_island_objects(self):
-        import bridge.native_cache as native_cache
-        import bridge.performance as performance
-        from runtime_test_facade import runtime as rt
-        import bridge.schema as schema
-
-        self.assertIs(rt.performance_enabled, performance.performance_enabled)
-        self.assertIs(rt.perf_span, performance.perf_span)
-        self.assertIs(rt.timed_call, performance.timed_call)
-        self.assertIs(rt.cached_json, native_cache.cached_json)
-        self.assertIs(rt.cached_png_metadata, native_cache.cached_png_metadata)
-        self.assertIs(rt.cached_text, native_cache.cached_text)
-        self.assertIs(rt.SCHEMA_MIGRATIONS, schema.SCHEMA_MIGRATIONS)
-        self.assertIs(
-            rt.initialize_database_schema,
-            schema.initialize_database_schema,
-        )
-
-    def test_runtime_has_no_loader_report_after_final_cutover(self):
-        import bridge.runtime as rt
-
-        self.assertFalse(hasattr(rt, "RUNTIME_LOAD_REPORT"))
-
-
-    def test_ordinary_modules_before_runtime_keep_canonical_identity(self):
-        completed = self._run_python(
-            "import bridge.performance as performance\n"
-            "import bridge.native_cache as native_cache\n"
-            "import bridge.schema as schema\n"
-            "import bridge.runtime as rt\n"
-            "assert rt.perf_span is performance.perf_span\n"
-            "assert rt.cached_json is native_cache.cached_json\n"
-            "assert rt.initialize_database_schema is schema.initialize_database_schema\n"
-        )
-
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
-
-    def test_runtime_before_ordinary_modules_keeps_canonical_identity(self):
-        completed = self._run_python(
-            "import bridge.runtime as rt\n"
-            "import bridge.performance as performance\n"
-            "import bridge.native_cache as native_cache\n"
-            "import bridge.schema as schema\n"
-            "assert rt.perf_span is performance.perf_span\n"
-            "assert rt.cached_json is native_cache.cached_json\n"
-            "assert rt.initialize_database_schema is schema.initialize_database_schema\n"
-        )
-
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
-
-    def test_runtime_and_native_cache_share_one_text_cache(self):
-        import bridge.native_cache as native_cache
-        import bridge.runtime as rt
-
-        key = "phase-7a-single-cache-state"
-        native_cache._TEXT_CACHE.pop(key, None)
-        try:
-            first = rt.cached_text(
-                key,
-                lambda: "from-runtime",
-            )
-            second = native_cache.cached_text(
-                key,
-                lambda: "from-module",
-            )
-        finally:
-            native_cache._TEXT_CACHE.pop(key, None)
-
-        self.assertEqual(first, "from-runtime")
-        self.assertEqual(second, "from-runtime")
-        self.assertIs(rt.cached_text, native_cache.cached_text)
-
     def test_migrated_modules_do_not_import_bridge_runtime(self):
         for filename in (
             "runtime_defaults.py",
@@ -169,6 +89,32 @@ class RuntimeImportIslandTests(unittest.TestCase):
                     source,
                 )
 
+
+    def test_import_island_objects_are_owned_directly(self):
+        import bridge.main  # completes transitional ordinary dependency bindings
+        import bridge.message_commands as message_commands
+        import bridge.native_cache as native_cache
+        import bridge.performance as performance
+        import bridge.schema as schema
+
+        self.assertTrue(callable(performance.performance_enabled))
+        self.assertTrue(callable(performance.perf_span))
+        self.assertIs(message_commands.timed_call, performance.timed_call)
+        self.assertTrue(callable(native_cache.cached_json))
+        self.assertTrue(callable(native_cache.cached_png_metadata))
+        self.assertTrue(callable(native_cache.cached_text))
+        self.assertTrue(schema.SCHEMA_MIGRATIONS)
+        self.assertTrue(callable(schema.initialize_database_schema))
+
+        key = "phase-7a-single-cache-state"
+        native_cache._TEXT_CACHE.pop(key, None)
+        try:
+            first = native_cache.cached_text(key, lambda: "first")
+            second = native_cache.cached_text(key, lambda: "second")
+        finally:
+            native_cache._TEXT_CACHE.pop(key, None)
+        self.assertEqual(first, "first")
+        self.assertEqual(second, "first")
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,30 +2,33 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime_test_facade import runtime as rt
+import subprocess
+from dependency_patch import dependency_module
+
+_m_update = dependency_module("bridge.update")
 
 
 class UpdatePanelTests(unittest.TestCase):
     def test_update_panel_uses_installed_version_and_release_notes(self):
-        text = rt.update_menu_text("0.2.007", "0.2.008", "Added safer updates.")
+        text = _m_update.update_menu_text("0.2.007", "0.2.008", "Added safer updates.")
         self.assertIn("Installed: v0.2.007", text)
         self.assertIn("Latest: v0.2.008", text)
         self.assertIn("Added safer updates.", text)
 
     def test_latest_panel_has_no_confirm_action(self):
-        text = rt.update_menu_text("0.2.008", "0.2.008", "ignored")
+        text = _m_update.update_menu_text("0.2.008", "0.2.008", "ignored")
         self.assertIn("Status: Already latest", text)
         self.assertNotIn("Release notes:", text)
 
     def test_unreleased_panel_shows_release_base_and_local_state(self):
-        text = rt.update_menu_text("0.2.013", "0.2.013", "ignored", unreleased=True)
+        text = _m_update.update_menu_text("0.2.013", "0.2.013", "ignored", unreleased=True)
         self.assertIn("Installed: v0.2.013 (unreleased local changes)", text)
         self.assertIn("Status: Local unreleased changes", text)
         self.assertNotIn("Confirm update", text)
 
     def test_unreleased_changelog_uses_latest_released_heading(self):
-        old_live = rt.UPDATE_LIVE_DIR
-        old_repo = rt.UPDATE_REPO_DIR
+        old_live = _m_update.UPDATE_LIVE_DIR
+        old_repo = _m_update.UPDATE_REPO_DIR
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             live = root / "live"
@@ -33,88 +36,88 @@ class UpdatePanelTests(unittest.TestCase):
             live.mkdir()
             repo.mkdir()
             (live / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [0.2.013] - 2026-09-18\n", encoding="utf-8")
-            rt.UPDATE_LIVE_DIR = live
-            rt.UPDATE_REPO_DIR = repo
+            _m_update.UPDATE_LIVE_DIR = live
+            _m_update.UPDATE_REPO_DIR = repo
             try:
-                self.assertEqual(rt.installed_bridge_version(), "0.2.013")
-                self.assertTrue(rt.installed_bridge_has_unreleased())
+                self.assertEqual(_m_update.installed_bridge_version(), "0.2.013")
+                self.assertTrue(_m_update.installed_bridge_has_unreleased())
             finally:
-                rt.UPDATE_LIVE_DIR = old_live
-                rt.UPDATE_REPO_DIR = old_repo
+                _m_update.UPDATE_LIVE_DIR = old_live
+                _m_update.UPDATE_REPO_DIR = old_repo
 
     def test_update_noop_skips_subprocess_when_latest(self):
-        old_latest = rt.latest_bridge_release
-        old_run = rt.subprocess.run
+        old_latest = _m_update.latest_bridge_release
+        old_run = subprocess.run
         calls = []
-        rt.latest_bridge_release = lambda: (rt.installed_bridge_version(), "")
-        rt.subprocess.run = lambda *args, **kwargs: calls.append((args, kwargs))
+        _m_update.latest_bridge_release = lambda: (_m_update.installed_bridge_version(), "")
+        subprocess.run = lambda *args, **kwargs: calls.append((args, kwargs))
         try:
-            self.assertIn("Already latest", rt._run_update())
+            self.assertIn("Already latest", _m_update._run_update())
         finally:
-            rt.latest_bridge_release = old_latest
-            rt.subprocess.run = old_run
+            _m_update.latest_bridge_release = old_latest
+            subprocess.run = old_run
         self.assertEqual(calls, [])
 
     def test_update_refuses_dirty_repository_without_side_effect(self):
-        old_repo = rt.UPDATE_REPO_DIR
-        old_latest = rt.latest_bridge_release
+        old_repo = _m_update.UPDATE_REPO_DIR
+        old_latest = _m_update.latest_bridge_release
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
             (repo / ".git").mkdir()
             (repo / "CHANGELOG.md").write_text("## [0.0.1]\n", encoding="utf-8")
-            rt.UPDATE_REPO_DIR = repo
-            rt.latest_bridge_release = lambda: ("0.0.2", "")
-            original_run = rt.subprocess.run
-            rt.subprocess.run = lambda *_args, **_kwargs: type("Result", (), {"stdout": " M local.py\n"})()
+            _m_update.UPDATE_REPO_DIR = repo
+            _m_update.latest_bridge_release = lambda: ("0.0.2", "")
+            original_run = subprocess.run
+            subprocess.run = lambda *_args, **_kwargs: type("Result", (), {"stdout": " M local.py\n"})()
             try:
-                self.assertIn("uncommitted", rt._run_update())
+                self.assertIn("uncommitted", _m_update._run_update())
             finally:
-                rt.subprocess.run = original_run
-                rt.latest_bridge_release = old_latest
-                rt.UPDATE_REPO_DIR = old_repo
+                subprocess.run = original_run
+                _m_update.latest_bridge_release = old_latest
+                _m_update.UPDATE_REPO_DIR = old_repo
 
     def test_update_reports_missing_source_checkout(self):
-        old_repo = rt.UPDATE_REPO_DIR
-        old_latest = rt.latest_bridge_release
-        rt.UPDATE_REPO_DIR = Path("/tmp/not-a-bridge-checkout")
-        rt.latest_bridge_release = lambda: ("0.0.2", "")
+        old_repo = _m_update.UPDATE_REPO_DIR
+        old_latest = _m_update.latest_bridge_release
+        _m_update.UPDATE_REPO_DIR = Path("/tmp/not-a-bridge-checkout")
+        _m_update.latest_bridge_release = lambda: ("0.0.2", "")
         try:
-            self.assertIn("source checkout not found", rt._run_update())
+            self.assertIn("source checkout not found", _m_update._run_update())
         finally:
-            rt.latest_bridge_release = old_latest
-            rt.UPDATE_REPO_DIR = old_repo
+            _m_update.latest_bridge_release = old_latest
+            _m_update.UPDATE_REPO_DIR = old_repo
 
     def test_update_reports_git_stderr_without_raising(self):
-        old_repo = rt.UPDATE_REPO_DIR
-        old_latest = rt.latest_bridge_release
+        old_repo = _m_update.UPDATE_REPO_DIR
+        old_latest = _m_update.latest_bridge_release
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
             (repo / ".git").mkdir()
             (repo / "CHANGELOG.md").write_text("## [0.0.1]\n", encoding="utf-8")
-            rt.UPDATE_REPO_DIR = repo
-            rt.latest_bridge_release = lambda: ("0.0.2", "")
-            original_run = rt.subprocess.run
+            _m_update.UPDATE_REPO_DIR = repo
+            _m_update.latest_bridge_release = lambda: ("0.0.2", "")
+            original_run = subprocess.run
 
             def fake_run(command, **kwargs):
                 if command[1:3] == ["status", "--porcelain"]:
                     return type("Result", (), {"stdout": ""})()
-                raise rt.subprocess.CalledProcessError(128, command, stderr="fatal: remote unavailable")
+                raise subprocess.CalledProcessError(128, command, stderr="fatal: remote unavailable")
 
-            rt.subprocess.run = fake_run
+            subprocess.run = fake_run
             try:
-                result = rt._run_update()
+                result = _m_update._run_update()
             finally:
-                rt.subprocess.run = original_run
-                rt.latest_bridge_release = old_latest
-                rt.UPDATE_REPO_DIR = old_repo
+                subprocess.run = original_run
+                _m_update.latest_bridge_release = old_latest
+                _m_update.UPDATE_REPO_DIR = old_repo
         self.assertIn("remote unavailable", result)
 
 
     def test_update_fetches_and_merges_exact_release_tag(self):
-        old_repo = rt.UPDATE_REPO_DIR
-        old_live = rt.UPDATE_LIVE_DIR
-        old_latest = rt.latest_bridge_release
-        old_run = rt.subprocess.run
+        old_repo = _m_update.UPDATE_REPO_DIR
+        old_live = _m_update.UPDATE_LIVE_DIR
+        old_latest = _m_update.latest_bridge_release
+        old_run = subprocess.run
         calls = []
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -122,35 +125,35 @@ class UpdatePanelTests(unittest.TestCase):
             live = root / "live"
             (repo / ".git").mkdir(parents=True)
             (repo / "CHANGELOG.md").write_text("## [0.0.1]\\n", encoding="utf-8")
-            rt.UPDATE_REPO_DIR = repo
-            rt.UPDATE_LIVE_DIR = live
-            rt.latest_bridge_release = lambda: ("0.0.2", "")
+            _m_update.UPDATE_REPO_DIR = repo
+            _m_update.UPDATE_LIVE_DIR = live
+            _m_update.latest_bridge_release = lambda: ("0.0.2", "")
 
             def fake_run(command, **kwargs):
                 calls.append(command)
                 return type("Result", (), {"stdout": "", "stderr": ""})()
 
-            rt.subprocess.run = fake_run
+            subprocess.run = fake_run
             try:
-                rt._run_update()
+                _m_update._run_update()
             finally:
-                rt.subprocess.run = old_run
-                rt.latest_bridge_release = old_latest
-                rt.UPDATE_LIVE_DIR = old_live
-                rt.UPDATE_REPO_DIR = old_repo
+                subprocess.run = old_run
+                _m_update.latest_bridge_release = old_latest
+                _m_update.UPDATE_LIVE_DIR = old_live
+                _m_update.UPDATE_REPO_DIR = old_repo
 
         fetched_ref = "refs/bridge-release/v0.0.2"
-        git_bin = rt._resolve_command("git")
-        rsync_bin = rt._resolve_command("rsync")
-        cp_bin = rt._resolve_command("cp")
-        systemctl_bin = rt._resolve_command("systemctl")
+        git_bin = _m_update._resolve_command("git")
+        rsync_bin = _m_update._resolve_command("rsync")
+        cp_bin = _m_update._resolve_command("cp")
+        systemctl_bin = _m_update._resolve_command("systemctl")
         self.assertIn(
             [
                 git_bin,
                 "fetch",
                 "--force",
                 "--no-tags",
-                rt.UPDATE_CANONICAL_GIT_URL,
+                _m_update.UPDATE_CANONICAL_GIT_URL,
                 f"refs/tags/v0.0.2:{fetched_ref}",
             ],
             calls,

@@ -5,7 +5,18 @@ import unittest
 from unittest.mock import patch
 
 import bridge.config as config
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_command_routes = dependency_module("bridge.command_routes")
+_m_input_flows = dependency_module("bridge.input_flows")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
+_m_persona_sync = dependency_module("bridge.persona_sync")
+_m_session_naming = dependency_module("bridge.session_naming")
+_m_sync_core = dependency_module("bridge.sync_core")
+_m_cards = dependency_module("bridge.cards")
+_m_telegram = dependency_module("bridge.telegram")
 
 
 class FakePersonaService:
@@ -128,64 +139,64 @@ class PersonaEditorTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.old_db = config.DB_FILE
-        self.old_settings = rt.NATIVE_PERSONA_SETTINGS_FILE
-        self.old_avatars = rt.NATIVE_PERSONA_AVATAR_DIR
-        self.old_backups = rt.NATIVE_PERSONA_BACKUP_DIR
-        self.old_cache = rt._NATIVE_PERSONA_CACHE
-        self.old_cache_time = rt._NATIVE_PERSONA_CACHE_LAST_REFRESH
-        self.old_phase3 = rt.phase3_api_configured
+        self.old_settings = _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE
+        self.old_avatars = _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR
+        self.old_backups = _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR
+        self.old_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
+        self.old_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
+        self.old_phase3 = _m_persona_sync.phase3_api_configured
         config.DB_FILE = root / "bridge.sqlite3"
-        rt.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
-        rt.NATIVE_PERSONA_AVATAR_DIR = root / "User Avatars"
-        rt.NATIVE_PERSONA_BACKUP_DIR = root / "backups"
-        rt.NATIVE_PERSONA_AVATAR_DIR.mkdir()
-        (rt.NATIVE_PERSONA_AVATAR_DIR / "user-default.png").write_bytes(b"avatar")
+        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
+        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = root / "User Avatars"
+        _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR = root / "backups"
+        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR.mkdir()
+        (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / "user-default.png").write_bytes(b"avatar")
         self.native = {"user_avatar": "user-default.png", "power_user": {"personas": {"bridge-user.png": "Test User"}, "persona_descriptions": {"bridge-user.png": {"description": "Original description", "connections": ["keep"]}}}, "unrelated": {"keep": True}}
-        rt.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(self.native), encoding="utf-8")
-        rt._NATIVE_PERSONA_CACHE = {}
-        rt._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        rt.phase3_api_configured = lambda: False
-        self.db = rt.db_connect()
-        self.session = rt.create_session(self.db, "chat", "provider/model", session_id="persona-session")
+        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(self.native), encoding="utf-8")
+        _m_persona_sync._NATIVE_PERSONA_CACHE = {}
+        _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
+        _m_persona_sync.phase3_api_configured = lambda: False
+        self.db = _m_memory_curator.db_connect()
+        self.session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="persona-session")
         self.calls = []
-        self.old_request = rt.telegram_request
-        self.old_send_text = rt.send_text
-        self.old_close = rt.close_panel_message
-        rt.telegram_request = lambda _token, method, payload: self.calls.append((method, payload)) or {"message_id": 500}
-        rt.send_text = lambda _token, _chat, _text: [501]
-        rt.close_panel_message = lambda _token, _chat, _callback: None
+        self.old_request = _m_panel_callback_routes.telegram_request
+        self.old_send_text = _m_memory_curator.send_text
+        self.old_close = _m_session_naming.close_panel_message
+        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: self.calls.append((method, payload)) or {"message_id": 500}
+        _m_memory_curator.send_text = lambda _token, _chat, _text: [501]
+        _m_session_naming.close_panel_message = lambda _token, _chat, _callback: None
 
     def tearDown(self):
-        rt.telegram_request = self.old_request
-        rt.send_text = self.old_send_text
-        rt.close_panel_message = self.old_close
-        rt._NATIVE_PERSONA_CACHE = self.old_cache
-        rt._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
-        rt.phase3_api_configured = self.old_phase3
+        _m_panel_callback_routes.telegram_request = self.old_request
+        _m_memory_curator.send_text = self.old_send_text
+        _m_session_naming.close_panel_message = self.old_close
+        _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_cache
+        _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
+        _m_persona_sync.phase3_api_configured = self.old_phase3
         self.db.close()
         config.DB_FILE = self.old_db
-        rt.NATIVE_PERSONA_SETTINGS_FILE = self.old_settings
-        rt.NATIVE_PERSONA_AVATAR_DIR = self.old_avatars
-        rt.NATIVE_PERSONA_BACKUP_DIR = self.old_backups
+        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.old_settings
+        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.old_avatars
+        _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR = self.old_backups
         self.tmp.cleanup()
 
     def _settings(self):
-        return json.loads(rt.NATIVE_PERSONA_SETTINGS_FILE.read_text(encoding="utf-8"))
+        return json.loads(_m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.read_text(encoding="utf-8"))
 
     def _start(self, mode, persona_id=""):
         callback = {"id": "callback", "message": {"message_id": 77}}
-        rt.start_persona_input(self.db, "token", "chat", self.session["session_id"], mode, persona_id, callback)
-        return json.loads(rt.get_meta(self.db, "persona_input:chat"))
+        _m_input_flows.start_persona_input(self.db, "token", "chat", self.session["session_id"], mode, persona_id, callback)
+        return json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
 
     def test_pending_create_uses_injected_persona_service(self):
         self._start("create")
         fake = FakePersonaService()
         with patch.object(
-            rt,
+            _m_persona_sync,
             "upsert_native_persona",
             side_effect=AssertionError("raw upsert bypassed service"),
         ):
-            handled = rt.handle_pending_input(
+            handled = _m_message_commands.handle_pending_input(
                 self.db,
                 "token",
                 "chat",
@@ -215,11 +226,11 @@ class PersonaEditorTests(unittest.TestCase):
         self._start("edit", "bridge-user.png")
         fake = FakePersonaService()
         with patch.object(
-            rt,
+            _m_persona_sync,
             "upsert_native_persona",
             side_effect=AssertionError("raw upsert bypassed service"),
         ):
-            handled = rt.handle_pending_input(
+            handled = _m_message_commands.handle_pending_input(
                 self.db,
                 "token",
                 "chat",
@@ -243,7 +254,7 @@ class PersonaEditorTests(unittest.TestCase):
         state = self._start("create")
         fake = FakePersonaService()
         self.assertTrue(
-            rt.handle_pending_input(
+            _m_message_commands.handle_pending_input(
                 self.db,
                 "token",
                 "chat",
@@ -253,7 +264,7 @@ class PersonaEditorTests(unittest.TestCase):
             )
         )
         self.assertEqual(fake.calls, [])
-        current = json.loads(rt.get_meta(self.db, "persona_input:chat"))
+        current = json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
         self.assertEqual(current["mode"], "create")
         self.assertEqual(
             current["prompt_message_ids"],
@@ -265,7 +276,7 @@ class PersonaEditorTests(unittest.TestCase):
         fake = FakePersonaService()
         fake.create_error = RuntimeError("offline")
         self.assertTrue(
-            rt.handle_pending_input(
+            _m_message_commands.handle_pending_input(
                 self.db,
                 "token",
                 "chat",
@@ -275,7 +286,7 @@ class PersonaEditorTests(unittest.TestCase):
             )
         )
         self.assertTrue(
-            json.loads(rt.get_meta(self.db, "persona_input:chat"))
+            json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
         )
 
     def test_persona_menu_reads_from_injected_service(self):
@@ -287,7 +298,7 @@ class PersonaEditorTests(unittest.TestCase):
                 "sillytavern_avatar": "injected.png",
             }
         }
-        rt.send_persona_menu(
+        _m_command_routes.send_persona_menu(
             "token",
             "chat",
             "injected.png",
@@ -311,7 +322,7 @@ class PersonaEditorTests(unittest.TestCase):
                 "sillytavern_avatar": "injected.png",
             }
         }
-        rt.send_persona_edit_menu(
+        _m_input_flows.send_persona_edit_menu(
             "token",
             "chat",
             "injected.png",
@@ -338,7 +349,7 @@ class PersonaEditorTests(unittest.TestCase):
                 "sillytavern_avatar": "injected.png",
             },
         }
-        rt.send_persona_delete_menu(
+        _m_input_flows.send_persona_delete_menu(
             "token",
             "chat",
             "current.png",
@@ -357,11 +368,11 @@ class PersonaEditorTests(unittest.TestCase):
         services = type("Services", (), {"persona": fake})()
         captured = {}
         with patch.object(
-            rt,
+            _m_cards,
             "send_persona_menu",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
-            handled = rt._handle_entities(
+            handled = _m_command_routes._handle_entities(
                 self.db,
                 "token",
                 "provider/model",
@@ -379,21 +390,21 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_native_catalog_loads_and_create_selects_avatar(self):
         self._start("create")
-        self.assertTrue(rt.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes."))
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes."))
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-writer.png"], "Writer")
         self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-writer.png"]["description"], "I write concise notes.")
-        self.assertTrue((rt.NATIVE_PERSONA_AVATAR_DIR / "bridge-writer.png").is_file())
-        self.assertEqual(rt.load_session(self.db, "chat", "persona-session", "provider/model")["persona_id"], "bridge-writer.png")
+        self.assertTrue((_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / "bridge-writer.png").is_file())
+        self.assertEqual(_m_memory_curator.load_session(self.db, "chat", "persona-session", "provider/model")["persona_id"], "bridge-writer.png")
         self.assertEqual(settings["unrelated"], {"keep": True})
 
     def test_default_persona_resolves_only_native_persona(self):
-        self.assertEqual(rt.default_persona_id(), "")
-        self.assertEqual(rt.persona_name(""), "")
+        self.assertEqual(_m_persona_sync.default_persona_id(), "")
+        self.assertEqual(_m_sync_core.persona_name(""), "")
 
     def test_edit_name_and_description_updates_native_settings(self):
         self._start("edit", "bridge-user.png")
-        rt.handle_pending_input(self.db, "token", "chat", self.session, "Updated Name | Updated description")
+        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Updated Name | Updated description")
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Updated Name")
         self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-user.png"]["description"], "Updated description")
@@ -401,16 +412,16 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_edit_description_only_preserves_native_name(self):
         self._start("edit_description", "bridge-user.png")
-        rt.handle_pending_input(self.db, "token", "chat", self.session, "Description only")
+        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Description only")
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Test User")
         self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-user.png"]["description"], "Description only")
 
     def test_edit_callback_reads_native_metadata(self):
-        rt.update_session(self.db, "chat", self.session["session_id"], persona_id="bridge-user.png")
-        self.session = rt.load_session(self.db, "chat", self.session["session_id"], "provider/model")
+        _m_session_naming.update_session(self.db, "chat", self.session["session_id"], persona_id="bridge-user.png")
+        self.session = _m_memory_curator.load_session(self.db, "chat", self.session["session_id"], "provider/model")
         answers = []
-        handled = rt.handle_persona_callback(self.db, "token", {"id": "cb"}, lambda _t, _i, text: answers.append(text), "persona:edit", "chat", {"message_id": 77}, self.session, "persona-session", None)
+        handled = _m_panel_callback_routes.handle_persona_callback(self.db, "token", {"id": "cb"}, lambda _t, _i, text: answers.append(text), "persona:edit", "chat", {"message_id": 77}, self.session, "persona-session", None)
         self.assertTrue(handled)
         self.assertEqual(answers, ["Review persona"])
         self.assertIn("Original description", self.calls[-1][1]["text"])
@@ -419,18 +430,18 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_callback_select_uses_injected_persona_service(self):
         fake = FakePersonaService()
-        token_value = rt.dynamic_callback_token(
+        token_value = _m_panel_callback_routes.dynamic_callback_token(
             "persona",
             "other.png",
             "chat",
         )
         answers = []
         with patch.object(
-            rt,
+            _m_telegram,
             "update_session",
             side_effect=AssertionError("direct session mutation"),
         ):
-            handled = rt.handle_persona_callback(
+            handled = _m_panel_callback_routes.handle_persona_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -453,11 +464,11 @@ class PersonaEditorTests(unittest.TestCase):
         fake = FakePersonaService()
         answers = []
         with patch.object(
-            rt,
+            _m_telegram,
             "update_session",
             side_effect=AssertionError("direct session mutation"),
         ):
-            handled = rt.handle_persona_callback(
+            handled = _m_panel_callback_routes.handle_persona_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -478,18 +489,18 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_callback_delete_uses_injected_persona_service(self):
         fake = FakePersonaService()
-        token_value = rt.dynamic_callback_token(
+        token_value = _m_panel_callback_routes.dynamic_callback_token(
             "persona",
             "other.png",
             "chat",
         )
         answers = []
         with patch.object(
-            rt,
+            _m_persona_sync,
             "delete_native_persona",
             side_effect=AssertionError("raw delete bypassed service"),
         ):
-            handled = rt.handle_persona_callback(
+            handled = _m_panel_callback_routes.handle_persona_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -515,13 +526,13 @@ class PersonaEditorTests(unittest.TestCase):
         fake.delete_error = ValueError(
             "Persona is used by another session"
         )
-        token_value = rt.dynamic_callback_token(
+        token_value = _m_panel_callback_routes.dynamic_callback_token(
             "persona",
             "other.png",
             "chat",
         )
         answers = []
-        handled = rt.handle_persona_callback(
+        handled = _m_panel_callback_routes.handle_persona_callback(
             self.db,
             "token",
             {"id": "cb"},
@@ -541,13 +552,13 @@ class PersonaEditorTests(unittest.TestCase):
         )
 
     def test_delete_refuses_persona_referenced_by_another_chat(self):
-        target = rt.upsert_native_persona("shared", "Shared", "Shared description")
-        other = rt.create_session(self.db, "other-chat", "provider/model", session_id="other-session")
-        rt.update_session(self.db, "other-chat", other["session_id"], persona_id=target)
-        token_value = rt.dynamic_callback_token("persona", target, "chat")
+        target = _m_persona_sync.upsert_native_persona("shared", "Shared", "Shared description")
+        other = _m_session_naming.create_session(self.db, "other-chat", "provider/model", session_id="other-session")
+        _m_session_naming.update_session(self.db, "other-chat", other["session_id"], persona_id=target)
+        token_value = _m_panel_callback_routes.dynamic_callback_token("persona", target, "chat")
         answers = []
 
-        handled = rt.handle_persona_callback(
+        handled = _m_panel_callback_routes.handle_persona_callback(
             self.db,
             "token",
             {"id": "cb"},
@@ -562,39 +573,39 @@ class PersonaEditorTests(unittest.TestCase):
 
         self.assertTrue(handled)
         self.assertEqual(answers, ["Deletion refused: Persona is used by another session"])
-        self.assertIsNotNone(rt.get_persona(target))
+        self.assertIsNotNone(_m_sync_core.get_persona(target))
 
     def test_invalid_create_keeps_pending_state_and_native_file(self):
         state = self._start("create")
-        self.assertTrue(rt.handle_pending_input(self.db, "token", "chat", self.session, "bad input"))
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "bad input"))
         self.assertEqual(self._settings(), self.native)
-        current = json.loads(rt.get_meta(self.db, "persona_input:chat"))
+        current = json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
         self.assertEqual(current["mode"], "create")
         self.assertEqual(current["prompt_message_ids"], state["prompt_message_ids"] + [501])
 
     def test_cancel_clears_pending_persona_input(self):
         self._start("create")
-        self.assertTrue(rt.handle_pending_input(self.db, "token", "chat", self.session, "/cancel"))
-        self.assertEqual(rt.get_meta(self.db, "persona_input:chat"), "")
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/cancel"))
+        self.assertEqual(_m_session_naming.get_meta(self.db, "persona_input:chat"), "")
         self.assertEqual(self._settings(), self.native)
 
     def test_pending_persona_input_is_session_scoped(self):
         self._start("create")
         other = dict(self.session)
         other["session_id"] = "other-session"
-        self.assertFalse(rt.handle_pending_input(self.db, "token", "chat", other, "writer | Writer | Should not apply"))
+        self.assertFalse(_m_message_commands.handle_pending_input(self.db, "token", "chat", other, "writer | Writer | Should not apply"))
         self.assertEqual(self._settings(), self.native)
 
     def test_save_failure_keeps_native_settings_and_pending_state(self):
         self._start("edit_description", "bridge-user.png")
-        original_save = rt._save_native_settings
-        rt._save_native_settings = lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))
+        original_save = _m_persona_sync._save_native_settings
+        _m_persona_sync._save_native_settings = lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))
         try:
-            self.assertTrue(rt.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update"))
+            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update"))
         finally:
-            rt._save_native_settings = original_save
+            _m_persona_sync._save_native_settings = original_save
         self.assertEqual(self._settings(), self.native)
-        self.assertTrue(json.loads(rt.get_meta(self.db, "persona_input:chat")))
+        self.assertTrue(json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat")))
 
 
 if __name__ == "__main__":

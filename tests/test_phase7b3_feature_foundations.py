@@ -220,12 +220,11 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertNotIn(f"def {name}(", source)
 
-    def test_runtime_facade_exports_canonical_foundations(self):
+    def test_canonical_foundation_exports_are_directly_available(self):
         import bridge.group_core as group_core
         import bridge.memory_backend as memory_backend
         import bridge.network_security as network_security
         import bridge.rag_core as rag_core
-        from runtime_test_facade import runtime as rt
 
         for module, names in (
             (network_security, NETWORK_EXPORTS),
@@ -235,7 +234,7 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
         ):
             for name in names:
                 with self.subTest(module=module.__name__, name=name):
-                    self.assertIs(getattr(rt, name), getattr(module, name))
+                    self.assertTrue(hasattr(module, name))
 
     def test_phase_7b3_foundations_remain_ordinary_after_final_cutover(self):
         self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())

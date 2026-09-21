@@ -5,7 +5,21 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from runtime_test_facade import runtime as rt
+import time
+from dependency_patch import dependency_module
+
+_m_callbacks = dependency_module("bridge.callbacks")
+_m_commands = dependency_module("bridge.commands")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
+_m_session_naming = dependency_module("bridge.session_naming")
+_m_sync_api = dependency_module("bridge.sync_api")
+_m_sync_core = dependency_module("bridge.sync_core")
+_m_card_content = dependency_module("bridge.card_content")
+_m_generation = dependency_module("bridge.generation")
+_m_media = dependency_module("bridge.media")
+_m_telegram = dependency_module("bridge.telegram")
 from bridge.operation_recovery import OperationRecovery
 
 
@@ -13,8 +27,8 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "recovery.sqlite3"
-        self.db = rt.db_connect(self.path)
-        self.session = rt.ensure_session(
+        self.db = _m_memory_curator.db_connect(self.path)
+        self.session = _m_callbacks.ensure_session(
             self.db,
             "chat",
             "provider::model",
@@ -26,7 +40,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def _operation(self, operation_id, state, kind="command"):
-        now = rt.time.time()
+        now = time.time()
         self.db.execute(
             "INSERT OR REPLACE INTO operations("
             "operation_id,kind,state,created_at,updated_at"
@@ -36,7 +50,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self.db.commit()
 
     def _turns(self, user="question", assistant="answer"):
-        now = rt.time.time()
+        now = time.time()
         user_cursor = self.db.execute(
             "INSERT INTO messages("
             "chat_id,session_id,role,content,created_at"
@@ -65,7 +79,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         return int(user_cursor.lastrowid), int(assistant_cursor.lastrowid)
 
     def _payload(self, operation_id, payload):
-        rt.set_meta(
+        _m_session_naming.set_meta(
             self.db,
             f"operation_payload:{operation_id}",
             json.dumps(payload, separators=(",", ":")),
@@ -78,7 +92,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             "committed regen",
         )
         for response in ("v1", "v2", "committed regen"):
-            rt.save_response_variant(
+            _m_sync_core.save_response_variant(
                 self.db,
                 "chat",
                 self.session["session_id"],
@@ -93,21 +107,21 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         )
 
         with patch.object(
-            rt,
+            _m_generation,
             "generate_text",
             side_effect=AssertionError("provider must not run"),
         ), patch.object(
-            rt,
+            _m_media,
             "delete_outgoing_message_row",
         ) as delete_current, patch.object(
-            rt,
+            _m_telegram,
             "telegram_request",
             return_value={},
         ) as telegram, patch.object(
-            rt,
+            _m_media,
             "send_reply",
         ) as send_reply:
-            rt.regenerate_last(
+            _m_message_commands.regenerate_last(
                 self.db,
                 "token",
                 "key",
@@ -133,9 +147,9 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             "Regenerated response (variant 3)",
             send_reply.call_args.args[2],
         )
-        self.assertEqual(rt.operation_phase(self.db, operation_id), "applied")
+        self.assertEqual(_m_message_commands.operation_phase(self.db, operation_id), "applied")
         self.assertEqual(
-            rt.get_meta(self.db, f"operation_payload:{operation_id}", ""),
+            _m_session_naming.get_meta(self.db, f"operation_payload:{operation_id}", ""),
             "",
         )
 
@@ -145,7 +159,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             "question",
             "committed regen",
         )
-        rt.save_response_variant(
+        _m_sync_core.save_response_variant(
             self.db,
             "chat",
             self.session["session_id"],
@@ -160,14 +174,14 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         )
 
         with patch.object(
-            rt,
+            _m_generation,
             "generate_text",
             side_effect=AssertionError("provider must not run"),
         ), patch.object(
-            rt,
+            _m_media,
             "delete_outgoing_message_row",
         ), patch.object(
-            rt,
+            _m_media,
             "send_reply",
             side_effect=RuntimeError("Telegram sendMessage failed"),
         ):
@@ -175,7 +189,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 RuntimeError,
                 "Telegram sendMessage failed",
             ):
-                rt.regenerate_last(
+                _m_message_commands.regenerate_last(
                     self.db,
                     "token",
                     "key",
@@ -186,11 +200,11 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 )
 
         self.assertEqual(
-            rt.operation_phase(self.db, operation_id),
+            _m_message_commands.operation_phase(self.db, operation_id),
             "local_committed",
         )
         self.assertNotEqual(
-            rt.get_meta(self.db, f"operation_payload:{operation_id}", ""),
+            _m_session_naming.get_meta(self.db, f"operation_payload:{operation_id}", ""),
             "",
         )
 
@@ -202,7 +216,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             RuntimeError,
             "regen recovery state is incomplete",
         ):
-            rt.regenerate_last(
+            _m_message_commands.regenerate_last(
                 self.db,
                 "token",
                 "key",
@@ -213,7 +227,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            rt.operation_phase(self.db, operation_id),
+            _m_message_commands.operation_phase(self.db, operation_id),
             "local_committed",
         )
 
@@ -230,21 +244,21 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         )
 
         with patch.object(
-            rt,
+            _m_generation,
             "generate_text",
             side_effect=AssertionError("provider must not run"),
         ), patch.object(
-            rt,
+            _m_media,
             "delete_outgoing_message_row",
         ), patch.object(
-            rt,
+            _m_telegram,
             "telegram_request",
             return_value={},
         ), patch.object(
-            rt,
+            _m_media,
             "send_reply",
         ) as send_reply:
-            rt.continue_last(
+            _m_message_commands.continue_last(
                 self.db,
                 "token",
                 "key",
@@ -263,7 +277,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             send_reply.call_args.args[2],
         )
         self.assertEqual(
-            rt.operation_phase(self.db, operation_id),
+            _m_message_commands.operation_phase(self.db, operation_id),
             "applied",
         )
 
@@ -280,21 +294,21 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         )
 
         with patch.object(
-            rt,
+            _m_generation,
             "generate_text",
             side_effect=AssertionError("provider must not run"),
         ), patch.object(
-            rt,
+            _m_media,
             "delete_outgoing_message_row",
         ), patch.object(
-            rt,
+            _m_telegram,
             "telegram_request",
             return_value={},
         ), patch.object(
-            rt,
+            _m_media,
             "send_reply",
         ) as send_reply:
-            rt.regenerate_edited_turn(
+            _m_commands.regenerate_edited_turn(
                 self.db,
                 "token",
                 "key",
@@ -315,7 +329,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             send_reply.call_args.args[2],
         )
         self.assertEqual(
-            rt.operation_phase(self.db, operation_id),
+            _m_message_commands.operation_phase(self.db, operation_id),
             "applied",
         )
 
@@ -327,7 +341,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             RuntimeError,
             "continue recovery state is incomplete",
         ):
-            rt.continue_last(
+            _m_message_commands.continue_last(
                 self.db,
                 "token",
                 "key",
@@ -338,7 +352,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            rt.operation_phase(self.db, operation_id),
+            _m_message_commands.operation_phase(self.db, operation_id),
             "local_committed",
         )
 
@@ -350,7 +364,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             RuntimeError,
             "edit recovery state is incomplete",
         ):
-            rt.regenerate_edited_turn(
+            _m_commands.regenerate_edited_turn(
                 self.db,
                 "token",
                 "key",
@@ -363,7 +377,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            rt.operation_phase(self.db, operation_id),
+            _m_message_commands.operation_phase(self.db, operation_id),
             "local_committed",
         )
 
@@ -373,22 +387,22 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         memory = object()
 
         with patch.object(
-            rt,
+            _m_telegram,
             "load_session",
             return_value=self.session,
         ), patch.object(
-            rt,
+            _m_card_content,
             "card_fields_from_file",
             return_value=self.fields,
         ), patch.object(
-            rt,
+            _m_generation,
             "regenerate_last",
         ) as regen, patch.object(
-            rt,
+            _m_media,
             "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
-            rt.process_message(
+            _m_message_commands.process_message(
                 self.db,
                 "token",
                 "key",
@@ -409,22 +423,22 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         memory = object()
 
         with patch.object(
-            rt,
+            _m_telegram,
             "load_session",
             return_value=self.session,
         ), patch.object(
-            rt,
+            _m_card_content,
             "card_fields_from_file",
             return_value=self.fields,
         ), patch.object(
-            rt,
+            _m_generation,
             "continue_last",
         ) as continuation, patch.object(
-            rt,
+            _m_media,
             "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
-            rt.process_message(
+            _m_message_commands.process_message(
                 self.db,
                 "token",
                 "key",
@@ -445,22 +459,22 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         memory = object()
 
         with patch.object(
-            rt,
+            _m_telegram,
             "load_session",
             return_value=self.session,
         ), patch.object(
-            rt,
+            _m_card_content,
             "card_fields_from_file",
             return_value=self.fields,
         ), patch.object(
-            rt,
+            _m_commands,
             "edit_last_user",
         ) as edit, patch.object(
-            rt,
+            _m_media,
             "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
-            rt.process_message(
+            _m_message_commands.process_message(
                 self.db,
                 "token",
                 "key",
@@ -485,7 +499,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             "remote purge repeated"
         )
 
-        rt.reset_session(
+        _m_panel_callback_routes.reset_session(
             self.db,
             "token",
             "chat",
@@ -500,7 +514,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             ("chat", self.session["session_id"]),
         ).fetchone()[0]
         self.assertEqual(count, 0)
-        self.assertEqual(rt.operation_phase(self.db, operation_id), "applied")
+        self.assertEqual(_m_message_commands.operation_phase(self.db, operation_id), "applied")
 
     def test_reset_local_committed_resume_only_marks_applied(self):
         operation_id = 606
@@ -508,7 +522,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self._operation(operation_id, "local_committed", "reset")
         memory = Mock()
 
-        rt.reset_session(
+        _m_panel_callback_routes.reset_session(
             self.db,
             "token",
             "chat",
@@ -524,7 +538,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         ).fetchone()[0]
         self.assertEqual(count, 2)
         memory.purge_session.assert_not_called()
-        self.assertEqual(rt.operation_phase(self.db, operation_id), "applied")
+        self.assertEqual(_m_message_commands.operation_phase(self.db, operation_id), "applied")
 
 
 class DurableRecoveryOwnershipTests(unittest.TestCase):
@@ -594,7 +608,7 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
         for raw, expected in cases.items():
             with self.subTest(raw=raw):
                 self.assertEqual(
-                    rt._operation_command(raw),
+                    _m_message_commands._operation_command(raw),
                     expected,
                 )
 
@@ -608,15 +622,15 @@ class OperationRecoveryUnitTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "adapter.sqlite3"
-        self.db = rt.db_connect(self.path)
+        self.db = _m_memory_curator.db_connect(self.path)
         self.telegram = Mock(return_value={})
         self.log_info = Mock()
         self.adapter = OperationRecovery(
-            operation_phase=rt.operation_phase,
-            begin_operation=rt.begin_operation,
-            record_operation=rt.record_operation,
-            run_write_txn=rt.run_write_txn,
-            get_meta=rt.get_meta,
+            operation_phase=_m_message_commands.operation_phase,
+            begin_operation=_m_panel_callback_routes.begin_operation,
+            record_operation=_m_panel_callback_routes.record_operation,
+            run_write_txn=_m_sync_api.run_write_txn,
+            get_meta=_m_session_naming.get_meta,
             telegram_request=self.telegram,
             delete_outgoing_message_row=Mock(),
             log_info=self.log_info,
@@ -628,9 +642,9 @@ class OperationRecoveryUnitTests(unittest.TestCase):
 
     def test_payload_missing_malformed_and_non_object_are_empty(self):
         self.assertEqual(self.adapter.get_payload(self.db, 701), {})
-        rt.set_meta(self.db, "operation_payload:701", "{bad")
+        _m_session_naming.set_meta(self.db, "operation_payload:701", "{bad")
         self.assertEqual(self.adapter.get_payload(self.db, 701), {})
-        rt.set_meta(self.db, "operation_payload:701", "[1,2]")
+        _m_session_naming.set_meta(self.db, "operation_payload:701", "[1,2]")
         self.assertEqual(self.adapter.get_payload(self.db, 701), {})
 
     def test_message_id_decoder_preserves_order_and_deduplicates(self):
@@ -645,7 +659,7 @@ class OperationRecoveryUnitTests(unittest.TestCase):
         )
 
     def test_local_committed_delivery_failure_does_not_finish(self):
-        now = rt.time.time()
+        now = time.time()
         self.db.execute(
             "INSERT INTO operations("
             "operation_id,kind,state,created_at,updated_at"
@@ -665,12 +679,12 @@ class OperationRecoveryUnitTests(unittest.TestCase):
                 fail_delivery,
             )
         self.assertEqual(
-            rt.operation_phase(self.db, 702),
+            _m_message_commands.operation_phase(self.db, 702),
             "local_committed",
         )
 
     def test_finish_marks_applied_and_removes_payload(self):
-        now = rt.time.time()
+        now = time.time()
         self.db.execute(
             "INSERT INTO operations("
             "operation_id,kind,state,created_at,updated_at"
@@ -686,9 +700,9 @@ class OperationRecoveryUnitTests(unittest.TestCase):
 
         self.adapter.finish(self.db, 703, "regen")
 
-        self.assertEqual(rt.operation_phase(self.db, 703), "applied")
+        self.assertEqual(_m_message_commands.operation_phase(self.db, 703), "applied")
         self.assertEqual(
-            rt.get_meta(self.db, "operation_payload:703", ""),
+            _m_session_naming.get_meta(self.db, "operation_payload:703", ""),
             "",
         )
 

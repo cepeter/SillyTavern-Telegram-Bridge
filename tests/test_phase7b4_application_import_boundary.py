@@ -205,43 +205,26 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
     def test_phase_7b4_migrated_modules_remain_ordinary_after_7c(self):
         self.assertFalse((BRIDGE_DIR / "runtime_loader.py").exists())
 
-    def test_cards_is_ordinary_and_runtime_identity_is_canonical(self):
-        import bridge.cards as cards
-        import bridge.runtime as rt
-
-        for name in (
-            "get_persona",
-            "default_persona_id",
-            "persona_name",
-            "send_panel_message",
-            "send_persona_menu",
-            "send_character_menu",
-            "send_character_info_menu",
-            "send_character_delete_menu",
-            "send_character_delete_confirm",
-            "send_session_menu",
-        ):
-            with self.subTest(name=name):
-                self.assertIs(getattr(rt, name), getattr(cards, name))
-
-    def test_generation_command_callback_owners_are_ordinary(self):
+    def test_application_owners_are_directly_importable(self):
         import bridge.callbacks as callbacks
+        import bridge.cards as cards
         import bridge.command_routes as command_routes
         import bridge.generation as generation
         import bridge.message_commands as message_commands
         import bridge.panel_callback_routes as panel_callback_routes
-        import bridge.runtime as rt
 
-        for module, names in (
+        expectations = (
+            (cards, ("get_persona", "default_persona_id", "persona_name", "send_panel_message", "send_persona_menu", "send_character_menu", "send_character_info_menu", "send_character_delete_menu", "send_character_delete_confirm", "send_session_menu")),
             (generation, ("generate_text", "build_chat_messages", "regenerate_last", "continue_last")),
             (command_routes, ("handle_command_route",)),
             (message_commands, ("process_message", "generate_and_store_reply")),
             (callbacks, ("process_callback",)),
             (panel_callback_routes, ("handle_primary_panel_callback",)),
-        ):
+        )
+        for module, names in expectations:
             for name in names:
                 with self.subTest(module=module.__name__, name=name):
-                    self.assertIs(getattr(rt, name), getattr(module, name))
+                    self.assertTrue(hasattr(module, name))
 
 
     def test_extension_modules_expose_explicit_registration(self):

@@ -3,14 +3,20 @@ import tempfile
 import unittest
 
 import bridge.config as config
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_callbacks = dependency_module("bridge.callbacks")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
+_m_rag = dependency_module("bridge.rag")
+_m_session_naming = dependency_module("bridge.session_naming")
 
 
 class PdfWorkerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = rt.db_connect()
+        self.db = _m_memory_curator.db_connect()
 
     def tearDown(self):
         self.db.close()
@@ -36,16 +42,16 @@ class PdfWorkerTests(unittest.TestCase):
         pdf.extend(b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:]))
         pdf.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
 
-        self.assertIn(text, rt.extract_data_bank_text("fixture.pdf", bytes(pdf)))
+        self.assertIn(text, _m_rag.extract_data_bank_text("fixture.pdf", bytes(pdf)))
         with self.assertRaises(ValueError):
-            rt.extract_data_bank_text("fixture.pdf", b"not a pdf")
+            _m_rag.extract_data_bank_text("fixture.pdf", b"not a pdf")
 
-        first = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
-        rt.set_response_language(self.db, "chat", first["session_id"], "id")
-        second = rt.create_session(self.db, "chat", rt.DEFAULT_MODEL, session_id="second")
+        first = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        _m_panel_callback_routes.set_response_language(self.db, "chat", first["session_id"], "id")
+        second = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="second")
 
         self.assertEqual(
-            rt.load_session(self.db, "chat", first["session_id"], rt.DEFAULT_MODEL)["response_language"],
+            _m_memory_curator.load_session(self.db, "chat", first["session_id"], _m_memory_curator.DEFAULT_MODEL)["response_language"],
             "id",
         )
         self.assertEqual(second["response_language"], "auto")

@@ -772,7 +772,6 @@ boundaries (not exhaustive):
 ```text
 sillytavern_telegram_bridge.py   launcher; imports bridge.main directly
 bridge/main.py                   production composition, polling, durable job dispatch
-bridge/runtime.py                plain legacy import/re-export facade
 bridge/ordinary_dependencies.py explicit module-local application dependency graph
 bridge/extension_registry.py     explicit command and memory/summary extension hooks
 bridge/common.py                 queues, permissions, shared runtime support

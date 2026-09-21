@@ -3,15 +3,20 @@ import tempfile
 import unittest
 
 import bridge.config as config
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_callbacks = dependency_module("bridge.callbacks")
+_m_command_routes = dependency_module("bridge.command_routes")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_sync_core = dependency_module("bridge.sync_core")
 
 
 class StartOnboardingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = rt.db_connect()
-        self.session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
+        self.db = _m_memory_curator.db_connect()
+        self.session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         self.fields = {
             "name": "Test Character",
             "first_mes": "Hello from the character.",
@@ -29,15 +34,15 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_explains_optional_setup_without_greeting(self):
         sent = []
-        original = rt.send_text
-        rt.send_text = lambda _token, _chat_id, text: sent.append(text) or []
+        original = _m_memory_curator.send_text
+        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         try:
-            handled = rt._handle_basic(
-                self.db, "token", "key", rt.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
-                self.session, self.session["session_id"], rt.DEFAULT_MODEL, "", "User", None,
+            handled = _m_command_routes._handle_basic(
+                self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
+                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None,
             )
         finally:
-            rt.send_text = original
+            _m_memory_curator.send_text = original
         self.assertTrue(handled)
         self.assertEqual(len(sent), 1)
         self.assertIn("Persona, World Info, and System Prompt are optional", sent[0])
@@ -46,15 +51,15 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_plain_start_sends_and_stores_character_greeting(self):
         sent = []
-        original = rt.send_text
-        rt.send_text = lambda _token, _chat_id, text: sent.append(text) or [77]
+        original = _m_memory_curator.send_text
+        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text) or [77]
         try:
-            handled = rt._handle_basic(
-                self.db, "token", "key", rt.DEFAULT_MODEL, self.fields, "chat", "start", "start",
-                self.session, self.session["session_id"], rt.DEFAULT_MODEL, "", "User", None,
+            handled = _m_command_routes._handle_basic(
+                self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "start", "start",
+                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None,
             )
         finally:
-            rt.send_text = original
+            _m_memory_curator.send_text = original
         self.assertTrue(handled)
         self.assertEqual(sent, ["Hello from the character."])
         row = self.db.execute("SELECT role, content FROM messages").fetchone()
@@ -62,23 +67,23 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_sends_greeting_when_all_setup_is_enabled(self):
         sent = []
-        original_send = rt.send_text
-        original_greeting = rt.send_character_greeting
-        original_worlds = rt.active_world_files
-        rt.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        rt.send_character_greeting = lambda *_args, **_kwargs: sent.append("GREETING") or True
-        rt.active_world_files = lambda _value: ["world.json"]
+        original_send = _m_memory_curator.send_text
+        original_greeting = _m_command_routes.send_character_greeting
+        original_worlds = _m_sync_core.active_world_files
+        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text) or []
+        _m_command_routes.send_character_greeting = lambda *_args, **_kwargs: sent.append("GREETING") or True
+        _m_sync_core.active_world_files = lambda _value: ["world.json"]
         ready_session = dict(self.session)
         ready_session.update({"persona_id": "punto.png", "world_file": "world.json", "system_prompt": "Prompt"})
         try:
-            handled = rt._handle_basic(
-                self.db, "token", "key", rt.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
-                ready_session, ready_session["session_id"], rt.DEFAULT_MODEL, "punto.png", "User", None,
+            handled = _m_command_routes._handle_basic(
+                self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
+                ready_session, ready_session["session_id"], _m_memory_curator.DEFAULT_MODEL, "punto.png", "User", None,
             )
         finally:
-            rt.send_text = original_send
-            rt.send_character_greeting = original_greeting
-            rt.active_world_files = original_worlds
+            _m_memory_curator.send_text = original_send
+            _m_command_routes.send_character_greeting = original_greeting
+            _m_sync_core.active_world_files = original_worlds
         self.assertTrue(handled)
         self.assertEqual(sent, ["GREETING"])
 
