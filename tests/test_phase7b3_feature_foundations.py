@@ -168,8 +168,11 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
     def test_memory_backend_is_single_hindsight_lock_owner(self):
         backend = (REPO_ROOT / "bridge" / "memory_backend.py").read_text(encoding="utf-8")
         shell = (REPO_ROOT / "bridge" / "memory.py").read_text(encoding="utf-8")
-        self.assertIn("_HINDSIGHT_SESSION_LOCKS:", backend)
-        self.assertIn("_HINDSIGHT_SESSION_LOCKS_GUARD =", backend)
+        self.assertEqual(backend.count("_HINDSIGHT_SESSION_LOCKS:"), 1)
+        self.assertEqual(
+            backend.count("_HINDSIGHT_SESSION_LOCKS_GUARD ="),
+            1,
+        )
         self.assertNotIn("_HINDSIGHT_SESSION_LOCKS:", shell)
         self.assertNotIn("_HINDSIGHT_SESSION_LOCKS_GUARD =", shell)
 
