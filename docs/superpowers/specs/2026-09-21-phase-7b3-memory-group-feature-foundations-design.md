@@ -1,7 +1,7 @@
 # Phase 7B3 — Memory / Group Feature Foundations Ordinary-Import Boundary Design
 
-Date: 2026-09-21  
-Baseline upstream `main`: `2b340b23dc48149de9e9a58c064e375ff6d2f0e0`  
+Date: 2026-09-21
+Baseline upstream `main`: `2b340b23dc48149de9e9a58c064e375ff6d2f0e0`
 Feature branch: `refactor/phase-7b3-memory-group-feature-foundations`
 
 ## Status
