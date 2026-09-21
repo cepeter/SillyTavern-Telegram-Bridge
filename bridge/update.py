@@ -1,4 +1,8 @@
 """Confirmed, fast-forward-only bridge self-update workflow."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import json
 import os
@@ -177,3 +181,6 @@ def handle_update_callback(token: str, callback: dict, data: str, chat_id: str) 
         remove_inline_keyboard(token, callback)
         return True
     return True
+
+
+_bind_module_dependencies(__name__, globals())
