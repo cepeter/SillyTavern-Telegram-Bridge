@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 import os
 from pathlib import Path
 import shutil
@@ -293,3 +297,6 @@ def get_provider_spec(provider_id: str) -> dict:
     except Exception:
         logging.warning("Could not read provider spec for %s", provider_id, exc_info=True)
         return {}
+
+
+_bind_module_dependencies(__name__, globals())
