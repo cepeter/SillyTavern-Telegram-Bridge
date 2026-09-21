@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 from bridge.network_security import (
     strict_urlopen,
     validate_provider_endpoint,
@@ -1039,3 +1043,5 @@ def continue_last(
         "continue",
     )
 
+
+_bind_module_dependencies(__name__, globals())
