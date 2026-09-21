@@ -4,6 +4,7 @@ import time
 import unittest
 from pathlib import Path
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
@@ -12,22 +13,17 @@ class WorldManagementTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.old_world = rt.WORLD_DIR
-        self.old_db = rt.DB_FILE
-        self.old_schema = rt._DB_SCHEMA_READY
+        self.old_db = config.DB_FILE
         rt.WORLD_DIR = root / "worlds"
         rt.WORLD_DIR.mkdir()
-        rt.DB_FILE = root / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        config.DB_FILE = root / "bridge.sqlite3"
         self.db = rt.db_connect()
         self.session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
 
     def tearDown(self):
         self.db.close()
         rt.WORLD_DIR = self.old_world
-        rt.DB_FILE = self.old_db
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = self.old_schema
+        config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def test_upload_accepts_world_info_and_refuses_duplicate(self):
