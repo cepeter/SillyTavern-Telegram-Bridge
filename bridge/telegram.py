@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+from bridge.config import SYNC_MAX_BYTES
 
 _SESSION_COLUMNS = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
 _SESSION_COLUMN_SQL = ", ".join(_SESSION_COLUMNS)
