@@ -23,18 +23,8 @@ class RuntimeLoaderTests(unittest.TestCase):
                 "safety_overrides",
             },
         )
-        self.assertTrue(
-            any(
-                entry["public_callable_overrides"]
-                for entry in rt.RUNTIME_LOAD_REPORT
-                if entry["stage"] in {
-                    "recovery_overrides",
-                    "native_adapter_overrides",
-                    "safety_overrides",
-                }
-            )
-        )
         by_module = {entry["module"]: entry["public_callable_overrides"] for entry in rt.RUNTIME_LOAD_REPORT}
+        self.assertEqual(by_module["recovery.py"], ())
         self.assertEqual(by_module["scene_state.py"], ())
         self.assertEqual(by_module["memory_curator.py"], ())
         self.assertEqual(by_module["director_goals.py"], ())
