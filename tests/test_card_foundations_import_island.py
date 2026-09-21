@@ -645,5 +645,162 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         )
 
 
+    def test_phase_7b2_foundations_are_never_exec_loaded(self):
+        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
+
+        loaded = {
+            module
+            for stage in DEFAULT_RUNTIME_STAGES
+            for module in stage.modules
+        }
+        self.assertTrue(
+            {
+                "runtime_context.py",
+                "panel_utils.py",
+                "card_content.py",
+                "callback_tokens.py",
+            }.isdisjoint(loaded)
+        )
+
+    def test_cards_shell_remains_exec_loaded(self):
+        from bridge.runtime_loader import DEFAULT_RUNTIME_STAGES
+
+        core = next(
+            stage
+            for stage in DEFAULT_RUNTIME_STAGES
+            if stage.name == "core"
+        )
+        self.assertIn("cards.py", core.modules)
+        self.assertEqual(
+            core.modules[:4],
+            (
+                "common.py",
+                "cards.py",
+                "memory.py",
+                "rag.py",
+            ),
+        )
+
+    def test_card_foundations_before_runtime_keep_canonical_identity(self):
+        completed = self._run_python(
+            "import bridge.runtime_context as context\n"
+            "import bridge.panel_utils as panel_utils\n"
+            "import bridge.card_content as card_content\n"
+            "import bridge.callback_tokens as callback_tokens\n"
+            "import bridge.runtime as rt\n"
+            "assert rt.db_connection_context is context.db_connection_context\n"
+            "assert rt.panel_page is panel_utils.panel_page\n"
+            "assert rt.card_fields is card_content.card_fields\n"
+            "assert rt.character_display_name is card_content.character_display_name\n"
+            "assert rt.dynamic_callback_token is callback_tokens.dynamic_callback_token\n"
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stdout + completed.stderr,
+        )
+
+    def test_runtime_before_card_foundations_keeps_canonical_identity(self):
+        completed = self._run_python(
+            "import bridge.runtime as rt\n"
+            "import bridge.runtime_context as context\n"
+            "import bridge.panel_utils as panel_utils\n"
+            "import bridge.card_content as card_content\n"
+            "import bridge.callback_tokens as callback_tokens\n"
+            "assert rt.db_connection_context is context.db_connection_context\n"
+            "assert rt.panel_page is panel_utils.panel_page\n"
+            "assert rt.card_fields is card_content.card_fields\n"
+            "assert rt.character_display_name is card_content.character_display_name\n"
+            "assert rt.dynamic_callback_token is callback_tokens.dynamic_callback_token\n"
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stdout + completed.stderr,
+        )
+
+    def test_runtime_context_functions_resolve_canonical_threadlocals(self):
+        import bridge.runtime_context as context
+
+        self.assertIs(
+            context.db_connection_context.__globals__["_DB_CONNECTION_CONTEXT"],
+            context._DB_CONNECTION_CONTEXT,
+        )
+        self.assertIs(
+            context.panel_session_context.__globals__["_PANEL_SESSION_CONTEXT"],
+            context._PANEL_SESSION_CONTEXT,
+        )
+
+    def test_callback_functions_resolve_canonical_cache(self):
+        import bridge.callback_tokens as callback_tokens
+
+        self.assertIs(
+            callback_tokens.dynamic_callback_token.__globals__["_CALLBACK_TOKEN_VALUES"],
+            callback_tokens._CALLBACK_TOKEN_VALUES,
+        )
+        self.assertIs(
+            callback_tokens.resolve_dynamic_callback_token.__globals__["_CALLBACK_TOKEN_VALUES"],
+            callback_tokens._CALLBACK_TOKEN_VALUES,
+        )
+
+    def test_phase_7b2_ordinary_modules_do_not_import_runtime_or_common(self):
+        for filename in (
+            "runtime_context.py",
+            "panel_utils.py",
+            "card_content.py",
+            "callback_tokens.py",
+        ):
+            with self.subTest(filename=filename):
+                source = (
+                    REPO_ROOT / "bridge" / filename
+                ).read_text(encoding="utf-8")
+                self.assertNotIn("import bridge.runtime", source)
+                self.assertNotIn(
+                    "from bridge.runtime import",
+                    source,
+                )
+                self.assertNotIn("import bridge.common", source)
+                self.assertNotIn(
+                    "from bridge.common import",
+                    source,
+                )
+
+    def test_card_content_has_no_database_telegram_or_persona_dependency(self):
+        source = (
+            REPO_ROOT / "bridge" / "card_content.py"
+        ).read_text(encoding="utf-8")
+
+        for forbidden in (
+            "bridge.database",
+            "bridge.telegram",
+            "bridge.persona_sync",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+    def test_cards_shell_keeps_telegram_and_persona_collaborators_late_bound(self):
+        source = (
+            REPO_ROOT / "bridge" / "cards.py"
+        ).read_text(encoding="utf-8")
+
+        for forbidden in (
+            "import bridge.telegram",
+            "from bridge.telegram import",
+            "import bridge.persona_sync",
+            "from bridge.persona_sync import",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+        for collaborator in (
+            "telegram_request",
+            "resolve_persona_service",
+            "load_personas",
+            "_native_settings",
+        ):
+            with self.subTest(collaborator=collaborator):
+                self.assertIn(collaborator, source)
+
+
 if __name__ == "__main__":
     unittest.main()
