@@ -3,6 +3,10 @@
 Content, callback-token state, and pure panel helpers live in ordinary
 modules. This file remains exec-loaded until the Phase 7 UI migration.
 """
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 from pathlib import Path
 import logging
@@ -183,3 +187,5 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
     text = f"Current session: {current_id}{page_label}\nChoose a session, create a new one, or delete an inactive session with its session-scoped Hindsight documents."
     send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
+
+_bind_module_dependencies(__name__, globals())
