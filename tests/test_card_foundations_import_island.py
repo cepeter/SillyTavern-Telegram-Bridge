@@ -118,5 +118,43 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             context.set_panel_actor_context(None)
 
 
+    def test_common_no_longer_owns_extracted_context_state(self):
+        source = (
+            REPO_ROOT / "bridge" / "common.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn(
+            "_PANEL_SESSION_CONTEXT = threading.local()",
+            source,
+        )
+        self.assertNotIn(
+            "_DB_CONNECTION_CONTEXT = threading.local()",
+            source,
+        )
+        for name in RUNTIME_CONTEXT_EXPORTS:
+            self.assertNotIn(f"def {name}(", source)
+
+    def test_common_no_longer_defines_extracted_card_config(self):
+        source = (
+            REPO_ROOT / "bridge" / "common.py"
+        ).read_text(encoding="utf-8")
+
+        for prefix in (
+            "SILLYTAVERN_DIR = ",
+            "CHARACTER_DIR = ",
+            "DEFAULT_CHARACTER_FILE = ",
+            "CARD_FILE = ",
+            "WORLD_DIR = ",
+            "SYSTEM_PROMPTS_DIR = ",
+            "SYSTEM_PROMPTS_FILE = ",
+            "DEFAULT_USER_NAME = ",
+            "CATALOG_MAX_ITEMS = ",
+            "CARD_FIELD_MAX_CHARS = ",
+            "CARD_TOTAL_MAX_CHARS = ",
+        ):
+            with self.subTest(prefix=prefix):
+                self.assertNotIn("\n" + prefix, source)
+
+
 if __name__ == "__main__":
     unittest.main()
