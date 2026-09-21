@@ -225,7 +225,7 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
         import bridge.memory_backend as memory_backend
         import bridge.network_security as network_security
         import bridge.rag_core as rag_core
-        import bridge.runtime as rt
+        from runtime_test_facade import runtime as rt
 
         for module, names in (
             (network_security, NETWORK_EXPORTS),

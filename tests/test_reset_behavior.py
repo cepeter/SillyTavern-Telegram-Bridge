@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 import bridge.config as config
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class ResetBehaviorTests(unittest.TestCase):

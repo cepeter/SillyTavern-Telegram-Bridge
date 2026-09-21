@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 from bridge.persona_service import PersonaService
 
 

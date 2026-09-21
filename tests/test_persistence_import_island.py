@@ -204,7 +204,7 @@ class PersistenceImportIslandTests(unittest.TestCase):
 
     def test_runtime_facade_exports_complete_canonical_database_api(self):
         import bridge.database as database
-        import bridge.runtime as rt
+        from runtime_test_facade import runtime as rt
 
         actual_public_functions = {
             name

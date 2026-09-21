@@ -84,7 +84,7 @@ class RuntimeImportIslandTests(unittest.TestCase):
     def test_runtime_facade_uses_canonical_import_island_objects(self):
         import bridge.native_cache as native_cache
         import bridge.performance as performance
-        import bridge.runtime as rt
+        from runtime_test_facade import runtime as rt
         import bridge.schema as schema
 
         self.assertIs(rt.performance_enabled, performance.performance_enabled)
