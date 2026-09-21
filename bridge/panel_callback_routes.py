@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 def handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     """Handle System Prompt selection, disable, and pagination callbacks."""
     if data.startswith("systemprompt:"):
@@ -649,3 +653,6 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
     send_text(token, chat_id, message)
     send_model_target_menu(token, chat_id, model if target == "story" else session["model_id"] or DEFAULT_MODEL, task_model_for_session(db, chat_id, session, "utility"), message_id)
     return True
+
+
+_bind_module_dependencies(__name__, globals())
