@@ -147,6 +147,26 @@ class SyncUiBehaviorTests(unittest.TestCase):
             text,
         )
 
+    def test_status_uses_fallback_resolver_when_service_is_omitted(self):
+        with patch.object(
+            rt,
+            "resolve_sync_service",
+            return_value=self.service,
+        ) as resolve:
+            text = rt.sync_status_text(
+                self.db,
+                "chat",
+                self.session,
+            )
+
+        resolve.assert_called_once_with(None)
+        self.service.status.assert_called_once_with(
+            self.db,
+            "chat",
+            "session",
+        )
+        self.assertIn("Live Sync", text)
+
     def test_status_error_propagates(self):
         self.service.status.side_effect = RuntimeError("status failed")
 
@@ -1156,7 +1176,6 @@ git add \
   bridge/runtime_loader.py \
   tests/test_sync_ui.py \
   tests/test_runtime_loader.py
-git add -u bridge/recovery.py
 git commit -m "refactor: retire recovery runtime stage"
 ```
 
@@ -1227,11 +1246,11 @@ Expected: no known vulnerabilities.
 
 ```bash
 test ! -e bridge/recovery.py
-grep -R "recovery_overrides" -n bridge tests || true
-grep -R '"recovery.py"' -n bridge/runtime_loader.py tests/test_runtime_loader.py || true
+! grep -n "recovery_overrides" bridge/runtime_loader.py
+! grep -n '"recovery.py"' bridge/runtime_loader.py
 ```
 
-Expected: `test` succeeds and both `grep` commands print nothing.
+Expected: all three commands succeed; both negated `grep` commands find no legacy recovery stage/module reference in `bridge/runtime_loader.py`.
 
 - [ ] **Step 8: Verify canonical callable filenames and runtime report**
 
