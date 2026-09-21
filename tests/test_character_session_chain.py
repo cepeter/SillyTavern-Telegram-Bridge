@@ -3,15 +3,14 @@ import json
 import tempfile
 import unittest
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
 class CharacterSessionChainTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
 
     def tearDown(self):
