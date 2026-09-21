@@ -41,7 +41,7 @@ _DIRECTOR_CUSTOMIZATION_PROVIDER: tuple[str, DirectorCustomizationProvider] | No
 
 
 def reset_extension_registry() -> None:
-    """Clear all registered compatibility extensions before a runtime load."""
+    """Clear all registered extensions before explicit application composition."""
     global _DIRECTOR_CUSTOMIZATION_PROVIDER
 
     _COMMAND_ROUTES.clear()

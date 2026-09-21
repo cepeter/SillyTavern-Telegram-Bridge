@@ -9,8 +9,11 @@ from __future__ import annotations
 import importlib
 import sys
 
+from bridge.application_composition import initialize_extensions
+
 
 _RUNTIME = importlib.import_module("bridge.runtime")
+initialize_extensions()
 
 _MODULE_NAMES = (
     "bridge.common",
