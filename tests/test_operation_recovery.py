@@ -547,6 +547,35 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
         self.assertNotIn("\ndef begin_operation(", source)
 
 
+    def test_generation_owns_regen_and_continue_recovery_adapter(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "generation.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "from bridge.operation_recovery import",
+            source,
+        )
+        self.assertIn(
+            "_GENERATION_OPERATION_RECOVERY",
+            source,
+        )
+        self.assertIn(
+            "def regenerate_last(",
+            source,
+        )
+        self.assertIn(
+            "def continue_last(",
+            source,
+        )
+
+    def test_recovery_no_longer_defines_regen_or_continue(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "recovery.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("\ndef regenerate_last(", source)
+        self.assertNotIn("\ndef continue_last(", source)
+
+
 class OperationRecoveryUnitTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
