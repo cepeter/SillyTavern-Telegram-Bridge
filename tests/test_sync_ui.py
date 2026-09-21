@@ -3,7 +3,14 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from runtime_test_facade import runtime as rt
+import time
+from dependency_patch import dependency_module
+
+_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
+_m_status_panels = dependency_module("bridge.status_panels")
+_m_callbacks = dependency_module("bridge.callbacks")
+_m_cards = dependency_module("bridge.cards")
+_m_sync_api = dependency_module("bridge.sync_api")
 
 
 class SyncUiBehaviorTests(unittest.TestCase):
@@ -22,7 +29,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
         )
 
     def test_status_renders_never_synced_disabled_unconfigured(self):
-        text = rt.sync_status_text(
+        text = _m_status_panels.sync_status_text(
             self.db,
             "chat",
             self.session,
@@ -57,15 +64,15 @@ class SyncUiBehaviorTests(unittest.TestCase):
         )
 
         with patch.object(
-            rt.time,
+            time,
             "localtime",
             return_value="LOCAL",
         ) as localtime, patch.object(
-            rt.time,
+            time,
             "strftime",
             return_value="2026-09-21 09:00:00 WIB",
         ) as strftime:
-            text = rt.sync_status_text(
+            text = _m_status_panels.sync_status_text(
                 self.db,
                 "chat",
                 self.session,
@@ -89,11 +96,11 @@ class SyncUiBehaviorTests(unittest.TestCase):
 
     def test_status_uses_fallback_resolver_when_service_is_omitted(self):
         with patch.object(
-            rt,
+            _m_sync_api,
             "resolve_sync_service",
             return_value=self.service,
         ) as resolve:
-            text = rt.sync_status_text(
+            text = _m_status_panels.sync_status_text(
                 self.db,
                 "chat",
                 self.session,
@@ -114,7 +121,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             RuntimeError,
             "status failed",
         ):
-            rt.sync_status_text(
+            _m_status_panels.sync_status_text(
                 self.db,
                 "chat",
                 self.session,
@@ -123,10 +130,10 @@ class SyncUiBehaviorTests(unittest.TestCase):
 
     def test_send_sync_menu_preserves_keyboard_and_message_id(self):
         with patch.object(
-            rt,
+            _m_cards,
             "send_panel_message",
         ) as send_panel:
-            rt.send_sync_menu(
+            _m_panel_callback_routes.send_sync_menu(
                 "token",
                 "chat",
                 self.db,
@@ -182,13 +189,13 @@ class SyncUiBehaviorTests(unittest.TestCase):
 
     def test_non_sync_callback_returns_false_without_service_resolution(self):
         with patch.object(
-            rt,
+            _m_sync_api,
             "resolve_sync_service",
             side_effect=AssertionError(
                 "non-sync callback resolved SyncService"
             ),
         ):
-            handled = rt.handle_sync_callback(
+            handled = _m_panel_callback_routes.handle_sync_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -209,10 +216,10 @@ class SyncUiBehaviorTests(unittest.TestCase):
         message = {"message_id": 91}
 
         with patch.object(
-            rt,
+            _m_callbacks,
             "close_panel_message",
         ) as close:
-            handled = rt.handle_sync_callback(
+            handled = _m_panel_callback_routes.handle_sync_callback(
                 self.db,
                 "token",
                 callback,
@@ -245,10 +252,10 @@ class SyncUiBehaviorTests(unittest.TestCase):
             with self.subTest(data=data):
                 answer = Mock()
                 with patch.object(
-                    rt,
+                    _m_status_panels,
                     "send_sync_menu",
                 ) as send_menu:
-                    handled = rt.handle_sync_callback(
+                    handled = _m_panel_callback_routes.handle_sync_callback(
                         self.db,
                         "token",
                         {"id": "cb"},
@@ -282,10 +289,10 @@ class SyncUiBehaviorTests(unittest.TestCase):
         answer = Mock()
 
         with patch.object(
-            rt,
+            _m_status_panels,
             "send_sync_menu",
         ) as send_menu:
-            handled = rt.handle_sync_callback(
+            handled = _m_panel_callback_routes.handle_sync_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -324,10 +331,10 @@ class SyncUiBehaviorTests(unittest.TestCase):
         answer = Mock()
 
         with patch.object(
-            rt,
+            _m_status_panels,
             "send_sync_menu",
         ) as send_menu:
-            handled = rt.handle_sync_callback(
+            handled = _m_panel_callback_routes.handle_sync_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -364,7 +371,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
     def test_unknown_sync_action_is_handled_without_mutation(self):
         answer = Mock()
 
-        handled = rt.handle_sync_callback(
+        handled = _m_panel_callback_routes.handle_sync_callback(
             self.db,
             "token",
             {"id": "cb"},

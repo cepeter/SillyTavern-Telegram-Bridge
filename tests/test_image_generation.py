@@ -4,7 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime_test_facade import runtime as rt
+import os
+from dependency_patch import dependency_module
+
+_m_generation = dependency_module("bridge.generation")
+_m_image_generation = dependency_module("bridge.image_generation")
 
 
 class _Response:
@@ -32,19 +36,19 @@ class ImageGenerationTests(unittest.TestCase):
             "providers:\n  test-image:\n    name: Test Image\n    api_endpoint: https://images.example/v1\n    api_key_env: TEST_IMAGE_KEY\n    image_enabled: true\n    image_models: [test-model]\n",
             encoding="utf-8",
         )
-        self.old_catalog = rt.PROVIDER_CONFIG_FILE
-        self.old_urlopen = rt.strict_urlopen
-        self.old_key = rt.os.environ.get("TEST_IMAGE_KEY")
-        rt.PROVIDER_CONFIG_FILE = self.catalog
-        rt.os.environ["TEST_IMAGE_KEY"] = "test-key"
+        self.old_catalog = _m_generation.PROVIDER_CONFIG_FILE
+        self.old_urlopen = _m_generation.strict_urlopen
+        self.old_key = os.environ.get("TEST_IMAGE_KEY")
+        _m_generation.PROVIDER_CONFIG_FILE = self.catalog
+        os.environ["TEST_IMAGE_KEY"] = "test-key"
 
     def tearDown(self):
-        rt.PROVIDER_CONFIG_FILE = self.old_catalog
-        rt.strict_urlopen = self.old_urlopen
+        _m_generation.PROVIDER_CONFIG_FILE = self.old_catalog
+        _m_generation.strict_urlopen = self.old_urlopen
         if self.old_key is None:
-            rt.os.environ.pop("TEST_IMAGE_KEY", None)
+            os.environ.pop("TEST_IMAGE_KEY", None)
         else:
-            rt.os.environ["TEST_IMAGE_KEY"] = self.old_key
+            os.environ["TEST_IMAGE_KEY"] = self.old_key
         self.temp.cleanup()
 
     def test_base64_contract(self):
@@ -55,8 +59,8 @@ class ImageGenerationTests(unittest.TestCase):
             captured.append((request, timeout))
             return _Response({"data": [{"b64_json": base64.b64encode(raw).decode(), "revised_prompt": "revised"}]})
 
-        rt.strict_urlopen = fake_urlopen
-        result = rt.generate_image("test-image::test-model", "a small moon", "1024x1024")
+        _m_generation.strict_urlopen = fake_urlopen
+        result = _m_image_generation.generate_image("test-image::test-model", "a small moon", "1024x1024")
         body = json.loads(captured[0][0].data.decode())
         self.assertEqual(result, (raw, "revised", "test-image::test-model"))
         self.assertEqual(body["model"], "test-model")
@@ -65,17 +69,17 @@ class ImageGenerationTests(unittest.TestCase):
 
     def test_prompt_and_size_are_validated(self):
         with self.assertRaises(ValueError):
-            rt.generate_image("test-image::test-model", "", "1024x1024")
+            _m_image_generation.generate_image("test-image::test-model", "", "1024x1024")
         with self.assertRaises(ValueError):
-            rt.generate_image("test-image::test-model", "a prompt", "999x999")
+            _m_image_generation.generate_image("test-image::test-model", "a prompt", "999x999")
 
     def test_disabled_provider_fails_closed(self):
         self.catalog.write_text("providers: {}\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "No image provider"):
-            rt.generate_image("", "a prompt")
+            _m_image_generation.generate_image("", "a prompt")
 
     def test_command_is_registered(self):
-        source = Path(rt.__file__).parent / "help.py"
+        source = Path(_m_image_generation.__file__).parent / "help.py"
         self.assertIn('"command": "imagine"', source.read_text(encoding="utf-8"))
 
 

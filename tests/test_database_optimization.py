@@ -7,7 +7,12 @@ from pathlib import Path
 
 import bridge.config as config
 import bridge.database as database
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_main = dependency_module("bridge.main")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_sync_api = dependency_module("bridge.sync_api")
 
 
 class DatabaseOptimizationTests(unittest.TestCase):
@@ -80,7 +85,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         traced: list[str] = []
         self.db.set_trace_callback(traced.append)
         try:
-            rt.optimize_database(self.db)
+            _m_message_commands.optimize_database(self.db)
         finally:
             self.db.set_trace_callback(None)
 
@@ -98,7 +103,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.db.execute("DELETE FROM test_churn")
         self.db.commit()
 
-        reclaimed = rt.run_database_maintenance(vacuum_freelist_threshold=1)
+        reclaimed = _m_main.run_database_maintenance(vacuum_freelist_threshold=1)
         self.assertTrue(reclaimed)
 
         conn = database._lightweight_db_connect(timeout=5.0)
@@ -117,7 +122,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.db.commit()
         self.assertGreater(self.db.execute("PRAGMA freelist_count").fetchone()[0], 0)
 
-        reclaimed = rt.run_database_maintenance(vacuum_freelist_threshold=500)
+        reclaimed = _m_main.run_database_maintenance(vacuum_freelist_threshold=500)
 
         self.assertFalse(reclaimed)
         # A full VACUUM would have reclaimed every free page.
@@ -140,9 +145,9 @@ class DatabaseOptimizationTests(unittest.TestCase):
             def close(self):
                 self.closed = True
 
-        original_event = rt._PHASE3_STOP_EVENT
-        original_connect = rt.db_connect
-        original_poll = rt.phase3_sync_poll
+        original_event = _m_sync_api._PHASE3_STOP_EVENT
+        original_connect = _m_memory_curator.db_connect
+        original_poll = _m_sync_api.phase3_sync_poll
         stop_event = FakeStopEvent()
         connections = []
         polls = []
@@ -152,15 +157,15 @@ class DatabaseOptimizationTests(unittest.TestCase):
             connections.append(connection)
             return connection
 
-        rt._PHASE3_STOP_EVENT = stop_event
-        rt.db_connect = connect
-        rt.phase3_sync_poll = lambda db: polls.append(db)
+        _m_sync_api._PHASE3_STOP_EVENT = stop_event
+        _m_memory_curator.db_connect = connect
+        _m_sync_api.phase3_sync_poll = lambda db: polls.append(db)
         try:
-            rt._phase3_worker_loop()
+            _m_sync_api._phase3_worker_loop()
         finally:
-            rt._PHASE3_STOP_EVENT = original_event
-            rt.db_connect = original_connect
-            rt.phase3_sync_poll = original_poll
+            _m_sync_api._PHASE3_STOP_EVENT = original_event
+            _m_memory_curator.db_connect = original_connect
+            _m_sync_api.phase3_sync_poll = original_poll
 
         self.assertEqual(len(connections), 1)
         self.assertEqual(polls, [connections[0], connections[0]])

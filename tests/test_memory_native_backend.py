@@ -8,7 +8,15 @@ from unittest.mock import patch
 import bridge.extension_registry as registry
 import bridge.config as config
 import bridge.memory_backend as memory_backend
-from runtime_test_facade import runtime as rt
+import time
+from dependency_patch import dependency_module
+
+_m_main = dependency_module("bridge.main")
+_m_memory = dependency_module("bridge.memory")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_session_naming = dependency_module("bridge.session_naming")
+_m_sync_core = dependency_module("bridge.sync_core")
+_m_common = dependency_module("bridge.common")
 
 
 class _FakeDocuments:
@@ -85,11 +93,11 @@ class MemoryNativeBackendTests(unittest.TestCase):
         config.DB_FILE = (
             Path(self.tmp.name) / "bridge.sqlite3"
         )
-        self.db = rt.db_connect()
-        self.session = rt.create_session(
+        self.db = _m_memory_curator.db_connect()
+        self.session = _m_session_naming.create_session(
             self.db,
             "chat",
-            rt.DEFAULT_MODEL,
+            _m_memory_curator.DEFAULT_MODEL,
             session_id="memory-native",
         )
         self.fields = {"name": "Mira"}
@@ -110,7 +118,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 self.session["session_id"],
                 "user",
                 content,
-                rt.time.time(),
+                time.time(),
             ),
         )
         self.db.commit()
@@ -146,9 +154,9 @@ class MemoryNativeBackendTests(unittest.TestCase):
             f"{self.session['session_id']}"
         )
 
-        rt.set_meta(self.db, key, "not-an-int")
+        _m_session_naming.set_meta(self.db, key, "not-an-int")
         self.assertEqual(
-            rt._HINDSIGHT_STALE_GUARD.read_epoch(
+            _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
                 self.db,
                 "chat",
                 self.session["session_id"],
@@ -156,9 +164,9 @@ class MemoryNativeBackendTests(unittest.TestCase):
             0,
         )
 
-        rt.set_meta(self.db, key, "-9")
+        _m_session_naming.set_meta(self.db, key, "-9")
         self.assertEqual(
-            rt._HINDSIGHT_STALE_GUARD.read_epoch(
+            _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
                 self.db,
                 "chat",
                 self.session["session_id"],
@@ -173,7 +181,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
-            rt,
+            _m_common,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: (
                 queued.append(
@@ -181,7 +189,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 )
             ),
         ):
-            rt._HINDSIGHT_STALE_GUARD.retain(
+            _m_memory._HINDSIGHT_STALE_GUARD.retain(
                 self.db,
                 "chat",
                 self.session,
@@ -208,7 +216,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
     def test_successful_direct_guard_purge_advances_epoch_and_clears_mapping(self):
         self._add_message()
-        mapped = rt.hindsight_conversation_document_id(
+        mapped = _m_memory.hindsight_conversation_document_id(
             self.session["session_id"]
         )
         self.db.execute(
@@ -220,7 +228,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 self.session["session_id"],
                 mapped,
                 "conversation",
-                rt.time.time(),
+                time.time(),
             ),
         )
         self.db.commit()
@@ -232,14 +240,14 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         old_epoch = (
-            rt._HINDSIGHT_STALE_GUARD.read_epoch(
+            _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
                 self.db,
                 "chat",
                 self.session["session_id"],
             )
         )
 
-        deleted = rt._HINDSIGHT_STALE_GUARD.purge(
+        deleted = _m_memory._HINDSIGHT_STALE_GUARD.purge(
             self.db,
             "chat",
             self.session["session_id"],
@@ -247,7 +255,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
         self.assertGreaterEqual(deleted, 1)
         self.assertEqual(
-            rt._HINDSIGHT_STALE_GUARD.read_epoch(
+            _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
                 self.db,
                 "chat",
                 self.session["session_id"],
@@ -264,7 +272,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         )
 
     def test_failed_remote_purge_preserves_epoch_and_mapping(self):
-        mapped = rt.hindsight_conversation_document_id(
+        mapped = _m_memory.hindsight_conversation_document_id(
             self.session["session_id"]
         )
         self.db.execute(
@@ -276,7 +284,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 self.session["session_id"],
                 mapped,
                 "conversation",
-                rt.time.time(),
+                time.time(),
             ),
         )
         self.db.commit()
@@ -286,7 +294,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
             "chat:"
             f"{self.session['session_id']}"
         )
-        rt.set_meta(self.db, key, "5")
+        _m_session_naming.set_meta(self.db, key, "5")
 
         class BrokenDocuments(_FakeDocuments):
             async def list_documents(self, *args, **kwargs):
@@ -300,14 +308,14 @@ class MemoryNativeBackendTests(unittest.TestCase):
             RuntimeError,
             "Hindsight session memory cleanup failed",
         ):
-            rt._HINDSIGHT_STALE_GUARD.purge(
+            _m_memory._HINDSIGHT_STALE_GUARD.purge(
                 self.db,
                 "chat",
                 self.session["session_id"],
             )
 
         self.assertEqual(
-            rt.get_meta(self.db, key, ""),
+            _m_session_naming.get_meta(self.db, key, ""),
             "5",
         )
         self.assertEqual(
@@ -326,7 +334,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
-            rt,
+            _m_common,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: (
                 queued.append(
@@ -334,7 +342,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 )
             ),
         ):
-            rt.retain_session_memory(
+            _m_sync_core.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,
@@ -367,7 +375,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
-            rt,
+            _m_common,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: (
                 queued.append(
@@ -375,7 +383,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 )
             ),
         ):
-            rt.retain_session_memory(
+            _m_sync_core.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,
@@ -389,7 +397,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         ]
         self.assertEqual(len(hindsight_jobs), 1)
 
-        rt.purge_hindsight_session(
+        _m_main.purge_hindsight_session(
             self.db,
             "chat",
             self.session["session_id"],
@@ -407,7 +415,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
-            rt,
+            _m_common,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: (
                 queued.append(
@@ -415,7 +423,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 )
             ),
         ):
-            rt.retain_session_memory(
+            _m_sync_core.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,
@@ -459,12 +467,12 @@ class MemoryNativeBackendTests(unittest.TestCase):
             {"test": hook},
             clear=True,
         ):
-            rt.set_meta(
+            _m_session_naming.set_meta(
                 self.db,
                 "memory_mode:chat",
                 "off",
             )
-            rt._HINDSIGHT_STALE_GUARD.retain(
+            _m_memory._HINDSIGHT_STALE_GUARD.retain(
                 self.db,
                 "chat",
                 self.session,

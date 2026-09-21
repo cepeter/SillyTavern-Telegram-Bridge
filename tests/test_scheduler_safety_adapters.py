@@ -6,7 +6,10 @@ import unittest
 from unittest.mock import patch
 
 import bridge.database as database
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_main = dependency_module("bridge.main")
+_m_memory_curator = dependency_module("bridge.memory_curator")
 
 from bridge.scheduler_safety import DatabaseConnectionGate, DurableWorkerGuard
 
@@ -295,7 +298,7 @@ class CanonicalRecoveryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "recovery.sqlite3"
-        self.db = rt.db_connect(self.path)
+        self.db = _m_memory_curator.db_connect(self.path)
 
     def tearDown(self):
         self.db.close()
@@ -320,7 +323,7 @@ class CanonicalRecoveryTests(unittest.TestCase):
         job_ids = []
         for update_id in range(130):
             job_ids.append(
-                rt.enqueue_job(
+                _m_main.enqueue_job(
                     self.db,
                     update_id + 1,
                     "chat",
@@ -346,7 +349,7 @@ class CanonicalRecoveryTests(unittest.TestCase):
         )
         self.db.commit()
 
-        first = rt.recover_jobs(self.db, recover_running=True)
+        first = _m_main.recover_jobs(self.db, recover_running=True)
         self.assertEqual(len(first), 128)
         self.assertEqual(
             [row[0] for row in first],
@@ -362,9 +365,9 @@ class CanonicalRecoveryTests(unittest.TestCase):
         self.assertEqual(states[job_ids[1]], "queued")
 
         for row in first:
-            self.assertTrue(rt.mark_job_scheduled(self.db, row[0]))
+            self.assertTrue(_m_main.mark_job_scheduled(self.db, row[0]))
 
-        second = rt.recover_jobs(
+        second = _m_main.recover_jobs(
             self.db,
             recover_running=False,
         )

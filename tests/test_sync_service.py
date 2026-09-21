@@ -3,7 +3,10 @@ import sqlite3
 import unittest
 from unittest.mock import patch
 
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_sync_api = dependency_module("bridge.sync_api")
+_m_sync_core = dependency_module("bridge.sync_core")
 from bridge.sync_service import SyncService, SyncStatus
 
 
@@ -172,11 +175,11 @@ class SyncSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("telegram_request", source)
 
     def test_compatibility_service_uses_canonical_hardened_poll(self):
-        service = rt.compatibility_sync_service()
-        self.assertIs(service.poll_backend, rt.phase3_sync_poll)
+        service = _m_sync_api.compatibility_sync_service()
+        self.assertIs(service.poll_backend, _m_sync_api.phase3_sync_poll)
         self.assertEqual(
             Path(
-                rt.phase3_sync_poll.__code__.co_filename
+                _m_sync_api.phase3_sync_poll.__code__.co_filename
             ).name,
             "sync_api.py",
         )
@@ -191,19 +194,19 @@ class SyncCompatibilityServiceTests(unittest.TestCase):
             return None
 
         with patch.object(
-            rt, "phase3_sync_poll", final_poll
+            _m_sync_api, "phase3_sync_poll", final_poll
         ), patch.object(
-            rt, "sync_binding"
+            _m_sync_core, "sync_binding"
         ) as binding, patch.object(
-            rt, "phase3_sync_now"
+            _m_sync_api, "phase3_sync_now"
         ) as sync_now, patch.object(
-            rt, "phase3_toggle_realtime"
+            _m_sync_api, "phase3_toggle_realtime"
         ) as toggle, patch.object(
-            rt, "_phase3_disable"
+            _m_sync_api, "_phase3_disable"
         ) as disable, patch.object(
-            rt, "phase3_api_configured", return_value=True
+            _m_sync_api, "phase3_api_configured", return_value=True
         ):
-            service = rt.compatibility_sync_service()
+            service = _m_sync_api.compatibility_sync_service()
 
         self.assertIs(service.poll_backend, final_poll)
         self.assertIs(service.load_binding, binding)
@@ -213,7 +216,7 @@ class SyncCompatibilityServiceTests(unittest.TestCase):
 
     def test_resolve_sync_service_prefers_injected_service(self):
         sentinel = object()
-        self.assertIs(rt.resolve_sync_service(sentinel), sentinel)
+        self.assertIs(_m_sync_api.resolve_sync_service(sentinel), sentinel)
 
 
 if __name__ == "__main__":

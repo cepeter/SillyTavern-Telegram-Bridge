@@ -168,37 +168,8 @@ class Phase7CFinalRuntimeCutoverTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertNotEqual(source_module, "bridge.runtime")
 
-    def test_runtime_is_plain_facade_without_loader_or_mutation_bridge(self):
-        source = (BRIDGE_DIR / "runtime.py").read_text(encoding="utf-8")
-        self.assertNotIn("runtime_loader", source)
-        self.assertNotIn("_RuntimeFacadeModule", source)
-        self.assertNotIn("__class__ =", source)
-        self.assertNotIn("ModuleType", source)
-        self.assertNotIn("def __setattr__", source)
-        self.assertNotIn("def __getattribute__", source)
-
-    def test_runtime_reexports_canonical_main(self):
-        import bridge.main as app_main
-        import bridge.runtime as rt
-
-        self.assertIs(rt.main, app_main.main)
-        self.assertIs(rt.request_bridge_shutdown, app_main.request_bridge_shutdown)
-        self.assertIs(
-            rt.install_bridge_signal_handlers,
-            app_main.install_bridge_signal_handlers,
-        )
-
-    def test_runtime_import_does_not_restore_loader(self):
-        completed = self._run_python(
-            "import sys\n"
-            "import bridge.runtime\n"
-            "assert 'bridge.runtime_loader' not in sys.modules\n"
-        )
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
+    def test_runtime_compatibility_module_is_retired(self):
+        self.assertFalse((BRIDGE_DIR / "runtime.py").exists())
 
 
 if __name__ == "__main__":

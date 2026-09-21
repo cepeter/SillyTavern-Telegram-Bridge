@@ -3,7 +3,13 @@ import tempfile
 import unittest
 
 import bridge.config as config
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
+_m_session_naming = dependency_module("bridge.session_naming")
+_m_sync_api = dependency_module("bridge.sync_api")
 
 
 class SessionCommandRoutingTests(unittest.TestCase):
@@ -11,9 +17,9 @@ class SessionCommandRoutingTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = rt.db_connect()
-        self.session = rt.create_session(self.db, "chat", "provider/model", session_id="active")
-        rt.update_session(self.db, "chat", "active", character_file="missing.png")
+        self.db = _m_memory_curator.db_connect()
+        self.session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="active")
+        _m_session_naming.update_session(self.db, "chat", "active", character_file="missing.png")
 
     def tearDown(self):
         self.db.close()
@@ -22,15 +28,15 @@ class SessionCommandRoutingTests(unittest.TestCase):
 
     def test_session_command_routes_before_character_card_load(self):
         calls = []
-        old_menu = rt.send_session_menu
-        old_loader = rt.card_fields_from_file
-        rt.send_session_menu = lambda _token, chat_id, sessions, active_id, *_args: calls.append((chat_id, sessions, active_id))
-        rt.card_fields_from_file = lambda _name: (_ for _ in ()).throw(AssertionError("character loader must not run"))
+        old_menu = _m_panel_callback_routes.send_session_menu
+        old_loader = _m_sync_api.card_fields_from_file
+        _m_panel_callback_routes.send_session_menu = lambda _token, chat_id, sessions, active_id, *_args: calls.append((chat_id, sessions, active_id))
+        _m_sync_api.card_fields_from_file = lambda _name: (_ for _ in ()).throw(AssertionError("character loader must not run"))
         try:
-            rt.process_message(self.db, "token", "key", "provider/model", {}, "chat", "/session", telegram_message_id=1)
+            _m_message_commands.process_message(self.db, "token", "key", "provider/model", {}, "chat", "/session", telegram_message_id=1)
         finally:
-            rt.send_session_menu = old_menu
-            rt.card_fields_from_file = old_loader
+            _m_panel_callback_routes.send_session_menu = old_menu
+            _m_sync_api.card_fields_from_file = old_loader
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][0], "chat")
         self.assertEqual(calls[0][2], "active")

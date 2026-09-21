@@ -6,7 +6,28 @@ import unittest
 from unittest.mock import patch
 
 import bridge.config as config
-from runtime_test_facade import runtime as rt
+import time
+from dependency_patch import dependency_module
+
+_m_commands = dependency_module("bridge.commands")
+_m_help = dependency_module("bridge.help")
+_m_main = dependency_module("bridge.main")
+_m_memory = dependency_module("bridge.memory")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
+_m_session_naming = dependency_module("bridge.session_naming")
+_m_card_content = dependency_module("bridge.card_content")
+_m_command_routes = dependency_module("bridge.command_routes")
+_m_database = dependency_module("bridge.database")
+_m_generation = dependency_module("bridge.generation")
+_m_group_core = dependency_module("bridge.group_core")
+_m_input_flows = dependency_module("bridge.input_flows")
+_m_language = dependency_module("bridge.language")
+_m_media = dependency_module("bridge.media")
+_m_memory_backend = dependency_module("bridge.memory_backend")
+_m_rag_core = dependency_module("bridge.rag_core")
+_m_telegram = dependency_module("bridge.telegram")
 
 from bridge.memory_service import MemoryPromptContext, MemoryService
 
@@ -169,8 +190,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = rt.db_connect()
-        self.session = rt.create_session(
+        self.db = _m_memory_curator.db_connect()
+        self.session = _m_session_naming.create_session(
             self.db,
             "chat",
             "provider::model",
@@ -238,64 +259,64 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             raise AssertionError("legacy memory global must not run")
 
         with patch.object(
-            rt,
+            _m_memory_backend,
             "recall_memory_context",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_memory,
             "session_summary_for_prompt",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_memory,
             "retain_session_memory",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_retrieval_bundle",
             return_value={},
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_context_for_prompt",
             return_value="",
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_citation_footer",
             return_value="",
         ), patch.object(
-            rt,
+            _m_generation,
             "build_chat_messages",
             side_effect=build_messages,
         ), patch.object(
-            rt,
+            _m_media,
             "send_typing",
         ), patch.object(
-            rt,
+            _m_language,
             "normalize_response_language",
             return_value="en",
         ), patch.object(
-            rt,
+            _m_database,
             "get_generation_settings",
             return_value={},
         ), patch.object(
-            rt,
+            _m_generation,
             "generate_text",
             return_value="reply",
         ), patch.object(
-            rt,
+            _m_generation,
             "render_response_language",
             side_effect=lambda _key, _model, reply, *_args: reply,
         ), patch.object(
-            rt,
+            _m_generation,
             "save_response_variant",
             return_value=1,
         ), patch.object(
-            rt,
+            _m_media,
             "queue_user_quote_tts",
         ), patch.object(
-            rt,
+            _m_media,
             "send_reply",
         ):
-            rt.generate_and_store_reply(
+            _m_message_commands.generate_and_store_reply(
                 self.db,
                 "token",
                 "key",
@@ -321,7 +342,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         self.assertEqual(calls[1][2:], ("chat", "memory-message", "Mira"))
 
     def test_edited_turn_recovery_uses_injected_memory_service(self):
-        now = rt.time.time()
+        now = time.time()
         user_cursor = self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
             "VALUES(?,?,?,?,?)",
@@ -370,56 +391,56 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             return [{"role": "user", "content": text}]
 
         with patch.object(
-            rt,
+            _m_memory_backend,
             "recall_memory_context",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_memory,
             "get_session_summary",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_memory,
             "session_summary_for_prompt",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_memory,
             "retain_session_memory",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_retrieval_bundle",
             return_value={},
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_context_for_prompt",
             return_value="",
         ), patch.object(
-            rt,
+            _m_generation,
             "build_chat_messages",
             side_effect=build_messages,
         ), patch.object(
-            rt,
+            _m_media,
             "send_typing",
         ), patch.object(
-            rt,
+            _m_generation,
             "generate_text",
             return_value="new reply",
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_citation_footer",
             return_value="",
         ), patch.object(
-            rt,
+            _m_generation,
             "render_session_response",
             side_effect=lambda _api_key, _session, reply, _chat_id, _settings: reply,
         ), patch.object(
-            rt,
+            _m_generation,
             "save_response_variant",
         ), patch.object(
-            rt,
+            _m_media,
             "send_reply",
         ):
-            rt.regenerate_edited_turn(
+            _m_commands.regenerate_edited_turn(
                 self.db,
                 "token",
                 "key",
@@ -450,15 +471,15 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             captured.update(kwargs)
 
         with patch.object(
-            rt,
+            _m_command_routes,
             "_dispatch_extension_command_routes",
             return_value=False,
         ), patch.object(
-            rt,
+            _m_generation,
             "regenerate_last",
             side_effect=fake_regen,
         ):
-            handled = rt.handle_command_route(
+            handled = _m_message_commands.handle_command_route(
                 self.db,
                 "token",
                 "key",
@@ -487,11 +508,11 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             return True
 
         with patch.object(
-            rt,
+            _m_input_flows,
             "handle_pending_input",
             side_effect=fake_pending,
         ):
-            rt.process_message(
+            _m_message_commands.process_message(
                 self.db,
                 "token",
                 "key",
@@ -544,61 +565,61 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             return [{"role": "user", "content": text}]
 
         with patch.object(
-            rt,
+            _m_group_core,
             "group_current_speaker",
             return_value=None,
         ), patch.object(
-            rt,
+            _m_memory_backend,
             "recall_memory_context",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_memory,
             "session_summary_for_prompt",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_memory,
             "retain_session_memory",
             side_effect=legacy_called,
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_retrieval_bundle",
             return_value={},
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_context_for_prompt",
             return_value="",
         ), patch.object(
-            rt,
+            _m_generation,
             "build_chat_messages",
             side_effect=build_messages,
         ), patch.object(
-            rt,
+            _m_media,
             "send_typing",
         ), patch.object(
-            rt,
+            _m_database,
             "get_generation_settings",
             return_value={},
         ), patch.object(
-            rt,
+            _m_generation,
             "generate_text",
             return_value="image reply",
         ), patch.object(
-            rt,
+            _m_rag_core,
             "rag_citation_footer",
             return_value="",
         ), patch.object(
-            rt,
+            _m_generation,
             "render_session_response",
             side_effect=lambda _key, _session, reply, *_args: reply,
         ), patch.object(
-            rt,
+            _m_generation,
             "save_response_variant",
             return_value=1,
         ), patch.object(
-            rt,
+            _m_media,
             "send_reply",
         ):
-            rt.process_image_message(
+            _m_commands.process_image_message(
                 self.db,
                 "token",
                 "key",
@@ -622,23 +643,23 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         captured = {}
 
         with patch.object(
-            rt,
+            _m_telegram,
             "download_telegram_file",
             return_value=b"image",
         ), patch.object(
-            rt,
+            _m_telegram,
             "ensure_session",
             return_value=self.session,
         ), patch.object(
-            rt,
+            _m_card_content,
             "card_fields_from_file",
             return_value=self.fields,
         ), patch.object(
-            rt,
+            _m_commands,
             "process_image_message",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
-            rt.process_telegram_image(
+            _m_main.process_telegram_image(
                 self.db,
                 "token",
                 "chat",
@@ -661,31 +682,31 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         }
 
         with patch.object(
-            rt,
+            _m_telegram,
             "_consume_world_upload",
             return_value=False,
         ), patch.object(
-            rt,
+            _m_telegram,
             "download_telegram_file",
             return_value=b"not-a-card",
         ), patch.object(
-            rt,
+            _m_card_content,
             "parse_png_chara_bytes",
             side_effect=ValueError("not card"),
         ), patch.object(
-            rt,
+            _m_telegram,
             "ensure_session",
             return_value=self.session,
         ), patch.object(
-            rt,
+            _m_card_content,
             "card_fields_from_file",
             return_value=self.fields,
         ), patch.object(
-            rt,
+            _m_commands,
             "process_image_message",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
-            rt.import_telegram_document(
+            _m_help.import_telegram_document(
                 self.db,
                 "token",
                 "chat",
@@ -705,27 +726,27 @@ class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
         fields = {"name": "Mira"}
 
         with patch.object(
-            rt,
+            _m_memory_backend,
             "recall_memory_context",
             side_effect=lambda *_args: calls.append("recall") or "compat recall",
         ), patch.object(
-            rt,
+            _m_memory,
             "session_summary_for_prompt",
             side_effect=lambda *_args: calls.append("summary") or "compat summary",
         ), patch.object(
-            rt,
+            _m_memory,
             "get_session_summary",
             side_effect=lambda *_args: ("stored", 0),
         ), patch.object(
-            rt,
+            _m_memory,
             "retain_session_memory",
             side_effect=lambda *_args: calls.append("retain"),
         ), patch.object(
-            rt,
+            _m_memory,
             "purge_hindsight_session",
             side_effect=lambda *_args: calls.append("purge") or 4,
         ):
-            service = rt.compatibility_memory_service()
+            service = _m_memory.compatibility_memory_service()
             context = service.prompt_context(
                 sqlite3.connect(":memory:"),
                 "chat",
@@ -772,8 +793,8 @@ class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
         old_db = config.DB_FILE
         try:
             config.DB_FILE = Path(tmp.name) / "reset.sqlite3"
-            db = rt.db_connect()
-            session = rt.create_session(
+            db = _m_memory_curator.db_connect()
+            session = _m_session_naming.create_session(
                 db,
                 "chat",
                 "provider::model",
@@ -782,7 +803,7 @@ class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
             db.execute(
                 "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
                 "VALUES(?,?,?,?,?)",
-                ("chat", "reset-memory", "user", "hello", rt.time.time()),
+                ("chat", "reset-memory", "user", "hello", time.time()),
             )
             db.commit()
             calls = []
@@ -793,14 +814,14 @@ class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
                     return 1
 
             with patch.object(
-                rt,
+                _m_memory,
                 "purge_hindsight_session",
                 side_effect=AssertionError("raw purge must not run"),
             ), patch.object(
-                rt,
+                _m_database,
                 "optimize_database",
             ):
-                rt.reset_session(
+                _m_panel_callback_routes.reset_session(
                     db,
                     "token",
                     "chat",

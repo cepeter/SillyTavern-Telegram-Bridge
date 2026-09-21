@@ -4,7 +4,17 @@ import tempfile
 import unittest
 
 import bridge.config as config
-from runtime_test_facade import runtime as rt
+import time
+from dependency_patch import dependency_module
+
+_m_callbacks = dependency_module("bridge.callbacks")
+_m_main = dependency_module("bridge.main")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
+_m_schema = dependency_module("bridge.schema")
+_m_session_naming = dependency_module("bridge.session_naming")
+_m_sync_api = dependency_module("bridge.sync_api")
+_m_sync_core = dependency_module("bridge.sync_core")
 import bridge.schema as schema
 
 
@@ -13,7 +23,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = rt.db_connect()
+        self.db = _m_memory_curator.db_connect()
 
     def tearDown(self):
         self.db.close()
@@ -68,19 +78,19 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self._binding()
         calls = []
 
-        original = rt.phase3_sync_now
-        rt.phase3_sync_now = (
+        original = _m_sync_api.phase3_sync_now
+        _m_sync_api.phase3_sync_now = (
             lambda _db, chat_id, session_id:
             calls.append(
                 (chat_id, session_id)
             )
         )
         try:
-            rt._SYNC_POLL_SAFETY.poll(
+            _m_sync_api._SYNC_POLL_SAFETY.poll(
                 self.db,
             )
         finally:
-            rt.phase3_sync_now = original
+            _m_sync_api.phase3_sync_now = original
 
         self.assertEqual(
             calls,
@@ -90,35 +100,35 @@ class SyncAuditHardeningTests(unittest.TestCase):
     def test_phase3_realtime_sync_skips_chat_with_active_job_lock(self):
         self._binding()
         calls = []
-        original = rt.phase3_sync_now
-        rt.phase3_sync_now = (
+        original = _m_sync_api.phase3_sync_now
+        _m_sync_api.phase3_sync_now = (
             lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
         )
-        lock = rt.chat_job_lock("chat")
+        lock = _m_sync_api.chat_job_lock("chat")
         lock.acquire()
         try:
-            rt.phase3_sync_poll(self.db)
+            _m_sync_api.phase3_sync_poll(self.db)
             self.assertEqual(calls, [])
         finally:
             lock.release()
-            rt.phase3_sync_now = original
+            _m_sync_api.phase3_sync_now = original
 
     def test_phase3_poll_scans_past_32_locked_candidates(self):
         self._many_bindings()
         calls = []
-        original = rt.phase3_sync_now
-        rt.phase3_sync_now = (
+        original = _m_sync_api.phase3_sync_now
+        _m_sync_api.phase3_sync_now = (
             lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
         )
-        locks = [rt.chat_job_lock(f"a{index:02d}") for index in range(32)]
+        locks = [_m_sync_api.chat_job_lock(f"a{index:02d}") for index in range(32)]
         for lock in locks:
             lock.acquire()
         try:
-            rt.phase3_sync_poll(self.db)
+            _m_sync_api.phase3_sync_poll(self.db)
         finally:
             for lock in locks:
                 lock.release()
-            rt.phase3_sync_now = original
+            _m_sync_api.phase3_sync_now = original
         self.assertEqual(calls, [("z-eligible", "s32")])
 
     def test_phase3_bounded_poll_prioritizes_oldest_binding(self):
@@ -140,23 +150,23 @@ class SyncAuditHardeningTests(unittest.TestCase):
             )
         self.db.commit()
         seen = []
-        original = rt.phase3_sync_now
+        original = _m_sync_api.phase3_sync_now
 
         def fake_sync(db, chat_id, session_id):
             seen.append(session_id)
             db.execute(
                 "UPDATE sync_bindings SET last_checked_at=? "
                 "WHERE chat_id=? AND session_id=?",
-                (rt.time.time(), chat_id, session_id),
+                (time.time(), chat_id, session_id),
             )
             db.commit()
             return "unchanged"
 
-        rt.phase3_sync_now = fake_sync
+        _m_sync_api.phase3_sync_now = fake_sync
         try:
-            rt.phase3_sync_poll(self.db)
+            _m_sync_api.phase3_sync_poll(self.db)
         finally:
-            rt.phase3_sync_now = original
+            _m_sync_api.phase3_sync_now = original
         self.assertEqual(len(seen), 32)
         self.assertIn("s32", seen)
 
@@ -167,14 +177,14 @@ class SyncAuditHardeningTests(unittest.TestCase):
             "WHERE chat_id='chat' AND session_id='session'"
         )
         self.db.commit()
-        original = rt.phase3_sync_now
-        rt.phase3_sync_now = (
+        original = _m_sync_api.phase3_sync_now
+        _m_sync_api.phase3_sync_now = (
             lambda *_args: (_ for _ in ()).throw(RuntimeError("boom"))
         )
         try:
-            rt.phase3_sync_poll(self.db)
+            _m_sync_api.phase3_sync_poll(self.db)
         finally:
-            rt.phase3_sync_now = original
+            _m_sync_api.phase3_sync_now = original
         row = self.db.execute(
             "SELECT realtime_enabled,realtime_failures,last_error "
             "FROM sync_bindings WHERE chat_id='chat' AND session_id='session'"
@@ -186,16 +196,16 @@ class SyncAuditHardeningTests(unittest.TestCase):
     def test_public_poll_uses_hardened_adapter_after_cutover(self):
         self._many_bindings()
         calls = []
-        original = rt.phase3_sync_now
+        original = _m_sync_api.phase3_sync_now
 
-        rt.phase3_sync_now = (
+        _m_sync_api.phase3_sync_now = (
             lambda _db, chat_id, session_id:
             calls.append(
                 (chat_id, session_id)
             )
         )
         locks = [
-            rt.chat_job_lock(
+            _m_sync_api.chat_job_lock(
                 f"a{index:02d}"
             )
             for index in range(32)
@@ -203,11 +213,11 @@ class SyncAuditHardeningTests(unittest.TestCase):
         for lock in locks:
             lock.acquire()
         try:
-            rt.phase3_sync_poll(self.db)
+            _m_sync_api.phase3_sync_poll(self.db)
         finally:
             for lock in locks:
                 lock.release()
-            rt.phase3_sync_now = original
+            _m_sync_api.phase3_sync_now = original
 
         self.assertEqual(
             calls,
@@ -215,22 +225,22 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
 
     def test_session_delete_cascades_sync_binding_cleanup(self):
-        active = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
-        inactive = rt.create_session(
-            self.db, "chat", rt.DEFAULT_MODEL, session_id="inactive"
+        active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        inactive = _m_session_naming.create_session(
+            self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive"
         )
-        rt.set_meta(self.db, "active_session:chat", active["session_id"])
-        rt.ensure_sync_binding(self.db, "chat", inactive["session_id"])
+        _m_session_naming.set_meta(self.db, "active_session:chat", active["session_id"])
+        _m_sync_core.ensure_sync_binding(self.db, "chat", inactive["session_id"])
         self.db.execute(
             "UPDATE sync_bindings SET realtime_enabled=1 "
             "WHERE chat_id='chat' AND session_id='inactive'"
         )
         self.db.commit()
 
-        original_purge = rt.purge_hindsight_session
-        rt.purge_hindsight_session = lambda *_args: 0
+        original_purge = _m_main.purge_hindsight_session
+        _m_main.purge_hindsight_session = lambda *_args: 0
         try:
-            deleted, reason = rt.delete_session_data(
+            deleted, reason = _m_panel_callback_routes.delete_session_data(
                 self.db,
                 "chat",
                 inactive["session_id"],
@@ -238,7 +248,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
                 operation_id=991,
             )
         finally:
-            rt.purge_hindsight_session = original_purge
+            _m_main.purge_hindsight_session = original_purge
 
         self.assertTrue(deleted, reason)
         self.assertIsNone(
@@ -250,13 +260,13 @@ class SyncAuditHardeningTests(unittest.TestCase):
 
 
     def test_canonical_startup_cleanup_removes_orphan_sync_binding(self):
-        valid = rt.create_session(
+        valid = _m_session_naming.create_session(
             self.db,
             "valid-chat",
-            rt.DEFAULT_MODEL,
+            _m_memory_curator.DEFAULT_MODEL,
             session_id="valid-session",
         )
-        rt.ensure_sync_binding(
+        _m_sync_core.ensure_sync_binding(
             self.db,
             "valid-chat",
             valid["session_id"],
@@ -303,7 +313,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         traced = []
         self.db.set_trace_callback(traced.append)
         try:
-            rt.initialize_database_schema(self.db)
+            _m_schema.initialize_database_schema(self.db)
         finally:
             self.db.set_trace_callback(None)
 
@@ -335,7 +345,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self.assertEqual(
             tuple(
                 migration.version
-                for migration in rt.SCHEMA_MIGRATIONS
+                for migration in _m_schema.SCHEMA_MIGRATIONS
             ),
             (1, 2, 3, 4),
         )

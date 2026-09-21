@@ -4,7 +4,14 @@ import unittest
 
 import bridge.config as config
 import bridge.rag_core as rag_core
-from runtime_test_facade import runtime as rt
+import json
+import time
+from dependency_patch import dependency_module
+
+_m_help = dependency_module("bridge.help")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_rag = dependency_module("bridge.rag")
+_m_telegram = dependency_module("bridge.telegram")
 
 
 class RagScalingTests(unittest.TestCase):
@@ -12,8 +19,8 @@ class RagScalingTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.original_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = rt.db_connect()
-        self.namespace = rt.rag_embedding_namespace()
+        self.db = _m_memory_curator.db_connect()
+        self.namespace = _m_rag.rag_embedding_namespace()
 
     def tearDown(self):
         self.db.close()
@@ -27,7 +34,7 @@ class RagScalingTests(unittest.TestCase):
         semantic_target_index: int | None = None,
         with_signatures: bool = True,
     ):
-        now = rt.time.time()
+        now = time.time()
         document_id = "doc-large"
         self.db.execute(
             "INSERT INTO data_bank_documents(chat_id,document_id,filename,byte_size,chunk_count,created_at,updated_at) "
@@ -56,14 +63,14 @@ class RagScalingTests(unittest.TestCase):
                         chunk_id,
                         self.namespace,
                         2,
-                        rt.json.dumps(vector),
-                        rt.embedding_signature(vector),
+                        json.dumps(vector),
+                        _m_rag.embedding_signature(vector),
                     ),
                 )
             else:
                 self.db.execute(
                     "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json) VALUES(?,?,?,?)",
-                    (chunk_id, self.namespace, 2, rt.json.dumps(vector)),
+                    (chunk_id, self.namespace, 2, json.dumps(vector)),
                 )
             self.db.execute(
                 "INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)",
@@ -74,7 +81,7 @@ class RagScalingTests(unittest.TestCase):
 
     def test_small_corpus_keeps_exact_semantic_candidate_set(self):
         ids = self._insert_chunks(20)
-        candidates = rt.semantic_candidate_chunk_ids(
+        candidates = _m_rag.semantic_candidate_chunk_ids(
             self.db, "chat", self.namespace, [], candidate_limit=64
         )
         self.assertEqual(candidates, tuple(ids))
@@ -82,7 +89,7 @@ class RagScalingTests(unittest.TestCase):
     def test_large_corpus_is_bounded_and_keeps_lexical_neighborhood(self):
         ids = self._insert_chunks(500)
         hit = ids[250]
-        candidates = rt.semantic_candidate_chunk_ids(
+        candidates = _m_rag.semantic_candidate_chunk_ids(
             self.db, "chat", self.namespace, [hit], candidate_limit=64
         )
         self.assertLessEqual(len(candidates), 64)
@@ -104,7 +111,7 @@ class RagScalingTests(unittest.TestCase):
 
         rag_core.cosine_similarity = counted_cosine
         try:
-            results = rt.retrieve_data_bank(self.db, "chat", "needle", limit=5)
+            results = _m_rag.retrieve_data_bank(self.db, "chat", "needle", limit=5)
         finally:
             rag_core.cached_rag_embedding = original_cached
             rag_core.rag_semantic_candidate_limit = original_limit
@@ -122,7 +129,7 @@ class RagScalingTests(unittest.TestCase):
         rag_core.cached_rag_embedding = lambda _db, _query: [1.0, 0.0]
         rag_core.rag_semantic_candidate_limit = lambda: 16
         try:
-            results = rt.retrieve_data_bank(
+            results = _m_rag.retrieve_data_bank(
                 self.db,
                 "chat",
                 "meaningfulconcept",
@@ -152,7 +159,7 @@ class RagScalingTests(unittest.TestCase):
 
         rag_core.embed_rag_batch = fake_embed
         try:
-            status, count = rt.add_data_bank_document(
+            status, count = _m_telegram.add_data_bank_document(
                 self.db,
                 "chat",
                 "batched.txt",
@@ -174,7 +181,7 @@ class RagScalingTests(unittest.TestCase):
         )
 
     def test_reindex_embedding_batches_release_write_transaction_between_calls(self):
-        now = rt.time.time()
+        now = time.time()
         self.db.execute(
             "INSERT INTO data_bank_documents("
             "chat_id,document_id,filename,byte_size,chunk_count,created_at,updated_at"
@@ -199,7 +206,7 @@ class RagScalingTests(unittest.TestCase):
 
         rag_core.embed_rag_batch = fake_embed
         try:
-            total, indexed = rt.reindex_data_bank_documents(
+            total, indexed = _m_help.reindex_data_bank_documents(
                 self.db,
                 "chat",
                 "reindex.txt",
@@ -219,7 +226,7 @@ class RagScalingTests(unittest.TestCase):
             ).fetchone()[0],
             0,
         )
-        updated = rt.backfill_rag_embedding_signatures(
+        updated = _m_rag.backfill_rag_embedding_signatures(
             self.db,
             "chat",
             self.namespace,

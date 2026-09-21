@@ -109,50 +109,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         ):
             self.assertEqual(config.CARD_FILE, original_card)
 
-    def test_runtime_context_facade_exports_canonical_functions(self):
-        from runtime_test_facade import runtime as rt
-        import bridge.runtime_context as context
-
-        for name in RUNTIME_CONTEXT_EXPORTS:
-            with self.subTest(name=name):
-                self.assertIs(
-                    getattr(rt, name),
-                    getattr(context, name),
-                )
-
-    def test_db_context_is_shared_across_runtime_and_module(self):
-        import bridge.runtime as rt
-        import bridge.runtime_context as context
-
-        first = sqlite3.connect(":memory:")
-        second = sqlite3.connect(":memory:")
-        try:
-            rt.set_db_connection_context(first)
-            self.assertIs(context.db_connection_context(), first)
-            context.set_db_connection_context(second)
-            self.assertIs(rt.db_connection_context(), second)
-        finally:
-            context.set_db_connection_context(None)
-            first.close()
-            second.close()
-
-    def test_panel_context_is_shared_across_runtime_and_module(self):
-        import bridge.runtime as rt
-        import bridge.runtime_context as context
-
-        try:
-            rt.set_panel_session_context("session-a")
-            self.assertEqual(
-                context.panel_session_context(),
-                "session-a",
-            )
-            context.set_panel_actor_context("actor-b")
-            self.assertEqual(rt.panel_actor_context(), "actor-b")
-        finally:
-            context.set_panel_session_context(None)
-            context.set_panel_actor_context(None)
-
-
     def test_common_no_longer_owns_extracted_context_state(self):
         source = (
             REPO_ROOT / "bridge" / "common.py"
@@ -221,28 +177,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             0,
             completed.stdout + completed.stderr,
         )
-
-    def test_runtime_facade_exports_canonical_panel_utils(self):
-        import bridge.panel_utils as panel_utils
-        import bridge.runtime as rt
-
-        for name in PANEL_UTIL_EXPORTS:
-            with self.subTest(name=name):
-                self.assertIs(
-                    getattr(rt, name),
-                    getattr(panel_utils, name),
-                )
-
-    def test_runtime_facade_exports_complete_canonical_card_content_api(self):
-        import bridge.card_content as card_content
-        import bridge.runtime as rt
-
-        for name in CARD_CONTENT_EXPORTS:
-            with self.subTest(name=name):
-                self.assertIs(
-                    getattr(rt, name),
-                    getattr(card_content, name),
-                )
 
     def test_cards_shell_does_not_redefine_migrated_content_or_panel_functions(self):
         source = (
@@ -386,67 +320,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             0,
             completed.stdout + completed.stderr,
         )
-
-    def test_runtime_facade_exports_canonical_callback_token_functions(self):
-        import bridge.callback_tokens as callback_tokens
-        import bridge.runtime as rt
-
-        for name in CALLBACK_TOKEN_EXPORTS:
-            with self.subTest(name=name):
-                self.assertIs(
-                    getattr(rt, name),
-                    getattr(callback_tokens, name),
-                )
-
-    def test_runtime_and_module_share_one_callback_cache(self):
-        import bridge.callback_tokens as callback_tokens
-        import bridge.runtime as rt
-
-        callback_tokens._CALLBACK_TOKEN_VALUES.clear()
-        db = sqlite3.connect(":memory:")
-        try:
-            db.execute(
-                "CREATE TABLE callback_tokens("
-                "token TEXT PRIMARY KEY,"
-                "kind TEXT NOT NULL,"
-                "value TEXT NOT NULL,"
-                "chat_id TEXT NOT NULL,"
-                "expires_at REAL NOT NULL)"
-            )
-
-            token = rt.dynamic_callback_token(
-                "character",
-                "mira.png",
-                "chat",
-                db=db,
-            )
-            self.assertEqual(
-                callback_tokens.resolve_dynamic_callback_token(
-                    token,
-                    "character",
-                    "chat",
-                ),
-                "mira.png",
-            )
-
-            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
-            token2 = callback_tokens.dynamic_callback_token(
-                "world",
-                "lore.json",
-                "chat",
-                db=db,
-            )
-            self.assertEqual(
-                rt.resolve_dynamic_callback_token(
-                    token2,
-                    "world",
-                    "chat",
-                ),
-                "lore.json",
-            )
-        finally:
-            callback_tokens._CALLBACK_TOKEN_VALUES.clear()
-            db.close()
 
     def test_callback_token_format_remains_stable(self):
         import hashlib
@@ -623,14 +496,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             callback_tokens._CALLBACK_TOKEN_VALUES.clear()
             db.close()
 
-    def test_runtime_does_not_republish_private_callback_cache(self):
-        import bridge.runtime as rt
-
-        self.assertFalse(hasattr(rt, "_CALLBACK_TOKEN_VALUES"))
-        self.assertFalse(
-            hasattr(rt, "_CALLBACK_TOKEN_TTL_SECONDS")
-        )
-
     def test_cards_shell_does_not_define_callback_token_state_or_functions(self):
         source = (
             REPO_ROOT / "bridge" / "cards.py"
@@ -648,51 +513,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
     def test_phase_7b2_foundations_remain_ordinary_after_final_cutover(self):
         self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
 
-
-    def test_cards_shell_is_ordinary_after_final_cutover(self):
-        import bridge.cards as cards
-        import bridge.runtime as rt
-
-        self.assertIs(rt.send_character_menu, cards.send_character_menu)
-        self.assertIs(rt.send_session_menu, cards.send_session_menu)
-
-    def test_card_foundations_before_runtime_keep_canonical_identity(self):
-        completed = self._run_python(
-            "import bridge.runtime_context as context\n"
-            "import bridge.panel_utils as panel_utils\n"
-            "import bridge.card_content as card_content\n"
-            "import bridge.callback_tokens as callback_tokens\n"
-            "import bridge.runtime as rt\n"
-            "assert rt.db_connection_context is context.db_connection_context\n"
-            "assert rt.panel_page is panel_utils.panel_page\n"
-            "assert rt.card_fields is card_content.card_fields\n"
-            "assert rt.character_display_name is card_content.character_display_name\n"
-            "assert rt.dynamic_callback_token is callback_tokens.dynamic_callback_token\n"
-        )
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
-
-    def test_runtime_before_card_foundations_keeps_canonical_identity(self):
-        completed = self._run_python(
-            "import bridge.runtime as rt\n"
-            "import bridge.runtime_context as context\n"
-            "import bridge.panel_utils as panel_utils\n"
-            "import bridge.card_content as card_content\n"
-            "import bridge.callback_tokens as callback_tokens\n"
-            "assert rt.db_connection_context is context.db_connection_context\n"
-            "assert rt.panel_page is panel_utils.panel_page\n"
-            "assert rt.card_fields is card_content.card_fields\n"
-            "assert rt.character_display_name is card_content.character_display_name\n"
-            "assert rt.dynamic_callback_token is callback_tokens.dynamic_callback_token\n"
-        )
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
 
     def test_runtime_context_functions_resolve_canonical_threadlocals(self):
         import bridge.runtime_context as context
@@ -776,6 +596,43 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             with self.subTest(collaborator=collaborator):
                 self.assertIn(collaborator, source)
 
+
+    def test_card_foundation_exports_are_canonical_without_facade(self):
+        import bridge.main  # completes transitional ordinary dependency bindings
+        import bridge.callback_tokens as callback_tokens
+        import bridge.card_content as card_content
+        import bridge.cards as cards
+        import bridge.panel_utils as panel_utils
+        import bridge.runtime_context as context
+        import bridge.callbacks as callbacks
+        import bridge.media as media
+        import bridge.panel_callback_routes as panel_callback_routes
+        import bridge.session_naming as session_naming
+        import bridge.telegram as telegram
+
+        for name in RUNTIME_CONTEXT_EXPORTS:
+            with self.subTest(group="runtime_context", name=name):
+                self.assertTrue(hasattr(context, name))
+        for name in PANEL_UTIL_EXPORTS:
+            with self.subTest(group="panel_utils", name=name):
+                self.assertTrue(hasattr(panel_utils, name))
+        for name in CARD_CONTENT_EXPORTS:
+            with self.subTest(group="card_content", name=name):
+                self.assertTrue(hasattr(card_content, name))
+        for name in CALLBACK_TOKEN_EXPORTS:
+            with self.subTest(group="callback_tokens", name=name):
+                self.assertTrue(hasattr(callback_tokens, name))
+
+        self.assertIs(media.set_db_connection_context, context.set_db_connection_context)
+        self.assertIs(callbacks.db_connection_context, context.db_connection_context)
+        self.assertIs(session_naming.set_panel_session_context, context.set_panel_session_context)
+        self.assertIs(telegram.panel_actor_context, context.panel_actor_context)
+        self.assertIs(
+            panel_callback_routes.dynamic_callback_token,
+            callback_tokens.dynamic_callback_token,
+        )
+        self.assertTrue(callable(cards.send_character_menu))
+        self.assertTrue(callable(cards.send_session_menu))
 
 if __name__ == "__main__":
     unittest.main()

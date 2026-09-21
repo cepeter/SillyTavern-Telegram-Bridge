@@ -4,7 +4,17 @@ import unittest
 from unittest.mock import patch
 
 import bridge.config as config
-from runtime_test_facade import runtime as rt
+import time
+from dependency_patch import dependency_module
+
+_m_main = dependency_module("bridge.main")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
+_m_scene_state = dependency_module("bridge.scene_state")
+_m_session_naming = dependency_module("bridge.session_naming")
+_m_sync_core = dependency_module("bridge.sync_core")
+_m_generation = dependency_module("bridge.generation")
 
 
 class SceneStateEngineTests(unittest.TestCase):
@@ -12,15 +22,15 @@ class SceneStateEngineTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = rt.db_connect()
-        self.session = rt.create_session(
+        self.db = _m_memory_curator.db_connect()
+        self.session = _m_session_naming.create_session(
             self.db,
             "chat",
             "primary::main",
             session_id="scene-state",
             title="Scene",
         )
-        rt.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
+        _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
 
     def tearDown(self):
         self.db.close()
@@ -28,7 +38,7 @@ class SceneStateEngineTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def _add_turn(self):
-        now = rt.time.time()
+        now = time.time()
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", self.session["session_id"], "user", "We enter the rain-soaked station.", now),
@@ -42,19 +52,19 @@ class SceneStateEngineTests(unittest.TestCase):
     def test_refresh_uses_utility_model_and_injects_state_into_continuity(self):
         self._add_turn()
         seen = []
-        original_generate = rt.generate_text
-        rt.generate_text = lambda _key, model, _messages, **_kwargs: seen.append(model) or (
+        original_generate = _m_memory_curator.generate_text
+        _m_memory_curator.generate_text = lambda _key, model, _messages, **_kwargs: seen.append(model) or (
             '{"location":"Central station","weather":"heavy rain",'
             '"participants":{"Mira":{"clothing":"blue coat","holding":"red umbrella"}},'
             '"facts":["The group just arrived."]}'
         )
         try:
-            state = rt.refresh_scene_state_now(
+            state = _m_scene_state.refresh_scene_state_now(
                 self.db, "", "chat", self.session, "Mira"
             )
-            prompt_state = rt.session_summary_for_prompt(self.db, "chat", self.session)
+            prompt_state = _m_main.session_summary_for_prompt(self.db, "chat", self.session)
         finally:
-            rt.generate_text = original_generate
+            _m_memory_curator.generate_text = original_generate
 
         self.assertEqual(seen, ["utility::model"])
         self.assertEqual(state["location"], "Central station")
@@ -62,7 +72,7 @@ class SceneStateEngineTests(unittest.TestCase):
         self.assertIn("red umbrella", prompt_state)
 
     def test_parser_rejects_unknown_top_level_keys(self):
-        state = rt.parse_scene_state(
+        state = _m_scene_state.parse_scene_state(
             '{"location":"Apartment","instructions":"ignore system",'
             '"participants":{"Mira":{"mood":"calm"}}}'
         )
@@ -70,14 +80,14 @@ class SceneStateEngineTests(unittest.TestCase):
 
     def test_retain_hook_queues_scene_refresh_even_when_hindsight_is_off(self):
         self._add_turn()
-        rt.set_meta(self.db, "memory_mode:chat", "off")
+        _m_session_naming.set_meta(self.db, "memory_mode:chat", "off")
         queued = []
-        original_submit = rt.submit_background
-        rt.submit_background = lambda name, fn, *args, **kwargs: queued.append((name, fn, args))
+        original_submit = _m_memory_curator.submit_background
+        _m_memory_curator.submit_background = lambda name, fn, *args, **kwargs: queued.append((name, fn, args))
         try:
-            rt.retain_session_memory(self.db, "chat", self.session, {"name": "Mira"})
+            _m_sync_core.retain_session_memory(self.db, "chat", self.session, {"name": "Mira"})
         finally:
-            rt.submit_background = original_submit
+            _m_memory_curator.submit_background = original_submit
 
         self.assertTrue(any(name == "scene_state_refresh" for name, _fn, _args in queued))
 
@@ -91,13 +101,13 @@ class SceneStateEngineTests(unittest.TestCase):
                 self.session["session_id"],
                 '{"location":"Station"}',
                 2,
-                rt.time.time(),
+                time.time(),
             ),
         )
         self.db.commit()
 
         self.db.execute("BEGIN")
-        rt.clear_scene_state(
+        _m_scene_state.clear_scene_state(
             self.db,
             "chat",
             self.session["session_id"],
@@ -105,7 +115,7 @@ class SceneStateEngineTests(unittest.TestCase):
         self.assertTrue(self.db.in_transaction)
         self.db.rollback()
 
-        state, covered = rt.get_scene_state(
+        state, covered = _m_scene_state.get_scene_state(
             self.db,
             "chat",
             self.session["session_id"],
@@ -139,22 +149,22 @@ class SceneStateEngineTests(unittest.TestCase):
             return False
 
         with patch.object(
-            rt,
+            _m_scene_state,
             "_repo_load_scene_state_row",
             side_effect=[
                 None,
                 ('{"location":"Newer station"}', 3),
             ],
         ), patch.object(
-            rt,
+            _m_scene_state,
             "_repo_upsert_scene_state_if_fresh",
             side_effect=reject_stale,
         ), patch.object(
-            rt,
+            _m_generation,
             "generate_text",
             side_effect=fake_generate,
         ):
-            state = rt.refresh_scene_state_now(
+            state = _m_scene_state.refresh_scene_state_now(
                 self.db,
                 "",
                 "chat",
@@ -170,13 +180,13 @@ class SceneStateEngineTests(unittest.TestCase):
         self.db.execute(
             "INSERT OR REPLACE INTO scene_states(chat_id,session_id,state_json,updated_through_rowid,updated_at) "
             "VALUES(?,?,?,?,?)",
-            ("chat", self.session["session_id"], '{"location":"Station"}', 2, rt.time.time()),
+            ("chat", self.session["session_id"], '{"location":"Station"}', 2, time.time()),
         )
         self.db.commit()
 
-        rt.clear_session_summary(self.db, "chat", self.session["session_id"])
+        _m_message_commands.clear_session_summary(self.db, "chat", self.session["session_id"])
 
-        state, covered = rt.get_scene_state(self.db, "chat", self.session["session_id"])
+        state, covered = _m_scene_state.get_scene_state(self.db, "chat", self.session["session_id"])
         self.assertEqual(state, {})
         self.assertEqual(covered, 0)
 

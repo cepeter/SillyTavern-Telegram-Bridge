@@ -5,7 +5,12 @@ import time
 import unittest
 
 import bridge.config as config
-from runtime_test_facade import runtime as rt
+from dependency_patch import dependency_module
+
+_m_director_goals = dependency_module("bridge.director_goals")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_scene_state = dependency_module("bridge.scene_state")
+_m_session_naming = dependency_module("bridge.session_naming")
 import bridge.schema as schema
 from bridge.migrations import Migration, MigrationError, run_migrations
 
@@ -608,8 +613,8 @@ class RequestTimeSchemaRegressionTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = rt.db_connect()
-        self.session = rt.create_session(
+        self.db = _m_memory_curator.db_connect()
+        self.session = _m_session_naming.create_session(
             self.db,
             "chat",
             "primary::main",
@@ -648,28 +653,28 @@ class RequestTimeSchemaRegressionTests(unittest.TestCase):
         self.db.commit()
 
         operations = (
-            lambda: rt.get_scene_state(
+            lambda: _m_scene_state.get_scene_state(
                 self.db,
                 "chat",
                 self.session["session_id"],
             ),
-            lambda: rt.clear_scene_state(
+            lambda: _m_scene_state.clear_scene_state(
                 self.db,
                 "chat",
                 self.session["session_id"],
             ),
-            lambda: rt.get_director_goal(
+            lambda: _m_director_goals.get_director_goal(
                 self.db,
                 "chat",
                 self.session["session_id"],
             ),
-            lambda: rt.set_director_goal(
+            lambda: _m_director_goals.set_director_goal(
                 self.db,
                 "chat",
                 self.session["session_id"],
                 "Keep tension unresolved.",
             ),
-            lambda: rt._director_goal_customization(
+            lambda: _m_director_goals._director_goal_customization(
                 self.db,
                 "chat",
                 self.session,

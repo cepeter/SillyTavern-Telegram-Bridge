@@ -1,7 +1,13 @@
 import json
 import unittest
 
-from runtime_test_facade import runtime as rt
+import os
+from dependency_patch import dependency_module
+
+_m_generation = dependency_module("bridge.generation")
+_m_memory_curator = dependency_module("bridge.memory_curator")
+_m_message_commands = dependency_module("bridge.message_commands")
+_m_sync_core = dependency_module("bridge.sync_core")
 
 
 class _FakeResponse:
@@ -29,36 +35,36 @@ class _FakeStreamResponse(_FakeResponse):
 
 class GenerationContinuationTests(unittest.TestCase):
     def setUp(self):
-        self.original_resolve = rt.resolve_provider_model
-        self.original_spec = rt.get_provider_spec
-        self.original_urlopen = rt.strict_urlopen
-        self.old_key = rt.os.environ.get("TEST_OPENROUTER_KEY")
-        self.old_hosts = rt.os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
-        rt.resolve_provider_model = lambda _model: ("openrouter", "test/model")
-        rt.get_provider_spec = lambda _provider: {
+        self.original_resolve = _m_generation.resolve_provider_model
+        self.original_spec = _m_generation.get_provider_spec
+        self.original_urlopen = _m_generation.strict_urlopen
+        self.old_key = os.environ.get("TEST_OPENROUTER_KEY")
+        self.old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
+        _m_generation.resolve_provider_model = lambda _model: ("openrouter", "test/model")
+        _m_generation.get_provider_spec = lambda _provider: {
             "transport": "openai_compatible",
             "api_endpoint": "https://openrouter.ai/api/v1",
             "api_key_env": "TEST_OPENROUTER_KEY",
         }
-        rt.os.environ["TEST_OPENROUTER_KEY"] = "test-only"
-        rt.os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "openrouter.ai"
+        os.environ["TEST_OPENROUTER_KEY"] = "test-only"
+        os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "openrouter.ai"
 
     def tearDown(self):
-        rt.resolve_provider_model = self.original_resolve
-        rt.get_provider_spec = self.original_spec
-        rt.strict_urlopen = self.original_urlopen
+        _m_generation.resolve_provider_model = self.original_resolve
+        _m_generation.get_provider_spec = self.original_spec
+        _m_generation.strict_urlopen = self.original_urlopen
         if self.old_key is None:
-            rt.os.environ.pop("TEST_OPENROUTER_KEY", None)
+            os.environ.pop("TEST_OPENROUTER_KEY", None)
         else:
-            rt.os.environ["TEST_OPENROUTER_KEY"] = self.old_key
+            os.environ["TEST_OPENROUTER_KEY"] = self.old_key
         if self.old_hosts is None:
-            rt.os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
+            os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
         else:
-            rt.os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = self.old_hosts
+            os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = self.old_hosts
 
     def test_empty_stream_length_retries_with_larger_non_stream_budget(self):
-        self.original_spec = rt.get_provider_spec
-        rt.get_provider_spec = lambda _provider: {
+        self.original_spec = _m_generation.get_provider_spec
+        _m_generation.get_provider_spec = lambda _provider: {
             "transport": "openai_compatible",
             "api_endpoint": "https://openrouter.ai/api/v1",
             "api_key_env": "TEST_OPENROUTER_KEY",
@@ -81,12 +87,12 @@ class GenerationContinuationTests(unittest.TestCase):
             requests.append(json.loads(request.data.decode()))
             return responses.pop(0)
 
-        rt.strict_urlopen = fake_urlopen
-        result = rt.generate_text(
+        _m_generation.strict_urlopen = fake_urlopen
+        result = _m_memory_curator.generate_text(
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
-            settings={**rt.GENERATION_DEFAULTS, "max_tokens": 1800},
+            settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
         )
 
         self.assertEqual(result, "Recovered answer.")
@@ -96,8 +102,8 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertEqual(requests[1]["max_tokens"], 4096)
 
     def test_streaming_length_continuation_stays_streaming(self):
-        self.original_spec = rt.get_provider_spec
-        rt.get_provider_spec = lambda _provider: {
+        self.original_spec = _m_generation.get_provider_spec
+        _m_generation.get_provider_spec = lambda _provider: {
             "transport": "openai_compatible",
             "api_endpoint": "https://openrouter.ai/api/v1",
             "api_key_env": "TEST_OPENROUTER_KEY",
@@ -120,12 +126,12 @@ class GenerationContinuationTests(unittest.TestCase):
             requests.append(json.loads(request.data.decode()))
             return responses.pop(0)
 
-        rt.strict_urlopen = fake_urlopen
-        result = rt.generate_text(
+        _m_generation.strict_urlopen = fake_urlopen
+        result = _m_memory_curator.generate_text(
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
-            settings={**rt.GENERATION_DEFAULTS, "max_tokens": 1800},
+            settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
         )
 
         self.assertEqual(result, "Part one. Part two.")
@@ -144,12 +150,12 @@ class GenerationContinuationTests(unittest.TestCase):
             requests.append(json.loads(request.data.decode()))
             return _FakeResponse(payloads.pop(0))
 
-        rt.strict_urlopen = fake_urlopen
-        result = rt.generate_text(
+        _m_generation.strict_urlopen = fake_urlopen
+        result = _m_memory_curator.generate_text(
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
-            settings=dict(rt.GENERATION_DEFAULTS),
+            settings=dict(_m_sync_core.GENERATION_DEFAULTS),
         )
 
         self.assertEqual(result, "Part one. Part two.")
@@ -170,41 +176,41 @@ class GenerationContinuationTests(unittest.TestCase):
                 )
             raise RuntimeError("temporary provider failure")
 
-        rt.strict_urlopen = fake_urlopen
-        result = rt.generate_text(
+        _m_generation.strict_urlopen = fake_urlopen
+        result = _m_memory_curator.generate_text(
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
-            settings=dict(rt.GENERATION_DEFAULTS),
+            settings=dict(_m_sync_core.GENERATION_DEFAULTS),
         )
 
         self.assertEqual(result, "Partial but usable.")
         self.assertEqual(calls, 2)
 
     def test_auto_language_render_returns_original_without_backend_call(self):
-        original_generate = rt.generate_text
-        rt.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("auto must not render"))
+        original_generate = _m_memory_curator.generate_text
+        _m_memory_curator.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("auto must not render"))
         try:
-            result = rt.render_response_language("", "model", "original", "auto", "session", {})
+            result = _m_message_commands.render_response_language("", "model", "original", "auto", "session", {})
         finally:
-            rt.generate_text = original_generate
+            _m_memory_curator.generate_text = original_generate
         self.assertEqual(result, "original")
 
     def test_fixed_language_render_uses_minimal_indonesian_rewrite(self):
         captured = {}
-        original_generate = rt.generate_text
+        original_generate = _m_memory_curator.generate_text
 
         def fake_generate(api_key, model, messages, session_id="telegram", settings=None, **_kwargs):
             captured.update({"messages": messages, "session_id": session_id, "settings": settings})
             return "hasil Indonesia"
 
-        rt.generate_text = fake_generate
+        _m_memory_curator.generate_text = fake_generate
         try:
-            result = rt.render_response_language(
-                "", "model", "English source", "id", "telegram:chat:session", dict(rt.GENERATION_DEFAULTS)
+            result = _m_message_commands.render_response_language(
+                "", "model", "English source", "id", "telegram:chat:session", dict(_m_sync_core.GENERATION_DEFAULTS)
             )
         finally:
-            rt.generate_text = original_generate
+            _m_memory_curator.generate_text = original_generate
         self.assertEqual(result, "hasil Indonesia")
         self.assertEqual(captured["session_id"], "telegram:chat:session:language-render")
         self.assertIn("Bahasa Indonesia (id)", captured["messages"][0]["content"])
