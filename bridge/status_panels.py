@@ -1,4 +1,8 @@
 """Read-only status and prompt inspection panels."""
+from __future__ import annotations
+
+from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
+
 
 import json
 
@@ -286,3 +290,6 @@ def send_summary_menu(token, chat_id, db, session, message_id=None):
     text = "Session summary\n\n" + state + f"\nCovered through message row: {covered or 'none'}\n\nRegenerating uses the utility model and may take a while."
     markup = {"inline_keyboard": [[{"text": "✅ Regenerate summary", "callback_data": "summary:confirm"}], [{"text": "❌ Cancel", "callback_data": "summary:cancel"}]]}
     send_panel_message(token, chat_id, text, markup, message_id)
+
+
+_bind_module_dependencies(__name__, globals())
