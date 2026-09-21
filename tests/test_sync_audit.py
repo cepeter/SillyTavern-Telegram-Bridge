@@ -3,6 +3,7 @@ import sqlite3
 import tempfile
 import unittest
 
+import bridge.config as config
 import bridge.runtime as rt
 import bridge.schema as schema
 
@@ -10,15 +11,13 @@ import bridge.schema as schema
 class SyncAuditHardeningTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = rt.DB_FILE
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        with rt._DB_SCHEMA_LOCK:
-            rt._DB_SCHEMA_READY = False
+        self.old_db = config.DB_FILE
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
 
     def tearDown(self):
         self.db.close()
-        rt.DB_FILE = self.old_db
+        config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def _binding(self, chat_id="chat", session_id="session"):
