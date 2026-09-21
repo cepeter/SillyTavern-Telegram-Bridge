@@ -8,6 +8,21 @@ from __future__ import annotations
 
 from pathlib import Path as _RuntimePath
 
+from bridge.native_cache import (
+    cached_json,
+    cached_png_metadata,
+    cached_text,
+)
+from bridge.performance import (
+    perf_span,
+    performance_enabled,
+    timed_call,
+)
+from bridge.schema import (
+    SCHEMA_MIGRATIONS,
+    initialize_database_schema,
+)
+
 from bridge.runtime_loader import (
     DEFAULT_RUNTIME_STAGES as _DEFAULT_RUNTIME_STAGES,
     load_runtime_namespace as _load_runtime_namespace,
