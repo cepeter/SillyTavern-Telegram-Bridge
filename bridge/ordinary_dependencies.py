@@ -1,12 +1,11 @@
-"""Declared ordinary-import dependencies for the Phase 7B4 compatibility graph.
+"""Declared module-local dependencies for the ordinary bridge application.
 
 The legacy runtime used one shared exec namespace, so many modules referenced
-collaborators without importing them. During Phase 7B4 those edges are declared
-here explicitly. Binding happens after a module has defined its functions,
-which lets the existing cyclic UI graph keep call-time semantics while every
-source file becomes an ordinary Python module.
+collaborators without importing them. Those edges are declared here explicitly.
+Bindings are local to each ordinary module; no repository source is executed
+into another module's globals.
 
-No declaration may point at bridge.runtime or bridge.main.
+No declaration may source a dependency from bridge.runtime or bridge.main.
 """
 from __future__ import annotations
 
@@ -441,6 +440,100 @@ DECLARED_DEPENDENCIES: dict[str, dict[str, DependencySpec]] = {
         _from("bridge.common", "submit_background"),
         _stdlib("sqlite3"),
     ),
+    "bridge.main": _merge(
+        _from("bridge.config", "CARD_FILE", "CHARACTER_DIR", "DB_FILE", "DEFAULT_CHARACTER_FILE"),
+        _from("bridge.input_flows", "PERSONA_EDIT_LOCK"),
+        _from(
+            "bridge.sync_api",
+            "SillyTavernApiError",
+            "_phase3_disable",
+            "phase3_api_configured",
+            "phase3_client",
+            "phase3_sync_now",
+            "phase3_sync_poll",
+            "phase3_toggle_realtime",
+            "refresh_phase3_config",
+            "start_phase3_sync_worker",
+            "stop_phase3_sync_worker",
+        ),
+        _from(
+            "bridge.group_core",
+            "advance_group_turn",
+            "group_current_speaker",
+            "group_member_labels",
+            "group_state",
+            "group_user_turn_allowed",
+        ),
+        _from("bridge.catalog", "answer_callback"),
+        _from(
+            "bridge.common",
+            "begin_background_shutdown",
+            "chat_job_lock",
+            "enforce_runtime_permissions",
+            "load_env_file",
+            "register_durable_backlog_dispatcher",
+            "shutdown_background_executors",
+            "submit_chat_background",
+            "topic_scope_from_message",
+        ),
+        _from(
+            "bridge.card_content",
+            "card_fields",
+            "card_fields_from_file",
+            "read_png_chara",
+            "safe_character_path",
+        ),
+        _from(
+            "bridge.database",
+            "clear_failed_turn",
+            "committed_assistant_for_message",
+            "db_connect",
+            "enqueue_job",
+            "finish_job",
+            "get_generation_settings",
+            "get_meta",
+            "job_actor_id",
+            "mark_job_running",
+            "mark_job_scheduled",
+            "operation_phase",
+            "operation_was_applied",
+            "record_failed_turn",
+            "record_operation",
+            "recover_jobs",
+            "run_database_maintenance",
+            "run_write_txn",
+            "set_meta",
+        ),
+        _from("bridge.cards", "default_persona_id"),
+        _from("bridge.persona_sync", "delete_native_persona", "load_personas", "upsert_native_persona"),
+        _from("bridge.commands", "edit_telegram_user_message"),
+        _from(
+            "bridge.telegram",
+            "ensure_session",
+            "load_session",
+            "process_telegram_image",
+            "send_text",
+            "telegram_request",
+            "update_session",
+        ),
+        _from("bridge.generation", "generate_text", "resolve_provider_model"),
+        _from("bridge.media", "get_provider_spec", "process_voice_job", "send_reply"),
+        _from(
+            "bridge.memory",
+            "get_session_summary",
+            "purge_hindsight_session",
+            "retain_session_memory",
+            "session_summary_for_prompt",
+        ),
+        _from("bridge.help_details", "handle_help_callback", "is_help_callback", "send_help_command"),
+        _from("bridge.callbacks", "process_callback"),
+        _from("bridge.help", "process_document_job", "set_bot_commands"),
+        _from("bridge.memory_backend", "recall_memory_context"),
+        _from("bridge.runtime_context", "set_db_connection_context", "set_panel_actor_context"),
+        _from("bridge.sync_core", "sync_binding"),
+        {"Path": ("pathlib", "Path")},
+        _stdlib("argparse", "json", "logging", "os", "signal", "sqlite3", "threading", "time", "urllib"),
+    ),
 }
 
 
@@ -476,9 +569,9 @@ def bind_module_dependencies(
 ) -> None:
     """Bind safe dependencies during one module's ordinary import.
 
-    Dependencies on another Phase 7B4 compatibility module are deferred when
-    that peer is not fully initialized yet. The runtime facade completes those
-    declared edges after all ordinary modules have imported.
+    Dependencies on another declared application module are deferred when that
+    peer is not fully initialized yet. The composition pass completes those
+    edges after all ordinary modules have imported.
     """
     declarations = DECLARED_DEPENDENCIES.get(module_name, {})
     for name, spec in declarations.items():
@@ -506,11 +599,38 @@ def complete_module_dependencies(module: ModuleType) -> None:
         setattr(module, name, _resolve_dependency(spec))
 
 
+def complete_application_dependencies(
+    module_name: str,
+    namespace: MutableMapping[str, object],
+) -> tuple[ModuleType, ...]:
+    """Import the declared application graph and complete module-local edges."""
+    modules: list[ModuleType] = []
+    for declared_module_name in DECLARED_DEPENDENCIES:
+        if declared_module_name == module_name:
+            continue
+        module = importlib.import_module(declared_module_name)
+        modules.append(module)
+
+    for module in modules:
+        complete_module_dependencies(module)
+
+    declarations = DECLARED_DEPENDENCIES.get(module_name, {})
+    for name, spec in declarations.items():
+        source_module = spec[0]
+        if source_module in {"bridge.runtime", "bridge.main"}:
+            raise RuntimeError(
+                f"{module_name} declares forbidden dependency {name} from {source_module}"
+            )
+        namespace[name] = _resolve_dependency(spec)
+
+    return tuple(modules)
+
+
 def publish_compatibility_namespace(
     target: MutableMapping[str, object],
     module: ModuleType,
 ) -> None:
-    """Publish an ordinary module namespace into the temporary runtime facade."""
+    """Publish an ordinary module namespace into a plain compatibility facade."""
     for name, value in vars(module).items():
         if name.startswith("__"):
             continue
