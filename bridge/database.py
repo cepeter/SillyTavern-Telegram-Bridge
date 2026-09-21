@@ -1,10 +1,20 @@
 from contextlib import contextmanager as _contextmanager
+from pathlib import Path
+import hashlib
+import json
+import logging
+import re
+import sqlite3
+import threading
+import time
 
+from bridge import config as _config
 from bridge.scheduler_safety import (
     DatabaseConnectionGate as _DatabaseConnectionGate,
 )
+from bridge.schema import initialize_database_schema
 
-_DB_WRITE_LOCK = globals().get("_DB_WRITE_LOCK") or threading.RLock()
+_DB_WRITE_LOCK = threading.RLock()
 _WRITE_SQL_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
 _DB_PRIMARY_CACHE_KIB = 64000
 _DB_WORKER_CACHE_KIB = 16000
@@ -165,8 +175,9 @@ def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: floa
     to live traffic instead of blocking it, and only when freelist slack
     actually justifies the rewrite.
     """
-    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB_FILE, timeout=timeout, isolation_level=None)
+    path = _database_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(path, timeout=timeout, isolation_level=None)
     reclaimed = False
     try:
         _apply_connection_pragmas(db, timeout=timeout)
@@ -191,7 +202,11 @@ def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: floa
 
 
 def _database_path(database_path: Path | None = None) -> Path:
-    path = Path(database_path) if database_path is not None else DB_FILE
+    path = (
+        Path(database_path)
+        if database_path is not None
+        else _config.DB_FILE
+    )
     return path.expanduser().resolve()
 
 
@@ -244,14 +259,6 @@ _DB_CONNECTION_GATE = _DatabaseConnectionGate(
     _open_initialized_database,
     _lightweight_db_connect,
 )
-
-# Deprecated test-fixture compatibility only. Production connection readiness
-# is owned exclusively by _DB_CONNECTION_GATE; these names are intentionally
-# ignored by db_connect.
-_DB_SCHEMA_LOCK = threading.RLock()
-_DB_SCHEMA_READY = False
-_DB_SCHEMA_READY_PATHS: set[Path] = set()
-
 
 def db_connect(database_path: Path | None = None) -> sqlite3.Connection:
     """Open the canonical connection for a SQLite database path."""
@@ -461,7 +468,7 @@ def task_model_for_session(
     model = get_meta(db, task_model_key(chat_id, session_id, task_name), "").strip()
     if not model and task_name != "utility":
         model = get_meta(db, task_model_key(chat_id, session_id, "utility"), "").strip()
-    return model or str(session.get("model_id") or DEFAULT_MODEL)
+    return model or str(session.get("model_id") or _config.DEFAULT_MODEL)
 
 
 def set_task_model(
@@ -488,7 +495,7 @@ def model_target_selection_key(chat_id: str, session_id: str) -> str:
 def set_model_target_selection(db: sqlite3.Connection, chat_id: str, session_id: str, target: str) -> None:
     if target not in {"story", "utility"}:
         raise ValueError("invalid model target")
-    set_meta(db, model_target_selection_key(chat_id, session_id), json.dumps({"target": target, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}))
+    set_meta(db, model_target_selection_key(chat_id, session_id), json.dumps({"target": target, "expires_at": time.time() + _config.PENDING_SETTINGS_TTL_SECONDS}))
 
 
 def get_model_target_selection(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
@@ -516,7 +523,7 @@ def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: st
         (chat_id, session_id),
     ).fetchone()
     if row is None:
-        return dict(GENERATION_DEFAULTS)
+        return dict(_config.GENERATION_DEFAULTS)
     return dict(
         zip(
             (
@@ -534,7 +541,7 @@ def get_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: st
 
 
 def update_generation_settings(db: sqlite3.Connection, chat_id: str, session_id: str, **values: object) -> dict[str, object]:
-    allowed = set(GENERATION_DEFAULTS)
+    allowed = set(_config.GENERATION_DEFAULTS)
     values = {key: value for key, value in values.items() if key in allowed}
     with write_transaction(db):
         db.execute(
@@ -545,19 +552,19 @@ def update_generation_settings(db: sqlite3.Connection, chat_id: str, session_id:
             (
                 chat_id,
                 session_id,
-                GENERATION_DEFAULTS["temperature"],
-                GENERATION_DEFAULTS["max_tokens"],
-                GENERATION_DEFAULTS["top_p"],
-                GENERATION_DEFAULTS["frequency_penalty"],
-                GENERATION_DEFAULTS["presence_penalty"],
-                GENERATION_DEFAULTS["reasoning_budget"],
-                GENERATION_DEFAULTS["stop_sequences"],
+                _config.GENERATION_DEFAULTS["temperature"],
+                _config.GENERATION_DEFAULTS["max_tokens"],
+                _config.GENERATION_DEFAULTS["top_p"],
+                _config.GENERATION_DEFAULTS["frequency_penalty"],
+                _config.GENERATION_DEFAULTS["presence_penalty"],
+                _config.GENERATION_DEFAULTS["reasoning_budget"],
+                _config.GENERATION_DEFAULTS["stop_sequences"],
             ),
         )
         if values:
             assignments = ", ".join(f"{key}=?" for key in values)
             db.execute(
-                f"UPDATE generation_settings SET {assignments} "  # nosec B608 - assignments are filtered against GENERATION_DEFAULTS
+                f"UPDATE generation_settings SET {assignments} "  # nosec B608 - assignments are filtered against _config.GENERATION_DEFAULTS
                 "WHERE chat_id=? AND session_id=?",
                 (*values.values(), chat_id, session_id),
             )
@@ -595,7 +602,7 @@ def delete_generation_preset(db: sqlite3.Connection, chat_id: str, name: str) ->
 def format_generation_settings(settings: dict[str, object]) -> str:
     stop = str(settings.get("stop_sequences") or "") or "off"
     reasoning_budget = int(settings.get("reasoning_budget") or 0)
-    reasoning_level = next((name for name, value in REASONING_LEVELS.items() if value == reasoning_budget), "custom")
+    reasoning_level = next((name for name, value in _config.REASONING_LEVELS.items() if value == reasoning_budget), "custom")
     return (f"temperature={settings['temperature']}\nmax_tokens={settings['max_tokens']}\n"
             f"top_p={settings['top_p']}\nfrequency_penalty={settings['frequency_penalty']}\n"
             f"presence_penalty={settings['presence_penalty']}\nreasoning={reasoning_level} ({reasoning_budget})\n"
@@ -605,7 +612,7 @@ def format_generation_settings(settings: dict[str, object]) -> str:
 def parse_generation_setting(key: str, raw_value: str) -> tuple[str, object]:
     aliases = {"temp": "temperature", "max": "max_tokens", "top-p": "top_p", "frequency": "frequency_penalty", "presence": "presence_penalty", "reasoning": "reasoning_budget", "stop": "stop_sequences"}
     key = aliases.get(key.casefold(), key.casefold())
-    if key not in GENERATION_DEFAULTS:
+    if key not in _config.GENERATION_DEFAULTS:
         raise ValueError("unknown setting")
     if key == "stop_sequences":
         if raw_value.casefold() in {"off", "none", "clear"}:
@@ -614,8 +621,8 @@ def parse_generation_setting(key: str, raw_value: str) -> tuple[str, object]:
         if len(values) > 4 or any(len(item) > 100 for item in values):
             raise ValueError("stop supports up to 4 sequences of 100 characters")
         return key, "\n".join(values)
-    if key == "reasoning_budget" and raw_value.casefold() in REASONING_LEVELS:
-        return key, REASONING_LEVELS[raw_value.casefold()]
+    if key == "reasoning_budget" and raw_value.casefold() in _config.REASONING_LEVELS:
+        return key, _config.REASONING_LEVELS[raw_value.casefold()]
     try:
         if key in {"max_tokens", "reasoning_budget"}:
             value = int(raw_value)
