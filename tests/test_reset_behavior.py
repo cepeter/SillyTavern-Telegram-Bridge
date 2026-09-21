@@ -5,18 +5,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import bridge.config as config
 import bridge.runtime as rt
 
 
 class ResetBehaviorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = rt.DB_FILE
+        self.old_db = config.DB_FILE
         self.old_reset = getattr(rt, "reset_session")
         self.old_send = getattr(rt, "send_text")
         self.old_remove = getattr(rt, "remove_inline_keyboard")
-        rt.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        rt._DB_SCHEMA_READY = False
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = rt.db_connect()
         self.session = rt.ensure_session(self.db, "chat", rt.DEFAULT_MODEL)
 
@@ -25,8 +25,7 @@ class ResetBehaviorTests(unittest.TestCase):
         rt.send_text = self.old_send
         rt.remove_inline_keyboard = self.old_remove
         self.db.close()
-        rt.DB_FILE = self.old_db
-        rt._DB_SCHEMA_READY = False
+        config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def test_reset_command_preempts_pending_input(self):
