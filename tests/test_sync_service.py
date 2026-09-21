@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 from unittest.mock import patch
 
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 from bridge.sync_service import SyncService, SyncStatus
 
 

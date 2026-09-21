@@ -7,7 +7,7 @@ import unittest
 
 import bridge.config as config
 import bridge.database as database
-import bridge.runtime as rt
+from runtime_test_facade import runtime as rt
 
 
 class _FakeTelegramResponse:
