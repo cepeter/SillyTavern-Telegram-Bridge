@@ -8,6 +8,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
+import bridge.card_content as card_content
 import bridge.config as config
 import bridge.runtime as rt
 from bridge.sync_service import SyncStatus
@@ -431,6 +432,10 @@ class Phase3SyncTests(unittest.TestCase):
             ),
         ), patch.object(
             rt,
+            "safe_world_path",
+            return_value=True,
+        ), patch.object(
+            card_content,
             "safe_world_path",
             return_value=True,
         ), patch.object(
