@@ -74,8 +74,7 @@ def send_panel_message(token: str, chat_id: str, text: str, reply_markup: dict, 
     telegram_request(token, method, payload)
 
 
-def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service=None) -> None:
-    persona_service = resolve_persona_service(persona_service)
+def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service: PersonaService) -> None:
     personas = persona_service.list()
     options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in list(personas.items())[:_config.CATALOG_MAX_ITEMS]]
     page_options, current_page, total_pages = panel_page(options, page)
@@ -186,9 +185,9 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
 
 
 # Explicit late imports replace transitional dependency injection.
+from bridge.persona_service import PersonaService
 from bridge.persona_sync import (
     _native_settings,
     load_personas,
-    resolve_persona_service,
 )
 from bridge.telegram import telegram_request
