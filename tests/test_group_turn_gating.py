@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service
 
 ensure_application_extensions()
 
