@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 import bridge.config as config
+import bridge.extension_registry as extension_registry
 import bridge.character_identity as _m_character_identity
 import bridge.director_goals as _m_director_goals
 import bridge.groups as _m_groups
@@ -15,6 +16,7 @@ import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
+from bridge.group_director_service import GroupDirectorService
 class DirectorGoalsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -44,6 +46,19 @@ class DirectorGoalsTests(unittest.TestCase):
                 "turn_user_id": "",
                 "turn_users": [],
             },
+        )
+
+
+    def _service(self):
+        return GroupDirectorService(
+            load_group_state=_m_groups.group_state,
+            safe_character=_m_groups.safe_character_path,
+            member_labels=_m_groups.group_member_labels,
+            card_fields=_m_groups.card_fields_from_file,
+            generation_settings=_m_groups.get_generation_settings,
+            generate_text=_m_groups.generate_text,
+            director_customization=extension_registry.get_director_customization,
+            default_model=config.DEFAULT_MODEL,
         )
 
     def tearDown(self):
@@ -93,7 +108,7 @@ class DirectorGoalsTests(unittest.TestCase):
         _m_groups.generate_text = fake_generate
         try:
             before = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-            plan = _m_message_commands.group_director_plan(
+            plan = self._service().plan(
                 self.db,
                 "",
                 self.chat_id,
@@ -143,7 +158,7 @@ class DirectorGoalsTests(unittest.TestCase):
 
         _m_groups.generate_text = fake_generate
         try:
-            _m_message_commands.group_director_plan(
+            self._service().plan(
                 self.db,
                 "",
                 self.chat_id,
@@ -186,7 +201,7 @@ class DirectorGoalsTests(unittest.TestCase):
 
         _m_groups.generate_text = fake_generate
         try:
-            _m_message_commands.group_director_plan(
+            self._service().plan(
                 self.db,
                 "",
                 self.chat_id,
@@ -229,7 +244,7 @@ class DirectorGoalsTests(unittest.TestCase):
 
         _m_groups.generate_text = fake_generate
         try:
-            _m_message_commands.group_director_plan(
+            self._service().plan(
                 self.db,
                 "",
                 self.chat_id,
@@ -257,7 +272,7 @@ class DirectorGoalsTests(unittest.TestCase):
 
         _m_groups.generate_text = fake_generate
         try:
-            _m_message_commands.group_director_plan(
+            self._service().plan(
                 self.db,
                 "",
                 self.chat_id,
@@ -286,7 +301,7 @@ class DirectorGoalsTests(unittest.TestCase):
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
         try:
-            context = _m_message_commands.group_prompt_context(
+            context = self._service().prompt_context(
                 self.db,
                 self.chat_id,
                 self.session,
