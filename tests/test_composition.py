@@ -977,9 +977,7 @@ class StartupCompositionTests(unittest.TestCase):
         return {"username": "bridge_bot"}
 
     def test_run_check_uses_prebuilt_services_without_reloading_environment(self):
-        with patch.object(_m_common, "load_env_file",
-            side_effect=AssertionError("run_check must not reload env"),
-        ), patch.object(_m_main, "card_fields",
+        with patch.object(_m_main, "card_fields",
             return_value={"name": "Mira"},
         ), patch.object(_m_main, "read_png_chara",
             return_value={},
@@ -1125,7 +1123,6 @@ class StartupCompositionTests(unittest.TestCase):
             argparse.ArgumentParser,
             "parse_args",
             return_value=parsed,
-        ), patch.object(_m_main, "load_env_file"
         ), patch.object(_m_main, "refresh_phase3_config"
         ), patch.object(_m_main, "enforce_runtime_permissions"
         ), patch.object(_m_main, "configure_logging"
@@ -1197,7 +1194,6 @@ class StartupCompositionTests(unittest.TestCase):
                 argparse.ArgumentParser,
                 "parse_args",
                 return_value=parsed,
-            ), patch.object(_m_main, "load_env_file"
             ), patch.object(_m_main, "refresh_phase3_config"
             ), patch.object(_m_main, "enforce_runtime_permissions"
             ), patch.object(_m_main, "configure_logging"
@@ -1445,7 +1441,6 @@ class StartupCompositionTests(unittest.TestCase):
             argparse.ArgumentParser,
             "parse_args",
             return_value=parsed,
-        ), patch.object(_m_main, "load_env_file",
         ), patch.object(_m_main, "refresh_phase3_config",
         ), patch.object(_m_main, "enforce_runtime_permissions",
         ), patch.object(_m_main, "configure_logging",
