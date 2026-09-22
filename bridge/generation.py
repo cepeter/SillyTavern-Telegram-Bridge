@@ -445,9 +445,8 @@ def format_user_dialogue_action(text: str) -> str:
     return "\n\n".join(sections) or original
 
 
-def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_text: str, history_rows: list[tuple[str, str]], image_data_uri: str | None = None, memory_context: str = "", session_summary: str = "", rag_context: str = "", group_context: str = "", persona_service=None) -> list[dict]:
+def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_text: str, history_rows: list[tuple[str, str]], image_data_uri: str | None = None, memory_context: str = "", session_summary: str = "", rag_context: str = "", group_context: str = "", persona_service: PersonaService) -> list[dict]:
     current_persona = session["persona_id"]
-    persona_service = resolve_persona_service(persona_service)
     user_name = persona_service.name(current_persona) if current_persona else DEFAULT_USER_NAME
     persona = persona_service.get(current_persona) if current_persona else None
     history = [{"role": role, "content": format_user_dialogue_action(content) if role == "user" else content} for role, content in history_rows]
@@ -584,7 +583,7 @@ def regenerate_last(
     operation_id: int | str | None = None,
     *,
     memory_service: MemoryService,
-    persona_service=None,
+    persona_service: PersonaService,
 ) -> None:
     session_id = session["session_id"]
 
@@ -860,7 +859,7 @@ def continue_last(
     operation_id: int | str | None = None,
     *,
     memory_service: MemoryService,
-    persona_service=None,
+    persona_service: PersonaService,
 ) -> None:
     session_id = session["session_id"]
 
@@ -1103,7 +1102,7 @@ from bridge.media import (
     send_typing,
 )
 from bridge.memory_service import MemoryService
-from bridge.persona_sync import resolve_persona_service
+from bridge.persona_service import PersonaService
 from bridge.rag_core import (
     rag_citation_footer,
     rag_context_for_prompt,
