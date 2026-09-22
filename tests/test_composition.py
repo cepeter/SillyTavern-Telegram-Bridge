@@ -178,6 +178,52 @@ class CompositionConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     validate_bridge_config(config)
 
+    def test_validate_bridge_config_rejects_empty_allowlist(self):
+        environ = self._environ()
+        environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = ""
+        config = load_bridge_config(
+            environ,
+            character_dir=self.character_dir,
+            db_file=self.db_file,
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "SILLYTAVERN_TELEGRAM_ALLOWED_USERS",
+        ):
+            validate_bridge_config(config)
+
+    def test_validate_bridge_config_rejects_non_numeric_allowlist_member(self):
+        environ = self._environ()
+        environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = (
+            "100, invalid-user, 200,100"
+        )
+        config = load_bridge_config(
+            environ,
+            character_dir=self.character_dir,
+            db_file=self.db_file,
+        )
+
+        with self.assertRaisesRegex(ValueError, "invalid-user"):
+            validate_bridge_config(config)
+
+    def test_validate_bridge_config_accepts_trimmed_duplicate_numeric_ids(self):
+        environ = self._environ()
+        environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = (
+            " 100,200,100 ,, "
+        )
+        config = load_bridge_config(
+            environ,
+            character_dir=self.character_dir,
+            db_file=self.db_file,
+        )
+
+        self.assertEqual(
+            config.allowed_users,
+            frozenset({"100", "200"}),
+        )
+        self.assertIsNone(validate_bridge_config(config))
+
     def test_validate_bridge_config_rejects_missing_card(self):
         environ = self._environ()
         environ["SILLYTAVERN_DEFAULT_CHARACTER"] = "missing.png"
