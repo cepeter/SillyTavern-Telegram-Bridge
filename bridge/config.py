@@ -11,6 +11,25 @@ BRIDGE_HOME = Path(
     )
 )
 DB_FILE = BRIDGE_HOME / "scripts" / "sillytavern_telegram.sqlite3"
+LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
+PROVIDER_CONFIG_FILE = Path(
+    os.environ.get(
+        "SILLYTAVERN_PROVIDER_CONFIG",
+        str(BRIDGE_HOME / "sillytavern_telegram_providers.yaml"),
+    )
+)
+MODEL_CACHE_FILE = Path(
+    os.environ.get(
+        "SILLYTAVERN_MODEL_CACHE",
+        str(BRIDGE_HOME / "model_catalog_cache.json"),
+    )
+)
+CHARACTER_BACKUP_DIR = Path(
+    os.environ.get(
+        "SILLYTAVERN_CHARACTER_BACKUP_DIR",
+        str(BRIDGE_HOME / "backups/sillytavern/characters"),
+    )
+)
 DEFAULT_MODEL = os.environ.get("SILLYTAVERN_MODEL", "").strip()
 DEFAULT_MAX_TOKENS = 1800
 PENDING_SETTINGS_TTL_SECONDS = 600
@@ -43,10 +62,6 @@ SYSTEM_PROMPTS_DIR = Path(
         "SILLYTAVERN_SYSTEM_PROMPTS_DIR",
         str(SILLYTAVERN_DIR / "data/default-user/sysprompt"),
     )
-)
-SYSTEM_PROMPTS_FILE = os.environ.get(
-    "SILLYTAVERN_SYSTEM_PROMPTS_FILE",
-    "",
 )
 DEFAULT_USER_NAME = os.environ.get(
     "SILLYTAVERN_DEFAULT_USER_NAME",
