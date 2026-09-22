@@ -304,7 +304,7 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     return raw
 
 
-def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
+def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
     if file_size > IMAGE_MAX_BYTES:
         send_text(token, chat_id, "Image is too large. The limit is 8 MB.")
         return
@@ -323,6 +323,7 @@ def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, fil
         telegram_message_id=telegram_message_id,
         memory_service=memory_service,
         persona_service=persona_service,
+        group_director_service=group_director_service,
     )
 
 
@@ -438,7 +439,7 @@ def import_world_info_document(db: sqlite3.Connection, token: str, chat_id: str,
         send_text(token, chat_id, f"World Info imported: {target.name}. Open /world to enable it.")
 
 
-def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None, *, memory_service: MemoryService) -> None:
+def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
     file_size = int(document.get("file_size") or 0)
@@ -471,6 +472,8 @@ def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, d
                 mime_type="image/png",
                 telegram_message_id=telegram_message_id,
                 memory_service=memory_service,
+                persona_service=persona_service,
+                group_director_service=group_director_service,
             )
         else:
             import_character_card(db, token, chat_id, filename, raw)
@@ -572,6 +575,7 @@ from bridge.expressions import (
     expression_mode_key,
 )
 from bridge.generation import swipe_state_key
+from bridge.group_director_service import GroupDirectorService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.persona_sync import NATIVE_PERSONA_SETTINGS_FILE
