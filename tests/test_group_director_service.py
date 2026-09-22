@@ -94,6 +94,14 @@ class GroupDirectorServiceTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
+    def test_parse_decision_rejects_unknown_speaker(self):
+        self.assertIsNone(
+            self.service._parse_decision(
+                '{"speaker":"Mallory","direction":"Enter dramatically."}',
+                ["alice.png", "bob.png"],
+            )
+        )
+
     def test_plan_chooses_known_speaker_without_mutating_transcript(self):
         before = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
 
