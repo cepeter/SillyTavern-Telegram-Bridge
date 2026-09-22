@@ -34,10 +34,10 @@ jobs:
             requirements-dev.txt
 
       - name: Install locked runtime dependencies
-        run: uv pip install --python python --require-hashes --frozen -r requirements.lock
+        run: uv pip install --system --python python --require-hashes -r requirements.lock
 
       - name: Install development test tooling
-        run: uv pip install --python python -r requirements-dev.txt
+        run: uv pip install --system --python python -r requirements-dev.txt
 
       - name: Validate dependency environment
         run: python -m pip check
@@ -65,7 +65,7 @@ jobs:
             requirements.lock
 
       - name: Install pip-audit
-        run: uv pip install --python python pip-audit
+        run: uv pip install --system --python python pip-audit
 
       - name: Audit locked dependencies
         run: python -m pip_audit -r requirements.lock
