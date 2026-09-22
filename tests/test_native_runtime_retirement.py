@@ -132,6 +132,21 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
             ):
                 self.assertNotIn(forbidden, source, filename)
 
+    def test_no_optional_application_service_parameters_remain(self):
+        forbidden = (
+            "memory_service=None",
+            "persona_service=None",
+            "sync_service=None",
+            "group_director_service=None",
+        )
+        offenders = {}
+        for path in sorted(BRIDGE_DIR.glob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            hits = [value for value in forbidden if value in source]
+            if hits:
+                offenders[path.relative_to(REPO_ROOT).as_posix()] = hits
+        self.assertEqual(offenders, {})
+
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []
         for root in (BRIDGE_DIR, TESTS_DIR):
