@@ -283,7 +283,9 @@ The function uses:
 - `services.persona`
 - `services.group_director`
 
-directly.
+directly. Persona display/name lookup in this application path also uses
+`services.persona` rather than bypassing the service through a direct
+compatibility-era Persona helper.
 
 The following fallback logic is removed:
 
@@ -384,15 +386,16 @@ Application routing uses the composed `services.group_director` directly for:
 - planning;
 - prompt context.
 
-Compatibility delegation wrappers that exist only to recreate `GroupDirectorService` should be deleted once all production and test callers are migrated:
+Delete the compatibility delegation wrappers after production and tests are migrated:
 
 - `group_director_plan()`;
 - `group_prompt_context()`;
-- `parse_group_director_decision()` if no non-compatibility public caller remains.
+- `parse_group_director_decision()`.
 
-Tests that need parser behavior should target the service's application behavior directly rather than preserving a wrapper solely for test convenience.
-
-If implementation discovers a genuine non-compatibility public API use for one of those functions, the wrapper may remain only as a pure delegation that requires an explicit service parameter. It may not construct a service.
+This repository is preproduction and does not retain those wrappers as a public
+backward-compatibility surface. Tests that need parser behavior target
+`GroupDirectorService` directly rather than preserving wrapper functions for
+test convenience.
 
 ## 12. Narrow dependency rule
 
