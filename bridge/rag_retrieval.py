@@ -17,7 +17,6 @@ except ImportError:
 
 DEFAULT_SEMANTIC_CANDIDATE_LIMIT = 384
 MAX_SEMANTIC_CANDIDATE_LIMIT = 2048
-DEFAULT_SEMANTIC_SAMPLE_WINDOWS = 12
 EMBEDDING_SIGNATURE_BITS = 63
 _MASK64 = (1 << 64) - 1
 
@@ -75,18 +74,14 @@ def semantic_candidate_chunk_ids(
     query_signature: int | None = None,
     candidate_limit: int = DEFAULT_SEMANTIC_CANDIDATE_LIMIT,
     neighbor_radius: int = 2,
-    sample_windows: int = DEFAULT_SEMANTIC_SAMPLE_WINDOWS,
 ) -> tuple[int, ...]:
     """Return a bounded semantic shortlist without decoding the whole corpus.
 
     Small corpora remain exact. Larger corpora prioritize FTS-hit neighborhoods,
-    then globally rank compact embedding signatures by Hamming distance. A
-    deterministic positional sample is retained only as compatibility fallback
-    for legacy rows whose signature has not been backfilled yet.
+    then globally rank compact embedding signatures by Hamming distance.
     """
     candidate_limit = max(1, min(int(candidate_limit), MAX_SEMANTIC_CANDIDATE_LIMIT))
     neighbor_radius = max(0, min(int(neighbor_radius), 8))
-    sample_windows = max(1, min(int(sample_windows), 64))
 
     probe = db.execute(
         "SELECT e.chunk_id "
@@ -145,8 +140,7 @@ def semantic_candidate_chunk_ids(
             "FROM data_bank_embeddings e "
             "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
             "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-            "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? "
-            "AND e.vector_signature IS NOT NULL",
+            "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=?",
             (str(chat_id), str(embedding_namespace)),
         )
         for chunk_id, vector_signature in rows:
@@ -163,58 +157,5 @@ def semantic_candidate_chunk_ids(
             nearest, key=lambda item: (-item[0], item[2])
         ):
             add(chunk_id)
-
-    if len(selected) >= candidate_limit:
-        return tuple(selected)
-
-    # Compatibility fallback while pre-signature databases are lazily backfilled.
-    minimum = int(probe[0][0])
-    maximum_row = db.execute(
-        "SELECT e.chunk_id "
-        "FROM data_bank_embeddings e "
-        "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-        "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? "
-        "ORDER BY e.chunk_id DESC LIMIT 1",
-        (str(chat_id), str(embedding_namespace)),
-    ).fetchone()
-    maximum = int(maximum_row[0]) if maximum_row else minimum
-
-    remaining = candidate_limit - len(selected)
-    windows = min(sample_windows, remaining)
-    per_window = max(1, math.ceil(remaining / windows))
-    for index in range(windows):
-        if len(selected) >= candidate_limit:
-            break
-        if windows == 1 or maximum <= minimum:
-            anchor = minimum
-        else:
-            anchor = minimum + ((maximum - minimum) * index // (windows - 1))
-        rows = db.execute(
-            "SELECT e.chunk_id "
-            "FROM data_bank_embeddings e "
-            "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-            "WHERE c.chat_id=? AND e.embedding_namespace=? AND e.chunk_id>=? "
-            "ORDER BY e.chunk_id LIMIT ?",
-            (str(chat_id), str(embedding_namespace), anchor, per_window),
-        ).fetchall()
-        for (chunk_id,) in rows:
-            add(int(chunk_id))
-
-    if len(selected) < candidate_limit:
-        rows = db.execute(
-            "SELECT e.chunk_id "
-            "FROM data_bank_embeddings e "
-            "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-            "WHERE c.chat_id=? AND e.embedding_namespace=? "
-            "ORDER BY e.chunk_id DESC LIMIT ?",
-            (
-                str(chat_id),
-                str(embedding_namespace),
-                candidate_limit - len(selected),
-            ),
-        ).fetchall()
-        for (chunk_id,) in rows:
-            add(int(chunk_id))
 
     return tuple(selected)
