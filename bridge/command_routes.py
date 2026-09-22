@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
+from bridge.composition import BridgeServices
 
-def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id, services=None):
+def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id, services):
     if command.startswith("/help "):
         send_help_command(token, chat_id, stripped)
         return True
@@ -71,7 +72,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
             record_failed_turn(db, chat_id, failed_message_id, str(failed[1]), str(failed[2]), str(exc), failed_session_id)
             send_text(token, chat_id, "Retry failed again; the turn remains queued for /retry.")
         return True
-    memory_service = getattr(services, "memory", None) if services is not None else None
+    memory_service = services.memory
     if command == "/prompt":
         send_prompt_menu(
             token,
@@ -153,10 +154,10 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
     return False
 
 
-def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session, fields, operation_id, services=None):
+def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session, fields, operation_id, services):
     """Handle memory, RAG, group, and synchronization commands."""
-    memory_service = getattr(services, "memory", None) if services is not None else None
-    persona_service = getattr(services, "persona", None) if services is not None else None
+    memory_service = services.memory
+    persona_service = services.persona
     if command == "/memory" or command in {"/memory on", "/memory off", "/memory status", "/memory scope"}:
         send_memory_menu(token, chat_id, db)
         return True
@@ -246,10 +247,10 @@ def _handle_voice_panels(db, token, chat_id, command, session):
     return False
 
 
-def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id, services=None):
+def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id, services):
     """Dispatch generation, memory, voice, and panel-first commands."""
-    memory_service = getattr(services, "memory", None) if services is not None else None
-    persona_service = getattr(services, "persona", None) if services is not None else None
+    memory_service = services.memory
+    persona_service = services.persona
     if _handle_generation_panels(
         db,
         token,
@@ -280,7 +281,7 @@ def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command
     return _handle_voice_panels(db, token, chat_id, command, session)
 
 
-def _handle_entities(db, token, model, fields, chat_id, command, session, session_id, current_model, current_persona, services=None):
+def _handle_entities(db, token, model, fields, chat_id, command, session, session_id, current_model, current_persona, services):
     """Handle character, session, persona, world, prompt, and provider panels."""
     if command == "/systemprompt":
         send_system_prompt_menu(token, chat_id, session.get("system_prompt") or "")
@@ -302,10 +303,7 @@ def _handle_entities(db, token, model, fields, chat_id, command, session, sessio
             token,
             chat_id,
             current_persona,
-            persona_service=(
-                getattr(services, "persona", None)
-                if services is not None else None
-            ),
+            persona_service=services.persona,
         )
         return True
     if command == "/world" or command.startswith("/world "):
@@ -320,13 +318,13 @@ def _handle_entities(db, token, model, fields, chat_id, command, session, sessio
     return False
 
 
-def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, session, operation_id, services=None):
+def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, session, operation_id, services):
     """Handle edit, continuation, swipe, branch, and regeneration commands."""
     if command == "/edit":
         start_text_action_input(db, token, chat_id, session["session_id"], "edit", "Send the replacement text for the latest user message.")
         return True
-    memory_service = getattr(services, "memory", None) if services is not None else None
-    persona_service = getattr(services, "persona", None) if services is not None else None
+    memory_service = services.memory
+    persona_service = services.persona
     if command.startswith("/edit "):
         return handle_inline_text_action(
             db,
@@ -373,7 +371,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
     return False
 
 
-def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id=None, services=None):
+def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id=None, *, services: BridgeServices):
     """Dispatch a normalized slash command without entering normal generation."""
     if _dispatch_extension_command_routes(
         db,
