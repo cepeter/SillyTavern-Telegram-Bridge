@@ -196,6 +196,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 chat_id,
                 operation_id=operation_id,
                 memory_service=memory_service,
+                persona_service=persona_service,
             )
         if recovery_command == "/edit":
             edited = str(text or "").strip().split(None, 1)
@@ -214,6 +215,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 edited_text,
                 operation_id=operation_id,
                 memory_service=memory_service,
+                persona_service=persona_service,
             )
 
         # Generic committed-response recovery remains the fallback for
