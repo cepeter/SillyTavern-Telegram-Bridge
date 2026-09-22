@@ -42,6 +42,7 @@ from bridge.config import (
     CARD_FILE,
     CARD_TOTAL_MAX_CHARS,
     CATALOG_MAX_ITEMS,
+    CHARACTER_BACKUP_DIR as _CHARACTER_BACKUP_DIR,
     CHARACTER_DIR,
     DB_FILE,
     DEFAULT_CHARACTER_FILE,
@@ -53,6 +54,9 @@ from bridge.config import (
     HINDSIGHT_DEFAULT_URL,
     HINDSIGHT_RECALL_MAX_TOKENS,
     HINDSIGHT_RETAIN_MAX_MESSAGES,
+    LOG_FILE as _LOG_FILE,
+    MODEL_CACHE_FILE as _MODEL_CACHE_FILE,
+    PROVIDER_CONFIG_FILE as _PROVIDER_CONFIG_FILE,
     RAG_CHUNK_CHARS,
     RAG_CHUNK_OVERLAP,
     RAG_EMBEDDING_DIMENSIONS,
@@ -74,9 +78,9 @@ from bridge.config import (
     REASONING_LEVELS,
     SILLYTAVERN_DIR,
     SYSTEM_PROMPTS_DIR,
-    SYSTEM_PROMPTS_FILE,
     WORLD_DIR,
 )
+from bridge.environment import environment_file
 from bridge.runtime_context import (
     db_connection_context,
     panel_actor_context,
@@ -114,23 +118,18 @@ def topic_scope_from_message(chat_id: str, message: dict | None) -> str:
     return topic_scope_id(chat_id, (message or {}).get("message_thread_id"))
 
 
-ENV_FILE = Path(os.environ.get("SILLYTAVERN_ENV_FILE", str(BRIDGE_HOME / ".env")))
-PROVIDER_CONFIG_FILE = Path(os.environ.get("SILLYTAVERN_PROVIDER_CONFIG", str(BRIDGE_HOME / "sillytavern_telegram_providers.yaml")))
-MODEL_CACHE_FILE = Path(os.environ.get("SILLYTAVERN_MODEL_CACHE", str(BRIDGE_HOME / "model_catalog_cache.json")))
 MODEL_REFRESH_SECONDS = int(os.environ.get("SILLYTAVERN_MODEL_REFRESH_SECONDS", "3600"))
-CHARACTER_BACKUP_DIR = Path(os.environ.get("SILLYTAVERN_CHARACTER_BACKUP_DIR", str(BRIDGE_HOME / "backups/sillytavern/characters")))
 IMAGE_MAX_BYTES = 8 * 1024 * 1024
 TTS_MAX_CHARS = 4000
 STT_MAX_BYTES = 20 * 1024 * 1024
 STT_DEFAULT_MODEL = "base"
-LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
 DEFAULT_ALLOWED_USER = os.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", "")
 DEFAULT_PROVIDER_URL = ""
 MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
 MODEL_CHOICES = []
 
-LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     handlers=[RotatingFileHandler(str(LOG_FILE), maxBytes=10 * 1024 * 1024, backupCount=5)],
@@ -343,7 +342,7 @@ def load_env_file() -> None:
 
 
 def enforce_runtime_permissions() -> None:
-    private_dirs = {DB_FILE.parent, LOG_FILE.parent, BRIDGE_HOME / "backups", CHARACTER_BACKUP_DIR}
+    private_dirs = {DB_FILE.parent, _LOG_FILE.parent, BRIDGE_HOME / "backups", _CHARACTER_BACKUP_DIR}
     enforce_prompt_permissions = os.environ.get("SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS", "false").casefold() == "true"
     if SYSTEM_PROMPTS_DIR.exists() and (enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)):
         private_dirs.add(SYSTEM_PROMPTS_DIR)
@@ -353,7 +352,7 @@ def enforce_runtime_permissions() -> None:
             directory.chmod(0o700)
         except OSError:
             logging.warning("Could not protect runtime directory %s", directory, exc_info=True)
-    private_files = {ENV_FILE, DB_FILE, LOG_FILE, PROVIDER_CONFIG_FILE, MODEL_CACHE_FILE}
+    private_files = {environment_file(), DB_FILE, _LOG_FILE, _PROVIDER_CONFIG_FILE, _MODEL_CACHE_FILE}
     if SYSTEM_PROMPTS_DIR.exists() and (enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)):
         private_files.update(SYSTEM_PROMPTS_DIR.glob("*.txt"))
         private_files.update(SYSTEM_PROMPTS_DIR.glob("*.json"))
