@@ -147,6 +147,53 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
                 offenders[path.relative_to(REPO_ROOT).as_posix()] = hits
         self.assertEqual(offenders, {})
 
+    def test_startup_path_ownership_has_no_legacy_common_definitions(self):
+        common_source = (BRIDGE_DIR / "common.py").read_text(
+            encoding="utf-8"
+        )
+        config_source = (BRIDGE_DIR / "config.py").read_text(
+            encoding="utf-8"
+        )
+        for forbidden in (
+            "ENV_FILE =",
+            "PROVIDER_CONFIG_FILE =",
+            "MODEL_CACHE_FILE =",
+            "CHARACTER_BACKUP_DIR =",
+            "LOG_FILE =",
+        ):
+            self.assertNotIn(forbidden, common_source)
+
+        self.assertNotIn("ENV_FILE =", config_source)
+        for required in (
+            "PROVIDER_CONFIG_FILE =",
+            "MODEL_CACHE_FILE =",
+            "CHARACTER_BACKUP_DIR =",
+            "LOG_FILE =",
+        ):
+            self.assertIn(required, config_source)
+
+        import bridge.common as common
+
+        for retired_export in (
+            "ENV_FILE",
+            "PROVIDER_CONFIG_FILE",
+            "MODEL_CACHE_FILE",
+            "CHARACTER_BACKUP_DIR",
+            "LOG_FILE",
+        ):
+            self.assertFalse(
+                hasattr(common, retired_export),
+                retired_export,
+            )
+
+    def test_single_file_system_prompt_fallback_is_deleted(self):
+        offenders = {}
+        for path in sorted(BRIDGE_DIR.glob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if "SYSTEM_PROMPTS_FILE" in source:
+                offenders[path.name] = "SYSTEM_PROMPTS_FILE"
+        self.assertEqual(offenders, {})
+
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []
         for root in (BRIDGE_DIR, TESTS_DIR):
