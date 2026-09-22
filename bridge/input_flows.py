@@ -343,7 +343,7 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
     return True
 
 
-def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service=None, persona_service=None) -> bool:
+def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service: MemoryService, persona_service=None) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
     world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
