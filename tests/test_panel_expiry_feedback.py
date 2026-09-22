@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_application_services
 
 ensure_application_extensions()
 
@@ -37,7 +37,7 @@ class PanelExpiryFeedbackTests(unittest.TestCase):
         _m_callbacks.close_panel_message = lambda _token, _chat_id, value: closed.append(value)
         callback = {"id": "callback-501", "from": {"id": "user-1"}, "data": "note:off", "_queued": True, "message": {"message_id": 501, "chat": {"id": "chat"}}}
         try:
-            _m_callbacks.process_callback(self.db, "token", callback)
+            _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
             _m_callbacks.send_text, _m_callbacks.answer_callback, _m_callbacks.close_panel_message = original_send, original_answer, original_close
         self.assertEqual(sent, ["Panel expired; reopen it"])
@@ -58,7 +58,7 @@ class PanelExpiryFeedbackTests(unittest.TestCase):
         _m_callbacks.close_panel_message = lambda _token, _chat_id, value: closed.append(value)
         callback = {"id": "callback-502", "from": {"id": "user-1"}, "data": "persona:off", "message": {"message_id": 502, "chat": {"id": "chat"}}}
         try:
-            _m_callbacks.process_callback(self.db, "token", callback)
+            _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
             _m_callbacks.send_text, _m_callbacks.answer_callback, _m_callbacks.close_panel_message = original_send, original_answer, original_close
         self.assertEqual(sent, [])
