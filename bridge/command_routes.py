@@ -71,11 +71,18 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
             record_failed_turn(db, chat_id, failed_message_id, str(failed[1]), str(failed[2]), str(exc), failed_session_id)
             send_text(token, chat_id, "Retry failed again; the turn remains queued for /retry.")
         return True
+    memory_service = getattr(services, "memory", None) if services is not None else None
     if command == "/prompt":
-        send_prompt_menu(token, chat_id, db, session, fields)
+        send_prompt_menu(
+            token,
+            chat_id,
+            db,
+            session,
+            fields,
+            memory_service=memory_service,
+        )
         return True
     if command == "/prompt text":
-        memory_service = getattr(services, "memory", None) if services is not None else None
         send_text(
             token,
             chat_id,
