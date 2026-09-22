@@ -10,7 +10,7 @@ import re
 DEFAULT_BRIDGE_HOME = (
     Path.home() / ".local/share/sillytavern-telegram"
 )
-_ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\\Z")
+_ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
 def environment_file(
@@ -62,7 +62,7 @@ def load_environment_file(
                 f"invalid environment name at {path}:{line_number}: {key!r}"
             )
 
-        if value[:1] in {"\\\"", "'"}:
+        if value[:1] in {'"', "'"}:
             if len(value) < 2 or value[-1] != value[0]:
                 raise RuntimeError(
                     f"unterminated quoted value at {path}:{line_number}"
