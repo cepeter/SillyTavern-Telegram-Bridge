@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service
+from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -273,7 +273,7 @@ class AuditRegressionTests(unittest.TestCase):
         try:
             _m_command_routes.start_text_action_input(self.db, "token", "chat", session["session_id"], "edit", "Send replacement")
             self.assertIn("edit", _m_session_naming.get_meta(self.db, "text_action_input:chat", ""))
-            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, memory_service=make_test_memory_service()))
+            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, memory_service=make_test_memory_service(), persona_service=make_test_persona_service()))
         finally:
             _m_input_flows.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "text_action_input:chat", ""), "")
@@ -500,7 +500,7 @@ class AuditRegressionTests(unittest.TestCase):
             "post_history_instructions": "An earlier character-card instruction.",
         }
 
-        messages = _m_message_commands.build_chat_messages(session, fields, "Halo", [])
+        messages = _m_message_commands.build_chat_messages(session, fields, "Halo", [], persona_service=make_test_persona_service())
 
         system = messages[0]["content"]
         self.assertIn("selected output language is English (en)", system)
