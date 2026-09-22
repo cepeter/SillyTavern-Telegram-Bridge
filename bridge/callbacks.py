@@ -70,6 +70,10 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
     session = load_session(db, chat_id, bound_session_id, DEFAULT_MODEL) if bound_session_id else ensure_session(db, chat_id, DEFAULT_MODEL)
     session_id = session["session_id"]
     set_panel_session_context(session_id)
+    memory_service = (
+        getattr(services, "memory", None)
+        if services is not None else None
+    )
     persona_service = (
         getattr(services, "persona", None)
         if services is not None else None
@@ -90,6 +94,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         session,
         session_id,
         operation_id,
+        memory_service=memory_service,
         sync_service=sync_service,
     ):
         return
@@ -104,6 +109,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         session,
         session_id,
         operation_id,
+        memory_service=memory_service,
         persona_service=persona_service,
     ):
         return
