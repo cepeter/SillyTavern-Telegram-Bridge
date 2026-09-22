@@ -125,7 +125,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-            )
+             memory_service=make_test_memory_service())
 
         delete_current.assert_called_once_with(
             self.db,
@@ -193,7 +193,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                     self.fields,
                     "chat",
                     operation_id=operation_id,
-                )
+                 memory_service=make_test_memory_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
@@ -220,7 +220,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-            )
+             memory_service=make_test_memory_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
@@ -256,7 +256,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-            )
+             memory_service=make_test_memory_service())
 
         self.assertIn(
             "↪️ Continued response",
@@ -331,7 +331,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-            )
+             memory_service=make_test_memory_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
