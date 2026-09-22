@@ -339,7 +339,7 @@ def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: di
     regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(last_user[0]), new_text, operation_id=operation_id, memory_service=memory_service, persona_service=persona_service)
 
 
-def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, memory_service=None, persona_service=None) -> None:
+def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, memory_service: MemoryService, persona_service=None) -> None:
     session = ensure_session(db, chat_id, default_model)
     fields = card_fields_from_file(session["character_file"])
     row = db.execute("SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND telegram_message_id=? ORDER BY rowid DESC LIMIT 1", (chat_id, str(message_id))).fetchone()
