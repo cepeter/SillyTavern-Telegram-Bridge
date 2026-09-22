@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -386,7 +386,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 "/regen",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=SimpleNamespace(memory=memory),
+                services=make_test_application_services(memory=memory),
             )
 
         regen.assert_called_once()
@@ -414,7 +414,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 "/continue",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=SimpleNamespace(memory=memory),
+                services=make_test_application_services(memory=memory),
             )
 
         continuation.assert_called_once()
@@ -442,7 +442,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 "/edit replacement",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=SimpleNamespace(memory=memory),
+                services=make_test_application_services(memory=memory),
             )
 
         edit.assert_called_once()
