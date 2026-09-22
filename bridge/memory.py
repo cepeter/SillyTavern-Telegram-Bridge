@@ -52,8 +52,6 @@ from bridge.extension_registry import (
 from bridge.hindsight_integrity import (
     HindsightStaleGuard as _HindsightStaleGuard,
 )
-from bridge.memory_service import MemoryService as _MemoryService
-
 
 _HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(
     open_db=lambda: db_connect(),
@@ -206,26 +204,6 @@ def session_summary_for_prompt(db: sqlite3.Connection, chat_id: str, session: di
         summary = generate_session_summary(db, chat_id, session)
     return _apply_summary_context_hooks(summary, db, chat_id, session)
 
-
-def compatibility_memory_service() -> _MemoryService:
-    """Build a short-lived MemoryService from the final shared-runtime collaborators.
-
-    This is the compatibility adapter for direct legacy callers. The function
-    resolves the canonical shared-runtime collaborators at call time without
-    letting application workflows call backend functions directly.
-    """
-    return _MemoryService(
-        recall_context=recall_memory_context,
-        summary_for_prompt=session_summary_for_prompt,
-        summary_state=get_session_summary,
-        retain_session=retain_session_memory,
-        purge_session_memory=purge_hindsight_session,
-    )
-
-
-def resolve_memory_service(memory_service=None) -> _MemoryService:
-    """Return an injected service or the compatibility adapter."""
-    return memory_service if memory_service is not None else compatibility_memory_service()
 
 
 # Explicit late imports replace transitional dependency injection.
