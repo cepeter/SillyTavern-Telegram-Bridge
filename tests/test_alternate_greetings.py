@@ -44,7 +44,7 @@ class AlternateGreetingTests(unittest.TestCase):
         _m_greetings.random.randrange = lambda _length: 1
         try:
             fields = {"name": "Character", "first_mes": "Primary", "alternate_greetings": json.dumps(["Alt {{user}}"])}
-            self.assertTrue(_m_command_routes.send_character_greeting(self.db, "token", "chat", fields, self.session["session_id"], "User", None))
+            self.assertTrue(_m_greetings.send_character_greeting(self.db, "token", "chat", fields, self.session["session_id"], "User", None))
         finally:
             _m_greetings.send_text = original_send
             _m_greetings.random.randrange = original_randrange
