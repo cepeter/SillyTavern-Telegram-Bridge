@@ -134,7 +134,15 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         )
         self.db.commit()
 
-        deleted, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", target["session_id"], active["session_id"], memory_service=make_test_memory_service())
+        deleted, reason = _m_panel_callback_routes.delete_session_data(
+            self.db,
+            "chat",
+            target["session_id"],
+            active["session_id"],
+            memory_service=make_test_memory_service(
+                purge_session_memory=_m_memory.purge_hindsight_session,
+            ),
+        )
 
         self.assertTrue(deleted, reason)
         self.assertEqual(set(fake.documents.deleted), {mapped_id, tagged_id, prefixed_id, legacy_id})
