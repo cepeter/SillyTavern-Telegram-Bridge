@@ -722,14 +722,15 @@ def main() -> int:
     args = parser.parse_args()
 
     refresh_phase3_config()
-    enforce_runtime_permissions()
-    configure_logging()
 
     config = _load_startup_config(os.environ)
     try:
         validate_startup_credential(config.default_model)
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
+
+    enforce_runtime_permissions()
+    configure_logging()
 
     services = _build_startup_services(config)
     token = config.bot_token
