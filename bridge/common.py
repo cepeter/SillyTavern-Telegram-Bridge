@@ -332,9 +332,10 @@ def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) 
     return True
 
 def load_env_file() -> None:
-    if not ENV_FILE.exists():
+    path = environment_file()
+    if not path.exists():
         return
-    for raw in ENV_FILE.read_text(encoding="utf-8", errors="ignore").splitlines():
+    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
