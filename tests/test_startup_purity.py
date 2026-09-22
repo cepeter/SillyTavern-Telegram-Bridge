@@ -32,9 +32,11 @@ from pathlib import Path
 root = Path({str(root)!r})
 os.environ["SILLYTAVERN_BRIDGE_HOME"] = str(root)
 
-import bridge.common
+import bridge.common as common
 
 assert not (root / "logs").exists()
+assert common._GENERATION_EXECUTOR is None
+assert common._UTILITY_EXECUTOR is None
 assert not any(
     isinstance(handler, RotatingFileHandler)
     for handler in logging.getLogger().handlers
