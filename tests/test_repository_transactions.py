@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service
+from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -584,7 +584,7 @@ class GroupTransactionTests(unittest.TestCase):
                 "",
                 None,
                 None,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self._assert_group_reply_transaction_committed()
 
@@ -630,7 +630,7 @@ class GroupTransactionTests(unittest.TestCase):
                 self.chat_id,
                 "caption",
                 b"image",
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self._assert_group_reply_transaction_committed()
 
