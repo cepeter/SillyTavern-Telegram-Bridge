@@ -445,7 +445,7 @@ def format_user_dialogue_action(text: str) -> str:
     return "\n\n".join(sections) or original
 
 
-def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_text: str, history_rows: list[tuple[str, str]], image_data_uri: str | None = None, memory_context: str = "", session_summary: str = "", rag_context: str = "", group_context: str = "", persona_service: PersonaService) -> list[dict]:
+def build_chat_messages(session: dict[str, str], fields: dict[str, str], user_text: str, history_rows: list[tuple[str, str]], *, persona_service: PersonaService, image_data_uri: str | None = None, memory_context: str = "", session_summary: str = "", rag_context: str = "", group_context: str = "") -> list[dict]:
     current_persona = session["persona_id"]
     user_name = persona_service.name(current_persona) if current_persona else DEFAULT_USER_NAME
     persona = persona_service.get(current_persona) if current_persona else None
