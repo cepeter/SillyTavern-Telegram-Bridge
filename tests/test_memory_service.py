@@ -308,6 +308,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 None,
                 None,
                 memory_service=FakeMemory(),
+            persona_service=make_test_persona_service(),
             )
 
         self.assertEqual(captured["memory_context"], "service recall")
@@ -409,6 +410,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 user_rowid,
                 "new text",
                 memory_service=FakeMemory(),
+            persona_service=make_test_persona_service(),
             )
 
         self.assertEqual(
@@ -562,6 +564,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "describe this",
                 b"image-bytes",
                 memory_service=FakeMemory(),
+            persona_service=make_test_persona_service(),
             )
 
         self.assertEqual(captured["memory_context"], "image recall")
@@ -596,6 +599,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "caption",
                 "provider::model",
                 memory_service=memory,
+            persona_service=make_test_persona_service(),
             )
 
         self.assertIs(captured["memory_service"], memory)
@@ -636,6 +640,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 document,
                 "provider::model",
                 memory_service=memory,
+            persona_service=make_test_persona_service(),
             )
 
         self.assertIs(captured["memory_service"], memory)
@@ -720,6 +725,7 @@ class MemoryServiceBoundaryTests(unittest.TestCase):
                     "chat",
                     session,
                     memory_service=FakeMemory(),
+                persona_service=make_test_persona_service(),
                 )
 
             self.assertEqual(calls, [(db, "chat", "reset-memory")])
