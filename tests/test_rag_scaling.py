@@ -3,6 +3,7 @@ from application_test_setup import ensure_application_extensions
 ensure_application_extensions()
 
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 
@@ -74,6 +75,42 @@ class RagScalingTests(unittest.TestCase):
         self.db.commit()
         return ids
 
+    def test_current_embedding_schema_rejects_missing_signature_and_norm(self):
+        now = time.time()
+        self.db.execute(
+            "INSERT INTO data_bank_documents("
+            "chat_id,document_id,filename,byte_size,chunk_count,"
+            "created_at,updated_at"
+            ") VALUES(?,?,?,?,?,?,?)",
+            ("chat", "strict-doc", "strict.txt", 1, 1, now, now),
+        )
+        chunk_id = self.db.execute(
+            "INSERT INTO data_bank_chunks("
+            "chat_id,document_id,chunk_index,content"
+            ") VALUES(?,?,?,?)",
+            ("chat", "strict-doc", 0, "strict"),
+        ).lastrowid
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO data_bank_embeddings("
+                "chunk_id,embedding_namespace,dimensions,vector_json"
+                ") VALUES(?,?,?,?)",
+                (chunk_id, self.namespace, 2, "[1.0,0.0]"),
+            )
+
+    def test_rag_sources_have_no_legacy_backfill_or_sampling_fallback(self):
+        root = Path(__file__).parents[1] / "bridge"
+        core = (root / "rag_core.py").read_text(encoding="utf-8")
+        retrieval = (root / "rag_retrieval.py").read_text(encoding="utf-8")
+        shell = (root / "rag.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("backfill_rag_embedding_signatures", core)
+        self.assertNotIn("backfill_rag_embedding_signatures", shell)
+        self.assertNotIn("DEFAULT_SEMANTIC_SAMPLE_WINDOWS", retrieval)
+        self.assertNotIn("sample_windows", retrieval)
+        self.assertNotIn("Compatibility fallback", retrieval)
+
     def test_small_corpus_keeps_exact_semantic_candidate_set(self):
         ids = self._insert_chunks(20)
         candidates = _m_rag.semantic_candidate_chunk_ids(
@@ -100,9 +137,9 @@ class RagScalingTests(unittest.TestCase):
         rag_core.cached_rag_embedding = lambda _db, _query: [1.0, 0.0]
         rag_core.rag_semantic_candidate_limit = lambda: 32
 
-        def counted_cosine(left, right, *args):
+        def counted_cosine(left, right, *norms):
             cosine_calls.append((left, right))
-            return original_cosine(left, right, *args)
+            return original_cosine(left, right, *norms)
 
         rag_core.cosine_similarity = counted_cosine
         try:
@@ -175,6 +212,20 @@ class RagScalingTests(unittest.TestCase):
             65,
         )
 
+        rows = self.db.execute(
+            "SELECT embedding_namespace,vector_signature,vector_norm "
+            "FROM data_bank_embeddings"
+        ).fetchall()
+        self.assertEqual(len(rows), 65)
+        self.assertTrue(
+            all(
+                namespace == self.namespace
+                and signature is not None
+                and norm is not None
+                for namespace, signature, norm in rows
+            )
+        )
+
     def test_reindex_embedding_batches_release_write_transaction_between_calls(self):
         now = time.time()
         self.db.execute(
@@ -212,6 +263,20 @@ class RagScalingTests(unittest.TestCase):
         self.assertEqual((total, indexed), (65, 65))
         self.assertEqual(transaction_states, [False, False, False])
         self.assertFalse(self.db.in_transaction)
+
+        rows = self.db.execute(
+            "SELECT embedding_namespace,vector_signature,vector_norm "
+            "FROM data_bank_embeddings"
+        ).fetchall()
+        self.assertEqual(len(rows), 65)
+        self.assertTrue(
+            all(
+                namespace == self.namespace
+                and signature is not None
+                and norm is not None
+                for namespace, signature, norm in rows
+            )
+        )
 
     def test_rag_embedding_schema_is_canonical_without_legacy_backfill(self):
         columns = {
