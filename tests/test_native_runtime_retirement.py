@@ -204,6 +204,31 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
         self.assertNotIn("def load_env_file(", common_source)
         self.assertNotIn("load_env_file", main_source)
 
+    def test_common_has_no_import_time_process_resource_construction(self):
+        source = (BRIDGE_DIR / "common.py").read_text(encoding="utf-8")
+        for forbidden in (
+            "logging.basicConfig(",
+            "LOG_FILE.parent.mkdir(",
+            "_GENERATION_EXECUTOR = concurrent.futures.ThreadPoolExecutor(",
+            "_UTILITY_EXECUTOR = concurrent.futures.ThreadPoolExecutor(",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+    def test_launcher_has_no_local_environment_parser(self):
+        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("def bootstrap_env(", source)
+        self.assertIn(
+            "from bridge.environment import bootstrap_environment",
+            source,
+        )
+
+    def test_env_example_has_no_single_file_system_prompt_fallback(self):
+        source = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+        self.assertNotIn("SILLYTAVERN_SYSTEM_PROMPTS_FILE", source)
+
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []
         for root in (BRIDGE_DIR, TESTS_DIR):
