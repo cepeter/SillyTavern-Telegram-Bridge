@@ -123,7 +123,6 @@ from bridge.common import (
     chat_job_lock,
     configure_logging,
     enforce_runtime_permissions,
-    load_env_file,
     register_durable_backlog_dispatcher,
     shutdown_background_executors,
     submit_chat_background,
@@ -722,7 +721,6 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
-    load_env_file()
     refresh_phase3_config()
     enforce_runtime_permissions()
     configure_logging()
