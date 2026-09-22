@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from bridge.composition import BridgeServices
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bridge.composition import BridgeServices
 
 def close_panel_message(token: str, chat_id: str, callback: dict) -> None:
     message = callback.get("message") or callback
