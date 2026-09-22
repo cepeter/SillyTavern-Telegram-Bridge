@@ -328,12 +328,14 @@ from bridge.card_content import (
 )
 from bridge.cards import send_panel_message
 from bridge.common import (
-    MODEL_CACHE_FILE,
     MODEL_CHOICES,
     MODEL_REFRESH_SECONDS,
-    PROVIDER_CONFIG_FILE,
 )
-from bridge.config import WORLD_DIR
+from bridge.config import (
+    MODEL_CACHE_FILE,
+    PROVIDER_CONFIG_FILE,
+    WORLD_DIR,
+)
 from bridge.generation import opencode_muse_headers
 from bridge.network_security import (
     strict_urlopen,
