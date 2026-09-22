@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -134,7 +134,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         )
         self.db.commit()
 
-        deleted, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", target["session_id"], active["session_id"])
+        deleted, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", target["session_id"], active["session_id"], memory_service=make_test_memory_service())
 
         self.assertTrue(deleted, reason)
         self.assertEqual(set(fake.documents.deleted), {mapped_id, tagged_id, prefixed_id, legacy_id})
