@@ -87,6 +87,25 @@ if os.name == "posix":
             completed.stdout + completed.stderr,
         )
 
+    def test_configure_logging_does_not_create_executors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log_file = Path(directory) / "bridge.log"
+            source = f"""
+from pathlib import Path
+import bridge.common as common
+
+common.configure_logging(Path({str(log_file)!r}))
+assert common._GENERATION_EXECUTOR is None
+assert common._UTILITY_EXECUTOR is None
+"""
+            completed = self._run(source)
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stdout + completed.stderr,
+        )
+
     def test_configure_logging_does_not_install_duplicate_handler(self):
         with tempfile.TemporaryDirectory() as directory:
             log_file = Path(directory) / "bridge.log"
