@@ -98,7 +98,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
     return False
 
 
-def _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id):
+def _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id, *, memory_service):
     """Handle generation, preset, settings, and response-language panels."""
     if command == "/update":
         send_update_menu(token, chat_id)
@@ -122,7 +122,18 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
         start_text_action_input(db, token, chat_id, session_id, "macro", "Send text to preview with supported SillyTavern macros.")
         return True
     if command.startswith("/macro "):
-        return handle_inline_text_action(db, token, "", chat_id, session, fields, "macro", stripped.split(None, 1)[1], operation_id)
+        return handle_inline_text_action(
+            db,
+            token,
+            "",
+            chat_id,
+            session,
+            fields,
+            "macro",
+            stripped.split(None, 1)[1],
+            operation_id,
+            memory_service=memory_service,
+        )
     if command == "/stscript" or command.startswith("/stscript "):
         send_stscript_menu(token, chat_id)
         return True
@@ -143,6 +154,7 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
 
 def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session, fields, operation_id, services=None):
     """Handle memory, RAG, group, and synchronization commands."""
+    memory_service = getattr(services, "memory", None) if services is not None else None
     if command == "/memory" or command in {"/memory on", "/memory off", "/memory status", "/memory scope"}:
         send_memory_menu(token, chat_id, db)
         return True
@@ -159,7 +171,18 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
         start_text_action_input(db, token, chat_id, session["session_id"], "remember", "Send the explicit memory fact to store in the active session.")
         return True
     if command.startswith("/remember "):
-        return handle_inline_text_action(db, token, api_key, chat_id, session, fields, "remember", stripped.split(None, 1)[1], operation_id)
+        return handle_inline_text_action(
+            db,
+            token,
+            api_key,
+            chat_id,
+            session,
+            fields,
+            "remember",
+            stripped.split(None, 1)[1],
+            operation_id,
+            memory_service=memory_service,
+        )
     if command == "/summarize":
         send_summary_menu(token, chat_id, db, session)
         return True
@@ -225,7 +248,19 @@ def _handle_voice_panels(db, token, chat_id, command, session):
 
 def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, operation_id, services=None):
     """Dispatch generation, memory, voice, and panel-first commands."""
-    if _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id):
+    memory_service = getattr(services, "memory", None) if services is not None else None
+    if _handle_generation_panels(
+        db,
+        token,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        session_id,
+        operation_id,
+        memory_service=memory_service,
+    ):
         return True
     if _handle_memory_media(
         db,
