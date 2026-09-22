@@ -78,6 +78,10 @@ class JobWorkerServiceTests(unittest.TestCase):
                 begin_shutdown=lambda: None,
             ),
             jobs=self.jobs,
+            group_director=object(),
+            memory=object(),
+            persona=object(),
+            sync=object(),
         )
 
     def tearDown(self):
@@ -350,7 +354,7 @@ class JobWorkerServiceTests(unittest.TestCase):
         ), patch.object(
             _m_media,
             "process_voice_message",
-        ):
+        ) as voice_message:
             _m_media.process_voice_job(
                 self.services,
                 {"name": "Mira"},
@@ -362,6 +366,10 @@ class JobWorkerServiceTests(unittest.TestCase):
         self.assertEqual(
             self.lifecycle_names(),
             ["start", "complete"],
+        )
+        self.assertIs(
+            voice_message.call_args.kwargs["services"],
+            self.services,
         )
 
         self.jobs.calls.clear()

@@ -45,17 +45,29 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
     def test_durable_job_compatibility_module_is_deleted(self):
         self.assertFalse((BRIDGE_DIR / "job_runtime.py").exists())
 
-    def test_job_service_is_required_by_composition(self):
-        self.assertIs(
-            BridgeServices.__dataclass_fields__["jobs"].default,
-            MISSING,
-        )
-        self.assertIs(
-            inspect.signature(build_bridge_services)
-            .parameters["jobs"]
-            .default,
-            inspect.Parameter.empty,
-        )
+    def test_all_application_services_are_required_by_composition(self):
+        for name in (
+            "jobs",
+            "group_director",
+            "memory",
+            "persona",
+            "sync",
+        ):
+            with self.subTest(name=name):
+                self.assertIs(
+                    BridgeServices.__dataclass_fields__[name].default,
+                    MISSING,
+                )
+                self.assertIs(
+                    inspect.signature(build_bridge_services)
+                    .parameters[name]
+                    .default,
+                    inspect.Parameter.empty,
+                )
+                self.assertNotIn(
+                    "None",
+                    str(BridgeServices.__dataclass_fields__[name].type),
+                )
 
     def test_legacy_durable_job_wrappers_are_deleted(self):
         source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
@@ -73,6 +85,64 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
         for path in sorted(BRIDGE_DIR.glob("*.py")):
             source = path.read_text(encoding="utf-8")
             hits = sorted(name for name in forbidden if name in source)
+            if hits:
+                offenders[path.relative_to(REPO_ROOT).as_posix()] = hits
+        self.assertEqual(offenders, {})
+
+    def test_group_director_compatibility_wrappers_are_deleted(self):
+        source = (BRIDGE_DIR / "groups.py").read_text(encoding="utf-8")
+        for forbidden in (
+            "def _compat_group_director_service(",
+            "def group_director_plan(",
+            "def group_prompt_context(",
+            "def parse_group_director_decision(",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+    def test_application_routes_require_service_graph(self):
+        from bridge.callbacks import process_callback
+        from bridge.command_routes import handle_command_route
+        from bridge.message_commands import process_message
+
+        for function in (
+            process_message,
+            process_callback,
+            handle_command_route,
+        ):
+            with self.subTest(function=function.__name__):
+                self.assertIs(
+                    inspect.signature(function).parameters["services"].default,
+                    inspect.Parameter.empty,
+                )
+
+    def test_required_service_routes_do_not_use_optional_service_lookup(self):
+        for filename in (
+            "message_commands.py",
+            "callbacks.py",
+            "command_routes.py",
+        ):
+            source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")
+            self.assertNotIn("services=None", source, filename)
+            for forbidden in (
+                'getattr(services, "memory", None)',
+                'getattr(services, "persona", None)',
+                'getattr(services, "sync", None)',
+                'getattr(services, "group_director", None)',
+            ):
+                self.assertNotIn(forbidden, source, filename)
+
+    def test_no_optional_application_service_parameters_remain(self):
+        forbidden = (
+            "memory_service=None",
+            "persona_service=None",
+            "sync_service=None",
+            "group_director_service=None",
+        )
+        offenders = {}
+        for path in sorted(BRIDGE_DIR.glob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            hits = [value for value in forbidden if value in source]
             if hits:
                 offenders[path.relative_to(REPO_ROOT).as_posix()] = hits
         self.assertEqual(offenders, {})

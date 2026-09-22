@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_native_test_sync_service, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -128,7 +128,13 @@ class HelpDrilldownTests(unittest.TestCase):
         original_request = _m_cards.telegram_request
         _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_sync_menu("token", "chat", self.db, session)
+            _m_panel_callback_routes.send_sync_menu(
+                "token",
+                "chat",
+                self.db,
+                session,
+                sync_service=make_native_test_sync_service(),
+            )
         finally:
             _m_cards.telegram_request = original_request
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
@@ -172,7 +178,14 @@ class HelpDrilldownTests(unittest.TestCase):
         _m_status_panels.send_panel_message = lambda *args, **kwargs: calls.append((args, kwargs))
         _m_catalog.get_model_groups = lambda: {}
         try:
-            _m_command_routes.send_prompt_menu("token", "chat", self.db, session, {"name": "Test"})
+            _m_command_routes.send_prompt_menu(
+                "token",
+                "chat",
+                self.db,
+                session,
+                {"name": "Test"},
+                memory_service=make_test_memory_service(),
+            )
             self.assertIn("prompt:budget", str(calls[-1]))
             _m_scene_state.send_scene_menu("token", "chat", self.db, session)
             self.assertIn("scene:refresh", str(calls[-1]))

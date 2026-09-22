@@ -15,6 +15,7 @@ import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
+from bridge.group_director_service import GroupDirectorService
 class GroupDirectorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -44,6 +45,19 @@ class GroupDirectorTests(unittest.TestCase):
             },
         )
 
+
+    def _service(self):
+        return GroupDirectorService(
+            load_group_state=_m_groups.group_state,
+            safe_character=_m_groups.safe_character_path,
+            member_labels=_m_groups.group_member_labels,
+            card_fields=_m_groups.card_fields_from_file,
+            generation_settings=_m_groups.get_generation_settings,
+            generate_text=_m_groups.generate_text,
+            director_customization=extension_registry.get_director_customization,
+            default_model=config.DEFAULT_MODEL,
+        )
+
     def tearDown(self):
         self.db.close()
         config.DB_FILE = self.old_db
@@ -54,7 +68,7 @@ class GroupDirectorTests(unittest.TestCase):
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
         try:
             self.assertIsNone(
-                _m_groups.parse_group_director_decision(
+                self._service()._parse_decision(
                     '{"speaker":"Mallory","direction":"Enter dramatically."}',
                     ["alice.png", "bob.png"],
                 )
@@ -77,7 +91,7 @@ class GroupDirectorTests(unittest.TestCase):
         _m_groups.generate_text = fake_generate
         try:
             before = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-            plan = _m_message_commands.group_director_plan(
+            plan = self._service().plan(
                 self.db,
                 "key",
                 "chat|topic:1",
@@ -104,7 +118,7 @@ class GroupDirectorTests(unittest.TestCase):
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
         _m_groups.generate_text = lambda *_args, **_kwargs: "not json"
         try:
-            plan = _m_message_commands.group_director_plan(
+            plan = self._service().plan(
                 self.db,
                 "key",
                 "chat|topic:1",
@@ -131,7 +145,7 @@ class GroupDirectorTests(unittest.TestCase):
 
         _m_groups.generate_text = fail_generate
         try:
-            plan = _m_message_commands.group_director_plan(
+            plan = self._service().plan(
                 self.db,
                 "key",
                 "chat|topic:1",
@@ -166,7 +180,7 @@ class GroupDirectorTests(unittest.TestCase):
                 "_DIRECTOR_CUSTOMIZATION_PROVIDER",
                 None,
             ):
-                plan = _m_message_commands.group_director_plan(
+                plan = self._service().plan(
                     self.db,
                     "key",
                     "chat|topic:1",
@@ -211,7 +225,7 @@ class GroupDirectorTests(unittest.TestCase):
                 "_DIRECTOR_CUSTOMIZATION_PROVIDER",
                 ("test", lambda db, chat_id, session: customization),
             ):
-                plan = _m_message_commands.group_director_plan(
+                plan = self._service().plan(
                     self.db,
                     "key",
                     "chat|topic:1",
@@ -254,7 +268,7 @@ class GroupDirectorTests(unittest.TestCase):
                 "_DIRECTOR_CUSTOMIZATION_PROVIDER",
                 ("invalid", lambda db, chat_id, session: customization),
             ):
-                plan = _m_message_commands.group_director_plan(
+                plan = self._service().plan(
                     self.db,
                     "key",
                     "chat|topic:1",
@@ -297,7 +311,7 @@ class GroupDirectorTests(unittest.TestCase):
                         "_DIRECTOR_CUSTOMIZATION_PROVIDER",
                         ("bounded", lambda db, chat_id, session, value=customization: value),
                     ):
-                        plan = _m_message_commands.group_director_plan(
+                        plan = self._service().plan(
                             self.db,
                             "key",
                             "chat|topic:1",
@@ -335,7 +349,7 @@ class GroupDirectorTests(unittest.TestCase):
                 "_DIRECTOR_CUSTOMIZATION_PROVIDER",
                 ("broken", fail_policy),
             ):
-                plan = _m_message_commands.group_director_plan(
+                plan = self._service().plan(
                     self.db,
                     "key",
                     "chat|topic:1",
@@ -382,7 +396,7 @@ class GroupDirectorTests(unittest.TestCase):
                 "_DIRECTOR_CUSTOMIZATION_PROVIDER",
                 ("test", policy),
             ):
-                plan = _m_message_commands.group_director_plan(
+                plan = self._service().plan(
                     self.db,
                     "key",
                     "chat|topic:1",
@@ -412,7 +426,7 @@ class GroupDirectorTests(unittest.TestCase):
                 "_DIRECTOR_CUSTOMIZATION_PROVIDER",
                 ("test", lambda db, chat_id, session: customization),
             ):
-                context = _m_message_commands.group_prompt_context(
+                context = self._service().prompt_context(
                     self.db,
                     "chat|topic:1",
                     self.session,
@@ -427,15 +441,15 @@ class GroupDirectorTests(unittest.TestCase):
         self.assertIn("keep the letter unopened", context)
 
 
-    def test_groups_module_delegates_director_workflow_to_service(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "groups.py"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn("GroupDirectorService", source)
-        self.assertNotIn("You are an invisible scene director", source)
-        self.assertNotIn("Output strict JSON only", source)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_groups_module_no_longer_owns_director_workflow(self):
+        source = (Path(__file__).parents[1] / "bridge" / "groups.py").read_text(
+            encoding="utf-8"
+        )
+        for forbidden in (
+            "GroupDirectorService",
+            "_compat_group_director_service",
+            "group_director_plan",
+            "group_prompt_context",
+            "parse_group_director_decision",
+        ):
+            self.assertNotIn(forbidden, source)

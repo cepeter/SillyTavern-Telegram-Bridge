@@ -49,8 +49,6 @@ from bridge.group_core import (
     advance_group_turn,
 )
 
-from bridge.extension_registry import get_director_customization as _get_director_customization
-from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
 def send_group_menu(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], message_id: int | None = None) -> None:
     state = group_state(db, chat_id, session["session_id"])
     labels = group_member_labels(state["members"])
@@ -202,59 +200,6 @@ def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str
     elif data.startswith("groupmode:"):
         handle_group_command(db, token, chat_id, session, f"/group mode {data.split(':', 1)[1]}", operation_id)
         send_group_mode_menu(db, token, chat_id, session, message_id)
-def _compat_group_director_service() -> _GroupDirectorService:
-    return _GroupDirectorService(
-        load_group_state=group_state,
-        safe_character=safe_character_path,
-        member_labels=group_member_labels,
-        card_fields=card_fields_from_file,
-        generation_settings=get_generation_settings,
-        generate_text=generate_text,
-        director_customization=_get_director_customization,
-        default_model=DEFAULT_MODEL,
-    )
-
-
-def parse_group_director_decision(
-    raw: str,
-    member_files: list[str],
-) -> tuple[str, str] | None:
-    """Compatibility parser delegated to the application service."""
-    return _compat_group_director_service()._parse_decision(raw, member_files)
-
-
-def group_director_plan(
-    db: sqlite3.Connection,
-    api_key: str,
-    chat_id: str,
-    session: dict[str, str],
-    user_text: str,
-) -> tuple[str, dict[str, object], str] | None:
-    """Compatibility adapter for Group Director planning."""
-    return _compat_group_director_service().plan(
-        db,
-        api_key,
-        chat_id,
-        session,
-        user_text,
-    )
-
-
-def group_prompt_context(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session: dict[str, str],
-    speaker_file: str,
-    director_instruction: str = "",
-) -> str:
-    """Compatibility adapter for Group Director prompt context."""
-    return _compat_group_director_service().prompt_context(
-        db,
-        chat_id,
-        session,
-        speaker_file,
-        director_instruction,
-    )
 def handle_group_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], command_text: str, operation_id: int | str | None = None) -> None:
     parts = command_text.split(None, 2)
     action = parts[1].casefold() if len(parts) > 1 else "status"

@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -308,6 +308,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 None,
                 None,
                 memory_service=FakeMemory(),
+                persona_service=make_test_persona_service(),
             )
 
         self.assertEqual(captured["memory_context"], "service recall")
@@ -409,6 +410,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 user_rowid,
                 "new text",
                 memory_service=FakeMemory(),
+                persona_service=make_test_persona_service(),
             )
 
         self.assertEqual(
@@ -450,7 +452,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "provider::model",
                 "",
                 "User",
-                services=SimpleNamespace(memory=memory),
+                services=make_test_application_services(memory=memory),
             )
 
         self.assertTrue(handled)
@@ -475,10 +477,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 "replacement text",
-                services=SimpleNamespace(
-                    memory=memory,
-                    group_director=None,
-                ),
+                services=make_test_application_services(memory=memory),
             )
 
         self.assertIs(captured["memory_service"], memory)
@@ -562,6 +561,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "describe this",
                 b"image-bytes",
                 memory_service=FakeMemory(),
+                persona_service=make_test_persona_service(),
+                group_director_service=make_test_application_services().group_director,
             )
 
         self.assertEqual(captured["memory_context"], "image recall")
@@ -596,6 +597,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "caption",
                 "provider::model",
                 memory_service=memory,
+                persona_service=make_test_persona_service(),
+                group_director_service=make_test_application_services().group_director,
             )
 
         self.assertIs(captured["memory_service"], memory)
@@ -636,58 +639,32 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 document,
                 "provider::model",
                 memory_service=memory,
+                persona_service=make_test_persona_service(),
+                group_director_service=make_test_application_services().group_director,
             )
 
         self.assertIs(captured["memory_service"], memory)
 
 
 
-class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
-    def test_compatibility_service_binds_current_runtime_memory_collaborators(self):
-        calls = []
-        session = {"session_id": "compat-session"}
-        fields = {"name": "Mira"}
-
-        with patch.object(_m_memory, "recall_memory_context",
-            side_effect=lambda *_args: calls.append("recall") or "compat recall",
-        ), patch.object(
-            _m_memory,
-            "session_summary_for_prompt",
-            side_effect=lambda *_args: calls.append("summary") or "compat summary",
-        ), patch.object(
-            _m_memory,
-            "get_session_summary",
-            side_effect=lambda *_args: ("stored", 0),
-        ), patch.object(
-            _m_memory,
-            "retain_session_memory",
-            side_effect=lambda *_args: calls.append("retain"),
-        ), patch.object(
-            _m_memory,
-            "purge_hindsight_session",
-            side_effect=lambda *_args: calls.append("purge") or 4,
+class MemoryServiceExplicitInjectionBoundaryTests(unittest.TestCase):
+    def test_memory_application_paths_do_not_resolve_compatibility_service(self):
+        root = Path(__file__).parents[1] / "bridge"
+        for filename in (
+            "message_commands.py",
+            "telegram.py",
+            "media.py",
+            "help.py",
+            "input_flows.py",
+            "generation.py",
+            "commands.py",
         ):
-            service = _m_memory.compatibility_memory_service()
-            context = service.prompt_context(
-                sqlite3.connect(":memory:"),
-                "chat",
-                session,
-                fields,
-                "query",
-            )
-            service.retain(None, "chat", session, fields)
-            purged = service.purge_session(None, "chat", "compat-session")
+            source = (root / filename).read_text(encoding="utf-8")
+            self.assertNotIn("resolve_memory_service", source, filename)
+            self.assertNotIn("compatibility_memory_service", source, filename)
 
-        self.assertEqual(
-            context,
-            MemoryPromptContext(
-                recall="compat recall",
-                summary="compat summary",
-            ),
-        )
-        self.assertEqual(purged, 4)
-        self.assertEqual(calls, ["recall", "summary", "retain", "purge"])
 
+class MemoryServiceBoundaryTests(unittest.TestCase):
     def test_reviewed_application_paths_do_not_call_memory_backend_functions_directly(self):
         root = Path(__file__).parents[1] / "bridge"
         reviewed = (

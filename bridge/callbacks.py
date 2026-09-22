@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bridge.composition import BridgeServices
+
 def close_panel_message(token: str, chat_id: str, callback: dict) -> None:
     message = callback.get("message") or callback
     message_id = message.get("message_id")
@@ -37,7 +42,7 @@ def is_session_scoped_panel_callback(data: str) -> bool:
     return data.startswith(("character", "persona", "session", "world", "systemprompt", "language", "note", "reset", "sync", "status:", "prompt:", "scene:", "goal:", "curated:", "summary:", "swipe:", "expression:", "update:", "models", "provider", "model", "group", "groupchars", "groupmode", "enum:settings", "enum:preset", "enum:rag", "enum:stt"))
 
 
-def process_callback(db: sqlite3.Connection, token: str, callback: dict, operation_id: int | None = None, *, services=None) -> None:
+def process_callback(db: sqlite3.Connection, token: str, callback: dict, operation_id: int | None = None, *, services: BridgeServices) -> None:
     sender = str((callback.get("from") or {}).get("id", ""))
     message = callback.get("message") or {}
     chat_id = str((message.get("chat") or {}).get("id", ""))
@@ -70,14 +75,9 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
     session = load_session(db, chat_id, bound_session_id, DEFAULT_MODEL) if bound_session_id else ensure_session(db, chat_id, DEFAULT_MODEL)
     session_id = session["session_id"]
     set_panel_session_context(session_id)
-    persona_service = (
-        getattr(services, "persona", None)
-        if services is not None else None
-    )
-    sync_service = (
-        getattr(services, "sync", None)
-        if services is not None else None
-    )
+    memory_service = services.memory
+    persona_service = services.persona
+    sync_service = services.sync
 
     if handle_primary_panel_callback(
         db,
@@ -90,6 +90,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         session,
         session_id,
         operation_id,
+        memory_service=memory_service,
         sync_service=sync_service,
     ):
         return
@@ -104,6 +105,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         session,
         session_id,
         operation_id,
+        memory_service=memory_service,
         persona_service=persona_service,
     ):
         return

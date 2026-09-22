@@ -44,10 +44,10 @@ class BridgeServices:
     telegram: TelegramRuntime
     background: BackgroundRuntime
     jobs: JobService
-    group_director: GroupDirectorService | None = None
-    memory: MemoryService | None = None
-    persona: PersonaService | None = None
-    sync: SyncService | None = None
+    group_director: GroupDirectorService
+    memory: MemoryService
+    persona: PersonaService
+    sync: SyncService
 
 
 def load_bridge_config(
@@ -103,10 +103,10 @@ def build_bridge_services(
     telegram: TelegramRuntime,
     background: BackgroundRuntime,
     jobs: JobService,
-    group_director: GroupDirectorService | None = None,
-    memory: MemoryService | None = None,
-    persona: PersonaService | None = None,
-    sync: SyncService | None = None,
+    group_director: GroupDirectorService,
+    memory: MemoryService,
+    persona: PersonaService,
+    sync: SyncService,
 ) -> BridgeServices:
     return BridgeServices(
         config=config,

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bridge.composition import BridgeServices
+
 def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
     method = "editMessageText" if message_id else "sendMessage"
     payload = {
@@ -15,8 +20,7 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     telegram_request(token, method, payload)
 
 
-def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None, *, memory_service=None) -> None:
-    memory_service = resolve_memory_service(memory_service)
+def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None, *, memory_service: MemoryService) -> None:
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "reset"):
             return
@@ -54,9 +58,8 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
     set_meta(db, meta_key, json.dumps(state))
 
 
-def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service=None, persona_service=None) -> None:
+def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
-    memory_service = resolve_memory_service(memory_service)
     history_rows = timed_call("history_load", db.execute,
         "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
         (chat_id, session_id, context_history_candidate_limit()),
@@ -150,7 +153,7 @@ def _operation_command(text):
     return command
 
 
-def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None, *, services=None) -> None:
+def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None, *, services: BridgeServices) -> None:
     stripped = text.strip()
     command = stripped.lower()
     command_parts = command.split(None, 1)
@@ -164,8 +167,8 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
     session_id = session["session_id"]
     set_panel_session_context(session_id)
-    memory_service = getattr(services, "memory", None) if services is not None else None
-    persona_service = getattr(services, "persona", None) if services is not None else None
+    memory_service = services.memory
+    persona_service = services.persona
     if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
         recovery_command = _operation_command(text)
         recovery_fields = card_fields_from_file(
@@ -181,6 +184,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 chat_id,
                 operation_id=operation_id,
                 memory_service=memory_service,
+                persona_service=persona_service,
             )
         if recovery_command == "/continue":
             return continue_last(
@@ -192,6 +196,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 chat_id,
                 operation_id=operation_id,
                 memory_service=memory_service,
+                persona_service=persona_service,
             )
         if recovery_command == "/edit":
             edited = str(text or "").strip().split(None, 1)
@@ -210,6 +215,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 edited_text,
                 operation_id=operation_id,
                 memory_service=memory_service,
+                persona_service=persona_service,
             )
 
         # Generic committed-response recovery remains the fallback for
@@ -243,24 +249,15 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     session = reconcile_session_character(db, chat_id, session)
     fields = card_fields_from_file(session["character_file"])
     director_plan = None
-    group_director = getattr(services, "group_director", None) if services is not None else None
+    group_director = services.group_director
     if not command.startswith("/"):
-        if group_director is not None:
-            director_plan = group_director.plan(
-                db,
-                api_key,
-                chat_id,
-                session,
-                text,
-            )
-        else:
-            director_plan = group_director_plan(
-                db,
-                api_key,
-                chat_id,
-                session,
-                text,
-            )
+        director_plan = group_director.plan(
+            db,
+            api_key,
+            chat_id,
+            session,
+            text,
+        )
     director_instruction = ""
     if director_plan:
         group_turn = (director_plan[0], director_plan[1])
@@ -270,25 +267,16 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     group_context = ""
     if group_turn:
         fields = card_fields_from_file(group_turn[0])
-        if group_director is not None:
-            group_context = group_director.prompt_context(
-                db,
-                chat_id,
-                session,
-                group_turn[0],
-                director_instruction,
-            )
-        else:
-            group_context = group_prompt_context(
-                db,
-                chat_id,
-                session,
-                group_turn[0],
-                director_instruction,
-            )
+        group_context = group_director.prompt_context(
+            db,
+            chat_id,
+            session,
+            group_turn[0],
+            director_instruction,
+        )
     current_model = session["model_id"] or model
     current_persona = session["persona_id"]
-    user_name = persona_name(current_persona) if current_persona else DEFAULT_USER_NAME
+    user_name = persona_service.name(current_persona) if current_persona else DEFAULT_USER_NAME
     if handle_command_route(
         db,
         token,
@@ -334,10 +322,7 @@ import logging
 import sqlite3
 import time
 from bridge.card_content import card_fields_from_file
-from bridge.cards import (
-    persona_name,
-    send_session_menu,
-)
+from bridge.cards import send_session_menu
 from bridge.character_identity import reconcile_session_character
 from bridge.command_routes import handle_command_route
 from bridge.commands import edit_last_user
@@ -370,10 +355,6 @@ from bridge.group_core import (
     advance_group_turn,
     group_current_speaker,
 )
-from bridge.groups import (
-    group_director_plan,
-    group_prompt_context,
-)
 from bridge.input_flows import handle_pending_input
 from bridge.language import normalize_response_language
 from bridge.media import (
@@ -381,10 +362,9 @@ from bridge.media import (
     send_reply,
     send_typing,
 )
-from bridge.memory import (
-    clear_session_summary,
-    resolve_memory_service,
-)
+from bridge.memory import clear_session_summary
+from bridge.memory_service import MemoryService
+from bridge.persona_service import PersonaService
 from bridge.performance import timed_call
 from bridge.rag_core import (
     rag_citation_footer,

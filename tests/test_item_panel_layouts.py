@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -42,12 +42,8 @@ class ItemPanelLayoutTests(unittest.TestCase):
         return [button["callback_data"] for row in payload["reply_markup"]["inline_keyboard"] for button in row]
 
     def test_persona_rows_have_delete_callbacks(self):
-        old_loader = _m_persona_sync.load_personas
-        _m_persona_sync.load_personas = lambda: {"p1": {"name": "Punto"}, "p2": {"name": "Alt"}}
-        try:
-            _m_command_routes.send_persona_menu("bot", "chat", "p1")
-        finally:
-            _m_persona_sync.load_personas = old_loader
+        persona_service = make_test_persona_service(personas={"p1": {"name": "Punto"}, "p2": {"name": "Alt"}})
+        _m_command_routes.send_persona_menu("bot", "chat", "p1", persona_service=persona_service)
         callbacks = self._callbacks(self.calls[-1][1])
         self.assertEqual(sum(value.startswith("persona:delete:") for value in callbacks), 2)
         self.assertNotIn("persona:delete", callbacks)

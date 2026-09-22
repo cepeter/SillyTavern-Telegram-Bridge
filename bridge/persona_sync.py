@@ -15,10 +15,6 @@ from bridge.config import BRIDGE_HOME, SILLYTAVERN_DIR
 from bridge.persona_integrity import (
     IntegrityCheckedPersonaStore as _IntegrityCheckedPersonaStore,
 )
-from bridge.persona_service import PersonaService as _PersonaService
-from bridge.repositories import (
-    count_persona_references as _repo_count_persona_references,
-)
 
 
 NATIVE_PERSONA_SETTINGS_FILE = Path(os.environ.get(
@@ -43,27 +39,6 @@ def load_personas() -> dict[str, dict[str, object]]:
     except Exception:
         logging.warning("Could not load native Persona metadata", exc_info=True)
         return {}
-
-
-def compatibility_persona_service() -> _PersonaService:
-    """Build a late-bound PersonaService over the final runtime collaborators."""
-    return _PersonaService(
-        load_personas=load_personas,
-        load_default_persona=default_persona_id,
-        upsert_persona=upsert_native_persona,
-        delete_persona=delete_native_persona,
-        update_session_persona=update_session,
-        persona_reference_count=_repo_count_persona_references,
-        persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
-    )
-
-
-def resolve_persona_service(persona_service=None) -> _PersonaService:
-    return (
-        persona_service
-        if persona_service is not None
-        else compatibility_persona_service()
-    )
 
 
 def _settings_hash(settings: dict) -> str:

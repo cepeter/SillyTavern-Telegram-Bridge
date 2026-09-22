@@ -94,23 +94,13 @@ class SyncUiBehaviorTests(unittest.TestCase):
             text,
         )
 
-    def test_status_uses_fallback_resolver_when_service_is_omitted(self):
-        with patch.object(_m_status_panels, "resolve_sync_service",
-            return_value=self.service,
-        ) as resolve:
-            text = _m_status_panels.sync_status_text(
+    def test_status_requires_explicit_sync_service(self):
+        with self.assertRaises(TypeError):
+            _m_status_panels.sync_status_text(
                 self.db,
                 "chat",
                 self.session,
             )
-
-        resolve.assert_called_once_with(None)
-        self.service.status.assert_called_once_with(
-            self.db,
-            "chat",
-            "session",
-        )
-        self.assertIn("Live Sync", text)
 
     def test_status_error_propagates(self):
         self.service.status.side_effect = RuntimeError("status failed")
@@ -183,26 +173,23 @@ class SyncUiBehaviorTests(unittest.TestCase):
             "session",
         )
 
-    def test_non_sync_callback_returns_false_without_service_resolution(self):
-        with patch.object(_m_status_panels, "resolve_sync_service",
-            side_effect=AssertionError(
-                "non-sync callback resolved SyncService"
-            ),
-        ):
-            handled = _m_panel_callback_routes.handle_sync_callback(
-                self.db,
-                "token",
-                {"id": "cb"},
-                Mock(),
-                "prompt:status",
-                "chat",
-                {"message_id": 91},
-                self.session,
-                "session",
-                123,
-            )
+    def test_non_sync_callback_returns_false_with_explicit_service(self):
+        handled = _m_panel_callback_routes.handle_sync_callback(
+            self.db,
+            "token",
+            {"id": "cb"},
+            Mock(),
+            "prompt:status",
+            "chat",
+            {"message_id": 91},
+            self.session,
+            "session",
+            123,
+            sync_service=self.service,
+        )
 
         self.assertFalse(handled)
+        self.service.assert_not_called()
 
     def test_sync_close_answers_and_closes_panel(self):
         answer = Mock()

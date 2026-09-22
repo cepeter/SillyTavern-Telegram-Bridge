@@ -218,7 +218,7 @@ def transcribe_audio_bytes(raw: bytes, suffix: str = ".ogg", model_name: str | N
     return text[:12000]
 
 
-def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, voice: dict, message_id: int, queued_session_id: str | None = None) -> None:
+def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, voice: dict, message_id: int, queued_session_id: str | None = None, *, services: _BridgeServices) -> None:
     if get_meta(db, f"stt_mode:{chat_id}", "on") != "on":
         send_text(token, chat_id, "Voice input is disabled. Use /voice_input on to enable it.")
         return
@@ -231,7 +231,18 @@ def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, mode
     language = get_meta(db, f"stt_language:{chat_id}", "auto")
     stt_model = get_meta(db, f"stt_model:{chat_id}", STT_DEFAULT_MODEL)
     transcript = transcribe_audio_bytes(raw, suffix, stt_model, language)
-    process_message(db, token, api_key, model, fields, chat_id, transcript, message_id, queued_session_id=queued_session_id)
+    process_message(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        transcript,
+        message_id,
+        queued_session_id=queued_session_id,
+        services=services,
+    )
 
 
 def process_voice_job(
@@ -268,7 +279,18 @@ def process_voice_job(
                 if job_id is not None:
                     jobs.complete(db, job_id)
                 return
-            process_voice_message(db, token, api_key, model, fields, chat_id, voice, message_id, queued_session_id=queued_session_id)
+            process_voice_message(
+                db,
+                token,
+                api_key,
+                model,
+                fields,
+                chat_id,
+                voice,
+                message_id,
+                queued_session_id=queued_session_id,
+                services=services,
+            )
             if job_id is not None:
                 jobs.complete(db, job_id)
         except Exception as exc:

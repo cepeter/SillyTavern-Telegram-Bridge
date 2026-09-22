@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_application_services
 
 ensure_application_extensions()
 
@@ -46,7 +46,7 @@ class PanelLifecycleTests(unittest.TestCase):
             "message": {"message_id": 104, "chat": {"id": "chat"}},
         }
         try:
-            _m_callbacks.process_callback(self.db, "token", callback)
+            _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
             _m_callbacks.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
@@ -62,7 +62,7 @@ class PanelLifecycleTests(unittest.TestCase):
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_settings_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/settings temperature 0.7")
+            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/settings temperature 0.7", services=make_test_application_services())
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_settings_menu = original_menu
@@ -88,7 +88,7 @@ class PanelLifecycleTests(unittest.TestCase):
                     "data": data,
                     "message": {"message_id": message_id, "chat": {"id": "chat"}},
                 }
-                _m_callbacks.process_callback(self.db, "token", callback)
+                _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
                 self.assertEqual(calls[0][0], "deleteMessage", data)
                 self.assertEqual(calls[1][0], "sendText", data)
                 self.assertIsNone(_m_callbacks.panel_session_for_message(self.db, "chat", message_id), data)
@@ -125,10 +125,10 @@ class PanelLifecycleTests(unittest.TestCase):
         _m_message_commands.send_text = lambda *_args, **_kwargs: [91]
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "99")
+            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "99", services=make_test_application_services())
             pending = json.loads(_m_session_naming.get_meta(self.db, "settings_input:chat", "{}"))
             self.assertEqual(pending["prompt_message_ids"], [90, 91])
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/cancel")
+            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/cancel", services=make_test_application_services())
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_settings_menu = original_menu
@@ -151,7 +151,7 @@ class PanelLifecycleTests(unittest.TestCase):
             "message": {"message_id": 105, "chat": {"id": "chat"}},
         }
         try:
-            _m_callbacks.process_callback(self.db, "token", callback)
+            _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
             _m_callbacks.answer_callback = original_answer
             _m_panel_callback_routes.telegram_request = original_request
@@ -175,7 +175,7 @@ class PanelLifecycleTests(unittest.TestCase):
             "message": {"message_id": 106, "chat": {"id": "chat"}},
         }
         try:
-            _m_callbacks.process_callback(self.db, "token", callback)
+            _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
             _m_callbacks.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
@@ -199,7 +199,7 @@ class PanelLifecycleTests(unittest.TestCase):
             "message": {"message_id": 107, "chat": {"id": "chat"}},
         }
         try:
-            _m_callbacks.process_callback(self.db, "token", callback)
+            _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
             _m_callbacks.answer_callback = original_answer
             _m_memory_curator.send_text = original_send

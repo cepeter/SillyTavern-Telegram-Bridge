@@ -83,7 +83,7 @@ def handle_language_callback(db, token, callback, answer_callback, data, chat_id
     return False
 
 
-def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service):
     """Handle reset confirmation and cancellation callbacks."""
     if data.startswith("reset:"):
         action = data.split(":", 1)[1]
@@ -95,7 +95,7 @@ def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, m
             answer_callback(token, str(callback.get("id", "")), "Unknown reset action")
             return True
         try:
-            reset_session(db, token, chat_id, session, operation_id=operation_id)
+            reset_session(db, token, chat_id, session, operation_id=operation_id, memory_service=memory_service)
         except Exception:
             logging.error("Reset failed for chat %s/session %s", chat_id, session_id, exc_info=True)
             answer_callback(token, str(callback.get("id", "")), "Reset failed; memory and session were preserved")
@@ -183,12 +183,11 @@ def handle_sync_callback(
     session_id,
     operation_id,
     *,
-    sync_service=None,
+    sync_service: SyncService,
 ):
     """Handle Live API Sync callbacks."""
     if not data.startswith("sync:"):
         return False
-    sync_service = resolve_sync_service(sync_service)
     action = data.split(":", 1)[1]
     message_id = message.get("message_id")
     if action == "close":
@@ -259,7 +258,7 @@ def handle_sync_callback(
     return True
 
 
-def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, sync_service=None):
+def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, sync_service: SyncService):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(token, callback, data, chat_id)
@@ -271,9 +270,21 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         return True
     if handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
-    if handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    if handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, memory_service=memory_service):
         return True
-    if handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    if handle_prompt_and_feature_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        memory_service=memory_service,
+    ):
         return True
     if handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
@@ -398,7 +409,7 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
     return False
 
 
-def handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+def handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service):
     """Handle session selection, creation, and deletion callbacks."""
     if data == "session:protected":
         answer_callback(token, str(callback.get("id", "")), "Active session is protected")
@@ -410,7 +421,7 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
         if target is None:
             answer_callback(token, str(callback.get("id", "")), "Session choice expired")
             return True
-        deleted, reason = delete_session_data(db, chat_id, target_session_id, session_id, operation_id=operation_id)
+        deleted, reason = delete_session_data(db, chat_id, target_session_id, session_id, operation_id=operation_id, memory_service=memory_service)
         if not deleted:
             answer_callback(token, str(callback.get("id", "")), f"Deletion refused: {reason}")
             return True
@@ -547,11 +558,11 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
     return False
 
 
-def handle_entity_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, persona_service=None):
+def handle_entity_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, persona_service):
     """Dispatch character, session, persona, and World Info callbacks."""
     if handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
-    if handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    if handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, memory_service=memory_service):
         return True
     if handle_persona_callback(
         db,
@@ -745,7 +756,7 @@ from bridge.status_panels import (
     handle_prompt_and_feature_callback,
     send_sync_menu,
 )
-from bridge.sync_api import resolve_sync_service
+from bridge.sync_service import SyncService
 from bridge.telegram import (
     character_delete_references,
     delete_session_data,

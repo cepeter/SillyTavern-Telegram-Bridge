@@ -52,14 +52,18 @@ _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
 
 
 
-def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service=None, persona_service=None) -> None:
-    memory_service = resolve_memory_service(memory_service)
+def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_current_speaker(db, chat_id, session, caption)
     group_context = ""
     if group_turn:
         fields = card_fields_from_file(group_turn[0])
-        group_context = group_prompt_context(db, chat_id, session, group_turn[0])
+        group_context = group_director_service.prompt_context(
+            db,
+            chat_id,
+            session,
+            group_turn[0],
+        )
     image_data_uri = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
     rows = db.execute("SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session["session_id"])).fetchall()
     history_rows = [(row[0], row[1]) for row in rows[-MAX_HISTORY_MESSAGES:]]
@@ -110,10 +114,9 @@ def regenerate_edited_turn(
     new_text: str,
     operation_id: int | str | None = None,
     *,
-    memory_service=None,
-    persona_service=None,
+    memory_service: MemoryService,
+    persona_service: PersonaService,
 ) -> None:
-    memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
     def deliver_recovered_edit():
@@ -331,7 +334,7 @@ def regenerate_edited_turn(
     )
 
 
-def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, memory_service=None, persona_service=None) -> None:
+def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
     session_id = session["session_id"]
     rows = db.execute("SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session_id)).fetchall()
     last_user = next((row for row in reversed(rows) if row[1] == "user"), None)
@@ -341,7 +344,7 @@ def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: di
     regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(last_user[0]), new_text, operation_id=operation_id, memory_service=memory_service, persona_service=persona_service)
 
 
-def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, memory_service=None, persona_service=None) -> None:
+def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
     session = ensure_session(db, chat_id, default_model)
     fields = card_fields_from_file(session["character_file"])
     row = db.execute("SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND telegram_message_id=? ORDER BY rowid DESC LIMIT 1", (chat_id, str(message_id))).fetchone()
@@ -406,8 +409,7 @@ def apply_preset_action(db: sqlite3.Connection, token: str, chat_id: str, sessio
     send_text(token, chat_id, f"Preset deleted: {name}" if delete_generation_preset(db, chat_id, name) else f"Preset not found: {name}")
 
 
-def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], *, memory_service=None) -> str:
-    memory_service = resolve_memory_service(memory_service)
+def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], *, memory_service: MemoryService) -> str:
     message_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0]
     summary, covered_until = memory_service.summary_status(db, chat_id, session["session_id"])
     docs = data_bank_documents(db, chat_id)
@@ -456,18 +458,19 @@ from bridge.generation import (
     render_session_response,
     save_response_variant,
 )
+from bridge.group_director_service import GroupDirectorService
 from bridge.group_core import (
     advance_group_turn,
     group_current_speaker,
     group_state,
 )
-from bridge.groups import group_prompt_context
 from bridge.media import (
     delete_outgoing_message_row,
     send_reply,
     send_typing,
 )
-from bridge.memory import resolve_memory_service
+from bridge.memory_service import MemoryService
+from bridge.persona_service import PersonaService
 from bridge.memory_backend import (
     memory_mode,
     memory_scope,

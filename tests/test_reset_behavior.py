@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -7,6 +7,7 @@ ensure_application_extensions()
 import json
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 
 import bridge.config as config
@@ -47,7 +48,7 @@ class ResetBehaviorTests(unittest.TestCase):
         original_menu = _m_message_commands.send_reset_confirmation_menu
         setattr(_m_message_commands, "send_reset_confirmation_menu", lambda *_args, **_kwargs: opened.append(True))
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/reset")
+            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             setattr(_m_message_commands, "send_reset_confirmation_menu", original_menu)
         self.assertEqual(opened, [True])
@@ -64,7 +65,7 @@ class ResetBehaviorTests(unittest.TestCase):
         handled = _m_panel_callback_routes.handle_reset_callback(
             self.db, "token", callback, original_answer, "reset:confirm", "chat",
             callback["message"], self.session, self.session["session_id"], None,
-        )
+         memory_service=make_test_memory_service())
         self.assertTrue(handled)
         self.assertEqual(sent, ["Reset complete. The active session was cleared."])
         self.assertEqual(removed, [callback])

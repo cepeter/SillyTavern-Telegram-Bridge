@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_native_test_persona_service
 
 ensure_application_extensions()
 
@@ -115,7 +115,7 @@ class CatalogLimitTests(unittest.TestCase):
         original = _m_cards.telegram_request
         _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_persona_menu("token", "chat", "")
+            _m_command_routes.send_persona_menu("token", "chat", "", persona_service=make_native_test_persona_service())
         finally:
             _m_cards.telegram_request = original
         callbacks = [button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row]
@@ -130,7 +130,7 @@ class CatalogLimitTests(unittest.TestCase):
         _m_message_commands.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             state = {"session_id": self.session["session_id"], "mode": "create", "persona_id": "", "expires_at": time.time() + 60}
-            self.assertTrue(_m_input_flows._handle_persona_input(self.db, "token", "chat", self.session, "p40 | Persona 40 | description", state, None))
+            self.assertTrue(_m_input_flows._handle_persona_input(self.db, "token", "chat", self.session, "p40 | Persona 40 | description", state, None, persona_service=make_native_test_persona_service()))
         finally:
             _m_message_commands.send_text = original
         self.assertTrue(any("40 maximum" in text for text in sent))

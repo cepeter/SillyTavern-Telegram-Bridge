@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -115,7 +115,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_command_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
         session = {"session_id": "session", "persona_id": "", "model_id": _m_memory_curator.DEFAULT_MODEL, "author_note": "", "world_file": "", "system_prompt": "", "response_language": "auto"}
         try:
-            handled = _m_message_commands.handle_command_route(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", _m_memory_curator.DEFAULT_MODEL, "", "Test User")
+            handled = _m_message_commands.handle_command_route(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", _m_memory_curator.DEFAULT_MODEL, "", "Test User", services=make_test_application_services())
         finally:
             _m_command_routes.send_text = original_send
         self.assertTrue(handled)
@@ -138,7 +138,7 @@ class GroupTurnGatingTests(unittest.TestCase):
             _m_callbacks.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user")
             pending = _m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "")
             self.assertTrue(pending)
-            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77)
+            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
         finally:
             _m_session_naming.close_panel_message = original_close
             _m_session_naming.send_character_menu = original_menu

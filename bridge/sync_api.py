@@ -380,36 +380,13 @@ _SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
 )
 
 
-def compatibility_sync_service() -> _SyncService:
-    """Build a late-bound SyncService over final runtime collaborators."""
-    return _SyncService(
-        load_binding=sync_binding,
-        count_messages=_count_session_messages,
-        sync_now_backend=phase3_sync_now,
-        toggle_realtime_backend=phase3_toggle_realtime,
-        poll_backend=phase3_sync_poll,
-        disable_realtime=_phase3_disable,
-        api_configured=phase3_api_configured,
-        expected_errors=(SillyTavernApiError, ValueError),
-    )
-
-
-def resolve_sync_service(sync_service=None) -> _SyncService:
-    return (
-        sync_service
-        if sync_service is not None
-        else compatibility_sync_service()
-    )
-
-
 def phase3_sync_poll(
     db: sqlite3.Connection,
 ) -> None:
     _SYNC_POLL_SAFETY.poll(db)
 
 
-def _phase3_worker_loop(sync_service=None) -> None:
-    sync_service = resolve_sync_service(sync_service)
+def _phase3_worker_loop(sync_service: _SyncService) -> None:
     db = None
     try:
         while not _PHASE3_STOP_EVENT.wait(PHASE3_SYNC_INTERVAL_SECONDS):
@@ -434,7 +411,7 @@ def _phase3_worker_loop(sync_service=None) -> None:
             db.close()
 
 
-def start_phase3_sync_worker(*, sync_service=None) -> bool:
+def start_phase3_sync_worker(*, sync_service: _SyncService) -> bool:
     """Start one daemon worker when the loopback API is configured."""
     global _PHASE3_WORKER
     if not phase3_api_configured():

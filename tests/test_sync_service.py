@@ -166,7 +166,36 @@ class SyncSourceBoundaryTests(unittest.TestCase):
             "def _phase3_worker_loop",
         )
         self.assertNotIn("phase3_sync_poll(", chunk)
+        self.assertNotIn("resolve_sync_service", chunk)
         self.assertIn("sync_service.poll(", chunk)
+
+    def test_realtime_worker_uses_supplied_sync_service_without_resolution(self):
+        class FakeDb:
+            in_transaction = False
+
+            def close(self):
+                pass
+
+        class FakeSyncService:
+            def __init__(self):
+                self.polls = 0
+
+            def poll(self, _db):
+                self.polls += 1
+
+        service = FakeSyncService()
+        with patch.object(
+            _m_sync_api._PHASE3_STOP_EVENT,
+            "wait",
+            side_effect=[False, True],
+        ), patch.object(
+            _m_sync_api,
+            "db_connect",
+            return_value=FakeDb(),
+        ):
+            _m_sync_api._phase3_worker_loop(service)
+
+        self.assertEqual(service.polls, 1)
 
     def test_sync_service_has_no_runtime_or_telegram_dependency(self):
         source = (
@@ -175,49 +204,6 @@ class SyncSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("bridge.runtime", source)
         self.assertNotIn("bridge.telegram", source)
         self.assertNotIn("telegram_request", source)
-
-    def test_compatibility_service_uses_canonical_hardened_poll(self):
-        service = _m_sync_api.compatibility_sync_service()
-        self.assertIs(service.poll_backend, _m_sync_api.phase3_sync_poll)
-        self.assertEqual(
-            Path(
-                _m_sync_api.phase3_sync_poll.__code__.co_filename
-            ).name,
-            "sync_api.py",
-        )
-        self.assertFalse(
-            (Path(__file__).parents[1] / "bridge" / "runtime_loader.py").exists()
-        )
-
-
-class SyncCompatibilityServiceTests(unittest.TestCase):
-    def test_compatibility_service_late_binds_final_poll_backend(self):
-        def final_poll(_db):
-            return None
-
-        with patch.object(
-            _m_sync_api, "phase3_sync_poll", final_poll
-        ), patch.object(_m_sync_api, "sync_binding"
-        ) as binding, patch.object(
-            _m_sync_api, "phase3_sync_now"
-        ) as sync_now, patch.object(
-            _m_sync_api, "phase3_toggle_realtime"
-        ) as toggle, patch.object(
-            _m_sync_api, "_phase3_disable"
-        ) as disable, patch.object(
-            _m_sync_api, "phase3_api_configured", return_value=True
-        ):
-            service = _m_sync_api.compatibility_sync_service()
-
-        self.assertIs(service.poll_backend, final_poll)
-        self.assertIs(service.load_binding, binding)
-        self.assertIs(service.sync_now_backend, sync_now)
-        self.assertIs(service.toggle_realtime_backend, toggle)
-        self.assertIs(service.disable_realtime, disable)
-
-    def test_resolve_sync_service_prefers_injected_service(self):
-        sentinel = object()
-        self.assertIs(_m_sync_api.resolve_sync_service(sentinel), sentinel)
 
 
 if __name__ == "__main__":

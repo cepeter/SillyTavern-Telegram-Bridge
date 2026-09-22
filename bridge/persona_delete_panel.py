@@ -9,8 +9,7 @@ from bridge.panel_utils import (
     panel_page,
 )
 
-def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service=None) -> None:
-    persona_service = resolve_persona_service(persona_service)
+def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service: PersonaService) -> None:
     personas = persona_service.list()
     options = [(persona_id, str(persona.get("name") or persona_id)) for persona_id, persona in personas.items() if persona_id != current_persona]
     page_options, current_page, total_pages = panel_page(options, page)
@@ -25,4 +24,4 @@ def send_persona_delete_menu(token: str, chat_id: str, current_persona: str, mes
 
 # Explicit late imports replace transitional dependency injection.
 from bridge.cards import send_panel_message
-from bridge.persona_sync import resolve_persona_service
+from bridge.persona_service import PersonaService

@@ -123,6 +123,7 @@ class CompositionConfigTests(unittest.TestCase):
             retain_session=lambda *_args, **_kwargs: None,
             purge_session_memory=lambda *_args, **_kwargs: 0,
         )
+        group_director = object()
         persona = object()
         sync = object()
         jobs = object()
@@ -131,6 +132,7 @@ class CompositionConfigTests(unittest.TestCase):
             db_factory=lambda: sqlite3.connect(":memory:"),
             telegram=telegram,
             background=background,
+            group_director=group_director,
             memory=memory,
             persona=persona,
             sync=sync,
@@ -140,12 +142,22 @@ class CompositionConfigTests(unittest.TestCase):
         self.assertIs(services.config, config)
         self.assertIs(services.telegram, telegram)
         self.assertIs(services.background, background)
+        self.assertIs(services.group_director, group_director)
         self.assertIs(services.memory, memory)
         self.assertIs(services.persona, persona)
         self.assertIs(services.sync, sync)
         self.assertIs(services.jobs, jobs)
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
+
+    def test_build_bridge_services_requires_complete_application_graph(self):
+        signature = inspect.signature(build_bridge_services)
+        for name in ("jobs", "group_director", "memory", "persona", "sync"):
+            self.assertEqual(
+                signature.parameters[name].default,
+                inspect.Parameter.empty,
+                name,
+            )
 
     def test_validate_bridge_config_rejects_missing_required_values(self):
         base = self._environ()
@@ -240,6 +252,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.opened = 0
         self.sent = []
         self.global_sent = []
+        self.group_director_service = object()
         self.memory_service = object()
         self.persona_service = object()
         self.sync_service = object()
@@ -266,6 +279,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 begin_shutdown=lambda: None,
             ),
             jobs=Mock(),
+            group_director=self.group_director_service,
             memory=self.memory_service,
             persona=self.persona_service,
             sync=self.sync_service,
@@ -640,6 +654,10 @@ class RecoveryCompositionTests(unittest.TestCase):
             ),
             background=self.background,
             jobs=Mock(),
+            group_director=object(),
+            memory=object(),
+            persona=object(),
+            sync=object(),
         )
 
     def tearDown(self):
@@ -795,6 +813,10 @@ class RecoveryCompositionTests(unittest.TestCase):
             telegram=self.services.telegram,
             background=self.services.background,
             jobs=fake_jobs,
+            group_director=self.services.group_director,
+            memory=self.services.memory,
+            persona=self.services.persona,
+            sync=self.services.sync,
         )
 
         dispatcher = _m_main.make_durable_backlog_dispatcher(
@@ -895,6 +917,10 @@ class StartupCompositionTests(unittest.TestCase):
                 begin_shutdown=lambda: None,
             ),
             jobs=Mock(),
+            group_director=object(),
+            memory=object(),
+            persona=object(),
+            sync=object(),
         )
 
     def tearDown(self):
@@ -1043,6 +1069,9 @@ class StartupCompositionTests(unittest.TestCase):
             ),
             sync=sync_service,
             jobs=Mock(),
+            group_director=object(),
+            memory=object(),
+            persona=object(),
         )
         parsed = argparse.Namespace(check=False)
 
@@ -1110,6 +1139,9 @@ class StartupCompositionTests(unittest.TestCase):
             ),
             sync=object(),
             jobs=jobs,
+            group_director=object(),
+            memory=object(),
+            persona=object(),
         )
         parsed = argparse.Namespace(check=False)
 

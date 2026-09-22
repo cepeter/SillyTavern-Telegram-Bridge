@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -72,7 +72,7 @@ class CharacterSessionChainTests(unittest.TestCase):
         _m_panel_callback_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             callback = self._callback("session:target")
-            handled = _m_panel_callback_routes.handle_session_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], current, current["session_id"], None)
+            handled = _m_panel_callback_routes.handle_session_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], current, current["session_id"], None, memory_service=make_test_memory_service())
         finally:
             _m_input_flows.safe_character_path = original_safe
             _m_panel_callback_routes.remove_inline_keyboard = original_remove
