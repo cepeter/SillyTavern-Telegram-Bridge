@@ -92,7 +92,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         self.assertIsInstance(config.WORLD_DIR, Path)
         self.assertIsInstance(config.SYSTEM_PROMPTS_DIR, Path)
         self.assertIsInstance(config.DEFAULT_CHARACTER_FILE, str)
-        self.assertIsInstance(config.SYSTEM_PROMPTS_FILE, str)
+        self.assertFalse(hasattr(config, "SYSTEM_PROMPTS_FILE"))
         self.assertIsInstance(config.DEFAULT_USER_NAME, str)
         self.assertEqual(config.CATALOG_MAX_ITEMS, 40)
         self.assertEqual(config.CARD_FIELD_MAX_CHARS, 20000)
