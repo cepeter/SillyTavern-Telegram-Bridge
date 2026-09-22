@@ -67,7 +67,7 @@ from bridge.runtime_context import (
     panel_session_context,
 )
 
-from bridge.config import SYNC_MAX_BYTES
+from bridge.config import CHARACTER_BACKUP_DIR, SYNC_MAX_BYTES
 from bridge.common import MAX_TELEGRAM_LENGTH
 
 _SESSION_COLUMNS = ("chat_id", "session_id", "title", "character_file", "model_id", "persona_id", "world_file", "author_note", "system_prompt", "response_language")
@@ -565,7 +565,6 @@ from bridge.cards import (
 from bridge.catalog import install_world_info_document
 from bridge.commands import process_image_message
 from bridge.common import (
-    CHARACTER_BACKUP_DIR,
     DEFAULT_ALLOWED_USER,
     IMAGE_MAX_BYTES,
     parse_topic_scope,
