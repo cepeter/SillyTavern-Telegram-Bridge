@@ -8,3 +8,5 @@ Pre-flight: Task 2 produces canonical runtime path ownership consumed by Tasks 3
 Pre-flight: Task 3 produces configure_logging consumed by Task 5 startup ordering — interfaces match spec.
 Pre-flight: Task 4 produces lazy executor lifecycle consumed by Task 6 import-purity verification — interfaces match spec.
 Pre-flight: Task 5 removes late environment loading and tightens config validation consumed by Task 6 residue guards — interfaces match spec.
+
+Task 5: Ruling: Branch already contains the approved production deletion of load_env_file from a parallel execution; CI RED is stale tests patching the deleted symbol. Migrate tests to the native startup contract rather than reintroducing a compatibility alias. Cost if wrong: tests could stop checking an intended startup seam, so focused startup tests and full CI must verify behavior.
