@@ -367,6 +367,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         operation_id = 604
         self._operation(operation_id, "local_committed", "regen")
         memory = object()
+        services = make_test_application_services(memory=memory)
 
         with patch.object(_m_message_commands, "load_session",
             return_value=self.session,
@@ -386,15 +387,18 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 "/regen",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=make_test_application_services(memory=memory),
+                services=services,
             )
 
         regen.assert_called_once()
+        self.assertIs(regen.call_args.kwargs["memory_service"], memory)
+        self.assertIs(regen.call_args.kwargs["persona_service"], services.persona)
 
     def test_process_message_routes_local_committed_continue_before_generic_delivery(self):
         operation_id = 611
         self._operation(operation_id, "local_committed", "continue")
         memory = object()
+        services = make_test_application_services(memory=memory)
 
         with patch.object(_m_message_commands, "load_session",
             return_value=self.session,
@@ -414,15 +418,18 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 "/continue",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=make_test_application_services(memory=memory),
+                services=services,
             )
 
         continuation.assert_called_once()
+        self.assertIs(continuation.call_args.kwargs["memory_service"], memory)
+        self.assertIs(continuation.call_args.kwargs["persona_service"], services.persona)
 
     def test_process_message_routes_local_committed_edit_before_generic_delivery(self):
         operation_id = 612
         self._operation(operation_id, "local_committed", "edit")
         memory = object()
+        services = make_test_application_services(memory=memory)
 
         with patch.object(_m_message_commands, "load_session",
             return_value=self.session,
@@ -442,11 +449,13 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 "/edit replacement",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=make_test_application_services(memory=memory),
+                services=services,
             )
 
         edit.assert_called_once()
         self.assertEqual(edit.call_args.args[6], "replacement")
+        self.assertIs(edit.call_args.kwargs["memory_service"], memory)
+        self.assertIs(edit.call_args.kwargs["persona_service"], services.persona)
 
     def test_reset_memory_purged_resume_skips_second_remote_purge(self):
         operation_id = 605
