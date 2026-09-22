@@ -137,8 +137,8 @@ import urllib.request
 from bridge.common import (
     IMAGE_MAX_BYTES,
     parse_topic_scope,
-    PROVIDER_CONFIG_FILE,
 )
+from bridge.config import PROVIDER_CONFIG_FILE
 from bridge.network_security import (
     strict_urlopen,
     validate_provider_endpoint,
