@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service
+from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -125,7 +125,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         delete_current.assert_called_once_with(
             self.db,
@@ -193,7 +193,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                     self.fields,
                     "chat",
                     operation_id=operation_id,
-                 memory_service=make_test_memory_service())
+                 memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
@@ -220,7 +220,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
@@ -256,7 +256,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertIn(
             "↪️ Continued response",
@@ -300,7 +300,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 user_rowid,
                 "replacement",
                 operation_id=operation_id,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertIn(
             "✏️ Edited message regenerated.",
@@ -331,7 +331,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
@@ -356,7 +356,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 1,
                 "replacement",
                 operation_id=operation_id,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
