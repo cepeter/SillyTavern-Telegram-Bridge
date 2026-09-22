@@ -6,9 +6,12 @@ dependency binding.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from bridge.application_composition import initialize_extensions
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
+from bridge.sync_service import SyncService
 
 
 _INITIALIZED = False
@@ -92,4 +95,42 @@ def make_native_test_persona_service() -> PersonaService:
         update_session_persona=update_session,
         persona_reference_count=count_persona_references,
         persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
+    )
+
+
+def make_test_sync_service() -> SyncService:
+    """Return an inert explicit SyncService for routing tests."""
+    return SyncService(
+        load_binding=lambda *_args, **_kwargs: {},
+        count_messages=lambda *_args, **_kwargs: 0,
+        sync_now_backend=lambda *_args, **_kwargs: "unchanged",
+        toggle_realtime_backend=lambda *_args, **_kwargs: "realtime API sync disabled",
+        poll_backend=lambda *_args, **_kwargs: None,
+        disable_realtime=lambda *_args, **_kwargs: None,
+        api_configured=lambda: False,
+        expected_errors=(ValueError,),
+    )
+
+
+class _TestGroupDirector:
+    def plan(self, *_args, **_kwargs):
+        return None
+
+    def prompt_context(self, *_args, **_kwargs):
+        return ""
+
+
+def make_test_application_services(
+    *,
+    memory=None,
+    persona=None,
+    sync=None,
+    group_director=None,
+):
+    """Return an explicit test-only application service graph for routers."""
+    return SimpleNamespace(
+        memory=memory or make_test_memory_service(),
+        persona=persona or make_test_persona_service(),
+        sync=sync or make_test_sync_service(),
+        group_director=group_director or _TestGroupDirector(),
     )
