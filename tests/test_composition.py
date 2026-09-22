@@ -147,6 +147,15 @@ class CompositionConfigTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
 
+    def test_build_bridge_services_requires_complete_application_graph(self):
+        signature = inspect.signature(build_bridge_services)
+        for name in ("jobs", "group_director", "memory", "persona", "sync"):
+            self.assertEqual(
+                signature.parameters[name].default,
+                inspect.Parameter.empty,
+                name,
+            )
+
     def test_validate_bridge_config_rejects_missing_required_values(self):
         base = self._environ()
         cases = (
