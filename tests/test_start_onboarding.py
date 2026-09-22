@@ -51,9 +51,7 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_plain_start_opens_greeting_choice_panel_without_storing_message(self):
         opened = []
-        original_greeting = _m_command_routes.send_character_greeting
-        original_menu = getattr(_m_command_routes, "send_greeting_menu", None)
-        _m_command_routes.send_character_greeting = lambda *_args, **_kwargs: self.fail("start must open the greeting chooser")
+        original_menu = _m_command_routes.send_greeting_menu
         _m_command_routes.send_greeting_menu = lambda _token, chat_id, fields, user_name: opened.append((chat_id, fields["first_mes"], user_name)) or True
         try:
             handled = _m_command_routes._handle_basic(
@@ -61,11 +59,7 @@ class StartOnboardingTests(unittest.TestCase):
                 self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None, make_test_application_services(),
             )
         finally:
-            _m_command_routes.send_character_greeting = original_greeting
-            if original_menu is None:
-                delattr(_m_command_routes, "send_greeting_menu")
-            else:
-                _m_command_routes.send_greeting_menu = original_menu
+            _m_command_routes.send_greeting_menu = original_menu
         self.assertTrue(handled)
         self.assertEqual(opened, [("chat", "Hello from the character.", "User")])
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 0)
@@ -73,11 +67,9 @@ class StartOnboardingTests(unittest.TestCase):
     def test_slash_start_opens_greeting_choice_panel_when_all_setup_is_enabled(self):
         opened = []
         original_send = _m_command_routes.send_text
-        original_greeting = _m_command_routes.send_character_greeting
-        original_menu = getattr(_m_command_routes, "send_greeting_menu", None)
+        original_menu = _m_command_routes.send_greeting_menu
         original_worlds = _m_command_routes.active_world_files
         _m_command_routes.send_text = lambda *_args, **_kwargs: self.fail("ready /start should open the greeting chooser")
-        _m_command_routes.send_character_greeting = lambda *_args, **_kwargs: self.fail("ready /start must not send immediately")
         _m_command_routes.send_greeting_menu = lambda _token, chat_id, fields, user_name: opened.append((chat_id, fields["first_mes"], user_name)) or True
         _m_command_routes.active_world_files = lambda _value: ["world.json"]
         ready_session = dict(self.session)
@@ -89,11 +81,7 @@ class StartOnboardingTests(unittest.TestCase):
             )
         finally:
             _m_command_routes.send_text = original_send
-            _m_command_routes.send_character_greeting = original_greeting
-            if original_menu is None:
-                delattr(_m_command_routes, "send_greeting_menu")
-            else:
-                _m_command_routes.send_greeting_menu = original_menu
+            _m_command_routes.send_greeting_menu = original_menu
             _m_command_routes.active_world_files = original_worlds
         self.assertTrue(handled)
         self.assertEqual(opened, [("chat", "Hello from the character.", "User")])
