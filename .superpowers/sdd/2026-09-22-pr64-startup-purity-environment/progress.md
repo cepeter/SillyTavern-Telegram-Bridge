@@ -10,3 +10,5 @@ Pre-flight: Task 4 produces lazy executor lifecycle consumed by Task 6 import-pu
 Pre-flight: Task 5 removes late environment loading and tightens config validation consumed by Task 6 residue guards — interfaces match spec.
 
 Task 5: Ruling: Branch already contains the approved production deletion of load_env_file from a parallel execution; CI RED is stale tests patching the deleted symbol. Migrate tests to the native startup contract rather than reintroducing a compatibility alias. Cost if wrong: tests could stop checking an intended startup seam, so focused startup tests and full CI must verify behavior.
+
+Tasks 1-5: branch implementation validated after stale-test migration by CI #1090 at 75a8711 — full workflow success. Parallel execution already contained RED/GREEN commit pairs for environment bootstrap, path/prompt retirement, explicit logging, lazy executors, and startup validation; current branch state conforms to approved interfaces.
