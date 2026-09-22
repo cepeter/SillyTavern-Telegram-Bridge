@@ -1082,6 +1082,7 @@ class StartupCompositionTests(unittest.TestCase):
         ), patch.object(_m_main, "load_env_file"
         ), patch.object(_m_main, "refresh_phase3_config"
         ), patch.object(_m_main, "enforce_runtime_permissions"
+        ), patch.object(_m_main, "configure_logging"
         ), patch.object(
             _m_main, "_load_startup_config", return_value=self.config
         ), patch.object(
@@ -1153,6 +1154,7 @@ class StartupCompositionTests(unittest.TestCase):
             ), patch.object(_m_main, "load_env_file"
             ), patch.object(_m_main, "refresh_phase3_config"
             ), patch.object(_m_main, "enforce_runtime_permissions"
+            ), patch.object(_m_main, "configure_logging"
             ), patch.object(
                 _m_main, "_load_startup_config", return_value=self.config
             ), patch.object(
@@ -1400,7 +1402,8 @@ class StartupCompositionTests(unittest.TestCase):
         ), patch.object(_m_main, "load_env_file",
         ), patch.object(_m_main, "refresh_phase3_config",
         ), patch.object(_m_main, "enforce_runtime_permissions",
-        ), patch.object(
+        ), patch.object(_m_main, "configure_logging",
+        ) as configure_logging, patch.object(
             _m_main,
             "_load_startup_config",
             return_value=self.config,
@@ -1419,6 +1422,7 @@ class StartupCompositionTests(unittest.TestCase):
         ) as run_check:
             self.assertEqual(_m_main.main(), 0)
 
+        configure_logging.assert_called_once_with()
         load_config.assert_called_once()
         build_services.assert_called_once_with(self.config)
         run_check.assert_called_once_with(self.services)
