@@ -304,7 +304,7 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     return raw
 
 
-def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service: MemoryService, persona_service=None) -> None:
+def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
     if file_size > IMAGE_MAX_BYTES:
         send_text(token, chat_id, "Image is too large. The limit is 8 MB.")
         return
@@ -573,5 +573,6 @@ from bridge.expressions import (
 )
 from bridge.generation import swipe_state_key
 from bridge.memory_service import MemoryService
+from bridge.persona_service import PersonaService
 from bridge.persona_sync import NATIVE_PERSONA_SETTINGS_FILE
 from bridge.session_naming import normalize_session_title
