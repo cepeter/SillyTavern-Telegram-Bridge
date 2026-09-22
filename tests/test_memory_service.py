@@ -642,6 +642,23 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
 
 
 
+class MemoryServiceExplicitInjectionBoundaryTests(unittest.TestCase):
+    def test_memory_application_paths_do_not_resolve_compatibility_service(self):
+        root = Path(__file__).parents[1] / "bridge"
+        for filename in (
+            "message_commands.py",
+            "telegram.py",
+            "media.py",
+            "help.py",
+            "input_flows.py",
+            "generation.py",
+            "commands.py",
+        ):
+            source = (root / filename).read_text(encoding="utf-8")
+            self.assertNotIn("resolve_memory_service", source, filename)
+            self.assertNotIn("compatibility_memory_service", source, filename)
+
+
 class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
     def test_compatibility_service_binds_current_runtime_memory_collaborators(self):
         calls = []
