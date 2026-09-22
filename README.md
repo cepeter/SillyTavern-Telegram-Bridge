@@ -756,14 +756,14 @@ and restarts the service.
 
 ## 🏗️ Architecture
 
-The bridge now uses ordinary Python imports and explicit module-local dependency
-composition. Production startup enters through `bridge.main`; repository source
-is no longer executed into a shared runtime namespace. Circular application/UI
-dependencies are declared against canonical owners in
-`bridge/ordinary_dependencies.py`, and cross-cutting features register through
-the explicit extension registry. `bridge.runtime` remains only as a plain
-read-compatible facade for older imports; production startup does not depend on
-it.
+The bridge uses ordinary Python imports and explicit startup composition.
+Production startup enters through `bridge.main`; repository source is no longer
+executed into a shared runtime namespace. Root infrastructure is assembled in
+`bridge.composition`, built-in cross-cutting features register explicitly through
+`bridge.application_composition.initialize_extensions()`, and durable jobs are
+provided through the required `JobService` on `BridgeServices`. The retired
+`bridge.runtime`, `bridge.ordinary_dependencies`, and `bridge.job_runtime`
+compatibility layers no longer exist.
 
 Scene State, Director Goals, and Memory Curator register command routes and
 memory/summary hooks deterministically during startup. Here are the main
@@ -771,8 +771,10 @@ boundaries (not exhaustive):
 
 ```text
 sillytavern_telegram_bridge.py   launcher; imports bridge.main directly
-bridge/main.py                   production composition, polling, durable job dispatch
-bridge/ordinary_dependencies.py explicit module-local application dependency graph
+bridge/main.py                   production startup, polling, durable job dispatch
+bridge/composition.py            root configuration and service composition
+bridge/application_composition.py explicit built-in extension registration
+bridge/job_service.py             canonical durable job service
 bridge/extension_registry.py     explicit command and memory/summary extension hooks
 bridge/common.py                 queues, permissions, shared runtime support
 bridge/config.py                 canonical startup and feature defaults
@@ -790,7 +792,6 @@ bridge/sync_*.py                 Live Sync primitives and API
 bridge/groups.py                 Forum Topic orchestration
 bridge/group_core.py             canonical group state and turn logic
 bridge/media.py                  voice, STT, TTS, Telegram media
-bridge/job_runtime.py            durable-job compatibility construction
 bridge/recovery.py               idempotent operation recovery
 bridge/state_integrity.py        native/Hindsight consistency hardening
 bridge/scheduler_safety.py       SQLite and durable-job hardening
