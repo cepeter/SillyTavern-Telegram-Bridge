@@ -129,12 +129,39 @@ MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
 MODEL_CHOICES = []
 
-_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[RotatingFileHandler(str(_LOG_FILE), maxBytes=10 * 1024 * 1024, backupCount=5)],
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+def configure_logging(log_file: Path = _LOG_FILE) -> None:
+    """Install the bridge rotating file handler explicitly."""
+    target = Path(log_file).expanduser().resolve()
+    root = logging.getLogger()
+
+    if any(
+        isinstance(handler, RotatingFileHandler)
+        and Path(handler.baseFilename).resolve() == target
+        for handler in root.handlers
+    ):
+        return
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(
+        str(target),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+    )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    )
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+    try:
+        target.chmod(0o600)
+    except OSError:
+        logging.warning(
+            "Could not protect runtime log file %s",
+            target,
+            exc_info=True,
+        )
+
 
 _BACKGROUND_MAX_QUEUED_PER_CHAT = 256
 _BACKGROUND_MAX_SCOPED_QUEUES = 1024
