@@ -1068,12 +1068,10 @@ from bridge.card_content import (
     build_world_info,
     replace_macros,
 )
-from bridge.common import (
-    DEFAULT_PROVIDER_URL,
-    PROVIDER_CONFIG_FILE,
-)
+from bridge.common import DEFAULT_PROVIDER_URL
 from bridge.config import (
     DEFAULT_MAX_TOKENS,
+    PROVIDER_CONFIG_FILE,
     DEFAULT_USER_NAME,
     GENERATION_DEFAULTS,
     HINDSIGHT_CONTEXT_MAX_CHARS,
