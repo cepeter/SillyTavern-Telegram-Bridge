@@ -37,7 +37,7 @@ def start_text_action_input(db, token: str, chat_id: str, session_id: str, actio
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
-def handle_inline_text_action(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, action: str, value: str, operation_id: int | None = None, *, memory_service=None, persona_service=None) -> bool:
+def handle_inline_text_action(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, action: str, value: str, operation_id: int | None = None, *, memory_service: MemoryService, persona_service=None) -> bool:
     """Run a bounded text action immediately when a command includes its value."""
     state = {"session_id": session["session_id"], "action": action, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
     return _handle_text_action_input(db, token, api_key, chat_id, session, fields, value, state, operation_id, memory_service=memory_service, persona_service=persona_service)
@@ -606,6 +606,7 @@ from bridge.language import (
 )
 from bridge.media import remove_inline_keyboard
 from bridge.memory import handle_memory_command
+from bridge.memory_service import MemoryService
 from bridge.memory_backend import remember_fact
 from bridge.message_commands import send_pending_input_message
 from bridge.persona_delete_panel import send_persona_delete_menu
