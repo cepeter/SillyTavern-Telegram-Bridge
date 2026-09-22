@@ -12,15 +12,6 @@ from unittest.mock import patch
 REPO_ROOT = Path(__file__).parents[1]
 
 
-RUNTIME_CONTEXT_EXPORTS = (
-    "set_panel_session_context",
-    "panel_session_context",
-    "set_panel_actor_context",
-    "panel_actor_context",
-    "set_db_connection_context",
-    "db_connection_context",
-)
-
 PANEL_UTIL_EXPORTS = (
     "panel_label",
     "panel_page",
@@ -67,22 +58,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             check=False,
         )
 
-    def test_runtime_context_imports_without_runtime_or_common(self):
-        completed = self._run_python(
-            "import sys\n"
-            "import bridge.runtime_context as context\n"
-            "assert 'bridge.runtime' not in sys.modules\n"
-            "assert 'bridge.common' not in sys.modules\n"
-            "assert context.panel_session_context() == ''\n"
-            "assert context.panel_actor_context() == ''\n"
-            "assert context.db_connection_context() is None\n"
-        )
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
-
     def test_config_exposes_card_foundation_defaults(self):
         import bridge.config as config
 
@@ -122,7 +97,14 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             "_DB_CONNECTION_CONTEXT = threading.local()",
             source,
         )
-        for name in RUNTIME_CONTEXT_EXPORTS:
+        for name in (
+            "set_panel_session_context",
+            "panel_session_context",
+            "set_panel_actor_context",
+            "panel_actor_context",
+            "set_db_connection_context",
+            "db_connection_context",
+        ):
             self.assertNotIn(f"def {name}(", source)
 
     def test_common_no_longer_defines_extracted_card_config(self):
@@ -508,18 +490,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
 
 
-    def test_runtime_context_functions_resolve_canonical_threadlocals(self):
-        import bridge.runtime_context as context
-
-        self.assertIs(
-            context.db_connection_context.__globals__["_DB_CONNECTION_CONTEXT"],
-            context._DB_CONNECTION_CONTEXT,
-        )
-        self.assertIs(
-            context.panel_session_context.__globals__["_PANEL_SESSION_CONTEXT"],
-            context._PANEL_SESSION_CONTEXT,
-        )
-
     def test_callback_functions_resolve_canonical_cache(self):
         import bridge.callback_tokens as callback_tokens
 
@@ -534,7 +504,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
 
     def test_phase_7b2_ordinary_modules_do_not_import_runtime_or_common(self):
         for filename in (
-            "runtime_context.py",
             "panel_utils.py",
             "card_content.py",
             "callback_tokens.py",
@@ -592,16 +561,12 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         import bridge.card_content as card_content
         import bridge.cards as cards
         import bridge.panel_utils as panel_utils
-        import bridge.runtime_context as context
         import bridge.callbacks as callbacks
         import bridge.media as media
         import bridge.panel_callback_routes as panel_callback_routes
         import bridge.session_naming as session_naming
         import bridge.telegram as telegram
 
-        for name in RUNTIME_CONTEXT_EXPORTS:
-            with self.subTest(group="runtime_context", name=name):
-                self.assertTrue(hasattr(context, name))
         for name in PANEL_UTIL_EXPORTS:
             with self.subTest(group="panel_utils", name=name):
                 self.assertTrue(hasattr(panel_utils, name))

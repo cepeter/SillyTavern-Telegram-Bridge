@@ -20,6 +20,45 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
     def test_runtime_compatibility_module_is_deleted(self):
         self.assertFalse((BRIDGE_DIR / "runtime.py").exists())
 
+    def test_ambient_runtime_context_module_is_deleted(self):
+        self.assertFalse((BRIDGE_DIR / "runtime_context.py").exists())
+
+    def test_no_ambient_runtime_context_in_production_source(self):
+        forbidden_tokens = (
+            "set_panel_session_context",
+            "panel_session_context",
+            "set_panel_actor_context",
+            "panel_actor_context",
+            "set_db_connection_context",
+            "db_connection_context",
+        )
+        offenders = {}
+        for path in sorted(BRIDGE_DIR.glob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            hits = [token for token in forbidden_tokens if token in source]
+            tree = ast.parse(source)
+            imports_runtime_context = any(
+                (
+                    isinstance(node, ast.Import)
+                    and any(
+                        alias.name == "bridge.runtime_context"
+                        for alias in node.names
+                    )
+                )
+                or (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module == "bridge.runtime_context"
+                )
+                for node in ast.walk(tree)
+            )
+            if imports_runtime_context:
+                hits.append("import bridge.runtime_context")
+            if hits:
+                offenders[path.relative_to(REPO_ROOT).as_posix()] = sorted(
+                    set(hits)
+                )
+        self.assertEqual(offenders, {})
+
     def test_runtime_test_facade_is_deleted(self):
         self.assertFalse((TESTS_DIR / "runtime_test_facade.py").exists())
 
