@@ -21,7 +21,15 @@ from bridge.database import (
     record_operation,
 )
 
+from bridge.panel_utils import (
+    PANEL_PAGE_SIZE,
+    panel_page,
+)
+
 import random
+
+
+_GREETING_PREVIEW_MAX_CHARS = 3200
 
 
 def greeting_options(fields: dict) -> list[str]:
@@ -37,6 +45,99 @@ def greeting_options(fields: dict) -> list[str]:
     return [value[:CARD_FIELD_MAX_CHARS].strip() for value in options if value[:CARD_FIELD_MAX_CHARS].strip()]
 
 
+def greeting_choice_label(index: int) -> str:
+    return "Default" if int(index) == 0 else f"Alternate {int(index)}"
+
+
+def render_greeting(fields: dict, user_name: str, index: int) -> str:
+    options = greeting_options(fields)
+    selected_index = int(index)
+    if selected_index < 0 or selected_index >= len(options):
+        return ""
+    return replace_macros(options[selected_index], fields, user_name).strip()
+
+
+def send_greeting_menu(
+    token: str,
+    chat_id: str,
+    fields: dict,
+    user_name: str,
+    message_id: int | None = None,
+    selected_index: int = 0,
+    page: int | None = None,
+) -> bool:
+    """Show the opening-message chooser and preview the selected greeting."""
+    options = greeting_options(fields)
+    if not options:
+        send_text(token, chat_id, "This character has no opening greeting.")
+        return False
+
+    selected_index = int(selected_index)
+    if selected_index < 0 or selected_index >= len(options):
+        selected_index = 0
+    target_page = selected_index // PANEL_PAGE_SIZE if page is None else max(0, int(page))
+    indexed_options = list(enumerate(options))
+    page_options, current_page, total_pages = panel_page(indexed_options, target_page)
+
+    rows = []
+    for index, _greeting in page_options:
+        label = greeting_choice_label(index)
+        mark = "✅ " if index == selected_index else ""
+        rows.append([
+            {
+                "text": mark + label,
+                "callback_data": f"greeting:preview:{index}",
+            }
+        ])
+
+    navigation = []
+    if current_page > 0:
+        navigation.append({
+            "text": "⬅️ Previous",
+            "callback_data": f"greeting:page:{current_page - 1}:{selected_index}",
+        })
+    if current_page < total_pages - 1:
+        navigation.append({
+            "text": "Next ➡️",
+            "callback_data": f"greeting:page:{current_page + 1}:{selected_index}",
+        })
+    if navigation:
+        rows.append(navigation)
+
+    rows.append([
+        {
+            "text": "▶️ Start with this greeting",
+            "callback_data": f"greeting:use:{selected_index}",
+        }
+    ])
+    rows.append([
+        {
+            "text": "❌ Cancel",
+            "callback_data": "greeting:cancel",
+        }
+    ])
+
+    preview = render_greeting(fields, user_name, selected_index)
+    if len(preview) > _GREETING_PREVIEW_MAX_CHARS:
+        preview = preview[: _GREETING_PREVIEW_MAX_CHARS - 1].rstrip() + "…"
+    page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
+    text = (
+        f"Opening message — {fields.get('name') or 'Character'}{page_label}\n"
+        f"Selected: {greeting_choice_label(selected_index)}\n\n"
+        f"Preview:\n{preview or '[empty after macro rendering]'}"
+    )
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": {"inline_keyboard": rows},
+    }
+    method = "editMessageText" if message_id is not None else "sendMessage"
+    if message_id is not None:
+        payload["message_id"] = message_id
+    telegram_request(token, method, payload)
+    return True
+
+
 def send_character_greeting(db: sqlite3.Connection, token: str, chat_id: str, fields: dict, session_id: str, user_name: str, index: int | None = 0, operation_id=None, operation_kind: str = "greeting") -> bool:
     if operation_id is not None and (operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, operation_kind)):
         return False
@@ -44,9 +145,7 @@ def send_character_greeting(db: sqlite3.Connection, token: str, chat_id: str, fi
     if not options:
         return False
     selected_index = random.randrange(len(options)) if index is None else int(index)  # nosec B311 - greeting choice is not security-sensitive
-    if selected_index < 0 or selected_index >= len(options):
-        return False
-    greeting = replace_macros(options[selected_index], fields, user_name).strip()
+    greeting = render_greeting(fields, user_name, selected_index)
     if not greeting:
         return False
     message_ids = send_text(token, chat_id, greeting)
@@ -58,4 +157,7 @@ def send_character_greeting(db: sqlite3.Connection, token: str, chat_id: str, fi
 
 
 # Explicit late imports replace transitional dependency injection.
-from bridge.telegram import send_text
+from bridge.telegram import (
+    send_text,
+    telegram_request,
+)
