@@ -64,7 +64,7 @@ class RagScalingTests(unittest.TestCase):
                     2,
                     json.dumps(vector),
                     _m_rag.embedding_signature(vector),
-                    0.0,
+                    _m_rag.embedding_norm(vector),
                 ),
             )
             self.db.execute(
@@ -100,9 +100,9 @@ class RagScalingTests(unittest.TestCase):
         rag_core.cached_rag_embedding = lambda _db, _query: [1.0, 0.0]
         rag_core.rag_semantic_candidate_limit = lambda: 32
 
-        def counted_cosine(left, right):
+        def counted_cosine(left, right, *args):
             cosine_calls.append((left, right))
-            return original_cosine(left, right)
+            return original_cosine(left, right, *args)
 
         rag_core.cosine_similarity = counted_cosine
         try:

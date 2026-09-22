@@ -81,8 +81,8 @@ def semantic_candidate_chunk_ids(
 
     Small corpora remain exact. Larger corpora prioritize FTS-hit neighborhoods,
     then globally rank compact embedding signatures by Hamming distance. A
-    deterministic positional sample is retained only as compatibility fallback
-    for legacy rows whose signature has not been backfilled yet.
+    deterministic positional sample provides bounded coverage when signature
+    ranked candidates are exhausted below the candidate limit.
     """
     candidate_limit = max(1, min(int(candidate_limit), MAX_SEMANTIC_CANDIDATE_LIMIT))
     neighbor_radius = max(0, min(int(neighbor_radius), 8))
@@ -167,7 +167,7 @@ def semantic_candidate_chunk_ids(
     if len(selected) >= candidate_limit:
         return tuple(selected)
 
-    # Compatibility fallback while pre-signature databases are lazily backfilled.
+    # Bounded positional fallback when signature-ranked candidates are exhausted.
     minimum = int(probe[0][0])
     maximum_row = db.execute(
         "SELECT e.chunk_id "
