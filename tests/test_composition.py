@@ -178,6 +178,30 @@ class CompositionConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     validate_bridge_config(config)
 
+    def test_missing_configuration_errors_do_not_claim_values_come_from_dotenv(self):
+        base = self._environ()
+        for key in (
+            "SILLYTAVERN_TELEGRAM_BOT_TOKEN",
+            "SILLYTAVERN_MODEL",
+            "SILLYTAVERN_DEFAULT_CHARACTER",
+            "SILLYTAVERN_TELEGRAM_ALLOWED_USERS",
+        ):
+            with self.subTest(key=key):
+                environ = dict(base)
+                environ[key] = ""
+                config = load_bridge_config(
+                    environ,
+                    character_dir=self.character_dir,
+                    db_file=self.db_file,
+                )
+
+                with self.assertRaises(ValueError) as raised:
+                    validate_bridge_config(config)
+
+                message = str(raised.exception)
+                self.assertNotIn(".env", message)
+                self.assertIn("environment", message)
+
     def test_validate_bridge_config_rejects_empty_allowlist(self):
         environ = self._environ()
         environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = ""

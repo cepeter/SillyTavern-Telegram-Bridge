@@ -193,6 +193,13 @@ environment values always take precedence over file values. Environment files
 use strict `KEY=VALUE` syntax (with optional `export ` and matching quotes),
 and malformed assignments stop startup instead of being silently ignored.
 
+Use `python3 sillytavern_telegram_bridge.py` as the supported entry point.
+`python -m bridge.main` imports the application module before the launcher
+bootstrap can run, so it does not load the environment file and is not the
+supported startup path. It can only rely on values already present in the
+process environment.
+
+
 `SILLYTAVERN_TELEGRAM_ALLOWED_USERS` is required and every retained
 comma-separated value must be a numeric Telegram user ID.
 
@@ -718,7 +725,9 @@ and never replaces the original conversation history.
   `SILLYTAVERN_TELEGRAM_ALLOWED_USERS` allowlist.
 - **🧩 Startup stays explicit.** Environment bootstrap happens before
   application imports, logging is configured during startup, and background
-  executors are created only when work is submitted.
+  executors are created only when work is submitted. The bridge owns
+  process-level logging during normal launcher startup and sets the root logger
+  level to `INFO`.
 - **🌐 HTTPS for anything external.** Loopback is fine for local services.
 - **🚫 Credentials are never displayed.** Provider hosts are validated before
   keys are attached. Health output never shows them.

@@ -130,7 +130,7 @@ MAX_TELEGRAM_LENGTH = 4000
 MODEL_CHOICES = []
 
 def configure_logging(log_file: Path = _LOG_FILE) -> None:
-    """Install the bridge rotating file handler explicitly."""
+    """Install the bridge rotating file handler and set root logging to INFO."""
     target = Path(log_file).expanduser().resolve()
     root = logging.getLogger()
 
