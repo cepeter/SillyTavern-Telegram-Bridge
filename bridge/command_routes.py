@@ -207,10 +207,7 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
             chat_id,
             db,
             session,
-            sync_service=(
-                getattr(services, "sync", None)
-                if services is not None else None
-            ),
+            sync_service=services.sync,
         )
         return True
     if command == "/group":
