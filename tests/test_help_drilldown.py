@@ -172,7 +172,14 @@ class HelpDrilldownTests(unittest.TestCase):
         _m_status_panels.send_panel_message = lambda *args, **kwargs: calls.append((args, kwargs))
         _m_catalog.get_model_groups = lambda: {}
         try:
-            _m_command_routes.send_prompt_menu("token", "chat", self.db, session, {"name": "Test"})
+            _m_command_routes.send_prompt_menu(
+                "token",
+                "chat",
+                self.db,
+                session,
+                {"name": "Test"},
+                memory_service=make_test_memory_service(),
+            )
             self.assertIn("prompt:budget", str(calls[-1]))
             _m_scene_state.send_scene_menu("token", "chat", self.db, session)
             self.assertIn("scene:refresh", str(calls[-1]))
