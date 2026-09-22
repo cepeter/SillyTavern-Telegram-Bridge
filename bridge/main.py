@@ -121,6 +121,7 @@ from bridge.group_core import (
 from bridge.common import (
     begin_background_shutdown,
     chat_job_lock,
+    configure_logging,
     enforce_runtime_permissions,
     load_env_file,
     register_durable_backlog_dispatcher,
@@ -724,6 +725,7 @@ def main() -> int:
     load_env_file()
     refresh_phase3_config()
     enforce_runtime_permissions()
+    configure_logging()
 
     config = _load_startup_config(os.environ)
     try:
