@@ -1435,6 +1435,76 @@ class StartupCompositionTests(unittest.TestCase):
                     sent,
                 )
 
+    def test_main_validates_config_and_credential_before_runtime_resources(self):
+        parsed = argparse.Namespace(check=True)
+        calls = []
+
+        def load_config(_environ):
+            calls.append("load_config")
+            return self.config
+
+        def validate_credential(_model):
+            calls.append("validate_credential")
+
+        def enforce_permissions():
+            calls.append("enforce_permissions")
+
+        def configure_logging():
+            calls.append("configure_logging")
+
+        def build_services(config):
+            calls.append("build_services")
+            self.assertIs(config, self.config)
+            return self.services
+
+        with patch.object(
+            argparse.ArgumentParser,
+            "parse_args",
+            return_value=parsed,
+        ), patch.object(
+            _m_main,
+            "refresh_phase3_config",
+        ), patch.object(
+            _m_main,
+            "_load_startup_config",
+            side_effect=load_config,
+        ), patch.object(
+            _m_main,
+            "validate_startup_credential",
+            side_effect=validate_credential,
+        ), patch.object(
+            _m_main,
+            "enforce_runtime_permissions",
+            side_effect=enforce_permissions,
+        ), patch.object(
+            _m_main,
+            "configure_logging",
+            side_effect=configure_logging,
+        ), patch.object(
+            _m_main,
+            "_build_startup_services",
+            side_effect=build_services,
+        ), patch.object(
+            _m_main,
+            "set_bot_commands",
+        ), patch.object(
+            _m_main,
+            "run_check",
+            return_value=0,
+        ):
+            self.assertEqual(_m_main.main(), 0)
+
+        self.assertEqual(
+            calls,
+            [
+                "load_config",
+                "validate_credential",
+                "enforce_permissions",
+                "configure_logging",
+                "build_services",
+            ],
+        )
+
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = argparse.Namespace(check=True)
         with patch.object(
