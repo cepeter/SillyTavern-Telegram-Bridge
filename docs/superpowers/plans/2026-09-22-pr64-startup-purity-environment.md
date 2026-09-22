@@ -682,6 +682,8 @@ class StartupPurityTests(unittest.TestCase):
     def test_importing_common_does_not_create_log_resources(self):
         with tempfile.TemporaryDirectory() as directory:
             source = f"""
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 
@@ -691,6 +693,10 @@ os.environ["SILLYTAVERN_BRIDGE_HOME"] = str(root)
 import bridge.common as common
 
 assert not (root / "logs").exists()
+assert not any(
+    isinstance(handler, RotatingFileHandler)
+    for handler in logging.getLogger().handlers
+)
 assert common._GENERATION_EXECUTOR is None
 assert common._UTILITY_EXECUTOR is None
 """
