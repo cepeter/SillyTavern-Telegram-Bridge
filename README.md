@@ -761,9 +761,9 @@ Production startup enters through `bridge.main`; repository source is no longer
 executed into a shared runtime namespace. Root infrastructure is assembled in
 `bridge.composition`, built-in cross-cutting features register explicitly through
 `bridge.application_composition.initialize_extensions()`, and durable jobs are
-provided through the required `JobService` on `BridgeServices`. The retired
-`bridge.runtime`, `bridge.ordinary_dependencies`, and `bridge.job_runtime`
-compatibility layers no longer exist.
+provided through the required `JobService` on `BridgeServices`. Production
+dependencies are ordinary module imports or explicitly injected services; no
+compatibility runtime/dependency layer participates in startup.
 
 Scene State, Director Goals, and Memory Curator register command routes and
 memory/summary hooks deterministically during startup. Here are the main
@@ -776,7 +776,7 @@ bridge/composition.py            root configuration and service composition
 bridge/application_composition.py explicit built-in extension registration
 bridge/job_service.py             canonical durable job service
 bridge/extension_registry.py     explicit command and memory/summary extension hooks
-bridge/common.py                 queues, permissions, shared runtime support
+bridge/common.py                 queues, permissions, shared infrastructure
 bridge/config.py                 canonical startup and feature defaults
 bridge/cards.py                  cards, Persona display, prompts, World Info
 bridge/database.py               sessions, persistence, generation settings
