@@ -112,6 +112,20 @@ class Phase7CFinalRuntimeCutoverTests(unittest.TestCase):
             completed.stdout + completed.stderr,
         )
 
+    def test_entrypoint_bootstraps_environment_before_importing_main(self):
+        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(
+            encoding="utf-8"
+        )
+        bootstrap_import = source.index(
+            "from bridge.environment import bootstrap_environment"
+        )
+        bootstrap_call = source.index("bootstrap_environment()")
+        main_import = source.index("from bridge.main import main")
+
+        self.assertLess(bootstrap_import, bootstrap_call)
+        self.assertLess(bootstrap_call, main_import)
+        self.assertNotIn("def bootstrap_env(", source)
+
     def test_entrypoint_imports_main_directly(self):
         source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(
             encoding="utf-8"
