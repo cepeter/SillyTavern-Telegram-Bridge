@@ -5,10 +5,8 @@ ensure_application_extensions()
 import sqlite3
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import bridge.message_commands as _m_message_commands
-import bridge.persona_sync as _m_persona_sync
 import bridge.cards as _m_cards
 from bridge.persona_service import PersonaService
 
@@ -406,65 +404,6 @@ class PersonaSourceBoundaryTests(unittest.TestCase):
             source = (root / filename).read_text(encoding="utf-8")
             self.assertNotIn("resolve_persona_service", source, filename)
             self.assertNotIn("compatibility_persona_service", source, filename)
-
-
-class PersonaCompatibilityServiceTests(unittest.TestCase):
-    def test_compatibility_service_late_binds_final_runtime_collaborators(self):
-        calls = []
-
-        with patch.object(
-            _m_persona_sync,
-            "load_personas",
-            return_value={
-                "native.png": {
-                    "name": "Native",
-                    "description": "D",
-                    "sillytavern_avatar": "native.png",
-                }
-            },
-        ), patch.object(_m_persona_sync, "default_persona_id",
-            return_value="native.png",
-        ), patch.object(
-            _m_persona_sync,
-            "upsert_native_persona",
-            side_effect=lambda *args: calls.append(("upsert", args))
-            or "native.png",
-        ), patch.object(
-            _m_persona_sync,
-            "delete_native_persona",
-            side_effect=lambda persona_id: calls.append(
-                ("delete", persona_id)
-            )
-            or True,
-        ), patch.object(
-            _m_persona_sync,
-            "_repo_count_persona_references",
-            return_value=0,
-            create=True,
-        ):
-            service = _m_persona_sync.compatibility_persona_service()
-            self.assertEqual(
-                service.list(),
-                {
-                    "native.png": {
-                        "name": "Native",
-                        "description": "D",
-                        "sillytavern_avatar": "native.png",
-                    }
-                },
-            )
-            self.assertEqual(service.name("native.png"), "Native")
-            self.assertEqual(service.default_id(), "native.png")
-            service.update("native.png", "Updated", "D")
-
-        self.assertEqual(
-            calls,
-            [("upsert", ("native.png", "Updated", "D"))],
-        )
-
-    def test_resolve_persona_service_prefers_injected_service(self):
-        sentinel = object()
-        self.assertIs(_m_persona_sync.resolve_persona_service(sentinel), sentinel)
 
 
 if __name__ == "__main__":
