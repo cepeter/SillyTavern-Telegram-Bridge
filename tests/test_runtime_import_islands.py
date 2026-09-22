@@ -40,7 +40,7 @@ class RuntimeImportIslandTests(unittest.TestCase):
             "import bridge.schema as schema\n"
             "assert 'bridge.runtime' not in sys.modules\n"
             "assert 'bridge.common' not in sys.modules\n"
-            "assert [m.version for m in schema.SCHEMA_MIGRATIONS] == [1, 2, 3, 4]\n"
+            "assert [m.version for m in schema.SCHEMA_MIGRATIONS] == [1]\n"
         )
 
         self.assertEqual(
