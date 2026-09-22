@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_native_test_persona_service
 
 ensure_application_extensions()
 
@@ -142,7 +142,7 @@ class NativePersonaStorageTests(unittest.TestCase):
         )
 
     def test_persona_service_lock_can_nest_into_integrity_store(self):
-        service = _m_persona_sync.compatibility_persona_service()
+        service = make_native_test_persona_service()
         db = _m_memory_curator.db_connect(
             self.root / "persona-service.sqlite3"
         )
