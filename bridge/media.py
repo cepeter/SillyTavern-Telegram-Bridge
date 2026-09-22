@@ -7,8 +7,10 @@ import os
 from pathlib import Path
 import shutil
 import subprocess  # nosec B404 - fixed local media tools, never shell-executed
+from typing import TYPE_CHECKING
 
-from bridge.composition import BridgeServices as _BridgeServices
+if TYPE_CHECKING:
+    from bridge.composition import BridgeServices as _BridgeServices
 
 
 def _resolve_media_command(configured: str, label: str) -> str:
