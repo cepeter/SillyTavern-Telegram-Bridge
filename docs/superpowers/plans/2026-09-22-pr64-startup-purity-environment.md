@@ -53,6 +53,7 @@
 - `bridge/card_content.py` — directory-only system-prompt discovery.
 - `bridge/catalog.py` — import provider/cache paths from `bridge.config`.
 - `bridge/generation.py` — import provider path from `bridge.config`.
+- `bridge/telegram.py` — import character-backup path from `bridge.config` rather than through `bridge.common`.
 - `bridge/composition.py` — stricter Telegram allowlist validation.
 - `bridge/main.py` — remove late environment load; explicitly configure logging during startup.
 - Other modules are changed only if the final residue scan finds an import of one of the moved path constants.
@@ -357,6 +358,7 @@ git commit -m "refactor: establish strict environment bootstrap"
 - Modify: `bridge/common.py`
 - Modify: `bridge/catalog.py`
 - Modify: `bridge/generation.py`
+- Modify: `bridge/telegram.py`
 - Modify: `bridge/card_content.py`
 - Modify: `tests/test_catalog_limits.py`
 - Modify: `tests/test_native_runtime_retirement.py`
@@ -392,6 +394,7 @@ def test_startup_path_ownership_has_no_legacy_common_definitions(self):
     ):
         self.assertNotIn(forbidden, common_source)
 
+    self.assertNotIn("ENV_FILE =", config_source)
     for required in (
         "PROVIDER_CONFIG_FILE =",
         "MODEL_CACHE_FILE =",
@@ -399,6 +402,20 @@ def test_startup_path_ownership_has_no_legacy_common_definitions(self):
         "LOG_FILE =",
     ):
         self.assertIn(required, config_source)
+
+    import bridge.common as common
+
+    for retired_export in (
+        "ENV_FILE",
+        "PROVIDER_CONFIG_FILE",
+        "MODEL_CACHE_FILE",
+        "CHARACTER_BACKUP_DIR",
+        "LOG_FILE",
+    ):
+        self.assertFalse(
+            hasattr(common, retired_export),
+            retired_export,
+        )
 
 
 def test_single_file_system_prompt_fallback_is_deleted(self):
@@ -493,9 +510,20 @@ Delete `SYSTEM_PROMPTS_FILE` from `bridge.config`.
 In `bridge/common.py`:
 
 - import `environment_file` from `bridge.environment`;
-- import `LOG_FILE`, `PROVIDER_CONFIG_FILE`, `MODEL_CACHE_FILE`, and `CHARACTER_BACKUP_DIR` from `bridge.config`;
+- import moved config paths under private aliases only:
+
+```python
+from bridge.config import (
+    CHARACTER_BACKUP_DIR as _CHARACTER_BACKUP_DIR,
+    LOG_FILE as _LOG_FILE,
+    MODEL_CACHE_FILE as _MODEL_CACHE_FILE,
+    PROVIDER_CONFIG_FILE as _PROVIDER_CONFIG_FILE,
+)
+```
+
 - delete local definitions for those paths and `ENV_FILE`;
-- remove `SYSTEM_PROMPTS_FILE` import.
+- remove `SYSTEM_PROMPTS_FILE` import;
+- do not expose the moved paths as public attributes of `bridge.common`.
 
 Change the permissions file set from:
 
@@ -515,9 +543,9 @@ to:
 private_files = {
     environment_file(),
     DB_FILE,
-    LOG_FILE,
-    PROVIDER_CONFIG_FILE,
-    MODEL_CACHE_FILE,
+    _LOG_FILE,
+    _PROVIDER_CONFIG_FILE,
+    _MODEL_CACHE_FILE,
 }
 ```
 
@@ -552,6 +580,8 @@ from bridge.config import (
 ```
 
 In `bridge/generation.py`, remove `PROVIDER_CONFIG_FILE` from the `bridge.common` import and import it from `bridge.config`.
+
+In `bridge/telegram.py`, remove `CHARACTER_BACKUP_DIR` from the `bridge.common` import and import it from `bridge.config`.
 
 Do not re-export moved paths from `bridge.common`.
 
@@ -705,7 +735,9 @@ matching = [
 assert len(matching) == 1
 assert target.exists()
 
-if hasattr(target, "chmod"):
+import os
+
+if os.name == "posix":
     mode = stat.S_IMODE(target.stat().st_mode)
     assert mode & 0o077 == 0
 """
@@ -764,7 +796,7 @@ Add:
 
 ```python
 def configure_logging(
-    log_file: Path = LOG_FILE,
+    log_file: Path = _LOG_FILE,
 ) -> None:
     """Install the bridge rotating file handler explicitly."""
     target = Path(log_file).expanduser().resolve()
