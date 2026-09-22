@@ -579,9 +579,9 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("from bridge.telegram import telegram_request", source)
+        self.assertIn("from bridge.persona_service import PersonaService", source)
         self.assertIn("from bridge.persona_sync import (", source)
         for collaborator in (
-            "resolve_persona_service",
             "load_personas",
             "_native_settings",
         ):
