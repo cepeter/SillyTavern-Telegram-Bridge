@@ -21,12 +21,16 @@ def ensure_application_extensions() -> None:
     _INITIALIZED = True
 
 
-def make_test_memory_service() -> MemoryService:
-    """Return a stateless explicit MemoryService for tests unrelated to memory."""
+def make_test_memory_service(*, purge_session_memory=None) -> MemoryService:
+    """Return an explicit MemoryService for tests that do not compose startup."""
     return MemoryService(
         recall_context=lambda *_args, **_kwargs: "",
         summary_for_prompt=lambda *_args, **_kwargs: "",
         summary_state=lambda *_args, **_kwargs: ("", 0),
         retain_session=lambda *_args, **_kwargs: None,
-        purge_session_memory=lambda *_args, **_kwargs: 0,
+        purge_session_memory=(
+            purge_session_memory
+            if purge_session_memory is not None
+            else (lambda *_args, **_kwargs: 0)
+        ),
     )
