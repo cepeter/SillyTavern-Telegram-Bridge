@@ -194,6 +194,16 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
                 offenders[path.name] = "SYSTEM_PROMPTS_FILE"
         self.assertEqual(offenders, {})
 
+    def test_late_environment_loader_is_deleted(self):
+        common_source = (BRIDGE_DIR / "common.py").read_text(
+            encoding="utf-8"
+        )
+        main_source = (BRIDGE_DIR / "main.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("def load_env_file(", common_source)
+        self.assertNotIn("load_env_file", main_source)
+
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []
         for root in (BRIDGE_DIR, TESTS_DIR):
