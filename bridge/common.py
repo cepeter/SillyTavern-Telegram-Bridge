@@ -381,22 +381,6 @@ def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) 
         _start_next_chat_job(chat_id)
     return True
 
-def load_env_file() -> None:
-    path = environment_file()
-    if not path.exists():
-        return
-    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        os.environ.setdefault(key, value)
-
-
 def enforce_runtime_permissions() -> None:
     private_dirs = {DB_FILE.parent, _LOG_FILE.parent, BRIDGE_HOME / "backups", _CHARACTER_BACKUP_DIR}
     enforce_prompt_permissions = os.environ.get("SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS", "false").casefold() == "true"
