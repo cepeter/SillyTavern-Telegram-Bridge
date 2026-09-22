@@ -95,6 +95,23 @@ def validate_bridge_config(config: BridgeConfig) -> None:
             f"{config.card_file}"
         )
 
+    if not config.allowed_users:
+        raise ValueError(
+            "required SILLYTAVERN_TELEGRAM_ALLOWED_USERS is missing from .env"
+        )
+
+    invalid_users = sorted(
+        user_id
+        for user_id in config.allowed_users
+        if not user_id.isdecimal()
+    )
+    if invalid_users:
+        raise ValueError(
+            "SILLYTAVERN_TELEGRAM_ALLOWED_USERS must contain "
+            "only numeric Telegram user IDs: "
+            + ", ".join(invalid_users)
+        )
+
 
 def build_bridge_services(
     config: BridgeConfig,

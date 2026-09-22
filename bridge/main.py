@@ -121,8 +121,8 @@ from bridge.group_core import (
 from bridge.common import (
     begin_background_shutdown,
     chat_job_lock,
+    configure_logging,
     enforce_runtime_permissions,
-    load_env_file,
     register_durable_backlog_dispatcher,
     shutdown_background_executors,
     submit_chat_background,
@@ -721,15 +721,16 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
-    load_env_file()
     refresh_phase3_config()
-    enforce_runtime_permissions()
 
     config = _load_startup_config(os.environ)
     try:
         validate_startup_credential(config.default_model)
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
+
+    enforce_runtime_permissions()
+    configure_logging()
 
     services = _build_startup_services(config)
     token = config.bot_token

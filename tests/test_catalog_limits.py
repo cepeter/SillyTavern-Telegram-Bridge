@@ -34,8 +34,6 @@ class CatalogLimitTests(unittest.TestCase):
         self.old_config_world = config.WORLD_DIR
         self.old_prompts = _m_common.SYSTEM_PROMPTS_DIR
         self.old_config_prompts = config.SYSTEM_PROMPTS_DIR
-        self.old_prompt_file = _m_common.SYSTEM_PROMPTS_FILE
-        self.old_config_prompt_file = config.SYSTEM_PROMPTS_FILE
         self.old_native_settings = _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE
         self.old_native_avatars = _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR
         self.old_native_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
@@ -49,8 +47,6 @@ class CatalogLimitTests(unittest.TestCase):
         config.WORLD_DIR = _m_catalog.WORLD_DIR
         _m_common.SYSTEM_PROMPTS_DIR = root / "prompts"
         config.SYSTEM_PROMPTS_DIR = _m_common.SYSTEM_PROMPTS_DIR
-        _m_common.SYSTEM_PROMPTS_FILE = ""
-        config.SYSTEM_PROMPTS_FILE = ""
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = root / "avatars"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR.mkdir()
@@ -74,8 +70,6 @@ class CatalogLimitTests(unittest.TestCase):
         config.WORLD_DIR = self.old_config_world
         _m_common.SYSTEM_PROMPTS_DIR = self.old_prompts
         config.SYSTEM_PROMPTS_DIR = self.old_config_prompts
-        _m_common.SYSTEM_PROMPTS_FILE = self.old_prompt_file
-        config.SYSTEM_PROMPTS_FILE = self.old_config_prompt_file
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.old_native_settings
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.old_native_avatars
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_native_cache
@@ -83,6 +77,22 @@ class CatalogLimitTests(unittest.TestCase):
         _m_persona_sync.phase3_api_configured = self.old_phase3
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
+
+    def test_system_prompt_catalog_uses_directory_only(self):
+        directory_prompt = _m_common.SYSTEM_PROMPTS_DIR / "Only.txt"
+        directory_prompt.write_text("directory prompt", encoding="utf-8")
+
+        prompts = _m_cards.load_system_prompts()
+
+        self.assertEqual(
+            prompts,
+            {
+                "Only": {
+                    "name": "Only",
+                    "prompt": "directory prompt",
+                }
+            },
+        )
 
     def test_file_catalogs_are_deterministically_capped_at_40(self):
         for index in range(41):

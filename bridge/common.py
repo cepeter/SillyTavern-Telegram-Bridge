@@ -42,6 +42,7 @@ from bridge.config import (
     CARD_FILE,
     CARD_TOTAL_MAX_CHARS,
     CATALOG_MAX_ITEMS,
+    CHARACTER_BACKUP_DIR as _CHARACTER_BACKUP_DIR,
     CHARACTER_DIR,
     DB_FILE,
     DEFAULT_CHARACTER_FILE,
@@ -53,6 +54,9 @@ from bridge.config import (
     HINDSIGHT_DEFAULT_URL,
     HINDSIGHT_RECALL_MAX_TOKENS,
     HINDSIGHT_RETAIN_MAX_MESSAGES,
+    LOG_FILE as _LOG_FILE,
+    MODEL_CACHE_FILE as _MODEL_CACHE_FILE,
+    PROVIDER_CONFIG_FILE as _PROVIDER_CONFIG_FILE,
     RAG_CHUNK_CHARS,
     RAG_CHUNK_OVERLAP,
     RAG_EMBEDDING_DIMENSIONS,
@@ -74,9 +78,9 @@ from bridge.config import (
     REASONING_LEVELS,
     SILLYTAVERN_DIR,
     SYSTEM_PROMPTS_DIR,
-    SYSTEM_PROMPTS_FILE,
     WORLD_DIR,
 )
+from bridge.environment import environment_file
 from bridge.runtime_context import (
     db_connection_context,
     panel_actor_context,
@@ -114,40 +118,63 @@ def topic_scope_from_message(chat_id: str, message: dict | None) -> str:
     return topic_scope_id(chat_id, (message or {}).get("message_thread_id"))
 
 
-ENV_FILE = Path(os.environ.get("SILLYTAVERN_ENV_FILE", str(BRIDGE_HOME / ".env")))
-PROVIDER_CONFIG_FILE = Path(os.environ.get("SILLYTAVERN_PROVIDER_CONFIG", str(BRIDGE_HOME / "sillytavern_telegram_providers.yaml")))
-MODEL_CACHE_FILE = Path(os.environ.get("SILLYTAVERN_MODEL_CACHE", str(BRIDGE_HOME / "model_catalog_cache.json")))
 MODEL_REFRESH_SECONDS = int(os.environ.get("SILLYTAVERN_MODEL_REFRESH_SECONDS", "3600"))
-CHARACTER_BACKUP_DIR = Path(os.environ.get("SILLYTAVERN_CHARACTER_BACKUP_DIR", str(BRIDGE_HOME / "backups/sillytavern/characters")))
 IMAGE_MAX_BYTES = 8 * 1024 * 1024
 TTS_MAX_CHARS = 4000
 STT_MAX_BYTES = 20 * 1024 * 1024
 STT_DEFAULT_MODEL = "base"
-LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
 DEFAULT_ALLOWED_USER = os.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", "")
 DEFAULT_PROVIDER_URL = ""
 MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
 MODEL_CHOICES = []
 
-LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[RotatingFileHandler(str(LOG_FILE), maxBytes=10 * 1024 * 1024, backupCount=5)],
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+def configure_logging(log_file: Path = _LOG_FILE) -> None:
+    """Install the bridge rotating file handler explicitly."""
+    target = Path(log_file).expanduser().resolve()
+    root = logging.getLogger()
+
+    if any(
+        isinstance(handler, RotatingFileHandler)
+        and Path(handler.baseFilename).resolve() == target
+        for handler in root.handlers
+    ):
+        return
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(
+        str(target),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+    )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    )
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+    try:
+        target.chmod(0o600)
+    except OSError:
+        logging.warning(
+            "Could not protect runtime log file %s",
+            target,
+            exc_info=True,
+        )
+
 
 _BACKGROUND_MAX_QUEUED_PER_CHAT = 256
 _BACKGROUND_MAX_SCOPED_QUEUES = 1024
 BACKGROUND_MAX_JOBS = 8
 _GENERATION_SLOTS = threading.BoundedSemaphore(6)
 _UTILITY_SLOTS = threading.BoundedSemaphore(4)
-_GENERATION_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=3, thread_name_prefix="st-generation")
-_UTILITY_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="st-utility")
+_GENERATION_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = None
+_UTILITY_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = None
 _GENERATION_LABELS = {"generation", "command", "retry", "regen", "continue", "edit", "summarize"}
 _CHAT_LOCKS: dict[str, threading.Lock] = {}
 _CHAT_LOCKS_GUARD = threading.Lock()
 _BACKGROUND_STATE_LOCK = threading.Lock()
+_EXECUTOR_LOCK = threading.Lock()
 _BACKGROUND_FUTURES: set[concurrent.futures.Future] = set()
 _BACKGROUND_ACCEPTING = True
 
@@ -157,8 +184,24 @@ def chat_job_lock(chat_id: str) -> threading.Lock:
         return _CHAT_LOCKS.setdefault(str(chat_id), threading.Lock())
 
 
-def _executor_for(label: str):
-    return _GENERATION_EXECUTOR if label in _GENERATION_LABELS else _UTILITY_EXECUTOR
+def _executor_for(label: str) -> concurrent.futures.ThreadPoolExecutor:
+    global _GENERATION_EXECUTOR, _UTILITY_EXECUTOR
+
+    with _EXECUTOR_LOCK:
+        if label in _GENERATION_LABELS:
+            if _GENERATION_EXECUTOR is None:
+                _GENERATION_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=3,
+                    thread_name_prefix="st-generation",
+                )
+            return _GENERATION_EXECUTOR
+
+        if _UTILITY_EXECUTOR is None:
+            _UTILITY_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+                max_workers=2,
+                thread_name_prefix="st-utility",
+            )
+        return _UTILITY_EXECUTOR
 
 
 def _admission_slot(label: str) -> threading.BoundedSemaphore:
@@ -244,10 +287,21 @@ def begin_background_shutdown() -> None:
 
 
 def shutdown_background_executors(timeout: float = 20.0) -> bool:
+    global _GENERATION_EXECUTOR, _UTILITY_EXECUTOR
+
     begin_background_shutdown()
     drained = drain_background_jobs(timeout)
-    _GENERATION_EXECUTOR.shutdown(wait=drained, cancel_futures=not drained)
-    _UTILITY_EXECUTOR.shutdown(wait=drained, cancel_futures=not drained)
+
+    with _EXECUTOR_LOCK:
+        generation = _GENERATION_EXECUTOR
+        utility = _UTILITY_EXECUTOR
+        _GENERATION_EXECUTOR = None
+        _UTILITY_EXECUTOR = None
+
+    if generation is not None:
+        generation.shutdown(wait=drained, cancel_futures=not drained)
+    if utility is not None:
+        utility.shutdown(wait=drained, cancel_futures=not drained)
     return drained
 
 
@@ -327,23 +381,8 @@ def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) 
         _start_next_chat_job(chat_id)
     return True
 
-def load_env_file() -> None:
-    if not ENV_FILE.exists():
-        return
-    for raw in ENV_FILE.read_text(encoding="utf-8", errors="ignore").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        os.environ.setdefault(key, value)
-
-
 def enforce_runtime_permissions() -> None:
-    private_dirs = {DB_FILE.parent, LOG_FILE.parent, BRIDGE_HOME / "backups", CHARACTER_BACKUP_DIR}
+    private_dirs = {DB_FILE.parent, _LOG_FILE.parent, BRIDGE_HOME / "backups", _CHARACTER_BACKUP_DIR}
     enforce_prompt_permissions = os.environ.get("SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS", "false").casefold() == "true"
     if SYSTEM_PROMPTS_DIR.exists() and (enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)):
         private_dirs.add(SYSTEM_PROMPTS_DIR)
@@ -353,7 +392,7 @@ def enforce_runtime_permissions() -> None:
             directory.chmod(0o700)
         except OSError:
             logging.warning("Could not protect runtime directory %s", directory, exc_info=True)
-    private_files = {ENV_FILE, DB_FILE, LOG_FILE, PROVIDER_CONFIG_FILE, MODEL_CACHE_FILE}
+    private_files = {environment_file(), DB_FILE, _LOG_FILE, _PROVIDER_CONFIG_FILE, _MODEL_CACHE_FILE}
     if SYSTEM_PROMPTS_DIR.exists() and (enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)):
         private_files.update(SYSTEM_PROMPTS_DIR.glob("*.txt"))
         private_files.update(SYSTEM_PROMPTS_DIR.glob("*.json"))

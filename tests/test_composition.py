@@ -178,6 +178,52 @@ class CompositionConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     validate_bridge_config(config)
 
+    def test_validate_bridge_config_rejects_empty_allowlist(self):
+        environ = self._environ()
+        environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = ""
+        config = load_bridge_config(
+            environ,
+            character_dir=self.character_dir,
+            db_file=self.db_file,
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "SILLYTAVERN_TELEGRAM_ALLOWED_USERS",
+        ):
+            validate_bridge_config(config)
+
+    def test_validate_bridge_config_rejects_non_numeric_allowlist_member(self):
+        environ = self._environ()
+        environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = (
+            "100, invalid-user, 200,100"
+        )
+        config = load_bridge_config(
+            environ,
+            character_dir=self.character_dir,
+            db_file=self.db_file,
+        )
+
+        with self.assertRaisesRegex(ValueError, "invalid-user"):
+            validate_bridge_config(config)
+
+    def test_validate_bridge_config_accepts_trimmed_duplicate_numeric_ids(self):
+        environ = self._environ()
+        environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = (
+            " 100,200,100 ,, "
+        )
+        config = load_bridge_config(
+            environ,
+            character_dir=self.character_dir,
+            db_file=self.db_file,
+        )
+
+        self.assertEqual(
+            config.allowed_users,
+            frozenset({"100", "200"}),
+        )
+        self.assertIsNone(validate_bridge_config(config))
+
     def test_validate_bridge_config_rejects_missing_card(self):
         environ = self._environ()
         environ["SILLYTAVERN_DEFAULT_CHARACTER"] = "missing.png"
@@ -931,9 +977,7 @@ class StartupCompositionTests(unittest.TestCase):
         return {"username": "bridge_bot"}
 
     def test_run_check_uses_prebuilt_services_without_reloading_environment(self):
-        with patch.object(_m_common, "load_env_file",
-            side_effect=AssertionError("run_check must not reload env"),
-        ), patch.object(_m_main, "card_fields",
+        with patch.object(_m_main, "card_fields",
             return_value={"name": "Mira"},
         ), patch.object(_m_main, "read_png_chara",
             return_value={},
@@ -1079,9 +1123,9 @@ class StartupCompositionTests(unittest.TestCase):
             argparse.ArgumentParser,
             "parse_args",
             return_value=parsed,
-        ), patch.object(_m_main, "load_env_file"
         ), patch.object(_m_main, "refresh_phase3_config"
         ), patch.object(_m_main, "enforce_runtime_permissions"
+        ), patch.object(_m_main, "configure_logging"
         ), patch.object(
             _m_main, "_load_startup_config", return_value=self.config
         ), patch.object(
@@ -1150,9 +1194,9 @@ class StartupCompositionTests(unittest.TestCase):
                 argparse.ArgumentParser,
                 "parse_args",
                 return_value=parsed,
-            ), patch.object(_m_main, "load_env_file"
             ), patch.object(_m_main, "refresh_phase3_config"
             ), patch.object(_m_main, "enforce_runtime_permissions"
+            ), patch.object(_m_main, "configure_logging"
             ), patch.object(
                 _m_main, "_load_startup_config", return_value=self.config
             ), patch.object(
@@ -1391,16 +1435,86 @@ class StartupCompositionTests(unittest.TestCase):
                     sent,
                 )
 
+    def test_main_validates_config_and_credential_before_runtime_resources(self):
+        parsed = argparse.Namespace(check=True)
+        calls = []
+
+        def load_config(_environ):
+            calls.append("load_config")
+            return self.config
+
+        def validate_credential(_model):
+            calls.append("validate_credential")
+
+        def enforce_permissions():
+            calls.append("enforce_permissions")
+
+        def configure_logging():
+            calls.append("configure_logging")
+
+        def build_services(config):
+            calls.append("build_services")
+            self.assertIs(config, self.config)
+            return self.services
+
+        with patch.object(
+            argparse.ArgumentParser,
+            "parse_args",
+            return_value=parsed,
+        ), patch.object(
+            _m_main,
+            "refresh_phase3_config",
+        ), patch.object(
+            _m_main,
+            "_load_startup_config",
+            side_effect=load_config,
+        ), patch.object(
+            _m_main,
+            "validate_startup_credential",
+            side_effect=validate_credential,
+        ), patch.object(
+            _m_main,
+            "enforce_runtime_permissions",
+            side_effect=enforce_permissions,
+        ), patch.object(
+            _m_main,
+            "configure_logging",
+            side_effect=configure_logging,
+        ), patch.object(
+            _m_main,
+            "_build_startup_services",
+            side_effect=build_services,
+        ), patch.object(
+            _m_main,
+            "set_bot_commands",
+        ), patch.object(
+            _m_main,
+            "run_check",
+            return_value=0,
+        ):
+            self.assertEqual(_m_main.main(), 0)
+
+        self.assertEqual(
+            calls,
+            [
+                "load_config",
+                "validate_credential",
+                "enforce_permissions",
+                "configure_logging",
+                "build_services",
+            ],
+        )
+
     def test_main_check_builds_services_once_and_passes_same_object(self):
         parsed = argparse.Namespace(check=True)
         with patch.object(
             argparse.ArgumentParser,
             "parse_args",
             return_value=parsed,
-        ), patch.object(_m_main, "load_env_file",
         ), patch.object(_m_main, "refresh_phase3_config",
         ), patch.object(_m_main, "enforce_runtime_permissions",
-        ), patch.object(
+        ), patch.object(_m_main, "configure_logging",
+        ) as configure_logging, patch.object(
             _m_main,
             "_load_startup_config",
             return_value=self.config,
@@ -1419,6 +1533,7 @@ class StartupCompositionTests(unittest.TestCase):
         ) as run_check:
             self.assertEqual(_m_main.main(), 0)
 
+        configure_logging.assert_called_once_with()
         load_config.assert_called_once()
         build_services.assert_called_once_with(self.config)
         run_check.assert_called_once_with(self.services)

@@ -338,13 +338,12 @@ from bridge.callbacks import close_panel_message
 from bridge.common import (
     chat_job_lock,
     parse_topic_scope,
-    PROVIDER_CONFIG_FILE,
     STT_DEFAULT_MODEL,
     STT_MAX_BYTES,
     submit_background,
     TTS_MAX_CHARS,
 )
-from bridge.config import BRIDGE_HOME
+from bridge.config import BRIDGE_HOME, PROVIDER_CONFIG_FILE
 from bridge.database import (
     begin_operation,
     clear_failed_turn,

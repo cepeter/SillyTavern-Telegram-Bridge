@@ -147,6 +147,113 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
                 offenders[path.relative_to(REPO_ROOT).as_posix()] = hits
         self.assertEqual(offenders, {})
 
+    def test_startup_path_ownership_has_no_legacy_common_definitions(self):
+        common_source = (BRIDGE_DIR / "common.py").read_text(
+            encoding="utf-8"
+        )
+        config_source = (BRIDGE_DIR / "config.py").read_text(
+            encoding="utf-8"
+        )
+        for forbidden in (
+            "ENV_FILE =",
+            "PROVIDER_CONFIG_FILE =",
+            "MODEL_CACHE_FILE =",
+            "CHARACTER_BACKUP_DIR =",
+            "LOG_FILE =",
+        ):
+            self.assertNotIn(forbidden, common_source)
+
+        self.assertNotIn("ENV_FILE =", config_source)
+        for required in (
+            "PROVIDER_CONFIG_FILE =",
+            "MODEL_CACHE_FILE =",
+            "CHARACTER_BACKUP_DIR =",
+            "LOG_FILE =",
+        ):
+            self.assertIn(required, config_source)
+
+        import bridge.common as common
+
+        for retired_export in (
+            "ENV_FILE",
+            "PROVIDER_CONFIG_FILE",
+            "MODEL_CACHE_FILE",
+            "CHARACTER_BACKUP_DIR",
+            "LOG_FILE",
+        ):
+            self.assertFalse(
+                hasattr(common, retired_export),
+                retired_export,
+            )
+
+    def test_single_file_system_prompt_fallback_is_deleted(self):
+        offenders = {}
+        for path in sorted(BRIDGE_DIR.glob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if "SYSTEM_PROMPTS_FILE" in source:
+                offenders[path.name] = "SYSTEM_PROMPTS_FILE"
+        self.assertEqual(offenders, {})
+
+    def test_late_environment_loader_is_deleted(self):
+        common_source = (BRIDGE_DIR / "common.py").read_text(
+            encoding="utf-8"
+        )
+        main_source = (BRIDGE_DIR / "main.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("def load_env_file(", common_source)
+        self.assertNotIn("load_env_file", main_source)
+
+    def test_common_has_no_import_time_process_resource_construction(self):
+        source = (BRIDGE_DIR / "common.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        top_level_calls = []
+        executor_assignments = []
+        for node in tree.body:
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+                top_level_calls.append(node.value)
+            elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+                executor_assignments.append(node.value)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.value, ast.Call):
+                executor_assignments.append(node.value)
+
+        def dotted_name(node):
+            if isinstance(node, ast.Name):
+                return node.id
+            if isinstance(node, ast.Attribute):
+                prefix = dotted_name(node.value)
+                return f"{prefix}.{node.attr}" if prefix else node.attr
+            return ""
+
+        self.assertFalse(
+            any(
+                dotted_name(call.func) == "logging.basicConfig"
+                or dotted_name(call.func).endswith(".mkdir")
+                for call in top_level_calls
+            )
+        )
+        self.assertFalse(
+            any(
+                dotted_name(call.func).endswith(".ThreadPoolExecutor")
+                for call in executor_assignments
+            )
+        )
+
+    def test_launcher_has_no_local_environment_parser(self):
+        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("def bootstrap_env(", source)
+        self.assertIn(
+            "from bridge.environment import bootstrap_environment",
+            source,
+        )
+
+    def test_env_example_has_no_single_file_system_prompt_fallback(self):
+        source = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+        self.assertNotIn("SILLYTAVERN_SYSTEM_PROMPTS_FILE", source)
+
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []
         for root in (BRIDGE_DIR, TESTS_DIR):
