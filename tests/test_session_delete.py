@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -77,7 +77,7 @@ class SessionDeletionTests(unittest.TestCase):
 
     def test_active_session_and_busy_session_are_protected(self):
         active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
-        denied, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", active["session_id"], active["session_id"])
+        denied, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", active["session_id"], active["session_id"], memory_service=make_test_memory_service())
         self.assertFalse(denied)
         self.assertEqual(reason, "active session")
         inactive = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="busy")
@@ -86,7 +86,7 @@ class SessionDeletionTests(unittest.TestCase):
             (801, "chat", inactive["session_id"], "1", "generation", "{}", "queued", time.time(), time.time()),
         )
         self.db.commit()
-        denied, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", inactive["session_id"], active["session_id"])
+        denied, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", inactive["session_id"], active["session_id"], memory_service=make_test_memory_service())
         self.assertFalse(denied)
         self.assertEqual(reason, "session has active jobs")
 
