@@ -1,15 +1,15 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 import unittest
 
 import os
-from dependency_patch import dependency_module
-
-_m_generation = dependency_module("bridge.generation")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_sync_core = dependency_module("bridge.sync_core")
-
-
+import bridge.generation as _m_generation
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.sync_core as _m_sync_core
 class _FakeResponse:
     def __init__(self, payload):
         self.payload = payload

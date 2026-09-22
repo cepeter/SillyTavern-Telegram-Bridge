@@ -35,8 +35,6 @@ from bridge.panel_utils import (
     panel_page,
 )
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 from bridge.group_core import (
     group_state,
     group_user_turn_allowed,
@@ -357,4 +355,24 @@ def handle_summary_command(db: sqlite3.Connection, token: str, chat_id: str, ses
         send_text(token, chat_id, "No chat messages are available to summarize.")
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.callbacks import (
+    close_panel_message,
+    discard_panel_binding,
+)
+from bridge.cards import send_panel_message
+from bridge.catalog import send_world_menu
+from bridge.common import parse_topic_scope
+from bridge.generation import generate_text
+from bridge.media import (
+    remove_inline_keyboard,
+    send_typing,
+)
+from bridge.memory import generate_session_summary
+from bridge.session_naming import start_session_name_input
+from bridge.telegram import (
+    create_session,
+    load_session,
+    send_text,
+    update_session,
+)

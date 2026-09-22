@@ -21,9 +21,6 @@ from bridge.database import (
     record_operation,
 )
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import random
 
 
@@ -60,4 +57,5 @@ def send_character_greeting(db: sqlite3.Connection, token: str, chat_id: str, fi
     return True
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.telegram import send_text

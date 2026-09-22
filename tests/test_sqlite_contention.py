@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 from pathlib import Path
 import tempfile
@@ -10,18 +14,14 @@ import bridge.database as database
 import sqlite3
 import time
 import urllib
-from dependency_patch import dependency_module
-
-_m_main = dependency_module("bridge.main")
-_m_media = dependency_module("bridge.media")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_sync_api = dependency_module("bridge.sync_api")
-_m_telegram = dependency_module("bridge.telegram")
-
-
+import bridge.main as _m_main
+import bridge.media as _m_media
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.session_naming as _m_session_naming
+import bridge.sync_api as _m_sync_api
+import bridge.telegram as _m_telegram
 class _FakeTelegramResponse:
     def __enter__(self):
         return self

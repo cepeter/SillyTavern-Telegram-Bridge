@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 from pathlib import Path
 import tempfile
@@ -5,23 +9,19 @@ import unittest
 
 import bridge.config as config
 import time
-from dependency_patch import dependency_module
-
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_cards = dependency_module("bridge.cards")
-_m_catalog = dependency_module("bridge.catalog")
-_m_character_identity = dependency_module("bridge.character_identity")
-_m_command_routes = dependency_module("bridge.command_routes")
-_m_common = dependency_module("bridge.common")
-_m_input_flows = dependency_module("bridge.input_flows")
-_m_main = dependency_module("bridge.main")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_persona_sync = dependency_module("bridge.persona_sync")
-_m_status_panels = dependency_module("bridge.status_panels")
-_m_telegram = dependency_module("bridge.telegram")
-
-
+import bridge.callbacks as _m_callbacks
+import bridge.cards as _m_cards
+import bridge.catalog as _m_catalog
+import bridge.character_identity as _m_character_identity
+import bridge.command_routes as _m_command_routes
+import bridge.common as _m_common
+import bridge.input_flows as _m_input_flows
+import bridge.main as _m_main
+import bridge.memory_curator as _m_memory_curator
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.persona_sync as _m_persona_sync
+import bridge.status_panels as _m_status_panels
+import bridge.telegram as _m_telegram
 class CatalogLimitTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

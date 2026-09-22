@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
     method = "editMessageText" if message_id else "sendMessage"
     payload = {
@@ -330,4 +328,74 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     )
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import json
+import logging
+import sqlite3
+import time
+from bridge.card_content import card_fields_from_file
+from bridge.cards import (
+    persona_name,
+    send_session_menu,
+)
+from bridge.character_identity import reconcile_session_character
+from bridge.command_routes import handle_command_route
+from bridge.commands import edit_last_user
+from bridge.config import DEFAULT_USER_NAME
+from bridge.context_compaction import context_history_candidate_limit
+from bridge.database import (
+    begin_operation,
+    clear_failed_turn,
+    get_generation_settings,
+    get_meta,
+    operation_phase,
+    operation_was_applied,
+    optimize_database,
+    record_operation,
+    run_write_txn,
+    set_meta,
+    set_operation_phase,
+    write_transaction,
+)
+from bridge.generation import (
+    build_chat_messages,
+    continue_last,
+    generate_text,
+    regenerate_last,
+    render_response_language,
+    save_response_variant,
+    swipe_state_key,
+)
+from bridge.group_core import (
+    advance_group_turn,
+    group_current_speaker,
+)
+from bridge.groups import (
+    group_director_plan,
+    group_prompt_context,
+)
+from bridge.input_flows import handle_pending_input
+from bridge.language import normalize_response_language
+from bridge.media import (
+    queue_user_quote_tts,
+    send_reply,
+    send_typing,
+)
+from bridge.memory import (
+    clear_session_summary,
+    resolve_memory_service,
+)
+from bridge.performance import timed_call
+from bridge.rag_core import (
+    rag_citation_footer,
+    rag_context_for_prompt,
+    rag_retrieval_bundle,
+)
+from bridge.runtime_context import set_panel_session_context
+from bridge.telegram import (
+    ensure_session,
+    list_sessions,
+    load_session,
+    send_text,
+    telegram_request,
+)

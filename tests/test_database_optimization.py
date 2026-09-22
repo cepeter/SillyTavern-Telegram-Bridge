@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import sqlite3
 import sys
 import tempfile
@@ -7,14 +11,10 @@ from pathlib import Path
 
 import bridge.config as config
 import bridge.database as database
-from dependency_patch import dependency_module
-
-_m_main = dependency_module("bridge.main")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_sync_api = dependency_module("bridge.sync_api")
-
-
+import bridge.main as _m_main
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.sync_api as _m_sync_api
 class DatabaseOptimizationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

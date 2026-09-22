@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -6,11 +10,8 @@ import unittest
 from unittest.mock import patch
 
 import bridge.database as database
-from dependency_patch import dependency_module
-
-_m_main = dependency_module("bridge.main")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-
+import bridge.main as _m_main
+import bridge.memory_curator as _m_memory_curator
 from bridge.scheduler_safety import DatabaseConnectionGate, DurableWorkerGuard
 
 

@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 from pathlib import Path
 import tempfile
@@ -5,15 +9,11 @@ import unittest
 
 import bridge.config as config
 import random
-from dependency_patch import dependency_module
-
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_command_routes = dependency_module("bridge.command_routes")
-_m_greetings = dependency_module("bridge.greetings")
-_m_main = dependency_module("bridge.main")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-
-
+import bridge.callbacks as _m_callbacks
+import bridge.command_routes as _m_command_routes
+import bridge.greetings as _m_greetings
+import bridge.main as _m_main
+import bridge.memory_curator as _m_memory_curator
 class AlternateGreetingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -1,15 +1,15 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
-from dependency_patch import dependency_module
-
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_persona_sync = dependency_module("bridge.persona_sync")
-_m_session_naming = dependency_module("bridge.session_naming")
-
-
+import bridge.memory_curator as _m_memory_curator
+import bridge.persona_sync as _m_persona_sync
+import bridge.session_naming as _m_session_naming
 class NativePersonaStorageTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

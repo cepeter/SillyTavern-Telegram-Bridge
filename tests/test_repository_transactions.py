@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import inspect
 import sqlite3
 import tempfile
@@ -7,22 +11,20 @@ from pathlib import Path
 
 import bridge.config as config
 import bridge.group_core as group_core
-from dependency_patch import dependency_module
-
-_m_commands = dependency_module("bridge.commands")
-_m_groups = dependency_module("bridge.groups")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_sync_api = dependency_module("bridge.sync_api")
-_m_sync_core = dependency_module("bridge.sync_core")
-_m_card_content = dependency_module("bridge.card_content")
-_m_generation = dependency_module("bridge.generation")
-_m_group_core = dependency_module("bridge.group_core")
-_m_media = dependency_module("bridge.media")
-_m_memory = dependency_module("bridge.memory")
-_m_memory_backend = dependency_module("bridge.memory_backend")
-_m_rag_core = dependency_module("bridge.rag_core")
+import bridge.commands as _m_commands
+import bridge.groups as _m_groups
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.session_naming as _m_session_naming
+import bridge.sync_api as _m_sync_api
+import bridge.sync_core as _m_sync_core
+import bridge.card_content as _m_card_content
+import bridge.generation as _m_generation
+import bridge.group_core as _m_group_core
+import bridge.media as _m_media
+import bridge.memory as _m_memory
+import bridge.memory_backend as _m_memory_backend
+import bridge.rag_core as _m_rag_core
 from bridge import repositories
 
 

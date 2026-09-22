@@ -1,8 +1,6 @@
 """Load editable Help descriptions from the adjacent JSON data file."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 import json
 import logging
 from pathlib import Path
@@ -190,4 +188,10 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
     return False
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.callbacks import close_panel_message
+from bridge.help import (
+    HELP_CATEGORIES,
+    send_help_menu,
+)
+from bridge.panel_utils import panel_page

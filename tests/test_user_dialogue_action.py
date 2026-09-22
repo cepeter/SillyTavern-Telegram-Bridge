@@ -1,11 +1,11 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import unittest
 
-from dependency_patch import dependency_module
-
-_m_generation = dependency_module("bridge.generation")
-_m_message_commands = dependency_module("bridge.message_commands")
-
-
+import bridge.generation as _m_generation
+import bridge.message_commands as _m_message_commands
 class UserDialogueActionTests(unittest.TestCase):
     def test_dialogue_and_action_are_labeled(self):
         result = _m_generation.format_user_dialogue_action("I am coming *walking toward the door*")

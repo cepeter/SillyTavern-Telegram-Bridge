@@ -1,14 +1,14 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import unittest
 
-from dependency_patch import dependency_module
-
-_m_help = dependency_module("bridge.help")
-_m_media = dependency_module("bridge.media")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_session_naming = dependency_module("bridge.session_naming")
-
-
+import bridge.help as _m_help
+import bridge.media as _m_media
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.session_naming as _m_session_naming
 class QuotedVoiceTests(unittest.TestCase):
     def test_extracts_only_double_quoted_dialogue(self):
         text = '*walks closer* "I am here." *smiles* "Are you ready?"'

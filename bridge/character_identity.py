@@ -1,9 +1,6 @@
 """Recover session character references after native SillyTavern renames."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import hashlib
 import logging
 from pathlib import Path
@@ -84,4 +81,13 @@ def reconcile_session_character(db: sqlite3.Connection, chat_id: str, session: d
     return updated
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.card_content import (
+    character_card_paths,
+    safe_character_path,
+)
+from bridge.common import (
+    CHARACTER_BACKUP_DIR,
+    IMAGE_MAX_BYTES,
+)
+from bridge.telegram import update_session

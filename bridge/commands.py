@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 from bridge.operation_recovery import (
     OperationRecovery as _OperationRecovery,
 )
@@ -422,4 +420,68 @@ def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, 
             "Macro support: char, user, random, pick, time, date, weekday\nWorld Info recursion: maximum 3 passes")
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import base64
+import logging
+import re
+import sqlite3
+import time
+from bridge.card_content import (
+    card_fields_from_file,
+    replace_macros,
+)
+from bridge.cards import persona_name
+from bridge.common import MAX_HISTORY_MESSAGES
+from bridge.context_compaction import (
+    context_history_candidate_limit,
+    context_input_budget_tokens,
+)
+from bridge.database import (
+    begin_operation,
+    delete_generation_preset,
+    format_generation_settings,
+    get_generation_settings,
+    get_meta,
+    load_generation_preset,
+    operation_phase,
+    record_operation,
+    run_write_txn,
+    set_operation_phase,
+    update_generation_settings,
+    write_transaction,
+)
+from bridge.generation import (
+    build_chat_messages,
+    generate_text,
+    render_session_response,
+    save_response_variant,
+)
+from bridge.group_core import (
+    advance_group_turn,
+    group_current_speaker,
+    group_state,
+)
+from bridge.groups import group_prompt_context
+from bridge.media import (
+    delete_outgoing_message_row,
+    send_reply,
+    send_typing,
+)
+from bridge.memory import resolve_memory_service
+from bridge.memory_backend import (
+    memory_mode,
+    memory_scope,
+)
+from bridge.message_commands import send_reset_confirmation_menu
+from bridge.rag_core import (
+    data_bank_documents,
+    rag_citation_footer,
+    rag_context_for_prompt,
+    rag_mode,
+    rag_retrieval_bundle,
+)
+from bridge.telegram import (
+    ensure_session,
+    send_text,
+    telegram_request,
+)

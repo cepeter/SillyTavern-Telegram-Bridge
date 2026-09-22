@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import copy
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,19 +16,17 @@ import bridge.card_content as card_content
 import bridge.config as config
 import os
 import time
-from dependency_patch import dependency_module
-
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_persona_sync = dependency_module("bridge.persona_sync")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_status_panels = dependency_module("bridge.status_panels")
-_m_sync_api = dependency_module("bridge.sync_api")
-_m_sync_core = dependency_module("bridge.sync_core")
-_m_card_content = dependency_module("bridge.card_content")
-_m_cards = dependency_module("bridge.cards")
-_m_database = dependency_module("bridge.database")
-_m_memory = dependency_module("bridge.memory")
+import bridge.memory_curator as _m_memory_curator
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.persona_sync as _m_persona_sync
+import bridge.session_naming as _m_session_naming
+import bridge.status_panels as _m_status_panels
+import bridge.sync_api as _m_sync_api
+import bridge.sync_core as _m_sync_core
+import bridge.card_content as _m_card_content
+import bridge.cards as _m_cards
+import bridge.database as _m_database
+import bridge.memory as _m_memory
 from bridge.sync_service import SyncStatus
 
 

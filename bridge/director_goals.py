@@ -6,9 +6,6 @@ call and the bounded group speaker prompt only while director mode is active.
 """
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import re
 import time
 
@@ -157,4 +154,12 @@ def register_director_goal_extensions() -> None:
         )
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import sqlite3
+from bridge.common import parse_topic_scope
+from bridge.database import (
+    task_model_for_session,
+    write_transaction,
+)
+from bridge.status_panels import send_director_goal_menu
+from bridge.telegram import send_text

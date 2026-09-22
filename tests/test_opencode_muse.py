@@ -1,15 +1,15 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 import re
 import unittest
 
 import os
-from dependency_patch import dependency_module
-
-_m_generation = dependency_module("bridge.generation")
-_m_main = dependency_module("bridge.main")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-
-
+import bridge.generation as _m_generation
+import bridge.main as _m_main
+import bridge.memory_curator as _m_memory_curator
 class _Response:
     def __init__(self, payload):
         self.payload = payload

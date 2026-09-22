@@ -1,8 +1,6 @@
 """Handle onboarding, status, retry, and prompt inspection commands."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
 
 def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id, services=None):
@@ -419,4 +417,77 @@ def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, c
     return False
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import logging
+from bridge.card_content import active_world_files
+from bridge.cards import (
+    send_character_menu,
+    send_persona_menu,
+    send_session_menu,
+)
+from bridge.catalog import (
+    send_model_target_menu,
+    send_world_menu,
+)
+from bridge.commands import (
+    prompt_diagnostics,
+    send_note_menu,
+    send_stscript_menu,
+)
+from bridge.common import parse_topic_scope
+from bridge.database import (
+    clear_failed_turn,
+    committed_assistant_for_message,
+    latest_failed_turn,
+    record_failed_turn,
+    task_model_for_session,
+)
+from bridge.expressions import send_expression_menu
+from bridge.generation import (
+    continue_last,
+    regenerate_last,
+    send_swipe_menu,
+)
+from bridge.greetings import send_character_greeting
+from bridge.groups import (
+    handle_group_command,
+    send_group_menu,
+)
+from bridge.help import (
+    send_databank_menu,
+    send_help_menu,
+    send_memory_menu,
+    send_preset_menu,
+    send_settings_menu,
+    send_stream_menu,
+    send_stt_language_menu,
+    send_system_prompt_menu,
+    send_voice_input_menu,
+    send_voice_menu,
+)
+from bridge.help_details import send_help_command
+from bridge.image_generation import handle_imagine_prompt
+from bridge.input_flows import (
+    handle_inline_text_action,
+    start_text_action_input,
+)
+from bridge.language import (
+    handle_language_command,
+    send_language_menu,
+)
+from bridge.media import send_reply
+from bridge.memory import handle_memory_command
+from bridge.message_commands import process_message
+from bridge.rag import handle_data_bank_command
+from bridge.session_naming import start_session_name_input
+from bridge.status_panels import (
+    send_prompt_menu,
+    send_summary_menu,
+    send_sync_menu,
+    status_text,
+)
+from bridge.telegram import (
+    list_sessions,
+    send_text,
+)
+from bridge.update import send_update_menu

@@ -1,18 +1,18 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
-from dependency_patch import dependency_module
-
-_m_expressions = dependency_module("bridge.expressions")
-_m_main = dependency_module("bridge.main")
-_m_media = dependency_module("bridge.media")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_persona_sync = dependency_module("bridge.persona_sync")
-_m_session_naming = dependency_module("bridge.session_naming")
-
-
+import bridge.expressions as _m_expressions
+import bridge.main as _m_main
+import bridge.media as _m_media
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.persona_sync as _m_persona_sync
+import bridge.session_naming as _m_session_naming
 class ExpressionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

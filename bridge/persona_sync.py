@@ -1,9 +1,6 @@
 """Explicit bridge/native SillyTavern persona interoperability."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import copy
 import hashlib
 import json
@@ -347,4 +344,15 @@ def delete_native_persona(identifier: str, client=None) -> bool:
     )
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.cards import default_persona_id
+from bridge.common import IMAGE_MAX_BYTES
+from bridge.config import CATALOG_MAX_ITEMS
+from bridge.input_flows import PERSONA_EDIT_LOCK
+from bridge.sync_api import (
+    phase3_api_configured,
+    phase3_client,
+    SillyTavernApiError,
+)
+from bridge.sync_core import SYNC_MAX_PAYLOAD_BYTES
+from bridge.telegram import update_session

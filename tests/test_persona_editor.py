@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 from pathlib import Path
 import tempfile
@@ -5,20 +9,16 @@ import unittest
 from unittest.mock import patch
 
 import bridge.config as config
-from dependency_patch import dependency_module
-
-_m_command_routes = dependency_module("bridge.command_routes")
-_m_input_flows = dependency_module("bridge.input_flows")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_persona_sync = dependency_module("bridge.persona_sync")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_sync_core = dependency_module("bridge.sync_core")
-_m_cards = dependency_module("bridge.cards")
-_m_telegram = dependency_module("bridge.telegram")
-
-
+import bridge.command_routes as _m_command_routes
+import bridge.input_flows as _m_input_flows
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.persona_sync as _m_persona_sync
+import bridge.session_naming as _m_session_naming
+import bridge.sync_core as _m_sync_core
+import bridge.cards as _m_cards
+import bridge.telegram as _m_telegram
 class FakePersonaService:
     def __init__(self):
         self.calls = []

@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -6,17 +10,13 @@ import unittest
 import bridge.config as config
 import bridge.memory_backend as memory_backend
 import time
-from dependency_patch import dependency_module
-
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_input_flows = dependency_module("bridge.input_flows")
-_m_main = dependency_module("bridge.main")
-_m_memory = dependency_module("bridge.memory")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_session_naming = dependency_module("bridge.session_naming")
-
-
+import bridge.callbacks as _m_callbacks
+import bridge.input_flows as _m_input_flows
+import bridge.main as _m_main
+import bridge.memory as _m_memory
+import bridge.memory_curator as _m_memory_curator
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.session_naming as _m_session_naming
 class _NotFound(Exception):
     status = 404
 

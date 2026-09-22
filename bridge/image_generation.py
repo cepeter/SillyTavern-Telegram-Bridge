@@ -1,9 +1,6 @@
 """Opt-in OpenAI-compatible image generation for Telegram."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 IMAGE_PROMPT_MAX_CHARS = 4000
 IMAGE_DEFAULT_SIZE = "1024x1024"
 IMAGE_RESPONSE_FORMAT = "b64_json"
@@ -128,4 +125,22 @@ def handle_imagine_prompt(token: str, chat_id: str, prompt: str, selection: str 
     _multipart_photo(token, chat_id, raw, caption)
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import base64
+import json
+import os
+import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from bridge.common import (
+    IMAGE_MAX_BYTES,
+    parse_topic_scope,
+    PROVIDER_CONFIG_FILE,
+)
+from bridge.network_security import (
+    strict_urlopen,
+    validate_provider_endpoint,
+)
+from bridge.telegram import send_text

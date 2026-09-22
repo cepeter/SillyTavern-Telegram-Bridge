@@ -1,9 +1,6 @@
 """SillyTavern-compatible expression sprites for Telegram delivery."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import re
 
 EXPRESSION_META = "expression"
@@ -159,4 +156,31 @@ def send_expression_menu(token: str, chat_id: str, session: dict, db: sqlite3.Co
     telegram_request(token, method, payload)
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import json
+import logging
+import sqlite3
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from bridge.card_content import safe_character_path
+from bridge.common import (
+    IMAGE_MAX_BYTES,
+    parse_topic_scope,
+)
+from bridge.config import (
+    CARD_FILE,
+    DEFAULT_CHARACTER_FILE,
+    SILLYTAVERN_DIR,
+)
+from bridge.database import (
+    get_meta,
+    set_meta,
+)
+from bridge.panel_utils import (
+    panel_navigation,
+    panel_page,
+)
+from bridge.telegram import telegram_request
+from pathlib import Path

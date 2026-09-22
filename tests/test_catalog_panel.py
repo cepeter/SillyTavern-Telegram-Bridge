@@ -1,16 +1,16 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
 import os
-from dependency_patch import dependency_module
-
-_m_catalog = dependency_module("bridge.catalog")
-_m_generation = dependency_module("bridge.generation")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-
-
+import bridge.catalog as _m_catalog
+import bridge.generation as _m_generation
+import bridge.panel_callback_routes as _m_panel_callback_routes
 class CatalogPanelTests(unittest.TestCase):
     def test_hive_health_uses_streaming_chat_completion_not_models(self):
         old_config = _m_generation.PROVIDER_CONFIG_FILE
