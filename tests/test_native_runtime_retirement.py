@@ -89,6 +89,49 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
                 offenders[path.relative_to(REPO_ROOT).as_posix()] = hits
         self.assertEqual(offenders, {})
 
+    def test_group_director_compatibility_wrappers_are_deleted(self):
+        source = (BRIDGE_DIR / "groups.py").read_text(encoding="utf-8")
+        for forbidden in (
+            "def _compat_group_director_service(",
+            "def group_director_plan(",
+            "def group_prompt_context(",
+            "def parse_group_director_decision(",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+    def test_application_routes_require_service_graph(self):
+        from bridge.callbacks import process_callback
+        from bridge.command_routes import handle_command_route
+        from bridge.message_commands import process_message
+
+        for function in (
+            process_message,
+            process_callback,
+            handle_command_route,
+        ):
+            with self.subTest(function=function.__name__):
+                self.assertIs(
+                    inspect.signature(function).parameters["services"].default,
+                    inspect.Parameter.empty,
+                )
+
+    def test_required_service_routes_do_not_use_optional_service_lookup(self):
+        for filename in (
+            "message_commands.py",
+            "callbacks.py",
+            "command_routes.py",
+        ):
+            source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")
+            self.assertNotIn("services=None", source, filename)
+            for forbidden in (
+                'getattr(services, "memory", None)',
+                'getattr(services, "persona", None)',
+                'getattr(services, "sync", None)',
+                'getattr(services, "group_director", None)',
+            ):
+                self.assertNotIn(forbidden, source, filename)
+
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []
         for root in (BRIDGE_DIR, TESTS_DIR):
