@@ -19,7 +19,6 @@ from bridge.rag_core import (
     embed_rag_text,
     embed_rag_batch,
     rag_semantic_candidate_limit,
-    backfill_rag_embedding_signatures,
     add_data_bank_document,
     cached_rag_embedding,
     retrieve_data_bank,

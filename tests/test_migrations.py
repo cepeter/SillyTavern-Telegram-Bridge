@@ -250,19 +250,25 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
                 filename TEXT NOT NULL,
                 byte_size INTEGER NOT NULL,
                 chunk_count INTEGER NOT NULL,
+                version_number INTEGER NOT NULL DEFAULT 1,
+                active INTEGER NOT NULL DEFAULT 1,
                 created_at REAL NOT NULL,
                 updated_at REAL NOT NULL,
                 PRIMARY KEY(chat_id, document_id)
             );
             CREATE TABLE data_bank_embeddings (
                 chunk_id INTEGER PRIMARY KEY,
+                embedding_namespace TEXT NOT NULL,
                 dimensions INTEGER NOT NULL,
-                vector_json TEXT NOT NULL
+                vector_json TEXT NOT NULL,
+                vector_signature INTEGER NOT NULL,
+                vector_norm REAL NOT NULL
             );
             CREATE TABLE rag_embedding_cache (
                 cache_key TEXT PRIMARY KEY,
                 dimensions INTEGER NOT NULL,
                 vector_json TEXT NOT NULL,
+                vector_norm REAL NOT NULL,
                 created_at REAL NOT NULL
             );
             CREATE TABLE failed_turns (
@@ -393,13 +399,6 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
                 "response_language",
             },
             "response_variants": {"user_rowid"},
-            "data_bank_documents": {"version_number", "active"},
-            "data_bank_embeddings": {
-                "embedding_namespace",
-                "vector_signature",
-                "vector_norm",
-            },
-            "rag_embedding_cache": {"vector_norm"},
             "failed_turns": {"session_id"},
             "panel_sessions": {"owner_user_id"},
             "sync_bindings": {
@@ -439,6 +438,14 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
             ).fetchone(),
             ("notes.txt", 1, 1),
         )
+
+    def test_rag_baseline_contains_no_legacy_column_repair_logic(self):
+        import inspect
+
+        source = inspect.getsource(schema._ensure_rag_tables)
+        self.assertNotIn("PRAGMA table_info", source)
+        self.assertNotIn("ALTER TABLE", source)
+        self.assertNotIn("legacy", source.casefold())
 
     def test_startup_cleanup_runs_when_core_migration_is_already_applied(self):
         schema.initialize_database_schema(self.db)
