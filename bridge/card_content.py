@@ -207,8 +207,6 @@ def _merge_system_prompt_text(result: dict[str, dict[str, str]], path: Path) -> 
 
 def load_system_prompts() -> dict[str, dict[str, str]]:
     result = {}
-    if _config.SYSTEM_PROMPTS_FILE:
-        _merge_system_prompt_file(result, Path(_config.SYSTEM_PROMPTS_FILE))
     if _config.SYSTEM_PROMPTS_DIR.exists():
         for path in sorted(list(_config.SYSTEM_PROMPTS_DIR.glob("*.json")) + list(_config.SYSTEM_PROMPTS_DIR.glob("*.txt"))):
             _merge_system_prompt_file(result, path)
