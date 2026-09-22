@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
 
@@ -87,12 +87,12 @@ class CharacterRenameTests(unittest.TestCase):
     def test_character_panel_rereads_embedded_name_and_has_refresh(self):
         (_m_main.CHARACTER_DIR / "Renamed.png").write_bytes(_card_png("Fresh Name"))
         calls = []
-        original = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_session_naming.send_character_menu("token", "chat", "Renamed.png")
+            _m_session_naming.send_character_menu("token", "chat", "Renamed.png", request_context=make_test_request_context(self.db, "active"))
         finally:
-            _m_cards.telegram_request = original
+            _m_cards.send_panel_request = original
         payload = calls[-1][1]
         labels = [button["text"] for row in payload["reply_markup"]["inline_keyboard"] for button in row]
         callbacks = [button["callback_data"] for row in payload["reply_markup"]["inline_keyboard"] for button in row]
@@ -108,8 +108,8 @@ class CharacterRenameTests(unittest.TestCase):
             "message": {"message_id": 10, "chat": {"id": "chat"}},
         }
         answers = []
-        original = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        original = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(
             RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified")
         )
         try:
@@ -124,9 +124,10 @@ class CharacterRenameTests(unittest.TestCase):
                 _m_memory_curator.load_session(self.db, "chat", "active", "provider/model"),
                 "active",
                 None,
+                request_context=make_test_request_context(self.db, "active"),
             )
         finally:
-            _m_cards.telegram_request = original
+            _m_cards.send_panel_request = original
         self.assertTrue(handled)
         self.assertEqual(answers, ["Refreshed"])
 

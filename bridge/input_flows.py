@@ -37,13 +37,13 @@ def start_text_action_input(db, token: str, chat_id: str, session_id: str, actio
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
-def handle_inline_text_action(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, action: str, value: str, operation_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> bool:
+def handle_inline_text_action(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, action: str, value: str, operation_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
     """Run a bounded text action immediately when a command includes its value."""
     state = {"session_id": session["session_id"], "action": action, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
-    return _handle_text_action_input(db, token, api_key, chat_id, session, fields, value, state, operation_id, memory_service=memory_service, persona_service=persona_service)
+    return _handle_text_action_input(db, token, api_key, chat_id, session, fields, value, state, operation_id, memory_service=memory_service, persona_service=persona_service, request_context=request_context)
 
 
-def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, stripped: str, state: dict, operation_id: int | None, *, memory_service: MemoryService, persona_service: PersonaService) -> bool:
+def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, stripped: str, state: dict, operation_id: int | None, *, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
     meta_key = f"text_action_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
@@ -67,15 +67,15 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
             handle_imagine_prompt(token, chat_id, value)
         elif action == "memory_search":
             handle_memory_command(db, token, chat_id, session, fields, "/memory search " + value)
-            send_memory_menu(token, chat_id, db)
+            send_memory_menu( token, chat_id, db, request_context=request_context)
         elif action == "databank_search":
             handle_data_bank_command(db, token, chat_id, "/databank search " + value)
-            send_databank_menu(token, chat_id, db)
+            send_databank_menu( token, chat_id, db, request_context=request_context)
         elif action == "director_goal":
             if len(value) > 1200:
                 raise ValueError("Director objective exceeds 1,200 characters")
             set_director_goal(db, chat_id, session["session_id"], value)
-            send_director_goal_menu(token, chat_id, db, session)
+            send_director_goal_menu( token, chat_id, db, session, request_context=request_context)
         else:
             raise ValueError("Unknown text action")
     except ValueError as exc:
@@ -97,10 +97,10 @@ def pending_character_for_session(db, chat_id: str) -> dict | None:
     return state
 
 
-def _handle_settings_input(db, token: str, chat_id: str, session_id: str, stripped: str, state: dict) -> bool:
+def _handle_settings_input(db, token: str, chat_id: str, session_id: str, stripped: str, state: dict, *, request_context) -> bool:
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, f"settings_input:{chat_id}", state)
-        send_settings_menu(token, chat_id, db, session_id)
+        send_settings_menu( token, chat_id, db, session_id, request_context=request_context)
         return True
     try:
         key, value = parse_generation_setting(str(state.get("key") or ""), stripped)
@@ -109,15 +109,15 @@ def _handle_settings_input(db, token: str, chat_id: str, session_id: str, stripp
         send_pending_input_message(db, token, chat_id, f"settings_input:{chat_id}", state, f"Invalid {state.get('key')}: {exc} Try again or send /cancel.")
         return True
     _cancel_pending(db, token, chat_id, f"settings_input:{chat_id}", state)
-    send_settings_menu(token, chat_id, db, session_id)
+    send_settings_menu( token, chat_id, db, session_id, request_context=request_context)
     return True
 
 
-def _handle_preset_input(db, token: str, chat_id: str, session_id: str, stripped: str, state: dict) -> bool:
+def _handle_preset_input(db, token: str, chat_id: str, session_id: str, stripped: str, state: dict, *, request_context) -> bool:
     meta_key = f"preset_save_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
-        send_preset_menu(token, chat_id, db)
+        send_preset_menu( token, chat_id, db, request_context=request_context)
         return True
     preset_name = stripped.strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", preset_name):
@@ -126,15 +126,15 @@ def _handle_preset_input(db, token: str, chat_id: str, session_id: str, stripped
     save_generation_preset(db, chat_id, preset_name, get_generation_settings(db, chat_id, session_id))
     _cancel_pending(db, token, chat_id, meta_key, state)
     send_text(token, chat_id, f"Preset saved: {preset_name}")
-    send_preset_menu(token, chat_id, db)
+    send_preset_menu( token, chat_id, db, request_context=request_context)
     return True
 
 
-def _handle_stt_input(db, token: str, chat_id: str, stripped: str, state: dict) -> bool:
+def _handle_stt_input(db, token: str, chat_id: str, stripped: str, state: dict, *, request_context) -> bool:
     meta_key = f"stt_language_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
-        send_stt_language_menu(token, chat_id, db)
+        send_stt_language_menu( token, chat_id, db, request_context=request_context)
         return True
     try:
         language = normalize_stt_language(stripped)
@@ -144,15 +144,15 @@ def _handle_stt_input(db, token: str, chat_id: str, stripped: str, state: dict) 
     _cancel_pending(db, token, chat_id, meta_key, state)
     set_meta(db, f"stt_language:{chat_id}", language)
     send_text(token, chat_id, f"STT language set to {stt_language_label(language)}.")
-    send_voice_input_menu(token, chat_id, db)
+    send_voice_input_menu( token, chat_id, db, request_context=request_context)
     return True
 
 
-def _handle_note_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None) -> bool:
+def _handle_note_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None, *, request_context) -> bool:
     meta_key = f"note_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
-        send_note_menu(token, chat_id, session.get("author_note") or "")
+        send_note_menu( token, chat_id, session.get("author_note") or "", request_context=request_context)
         return True
     note = stripped
     if not note or len(note) > 2000:
@@ -161,7 +161,7 @@ def _handle_note_input(db, token: str, chat_id: str, session: dict, stripped: st
     update_session(db, chat_id, session["session_id"], author_note=note, operation_id=operation_id, operation_kind="author_note_input")
     _cancel_pending(db, token, chat_id, meta_key, state)
     send_text(token, chat_id, "Author's Note updated for this session.")
-    send_note_menu(token, chat_id, note)
+    send_note_menu( token, chat_id, note, request_context=request_context)
     return True
 
 
@@ -192,11 +192,11 @@ def _persona_input_prompt(mode: str, current_name: str = "", persona_id: str = "
             "Send: display name | new description\nSend /cancel to cancel.")
 
 
-def send_persona_edit_menu(token: str, chat_id: str, persona_id: str, message_id: int | None = None, *, persona_service: PersonaService) -> None:
+def send_persona_edit_menu(token: str, chat_id: str, persona_id: str, message_id: int | None = None, *, persona_service: PersonaService, request_context) -> None:
     """Show current persona information before selecting an edit field."""
     persona = persona_service.get(persona_id)
     if not persona:
-        telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": "Current persona is no longer available.", "reply_markup": {"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "persona:menu"}, {"text": "❌ Close", "callback_data": "persona:cancel"}]]}})
+        send_panel_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": "Current persona is no longer available.", "reply_markup": {"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "persona:menu"}, {"text": "❌ Close", "callback_data": "persona:cancel"}]]}}, request_context=request_context)
         return
     description = str(persona.get("description") or "")
     if len(description) > 1800:
@@ -215,7 +215,7 @@ def send_persona_edit_menu(token: str, chat_id: str, persona_id: str, message_id
     ]}}
     if message_id:
         payload["message_id"] = message_id
-    telegram_request(token, "editMessageText" if message_id else "sendMessage", payload)
+    send_panel_request(token, "editMessageText" if message_id else "sendMessage", payload, request_context=request_context)
 
 
 def start_persona_input(db, token: str, chat_id: str, session_id: str, mode: str, persona_id: str, callback: dict, *, persona_service: PersonaService) -> None:
@@ -239,7 +239,7 @@ def start_persona_input(db, token: str, chat_id: str, session_id: str, mode: str
 
 
 
-def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None, *, persona_service: PersonaService) -> bool:
+def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped: str, state: dict, operation_id: int | None, *, persona_service: PersonaService, request_context) -> bool:
     """Validate Persona input and delegate lifecycle changes to PersonaService."""
     meta_key = f"persona_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
@@ -249,6 +249,7 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
             chat_id,
             session.get("persona_id") or "",
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     mode = str(state.get("mode") or "")
@@ -286,6 +287,7 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
             chat_id,
             session.get("persona_id") or "",
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     try:
@@ -335,11 +337,12 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
         chat_id,
         native_avatar if mode == "create" else session.get("persona_id") or "",
         persona_service=persona_service,
+        request_context=request_context,
     )
     return True
 
 
-def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> bool:
+def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
     world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
@@ -353,19 +356,19 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
     text_action = _pending_state(db, f"text_action_input:{chat_id}", session_id, token, chat_id)
     if text_action:
         action_fields = fields if fields is not None else card_fields_from_file(session["character_file"])
-        return _handle_text_action_input(db, token, api_key, chat_id, session, action_fields, stripped, text_action, operation_id, memory_service=memory_service, persona_service=persona_service)
+        return _handle_text_action_input(db, token, api_key, chat_id, session, action_fields, stripped, text_action, operation_id, memory_service=memory_service, persona_service=persona_service, request_context=request_context)
     session_name = _pending_state(db, f"session_name_input:{chat_id}", session_id, token, chat_id)
     if session_name:
-        return handle_session_name_input(db, token, chat_id, session, stripped, session_name, operation_id)
+        return handle_session_name_input(db, token, chat_id, session, stripped, session_name, operation_id, request_context=request_context)
     settings = _pending_state(db, f"settings_input:{chat_id}", session_id, token, chat_id)
     if settings.get("key"):
-        return _handle_settings_input(db, token, chat_id, session_id, stripped, settings)
+        return _handle_settings_input(db, token, chat_id, session_id, stripped, settings, request_context=request_context)
     preset = _pending_state(db, f"preset_save_input:{chat_id}", session_id, token, chat_id)
     if preset:
-        return _handle_preset_input(db, token, chat_id, session_id, stripped, preset)
+        return _handle_preset_input(db, token, chat_id, session_id, stripped, preset, request_context=request_context)
     stt = _pending_state(db, f"stt_language_input:{chat_id}", session_id, token, chat_id)
     if stt:
-        return _handle_stt_input(db, token, chat_id, stripped, stt)
+        return _handle_stt_input(db, token, chat_id, stripped, stt, request_context=request_context)
     persona = _pending_state(db, f"persona_input:{chat_id}", session_id, token, chat_id)
     if persona:
         return _handle_persona_input(
@@ -377,20 +380,21 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
             persona,
             operation_id,
             persona_service=persona_service,
+            request_context=request_context,
         )
     note = _pending_state(db, f"note_input:{chat_id}", session_id, token, chat_id)
     if note:
-        return _handle_note_input(db, token, chat_id, session, stripped, note, operation_id)
+        return _handle_note_input(db, token, chat_id, session, stripped, note, operation_id, request_context=request_context)
     return False
 
 
-def send_persona_delete_confirm(token: str, chat_id: str, persona_id: str, message_id: int | None = None, *, persona_service: PersonaService) -> None:
-    token_value = dynamic_callback_token("persona", persona_id, chat_id)
+def send_persona_delete_confirm(token: str, chat_id: str, persona_id: str, message_id: int | None = None, *, persona_service: PersonaService, request_context) -> None:
+    token_value = dynamic_callback_token("persona", persona_id, chat_id, db=request_context.db)
     payload = {"chat_id": chat_id, "text": f"Delete Persona '{persona_service.name(persona_id)}'? Native Persona metadata will be removed; the avatar file will be preserved. This cannot be undone from the bridge.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "personadeleteconfirm:" + token_value}], [{"text": "❌ Cancel", "callback_data": "persona:menu"}]]}}
-    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
+    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id, request_context=request_context)
 
 
-def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, persona_service: PersonaService):
+def handle_persona_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, persona_service: PersonaService, request_context):
     """Handle persona selection, review, field editing, disable, and deletion callbacks."""
     message_id = message.get("message_id")
     if data.startswith("persona:delete_page:"):
@@ -402,10 +406,11 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             message_id,
             page,
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     if data.startswith("persona:delete:"):
-        target = resolve_dynamic_callback_token(data.split(":", 2)[2], "persona", chat_id) or ""
+        target = resolve_dynamic_callback_token(data.split(":", 2)[2], "persona", chat_id, db=request_context.db) or ""
         if not target or target == session.get("persona_id"):
             answer_callback(token, str(callback.get("id", "")), "Cannot delete the current Persona")
             return True
@@ -415,10 +420,11 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             target,
             message_id,
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     if data.startswith("personadeleteconfirm:"):
-        persona_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "persona", chat_id) or ""
+        persona_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "persona", chat_id, db=request_context.db) or ""
         if not persona_id:
             answer_callback(token, str(callback.get("id", "")), "Persona not found")
             return True
@@ -445,6 +451,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             session.get("persona_id") or "",
             message_id,
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     if not data.startswith("persona:"):
@@ -453,7 +460,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
     message_id = message.get("message_id")
     field_actions = {"create", "edit", "edit_name", "edit_description", "edit_all", "delete"}
     if not value.startswith("page:") and value not in {"cancel", "off", "menu", *field_actions}:
-        value = resolve_dynamic_callback_token(value, "persona", chat_id) or ""
+        value = resolve_dynamic_callback_token(value, "persona", chat_id, db=request_context.db) or ""
     if value.startswith("page:"):
         answer_callback(token, str(callback.get("id", "")), "Page")
         send_persona_menu(
@@ -463,6 +470,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             message_id,
             int(value.split(":", 1)[1]),
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     if value == "menu":
@@ -473,6 +481,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             session.get("persona_id") or "",
             message_id,
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     if value == "edit":
@@ -487,6 +496,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             persona_id,
             message_id,
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     if value in {"create", "edit_name", "edit_description", "edit_all"}:
@@ -514,6 +524,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             session.get("persona_id") or "",
             message_id,
             persona_service=persona_service,
+            request_context=request_context,
         )
         return True
     if value == "cancel":
@@ -609,6 +620,7 @@ from bridge.rag import handle_data_bank_command
 from bridge.session_naming import handle_session_name_input
 from bridge.status_panels import send_director_goal_menu
 from bridge.telegram import (
+    send_panel_request,
     send_text,
     telegram_request,
     update_session,

@@ -807,7 +807,7 @@ def swipe_markup() -> dict:
     ]}
 
 
-def send_swipe_menu(token: str, db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
+def send_swipe_menu(token: str, db: sqlite3.Connection, chat_id: str, session_id: str, *, request_context) -> None:
     user_row, variants = last_user_variants(db, chat_id, session_id)
     if not user_row or not variants:
         send_text(token, chat_id, "Belum ada response variant. Kirim pesan lalu gunakan /regen terlebih dahulu.")
@@ -816,22 +816,22 @@ def send_swipe_menu(token: str, db: sqlite3.Connection, chat_id: str, session_id
     set_meta(db, swipe_state_key(chat_id, session_id), str(selected))
     response = next((row[1] for row in variants if int(row[0]) == selected), variants[-1][1])
     text = f"Variant {selected} of {len(variants)}\n\n{response[:3900]}"
-    result = telegram_request(token, "sendMessage", {"chat_id": chat_id, "text": text, "reply_markup": swipe_markup()})
+    result = send_panel_request(token, "sendMessage", {"chat_id": chat_id, "text": text, "reply_markup": swipe_markup()}, request_context=request_context)
     if result.get("message_id"):
         set_meta(db, f"swipe_message:{chat_id}:{session_id}", str(result["message_id"]))
 
 
-def edit_swipe_menu(token: str, db: sqlite3.Connection, callback: dict, session_id: str, index: int, variants) -> None:
+def edit_swipe_menu(token: str, db: sqlite3.Connection, callback: dict, session_id: str, index: int, variants, *, request_context) -> None:
     message = callback.get("message") or {}
     chat_id = str((message.get("chat") or {}).get("id", ""))
     message_id = message.get("message_id")
     response = next(row[1] for row in variants if int(row[0]) == index)
-    telegram_request(token, "editMessageText", {
+    send_panel_request(token, "editMessageText", {
         "chat_id": chat_id,
         "message_id": message_id,
         "text": f"Variant {index} of {len(variants)}\n\n{response[:3900]}",
         "reply_markup": swipe_markup(),
-    })
+    }, request_context=request_context)
     set_meta(db, swipe_state_key(chat_id, session_id), str(index))
 
 
@@ -1107,6 +1107,7 @@ from bridge.rag_core import (
     rag_retrieval_bundle,
 )
 from bridge.telegram import (
+    send_panel_request,
     send_text,
     telegram_request,
 )

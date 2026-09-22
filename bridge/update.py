@@ -92,7 +92,7 @@ def update_menu_text(current: str, latest: str, notes: str, unreleased: bool = F
     return f"Bridge update\nInstalled: v{current}{' (unreleased local changes)' if unreleased else ''}\nLatest: v{latest}\n\nRelease notes:\n{notes}\n\nChoose Confirm update only after reviewing the changes."
 
 
-def send_update_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
+def send_update_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
     current = installed_bridge_version()
     unreleased = installed_bridge_has_unreleased()
     try:
@@ -104,7 +104,7 @@ def send_update_menu(token: str, chat_id: str, message_id: int | None = None) ->
     method = "editMessageText" if message_id else "sendMessage"
     if message_id:
         payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_request(token, method, payload, request_context=request_context)
 
 
 def _run_update() -> str:
@@ -159,15 +159,15 @@ def _run_update() -> str:
     return f"Bridge updated to v{installed_bridge_version()} and restarted."
 
 
-def handle_update_callback(token: str, callback: dict, data: str, chat_id: str) -> bool:
+def handle_update_callback(db, token: str, callback: dict, data: str, chat_id: str) -> bool:
     if not data.startswith("update:"):
         return False
     answer_callback(token, str(callback.get("id", "")), "Update")
     if data == "update:cancel":
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         return True
     if data == "update:no_change":
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         return True
     if data == "update:confirm":
         try:
@@ -175,7 +175,7 @@ def handle_update_callback(token: str, callback: dict, data: str, chat_id: str) 
         except Exception as exc:
             result = f"Update failed safely: {exc}"
         send_text(token, chat_id, result)
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         return True
     return True
 
@@ -184,6 +184,6 @@ def handle_update_callback(token: str, callback: dict, data: str, chat_id: str) 
 from bridge.catalog import answer_callback
 from bridge.media import remove_inline_keyboard
 from bridge.telegram import (
+    send_panel_request,
     send_text,
-    telegram_request,
 )

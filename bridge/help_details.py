@@ -115,16 +115,16 @@ def _help_command_target(requested: str) -> tuple[str, int] | None:
     return base_match
 
 
-def send_help_command(token: str, chat_id: str, text: str, message_id: int | None = None) -> bool:
+def send_help_command(token: str, chat_id: str, text: str, message_id: int | None = None, *, request_context) -> bool:
     """Render a Help panel for an exact Help command without text fallback."""
     requested = normalize_help_command(text)
     if requested is None:
         return False
     target = _help_command_target(requested) if requested else None
     if target is None:
-        send_help_menu(token, chat_id, message_id=message_id)
+        send_help_menu(token, chat_id, message_id=message_id, request_context=request_context)
     else:
-        send_help_menu(token, chat_id, target[0], message_id, target[1])
+        send_help_menu(token, chat_id, target[0], message_id, target[1], request_context=request_context)
     return True
 
 
@@ -132,7 +132,7 @@ def is_help_callback(data: str) -> bool:
     return str(data or "").startswith("help:")
 
 
-def handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+def handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
     """Handle paginated help categories, command details, Back, and Close."""
     if data.startswith("help:cmdpage:"):
         parts = data.split(":")
@@ -149,7 +149,7 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
             answer_callback(token, str(callback.get("id", "")), "Help page expired")
             return True
         answer_callback(token, str(callback.get("id", "")), "Help")
-        send_help_menu(token, chat_id, parts[2], message.get("message_id"), page=page)
+        send_help_menu(token, chat_id, parts[2], message.get("message_id", request_context=request_context), page=page)
         return True
     if data.startswith("help:cmd:"):
         parts = data.split(":")
@@ -165,7 +165,7 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
             answer_callback(token, str(callback.get("id", "")), "Help choice expired")
             return True
         answer_callback(token, str(callback.get("id", "")), "Help")
-        send_help_menu(token, chat_id, parts[2], message.get("message_id"), command_index)
+        send_help_menu(token, chat_id, parts[2], message.get("message_id", request_context=request_context), command_index)
         return True
     if data.startswith("help:"):
         category = data.split(":", 1)[1]
@@ -177,13 +177,13 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
                 logging.debug("Could not acknowledge closed help panel", exc_info=True)
         elif category == "menu":
             answer_callback(token, str(callback.get("id", "")), "Help")
-            send_help_menu(token, chat_id, None, message.get("message_id"))
+            send_help_menu(token, chat_id, None, message.get("message_id", request_context=request_context))
         elif category in HELP_CATEGORIES:
             answer_callback(token, str(callback.get("id", "")), "Help")
-            send_help_menu(token, chat_id, category, message.get("message_id"))
+            send_help_menu(token, chat_id, category, message.get("message_id", request_context=request_context))
         else:
             answer_callback(token, str(callback.get("id", "")), "Help")
-            send_help_menu(token, chat_id, None, message.get("message_id"))
+            send_help_menu(token, chat_id, None, message.get("message_id", request_context=request_context))
         return True
     return False
 

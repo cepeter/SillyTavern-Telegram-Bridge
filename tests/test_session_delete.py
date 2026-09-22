@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service
+from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -94,12 +94,12 @@ class SessionDeletionTests(unittest.TestCase):
         active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         inactive = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive")
         calls = []
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_session_menu("token", "chat", [active, inactive], active["session_id"])
+            _m_panel_callback_routes.send_session_menu("token", "chat", [active, inactive], active["session_id"], request_context=make_test_request_context(self.db, active["session_id"]))
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
         rows = calls[0][1]["reply_markup"]["inline_keyboard"]
         callbacks = [button["callback_data"] for row in rows for button in row]
         self.assertEqual(sum(value.startswith("sessiondelete:") for value in callbacks), 1)

@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_request_context
 
 ensure_application_extensions()
 
@@ -54,20 +54,20 @@ class AlternateGreetingTests(unittest.TestCase):
 
     def test_greeting_menu_lists_default_alternates_and_preview(self):
         calls = []
-        original_request = getattr(_m_greetings, "telegram_request", None)
-        _m_greetings.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {"message_id": 55}
+        original_request = getattr(_m_greetings, "send_panel_request", None)
+        _m_greetings.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {"message_id": 55}
         fields = {
             "name": "Character",
             "first_mes": "Primary {{user}}",
             "alternate_greetings": json.dumps(["Alt one", "Alt two"]),
         }
         try:
-            self.assertTrue(_m_greetings.send_greeting_menu("token", "chat", fields, "User"))
+            self.assertTrue(_m_greetings.send_greeting_menu("token", "chat", fields, "User", request_context=make_test_request_context(self.db, self.session["session_id"])))
         finally:
             if original_request is None:
-                delattr(_m_greetings, "telegram_request")
+                delattr(_m_greetings, "send_panel_request")
             else:
-                _m_greetings.telegram_request = original_request
+                _m_greetings.send_panel_request = original_request
         self.assertEqual(calls[0][0], "sendMessage")
         payload = calls[0][1]
         self.assertIn("Selected: Default", payload["text"])
@@ -83,8 +83,8 @@ class AlternateGreetingTests(unittest.TestCase):
         self.assertIn("greeting:use:0", callbacks)
 
     def test_greeting_menu_ignores_unchanged_preview(self):
-        original_request = getattr(_m_greetings, "telegram_request", None)
-        _m_greetings.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        original_request = getattr(_m_greetings, "send_panel_request", None)
+        _m_greetings.send_panel_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(
             RuntimeError("Telegram API failed: message is not modified")
         )
         fields = {
@@ -93,12 +93,12 @@ class AlternateGreetingTests(unittest.TestCase):
             "alternate_greetings": json.dumps(["Alt"]),
         }
         try:
-            self.assertTrue(_m_greetings.send_greeting_menu("token", "chat", fields, "User"))
+            self.assertTrue(_m_greetings.send_greeting_menu("token", "chat", fields, "User", request_context=make_test_request_context(self.db, self.session["session_id"])))
         finally:
             if original_request is None:
-                delattr(_m_greetings, "telegram_request")
+                delattr(_m_greetings, "send_panel_request")
             else:
-                _m_greetings.telegram_request = original_request
+                _m_greetings.send_panel_request = original_request
 
     def test_greeting_callback_uses_selected_alternate_once(self):
         services = make_test_application_services()
@@ -134,6 +134,7 @@ class AlternateGreetingTests(unittest.TestCase):
                 self.session["session_id"],
                 123,
                 persona_service=services.persona,
+                request_context=make_test_request_context(self.db, self.session["session_id"], "user"),
             )
         finally:
             _m_panel_callback_routes.card_fields_from_file = original_fields

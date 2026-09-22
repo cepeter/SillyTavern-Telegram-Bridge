@@ -85,19 +85,19 @@ def system_prompt_menu_markup(current: str, page: int = 0) -> dict:
     return {"inline_keyboard": rows}
 
 
-def send_system_prompt_menu(token: str, chat_id: str, current: str, message_id: int | None = None, page: int = 0) -> None:
+def send_system_prompt_menu(token: str, chat_id: str, current: str, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     current_key = _system_prompt_key(current)
     labels = dict(system_prompt_choices())
     current_label = labels.get(current_key, "off")
     text = f"System Prompt choice\nCurrent: {current_label}\nChoose a TXT prompt:"
-    send_panel_message(token, chat_id, text, system_prompt_menu_markup(current, page), message_id)
+    send_panel_message(token, chat_id, text, system_prompt_menu_markup(current, page), message_id, request_context=request_context)
 
 
-def send_help_menu(token: str, chat_id: str, category: str | None = None, message_id: int | None = None, command_index: int | None = None, page: int = 0) -> None:
-    send_panel_message(token, chat_id, help_text(category, command_index, page), help_markup(category, command_index, page), message_id)
+def send_help_menu(token: str, chat_id: str, category: str | None = None, message_id: int | None = None, command_index: int | None = None, page: int = 0, *, request_context) -> None:
+    send_panel_message(token, chat_id, help_text(category, command_index, page), help_markup(category, command_index, page), message_id, request_context=request_context)
 
 
-def send_settings_menu(token: str, chat_id: str, db: sqlite3.Connection, session_id: str, message_id: int | None = None) -> None:
+def send_settings_menu(token: str, chat_id: str, db: sqlite3.Connection, session_id: str, message_id: int | None = None, *, request_context) -> None:
     settings = get_generation_settings(db, chat_id, session_id)
     levels = list(REASONING_LEVELS.items())
     current = int(settings.get("reasoning_budget", 0))
@@ -116,30 +116,30 @@ def send_settings_menu(token: str, chat_id: str, db: sqlite3.Connection, session
     current_values = (f"temperature={settings['temperature']}, max_tokens={settings['max_tokens']}, "
                       f"top_p={settings['top_p']}, frequency_penalty={settings['frequency_penalty']}, "
                       f"presence_penalty={settings['presence_penalty']}, stop_sequences={stop_label}")
-    send_panel_message(token, chat_id, f"Generation settings — current session\nActive reasoning: {current_label} ({current} budget)\nCurrent values: {current_values}\n\nTap a reasoning level below to apply it.\nTap a field to enter its value in the next message. Send /cancel to leave it unchanged.\nFields: temperature, max_tokens, top_p, frequency_penalty, presence_penalty, stop_sequences.", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Generation settings — current session\nActive reasoning: {current_label} ({current} budget)\nCurrent values: {current_values}\n\nTap a reasoning level below to apply it.\nTap a field to enter its value in the next message. Send /cancel to leave it unchanged.\nFields: temperature, max_tokens, top_p, frequency_penalty, presence_penalty, stop_sequences.", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_stream_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
+def send_stream_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, *, request_context) -> None:
     current = get_meta(db, f"stream_mode:{chat_id}", "on")
     rows = [[{"text": ("✅ " if current == "on" else "") + "Streaming on", "callback_data": "enum:stream:on"}, {"text": ("✅ " if current == "off" else "") + "Streaming off", "callback_data": "enum:stream:off"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    send_panel_message(token, chat_id, f"Live response streaming: {current}", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Live response streaming: {current}", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_voice_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
+def send_voice_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, *, request_context) -> None:
     current = get_meta(db, f"voice_mode:{chat_id}", "off")
     rows = [[{"text": ("✅ " if current == "tts" else "") + "Voice replies on", "callback_data": "enum:voice:on"}, {"text": ("✅ " if current != "tts" else "") + "Voice replies off", "callback_data": "enum:voice:off"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    send_panel_message(token, chat_id, f"Automatic voice replies: {'on' if current == 'tts' else 'off'}", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Automatic voice replies: {'on' if current == 'tts' else 'off'}", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_voice_input_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
+def send_voice_input_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, *, request_context) -> None:
     mode = get_meta(db, f"stt_mode:{chat_id}", "on")
     model = get_meta(db, f"stt_model:{chat_id}", STT_DEFAULT_MODEL)
     language = normalize_stt_language(get_meta(db, f"stt_language:{chat_id}", "auto"))
     rows = [[{"text": ("✅ " if mode == "on" else "") + "Transcription on", "callback_data": "enum:stt:on"}, {"text": ("✅ " if mode == "off" else "") + "Transcription off", "callback_data": "enum:stt:off"}], [{"text": f"Model: {model}", "callback_data": "enum:stt:model"}], [{"text": f"Language: {stt_language_label(language)}", "callback_data": "enum:stt:language"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    send_panel_message(token, chat_id, f"Voice input transcription: {mode}\nModel: {model}\nLanguage: {stt_language_label(language)}", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Voice input transcription: {mode}\nModel: {model}\nLanguage: {stt_language_label(language)}", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_stt_language_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
+def send_stt_language_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     current = normalize_stt_language(get_meta(db, f"stt_language:{chat_id}", "auto"))
     options = list(RESPONSE_LANGUAGES)
     page_options, current_page, total_pages = panel_page(options, page)
@@ -152,28 +152,28 @@ def send_stt_language_menu(token: str, chat_id: str, db: sqlite3.Connection, mes
         rows.append(navigation)
     rows.append([{"text": "✏️ User input", "callback_data": "enum:stt:language_input"}])
     rows.append([{"text": "⬅️ Back", "callback_data": "enum:stt:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    send_panel_message(token, chat_id, f"Choose voice input language (page {current_page + 1}/{total_pages}). Auto detects the language; User input accepts a custom 2–8 letter code.", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Choose voice input language (page {current_page + 1}/{total_pages}). Auto detects the language; User input accepts a custom 2–8 letter code.", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_stt_model_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
+def send_stt_model_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, *, request_context) -> None:
     current = get_meta(db, f"stt_model:{chat_id}", STT_DEFAULT_MODEL)
     rows = [[{"text": ("✅ " if model == current else "") + model, "callback_data": "enum:sttmodel:" + model}] for model in ("tiny", "base", "small")]
     rows.append([{"text": "⬅️ Back", "callback_data": "enum:stt:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    send_panel_message(token, chat_id, "Choose STT model:", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, "Choose STT model:", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_memory_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None) -> None:
+def send_memory_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, *, request_context) -> None:
     mode = memory_mode(db, chat_id)
     rows = [[{"text": ("✅ " if mode == "on" else "") + "Memory on", "callback_data": "enum:memory:on"}, {"text": ("✅ " if mode == "off" else "") + "Memory off", "callback_data": "enum:memory:off"}], [{"text": "🔎 Search memories", "callback_data": "enum:memory:search"}], [{"text": "❌ Close", "callback_data": "enum:close"}]]
-    send_panel_message(token, chat_id, f"Hindsight memory: {mode}\nScope: active session only (fixed)", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Hindsight memory: {mode}\nScope: active session only (fixed)", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_preset_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
+def send_preset_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     options = preset_names(db, chat_id)
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for name in page_options:
-        callback_token = dynamic_callback_token("preset", name, chat_id)
+        callback_token = dynamic_callback_token("preset", name, chat_id, db=request_context.db)
         rows.append([
             {"text": "📋 " + panel_label(name), "callback_data": "enum:presetuse:" + callback_token},
             {"text": "🗑️", "callback_data": "enum:presetdel:" + callback_token},
@@ -187,19 +187,19 @@ def send_preset_menu(token: str, chat_id: str, db: sqlite3.Connection, message_i
         rows.append(navigation)
     rows.append([{"text": "💾 Save preset", "callback_data": "enum:preset:save"}])
     rows.append([{"text": "❌ Close", "callback_data": "enum:close"}])
-    send_panel_message(token, chat_id, f"Choose a preset to apply (page {current_page + 1}/{total_pages}). Use Save preset for the two-step name input." , {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Choose a preset to apply (page {current_page + 1}/{total_pages}). Use Save preset for the two-step name input." , {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_preset_delete_confirm(token: str, chat_id: str, name: str, message_id: int | None = None) -> None:
-    callback_token = dynamic_callback_token("preset", name, chat_id)
+def send_preset_delete_confirm(token: str, chat_id: str, name: str, message_id: int | None = None, *, request_context) -> None:
+    callback_token = dynamic_callback_token("preset", name, chat_id, db=request_context.db)
     markup = {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "enum:presetdelconfirm:" + callback_token}, {"text": "❌ Cancel", "callback_data": "enum:preset:back"}]]}
-    send_panel_message(token, chat_id, f"Delete preset '{panel_label(name)}'? This cannot be undone.", markup, message_id)
+    send_panel_message(token, chat_id, f"Delete preset '{panel_label(name)}'? This cannot be undone.", markup, message_id, request_context=request_context)
 
 
-def send_preset_delete_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
+def send_preset_delete_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     options = preset_names(db, chat_id)
     page_options, current_page, total_pages = panel_page(options, page)
-    rows = [[{"text": panel_label(name), "callback_data": "enum:presetdel:" + dynamic_callback_token("preset", name, chat_id)}] for name in page_options]
+    rows = [[{"text": panel_label(name), "callback_data": "enum:presetdel:" + dynamic_callback_token("preset", name, chat_id, db=request_context.db)}] for name in page_options]
     if total_pages > 1:
         navigation = []
         if current_page > 0:
@@ -208,10 +208,10 @@ def send_preset_delete_menu(token: str, chat_id: str, db: sqlite3.Connection, me
             navigation.append({"text": "Next ➡️", "callback_data": f"enum:presetdeletepage:{current_page + 1}"})
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "enum:preset:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    send_panel_message(token, chat_id, "Choose a preset to delete:", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, "Choose a preset to delete:", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
+def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     mode = rag_mode(db, chat_id)
     docs = data_bank_documents(db, chat_id)
     total_chunks, indexed_chunks = rag_embedding_coverage(db, chat_id)
@@ -225,7 +225,7 @@ def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for name in page_options:
-        callback_token = dynamic_callback_token("rag_document", name, chat_id)
+        callback_token = dynamic_callback_token("rag_document", name, chat_id, db=request_context.db)
         rows.append([
             {"text": "📄 " + panel_label(name), "callback_data": "enum:ragversions:" + callback_token},
             {"text": "🗑️", "callback_data": "enum:ragremove:" + callback_token},
@@ -244,21 +244,21 @@ def send_databank_menu(token: str, chat_id: str, db: sqlite3.Connection, message
         [{"text": "🔄 Reindex embeddings", "callback_data": "enum:rag:reindex"}],
         [{"text": "❌ Close", "callback_data": "enum:close"}],
     ])
-    send_panel_message(token, chat_id, f"Data Bank RAG: {mode}\nDocuments: {len(options)}\nEmbedding coverage: {indexed_chunks}/{total_chunks}", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Data Bank RAG: {mode}\nDocuments: {len(options)}\nEmbedding coverage: {indexed_chunks}/{total_chunks}", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_databank_remove_confirm(token: str, chat_id: str, filename: str, message_id: int | None = None) -> None:
-    callback_token = dynamic_callback_token("rag_document", filename, chat_id)
+def send_databank_remove_confirm(token: str, chat_id: str, filename: str, message_id: int | None = None, *, request_context) -> None:
+    callback_token = dynamic_callback_token("rag_document", filename, chat_id, db=request_context.db)
     markup = {"inline_keyboard": [[{"text": "✅ Confirm remove", "callback_data": "enum:ragremoveconfirm:" + callback_token}, {"text": "❌ Cancel", "callback_data": "enum:rag:back"}]]}
-    send_panel_message(token, chat_id, f"Remove all Data Bank versions named '{panel_label(filename)}'? Indexed chunks will also be removed. This cannot be undone.", markup, message_id)
+    send_panel_message(token, chat_id, f"Remove all Data Bank versions named '{panel_label(filename)}'? Indexed chunks will also be removed. This cannot be undone.", markup, message_id, request_context=request_context)
 
 
-def send_databank_versions_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, filename: str | None = None, page: int = 0) -> None:
+def send_databank_versions_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, filename: str | None = None, page: int = 0, *, request_context) -> None:
     docs = data_bank_documents(db, chat_id)
     if not filename:
         options = [str(row[1]) for row in docs]
         page_options, current_page, total_pages = panel_page(options, page)
-        rows = [[{"text": panel_label(name), "callback_data": "enum:ragversions:" + dynamic_callback_token("rag_document", name, chat_id)}] for name in page_options]
+        rows = [[{"text": panel_label(name), "callback_data": "enum:ragversions:" + dynamic_callback_token("rag_document", name, chat_id, db=request_context.db)}] for name in page_options]
         if total_pages > 1:
             navigation = []
             if current_page > 0:
@@ -267,23 +267,23 @@ def send_databank_versions_menu(token: str, chat_id: str, db: sqlite3.Connection
                 navigation.append({"text": "Next ➡️", "callback_data": f"enum:ragversionspage:{current_page + 1}"})
             rows.append(navigation)
         rows.append([{"text": "⬅️ Data Bank", "callback_data": "enum:rag:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-        send_panel_message(token, chat_id, f"Choose a document to inspect versions (page {current_page + 1}/{total_pages}):", {"inline_keyboard": rows}, message_id)
+        send_panel_message(token, chat_id, f"Choose a document to inspect versions (page {current_page + 1}/{total_pages}):", {"inline_keyboard": rows}, message_id, request_context=request_context)
         return
     versions = data_bank_document_versions(db, chat_id, filename)
     rows = []
     for _document_id, version_number, active, byte_size, chunks in versions:
-        token_value = dynamic_callback_token("rag_version", f"{filename}|{version_number}", chat_id)
+        token_value = dynamic_callback_token("rag_version", f"{filename}|{version_number}", chat_id, db=request_context.db)
         label = f"{'✅ ' if active else ''}v{version_number} ({chunks} chunks, {byte_size} bytes)"
         rows.append([{"text": label, "callback_data": "enum:ragactivate:" + token_value}])
     rows.append([{"text": "⬅️ Documents", "callback_data": "enum:rag:versions"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    send_panel_message(token, chat_id, f"Versions for {filename}:\nChoose one to activate.", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Versions for {filename}:\nChoose one to activate.", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_databank_remove_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
+def send_databank_remove_menu(token: str, chat_id: str, db: sqlite3.Connection, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     docs = data_bank_documents(db, chat_id)
     options = [str(row[1]) for row in docs]
     page_options, current_page, total_pages = panel_page(options, page)
-    rows = [[{"text": panel_label(filename), "callback_data": "enum:ragremove:" + dynamic_callback_token("rag_document", filename, chat_id)}] for filename in page_options]
+    rows = [[{"text": panel_label(filename), "callback_data": "enum:ragremove:" + dynamic_callback_token("rag_document", filename, chat_id, db=request_context.db)}] for filename in page_options]
     if total_pages > 1:
         navigation = []
         if current_page > 0:
@@ -292,10 +292,10 @@ def send_databank_remove_menu(token: str, chat_id: str, db: sqlite3.Connection, 
             navigation.append({"text": "Next ➡️", "callback_data": f"enum:ragremovepage:{current_page + 1}"})
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "enum:rag:back"}, {"text": "❌ Close", "callback_data": "enum:close"}])
-    send_panel_message(token, chat_id, f"Choose a document to remove (page {current_page + 1}/{total_pages}):", {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, f"Choose a document to remove (page {current_page + 1}/{total_pages}):", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict) -> None:
+def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict, *, request_context) -> None:
     message_id = message.get("message_id")
     if data == "enum:close":
         discard_panel_binding(db, chat_id, message_id)
@@ -308,7 +308,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
     if data == "enum:stscript:reset":
         discard_panel_binding(db, chat_id, message_id)
         close_panel_message(db, token, chat_id, {"message": message})
-        send_reset_confirmation_menu(token, chat_id)
+        send_reset_confirmation_menu( token, chat_id, request_context=request_context)
         return
     parts = data.split(":", 2)
     if data.startswith("enum:settings:input:"):
@@ -324,27 +324,27 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         return
     if data == "enum:settings:reset":
         update_generation_settings(db, chat_id, session["session_id"], **GENERATION_DEFAULTS)
-        send_settings_menu(token, chat_id, db, session["session_id"], message_id)
+        send_settings_menu( token, chat_id, db, session["session_id"], message_id, request_context=request_context)
         return
     if data.startswith("enum:settings:reasoning:"):
         label = data.rsplit(":", 1)[1]
         budgets = REASONING_LEVELS
         if label in budgets:
             update_generation_settings(db, chat_id, session["session_id"], reasoning_budget=budgets[label])
-        send_settings_menu(token, chat_id, db, session["session_id"], message_id)
+        send_settings_menu( token, chat_id, db, session["session_id"], message_id, request_context=request_context)
         return
     if data.startswith("enum:stream:"):
         value = parts[2]
         if value in {"on", "off"}:
             set_meta(db, f"stream_mode:{chat_id}", value)
-        send_stream_menu(token, chat_id, db, message_id)
+        send_stream_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:voice:"):
         value = parts[2]
         if value in {"on", "off"}:
             set_meta(db, f"voice_mode:{chat_id}", "tts" if value == "on" else "off")
-        send_voice_menu(token, chat_id, db, message_id)
+        send_voice_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:stt:language":
-        send_stt_language_menu(token, chat_id, db, message_id)
+        send_stt_language_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:stt:language_input":
         pending_stt = {"session_id": session["session_id"], "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
         set_meta(db, f"stt_language_input:{chat_id}", json.dumps(pending_stt))
@@ -353,7 +353,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         pending_stt["prompt_message_ids"] = send_text(token, chat_id, "Send a 2–8 letter STT language code such as id, en, or ja. Send /cancel to cancel.")
         set_meta(db, f"stt_language_input:{chat_id}", json.dumps(pending_stt))
     elif data.startswith("enum:sttlanguagepage:"):
-        send_stt_language_menu(token, chat_id, db, message_id, int(parts[2]))
+        send_stt_language_menu( token, chat_id, db, message_id, int(parts[2]), request_context=request_context)
     elif data.startswith("enum:sttlanguage:"):
         try:
             value = normalize_stt_language(parts[2])
@@ -361,36 +361,36 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
             send_text(token, chat_id, "Invalid STT language choice.")
         else:
             set_meta(db, f"stt_language:{chat_id}", value)
-            send_voice_input_menu(token, chat_id, db, message_id)
+            send_voice_input_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:stt:model":
-        send_stt_model_menu(token, chat_id, db, message_id)
+        send_stt_model_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:stt:back":
-        send_voice_input_menu(token, chat_id, db, message_id)
+        send_voice_input_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:stt:"):
         value = parts[2]
         if value in {"on", "off"}:
             set_meta(db, f"stt_mode:{chat_id}", value)
-        send_voice_input_menu(token, chat_id, db, message_id)
+        send_voice_input_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:sttmodel:"):
         value = parts[2]
         if value in {"tiny", "base", "small"}:
             set_meta(db, f"stt_model:{chat_id}", value)
-        send_voice_input_menu(token, chat_id, db, message_id)
+        send_voice_input_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:memory:search":
-        start_text_action_input(db, token, chat_id, session["session_id"], "memory_search", "Send a query to search Hindsight memory for the active session.", {"message": message})
+        start_text_action_input(db, token, chat_id, session["session_id"], "memory_search", "Send a query to search Hindsight memory for the active session.", {"message": message}, request_context=request_context)
     elif data == "enum:memory:scope":
-        send_memory_menu(token, chat_id, db, message_id)
+        send_memory_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:memory:back":
-        send_memory_menu(token, chat_id, db, message_id)
+        send_memory_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:memory:"):
         value = parts[2]
         if value in {"on", "off"}:
             set_meta(db, f"memory_mode:{chat_id}", value)
-        send_memory_menu(token, chat_id, db, message_id)
+        send_memory_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:memoryscope:"):
         if parts[2] == "session":
             set_meta(db, f"memory_scope:{chat_id}", "session")
-        send_memory_menu(token, chat_id, db, message_id)
+        send_memory_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:preset:save":
         pending_preset = {"session_id": session["session_id"], "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
         set_meta(db, f"preset_save_input:{chat_id}", json.dumps(pending_preset))
@@ -399,37 +399,37 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         pending_preset["prompt_message_ids"] = send_text(token, chat_id, "Send a preset name (1–64 letters, numbers, hyphens, or underscores). Send /cancel to cancel.")
         set_meta(db, f"preset_save_input:{chat_id}", json.dumps(pending_preset))
     elif data == "enum:preset:back":
-        send_preset_menu(token, chat_id, db, message_id)
+        send_preset_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:presetdelete":
-        send_preset_delete_menu(token, chat_id, db, message_id)
+        send_preset_delete_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:presetpage:"):
-        send_preset_menu(token, chat_id, db, message_id, int(parts[2]))
+        send_preset_menu( token, chat_id, db, message_id, int(parts[2]), request_context=request_context)
     elif data.startswith("enum:presetdeletepage:"):
-        send_preset_delete_menu(token, chat_id, db, message_id, int(parts[2]))
+        send_preset_delete_menu( token, chat_id, db, message_id, int(parts[2]), request_context=request_context)
     elif data.startswith("enum:presetuse:"):
-        apply_preset_action(db, token, chat_id, session["session_id"], "use", resolve_dynamic_callback_token(parts[2], "preset", chat_id) or "")
-        send_preset_menu(token, chat_id, db, message_id)
+        apply_preset_action(db, token, chat_id, session["session_id"], "use", resolve_dynamic_callback_token(parts[2], "preset", chat_id, db=request_context.db) or "")
+        send_preset_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:presetdelconfirm:"):
-        name = resolve_dynamic_callback_token(parts[2], "preset", chat_id) or ""
+        name = resolve_dynamic_callback_token(parts[2], "preset", chat_id, db=request_context.db) or ""
         apply_preset_action(db, token, chat_id, session["session_id"], "delete", name)
-        send_preset_menu(token, chat_id, db, message_id)
+        send_preset_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:presetdel:"):
-        name = resolve_dynamic_callback_token(parts[2], "preset", chat_id) or ""
+        name = resolve_dynamic_callback_token(parts[2], "preset", chat_id, db=request_context.db) or ""
         if name:
-            send_preset_delete_confirm(token, chat_id, name, message_id)
+            send_preset_delete_confirm( token, chat_id, name, message_id, request_context=request_context)
         else:
-            send_preset_menu(token, chat_id, db, message_id)
+            send_preset_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:rag:search":
-        start_text_action_input(db, token, chat_id, session["session_id"], "databank_search", "Send a query to search the active Data Bank.", {"message": message})
+        start_text_action_input(db, token, chat_id, session["session_id"], "databank_search", "Send a query to search the active Data Bank.", {"message": message}, request_context=request_context)
     elif data == "enum:rag:versions":
-        send_databank_versions_menu(token, chat_id, db, message_id)
+        send_databank_versions_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:ragversionspage:"):
-        send_databank_versions_menu(token, chat_id, db, message_id, page=int(parts[2]))
+        send_databank_versions_menu( token, chat_id, db, message_id, page=int(parts[2]), request_context=request_context)
     elif data.startswith("enum:ragversions:"):
-        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id) or ""
-        send_databank_versions_menu(token, chat_id, db, message_id, filename=filename)
+        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id, db=request_context.db) or ""
+        send_databank_versions_menu( token, chat_id, db, message_id, filename=filename, request_context=request_context)
     elif data.startswith("enum:ragactivate:"):
-        raw = resolve_dynamic_callback_token(parts[2], "rag_version", chat_id) or ""
+        raw = resolve_dynamic_callback_token(parts[2], "rag_version", chat_id, db=request_context.db) or ""
         filename, _, raw_version = raw.rpartition("|")
         try:
             version = int(raw_version)
@@ -437,37 +437,37 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
             version = 0
         if filename and version > 0:
             activate_data_bank_version(db, chat_id, filename, version)
-        send_databank_versions_menu(token, chat_id, db, message_id, filename=filename)
+        send_databank_versions_menu( token, chat_id, db, message_id, filename=filename, request_context=request_context)
     elif data == "enum:rag:remove":
-        send_databank_remove_menu(token, chat_id, db, message_id)
+        send_databank_remove_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:rag:back":
-        send_databank_menu(token, chat_id, db, message_id)
+        send_databank_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:ragremovepage:"):
-        send_databank_remove_menu(token, chat_id, db, message_id, int(parts[2]))
+        send_databank_remove_menu( token, chat_id, db, message_id, int(parts[2]), request_context=request_context)
     elif data.startswith("enum:ragpage:"):
-        send_databank_menu(token, chat_id, db, message_id, int(parts[2]))
+        send_databank_menu( token, chat_id, db, message_id, int(parts[2]), request_context=request_context)
     elif data.startswith("enum:ragremoveconfirm:"):
-        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id) or ""
+        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id, db=request_context.db) or ""
         if filename:
             handle_data_bank_command(db, token, chat_id, "/databank remove " + filename + " confirm")
-        send_databank_menu(token, chat_id, db, message_id)
+        send_databank_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:ragremove:"):
-        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id) or ""
+        filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id, db=request_context.db) or ""
         if filename:
-            send_databank_remove_confirm(token, chat_id, filename, message_id)
+            send_databank_remove_confirm( token, chat_id, filename, message_id, request_context=request_context)
         else:
-            send_databank_menu(token, chat_id, db, message_id)
+            send_databank_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:rag:reindex":
         total, indexed = reindex_data_bank_documents(db, chat_id)
         send_text(token, chat_id, f"Data Bank reindex complete: {indexed}/{total} chunks indexed.")
-        send_databank_menu(token, chat_id, db, message_id)
+        send_databank_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:rag:"):
         value = parts[2]
         if value in {"on", "off"}:
             set_meta(db, f"rag_mode:{chat_id}", value)
         elif value == "list":
             handle_data_bank_command(db, token, chat_id, "/databank list")
-        send_databank_menu(token, chat_id, db, message_id)
+        send_databank_menu( token, chat_id, db, message_id, request_context=request_context)
 
 
 
@@ -484,7 +484,6 @@ def process_document_job(
     jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
-        set_db_connection_context(db)
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
@@ -507,7 +506,6 @@ def process_document_job(
                 jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Document import failed. Check the file format and size limits.")
         finally:
-            set_db_connection_context(None)
             db.close()
 
 
@@ -621,7 +619,6 @@ from bridge.rag_core import (
     rag_mode,
     reindex_data_bank_documents,
 )
-from bridge.runtime_context import set_db_connection_context
 from bridge.telegram import (
     import_telegram_document,
     send_text,

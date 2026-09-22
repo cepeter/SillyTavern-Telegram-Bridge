@@ -30,7 +30,7 @@ class SessionCommandRoutingTests(unittest.TestCase):
         calls = []
         old_menu = _m_message_commands.send_session_menu
         old_loader = _m_message_commands.card_fields_from_file
-        _m_message_commands.send_session_menu = lambda _token, chat_id, sessions, active_id, *_args: calls.append((chat_id, sessions, active_id))
+        _m_message_commands.send_session_menu = lambda _token, chat_id, sessions, active_id, *_args, **_kwargs: calls.append((chat_id, sessions, active_id))
         _m_message_commands.card_fields_from_file = lambda _name: (_ for _ in ()).throw(AssertionError("character loader must not run"))
         try:
             _m_message_commands.process_message(self.db, "token", "key", "provider/model", {}, "chat", "/session", telegram_message_id=1, services=make_test_application_services())

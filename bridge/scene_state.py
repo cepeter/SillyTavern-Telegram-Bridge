@@ -309,10 +309,12 @@ def handle_scene_command(
     session: dict[str, str],
     fields: dict[str, str],
     command: str,
+    *,
+    request_context,
 ) -> None:
     action = command.split(None, 1)[1].strip().casefold() if " " in command else "status"
     if action in {"", "status"}:
-        send_scene_menu(token, chat_id, db, session)
+        send_scene_menu( token, chat_id, db, session, request_context=request_context)
         return
     if action == "clear":
         clear_scene_state(db, chat_id, session["session_id"])
@@ -352,9 +354,11 @@ def _scene_state_command_route(
     current_persona,
     user_name,
     operation_id=None,
+    *,
+    request_context,
 ):
     if command == "/scene" or command.startswith("/scene "):
-        handle_scene_command(db, token, api_key, chat_id, session, fields, command)
+        handle_scene_command(db, token, api_key, chat_id, session, fields, command, request_context=request_context)
         return True
     return False
 

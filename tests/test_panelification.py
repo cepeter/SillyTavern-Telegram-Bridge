@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -73,6 +73,7 @@ class PanelificationTests(unittest.TestCase):
             _m_memory_curator.DEFAULT_MODEL,
             session.get("persona_id") or "",
             "user",
+            request_context=make_test_request_context(self.db, session["session_id"]),
             services=make_test_application_services(memory=make_test_memory_service()),
         )
 
@@ -82,9 +83,9 @@ class PanelificationTests(unittest.TestCase):
         old_callback_token = _m_cards.dynamic_callback_token
         _m_cards.character_card_paths = lambda: [Path("active.png"), Path("other.png")]
         _m_cards.character_display_name = lambda path: path.stem
-        _m_cards.dynamic_callback_token = lambda _kind, filename, _chat: "cb-" + filename
+        _m_cards.dynamic_callback_token = lambda _kind, filename, _chat, **_kwargs: "cb-" + filename
         try:
-            _m_session_naming.send_character_menu("bot-token", "chat", "active.png")
+            _m_session_naming.send_character_menu("bot-token", "chat", "active.png", request_context=make_test_request_context(self.db))
         finally:
             _m_cards.character_card_paths = old_paths
             _m_cards.character_display_name = old_display
@@ -139,9 +140,9 @@ class PanelificationTests(unittest.TestCase):
         old_callback_token = _m_catalog.dynamic_callback_token
         _m_catalog.world_file_paths = lambda: [Path("lore.json")]
         _m_catalog.active_world_files = lambda _current: []
-        _m_catalog.dynamic_callback_token = lambda _kind, _name, _chat: "callback-token"
+        _m_catalog.dynamic_callback_token = lambda _kind, _name, _chat, **_kwargs: "callback-token"
         try:
-            _m_panel_callback_routes.send_world_menu("bot-token", "chat", "")
+            _m_panel_callback_routes.send_world_menu("bot-token", "chat", "", request_context=make_test_request_context(self.db))
         finally:
             _m_catalog.world_file_paths = old_world_paths
             _m_catalog.active_world_files = old_active_worlds

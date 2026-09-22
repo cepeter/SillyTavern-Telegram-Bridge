@@ -161,7 +161,7 @@ def get_model_groups() -> dict[str, tuple[str, list[tuple[str, str]], bool]]:
     return fallback
 
 
-def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: str | None = None, message_id: int | None = None, page: int = 0) -> None:
+def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: str | None = None, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     groups = get_model_groups()
     if provider_id is None:
         options = [(group_id, f"{label} ({len(models)}){'' if is_supported else ' · catalog only'}", models, is_supported) for group_id, (label, models, is_supported) in groups.items()]
@@ -169,7 +169,7 @@ def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: s
         rows = []
         for group_id, label, models, _is_supported in page_options:
             mark = "✅ " if any(model_id == current_model for _, model_id in models) else ""
-            rows.append([{"text": mark + panel_label(label), "callback_data": "provider:" + dynamic_callback_token("provider", group_id, chat_id)}])
+            rows.append([{"text": mark + panel_label(label), "callback_data": "provider:" + dynamic_callback_token("provider", group_id, chat_id, db=request_context.db)}])
         if total_pages > 1:
             navigation = []
             if current_page > 0:
@@ -186,15 +186,15 @@ def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: s
         rows = []
         for model_label, model_id in page_options:
             mark = "✅ " if model_id == current_model else ""
-            callback = "model:" + dynamic_callback_token("model", model_id, chat_id) if is_supported else "unsupported:" + dynamic_callback_token("provider", provider_id, chat_id)
+            callback = "model:" + dynamic_callback_token("model", model_id, chat_id, db=request_context.db) if is_supported else "unsupported:" + dynamic_callback_token("provider", provider_id, chat_id, db=request_context.db)
             prefix = "" if is_supported else "🚫 "
             rows.append([{"text": prefix + mark + model_label, "callback_data": callback}])
         if total_pages > 1:
             navigation = []
             if current_page > 0:
-                navigation.append({"text": "⬅️ Previous", "callback_data": f"models:model:{dynamic_callback_token('provider', provider_id, chat_id)}:{current_page - 1}"})
+                navigation.append({"text": "⬅️ Previous", "callback_data": f"models:model:{dynamic_callback_token('provider', provider_id, chat_id, db=request_context.db)}:{current_page - 1}"})
             if current_page < total_pages - 1:
-                navigation.append({"text": "Next ➡️", "callback_data": f"models:model:{dynamic_callback_token('provider', provider_id, chat_id)}:{current_page + 1}"})
+                navigation.append({"text": "Next ➡️", "callback_data": f"models:model:{dynamic_callback_token('provider', provider_id, chat_id, db=request_context.db)}:{current_page + 1}"})
             rows.append(navigation)
         rows.append([{"text": "⬅️ Back to providers", "callback_data": "models:back"}])
         rows.append([{"text": "❌ Cancel", "callback_data": "models:cancel"}])
@@ -204,7 +204,7 @@ def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: s
         if not is_supported:
             text += "\nCatalog visible; this bridge adapter is not enabled yet."
     try:
-        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
+        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id, request_context=request_context)
     except RuntimeError as exc:
         if "not modified" in str(exc).casefold():
             logging.info("Panel already shows the requested state")
@@ -212,21 +212,21 @@ def send_model_menu(token: str, chat_id: str, current_model: str, provider_id: s
         raise
 
 
-def send_model_target_menu(token: str, chat_id: str, current_model: str, utility_model: str, message_id: int | None = None) -> None:
+def send_model_target_menu(token: str, chat_id: str, current_model: str, utility_model: str, message_id: int | None = None, *, request_context) -> None:
     markup = {"inline_keyboard": [[
         {"text": ("✅ " if current_model else "") + "📖 Story model", "callback_data": "modeltarget:story"},
         {"text": ("✅ " if utility_model else "") + "🛠️ Utility model", "callback_data": "modeltarget:utility"},
     ], [{"text": "❌ Cancel", "callback_data": "models:cancel"}]]}
-    send_panel_message(token, chat_id, "Where should the next selected model be used?", markup, message_id)
+    send_panel_message(token, chat_id, "Where should the next selected model be used?", markup, message_id, request_context=request_context)
 
 
-def send_provider_health_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
+def send_provider_health_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
     checks = provider_health_checks()
     lines = [f"{name}: {status}" for _provider_id, name, status in checks]
     text = "Provider health\n\n" + ("\n".join(lines) if lines else "No providers configured.")
     markup = {"inline_keyboard": [[{"text": "🔄 Refresh models", "callback_data": "provider:refresh"}], [{"text": "⬅️ Back to providers", "callback_data": "provider:back"}, {"text": "❌ Close", "callback_data": "models:cancel"}]]}
     try:
-        send_panel_message(token, chat_id, text, markup, message_id)
+        send_panel_message(token, chat_id, text, markup, message_id, request_context=request_context)
     except RuntimeError as exc:
         if "not modified" in str(exc).casefold():
             logging.info("Panel already shows the requested state")
@@ -234,13 +234,13 @@ def send_provider_health_menu(token: str, chat_id: str, message_id: int | None =
         raise
 
 
-def send_world_menu(token: str, chat_id: str, current_world: str, message_id: int | None = None, page: int = 0) -> None:
+def send_world_menu(token: str, chat_id: str, current_world: str, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     selected = set(active_world_files(current_world))
     options = [(path.name, path.stem) for path in world_file_paths()]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for name, label in page_options:
-        callback_token = dynamic_callback_token("world", name, chat_id)
+        callback_token = dynamic_callback_token("world", name, chat_id, db=request_context.db)
         mark = "✅ " if name in selected else ""
         rows.append([
             {"text": mark + panel_label(label), "callback_data": "world:" + callback_token},
@@ -255,7 +255,7 @@ def send_world_menu(token: str, chat_id: str, current_world: str, message_id: in
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Active World Info: {selected_label}{page_label}\nTap lorebooks to toggle them:"
     try:
-        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
+        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id, request_context=request_context)
     except RuntimeError as exc:
         if "not modified" in str(exc).casefold():
             logging.info("Panel already shows the requested state")

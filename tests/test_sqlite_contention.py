@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
 
@@ -39,10 +39,8 @@ class SqliteContentionTests(unittest.TestCase):
         self.old_db_file = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
-        _m_media.set_db_connection_context(self.db)
 
     def tearDown(self):
-        _m_media.set_db_connection_context(None)
         self.db.close()
         config.DB_FILE = self.old_db_file
         self.tmp.cleanup()
@@ -80,7 +78,7 @@ class SqliteContentionTests(unittest.TestCase):
         original_connect = _m_memory_curator.db_connect
         _m_memory_curator.db_connect = lambda: (_ for _ in ()).throw(AssertionError("opened nested SQLite connection"))
         try:
-            token = _m_panel_callback_routes.dynamic_callback_token("persona", "bridge-user.png", "chat")
+            token = _m_panel_callback_routes.dynamic_callback_token("persona", "bridge-user.png", "chat", db=self.db)
         finally:
             _m_memory_curator.db_connect = original_connect
         self.assertIsNotNone(self.db.execute("SELECT 1 FROM callback_tokens WHERE token=?", (token,)).fetchone())
@@ -142,24 +140,18 @@ class SqliteContentionTests(unittest.TestCase):
         calls = []
         original_urlopen = urllib.request.urlopen
         original_connect = _m_memory_curator.db_connect
-        original_session = _m_telegram.panel_session_context()
-        original_actor = _m_telegram.panel_actor_context()
-        _m_session_naming.set_panel_session_context("session")
-        _m_media.set_panel_actor_context("user")
         _m_memory_curator.db_connect = lambda: (_ for _ in ()).throw(AssertionError("opened nested SQLite connection"))
         urllib.request.urlopen = lambda *_args, **_kwargs: _FakeTelegramResponse()
         try:
-            result = _m_panel_callback_routes.telegram_request("token", "sendMessage", {
+            result = _m_telegram.send_panel_request("token", "sendMessage", {
                 "chat_id": "chat",
                 "text": "panel",
                 "reply_markup": {"inline_keyboard": []},
-            })
+            }, request_context=make_test_request_context(self.db, "session", "user"))
             calls.append(result)
         finally:
             urllib.request.urlopen = original_urlopen
             _m_memory_curator.db_connect = original_connect
-            _m_session_naming.set_panel_session_context(original_session)
-            _m_media.set_panel_actor_context(original_actor)
         self.assertEqual(calls, [{"message_id": 900}])
         self.assertIsNotNone(self.db.execute(
             "SELECT 1 FROM panel_sessions WHERE chat_id=? AND message_id=? AND session_id=?",

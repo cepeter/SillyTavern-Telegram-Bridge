@@ -436,14 +436,15 @@ class JobWorkerServiceTests(unittest.TestCase):
 
     def test_message_callback_and_voice_actor_lookup_use_job_service(self):
         self.jobs.actor = "777"
-        seen = []
 
-        with patch.object(_m_main, "set_panel_actor_context",
-            side_effect=lambda value: seen.append(value),
-        ), patch.object(_m_main, "committed_assistant_for_message",
+        with patch.object(
+            _m_main,
+            "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_main, "process_message",
-        ):
+        ), patch.object(
+            _m_main,
+            "process_message",
+        ) as process_message:
             _m_main.process_message_job(
                 self.services,
                 {"name": "Mira"},
@@ -452,40 +453,45 @@ class JobWorkerServiceTests(unittest.TestCase):
                 80,
                 job_id=48,
             )
-        self.assertEqual(seen[0], "777")
+        self.assertEqual(
+            process_message.call_args.kwargs["actor_id"],
+            "777",
+        )
 
         self.jobs.calls.clear()
-        seen.clear()
         callback = {
             "id": "cb",
             "from": {"id": "100"},
             "message": {"chat": {"id": "chat"}},
         }
-        with patch.object(_m_main, "set_panel_actor_context",
-            side_effect=lambda value: seen.append(value),
-        ), patch.object(
-            _m_database,
+        with patch.object(
+            _m_main,
             "operation_was_applied",
-            return_value=True,
-        ):
+            return_value=False,
+        ), patch.object(
+            _m_main,
+            "process_callback",
+        ) as process_callback:
             _m_main.process_callback_job(
                 self.services,
                 "chat",
                 callback,
                 job_id=49,
             )
-        self.assertEqual(seen[0], "777")
+        self.assertEqual(
+            process_callback.call_args.kwargs["actor_id"],
+            "777",
+        )
 
         self.jobs.calls.clear()
-        seen.clear()
-        with patch.object(_m_media, "set_panel_actor_context",
-            side_effect=lambda value: seen.append(value),
-        ), patch.object(_m_media, "committed_assistant_for_message",
+        with patch.object(
+            _m_media,
+            "committed_assistant_for_message",
             return_value=None,
         ), patch.object(
             _m_media,
             "process_voice_message",
-        ):
+        ) as process_voice_message:
             _m_media.process_voice_job(
                 self.services,
                 {"name": "Mira"},
@@ -494,7 +500,10 @@ class JobWorkerServiceTests(unittest.TestCase):
                 81,
                 job_id=50,
             )
-        self.assertEqual(seen[0], "777")
+        self.assertEqual(
+            process_voice_message.call_args.kwargs["actor_id"],
+            "777",
+        )
 
 
 if __name__ == "__main__":

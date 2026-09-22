@@ -6,6 +6,7 @@ from functools import partial as _partial
 from bridge import database as _database
 
 from bridge.composition import (
+    RequestContext,
     BackgroundRuntime as _BackgroundRuntime,
     BridgeConfig as _BridgeConfig,
     BridgeServices as _BridgeServices,
@@ -92,10 +93,6 @@ from bridge.persona_sync import (
     delete_native_persona,
     load_personas,
     upsert_native_persona,
-)
-from bridge.runtime_context import (
-    set_db_connection_context,
-    set_panel_actor_context,
 )
 from bridge.sync_core import sync_binding
 from pathlib import Path
@@ -242,11 +239,10 @@ def process_message_job(
     jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
-        set_db_connection_context(db)
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
-            set_panel_actor_context(jobs.actor_id(db, job_id))
+            actor_id = jobs.actor_id(db, job_id)
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 recovery_session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
@@ -274,6 +270,7 @@ def process_message_job(
                 message_id,
                 queued_session_id=queued_session_id,
                 operation_id=job_id,
+                actor_id=actor_id,
                 services=services,
             )
             if job_id is not None:
@@ -292,8 +289,6 @@ def process_message_job(
                 failure_message = "The character backend failed for this message. Use /retry or /status."
             services.telegram.send_text(token, chat_id, failure_message)
         finally:
-            set_panel_actor_context(None)
-            set_db_connection_context(None)
             db.close()
 
 
@@ -313,7 +308,6 @@ def process_image_job(
     jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
-        set_db_connection_context(db)
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
@@ -352,7 +346,6 @@ def process_image_job(
                 jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Image processing failed. The selected model may not support vision.")
         finally:
-            set_db_connection_context(None)
             db.close()
 
 
@@ -366,7 +359,6 @@ def process_callback_job(
     jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
-        set_db_connection_context(db)
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
@@ -374,10 +366,6 @@ def process_callback_job(
                 jobs.actor_id(db, job_id)
                 if job_id is not None
                 else ""
-            )
-            set_panel_actor_context(
-                actor_id
-                or str((callback.get("from") or {}).get("id", ""))
             )
             if job_id is not None and operation_was_applied(db, job_id):
                 jobs.complete(db, job_id)
@@ -387,6 +375,7 @@ def process_callback_job(
                 token,
                 callback,
                 operation_id=job_id,
+                actor_id=actor_id,
                 services=services,
             )
             if job_id is not None:
@@ -401,8 +390,6 @@ def process_callback_job(
                 jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Callback processing failed; try the command again.")
         finally:
-            set_panel_actor_context(None)
-            set_db_connection_context(None)
             db.close()
 
 
@@ -430,7 +417,6 @@ def process_edit_job(
     jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
-        set_db_connection_context(db)
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
@@ -459,7 +445,6 @@ def process_edit_job(
                 jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Native message edit failed; the previous branch was preserved.")
         finally:
-            set_db_connection_context(None)
             db.close()
 
 
@@ -1056,11 +1041,17 @@ def main() -> int:
                 if not text:
                     complete_update(db, update_id, offset)
                     continue
-                if send_help_command(token, chat_id, str(text)):
-                    complete_update(db, update_id, offset)
-                    continue
                 message_id = int(message.get("message_id"))
                 queued_session_id = ensure_session(db, chat_id, model)["session_id"]
+                request_context = RequestContext(db, queued_session_id, sender)
+                if send_help_command(
+                    token,
+                    chat_id,
+                    str(text),
+                    request_context=request_context,
+                ):
+                    complete_update(db, update_id, offset)
+                    continue
                 normalized_text = str(text).strip().casefold()
                 is_plain_start = normalized_text == "start"
                 if not str(text).lstrip().startswith("/") and not is_plain_start and not group_user_turn_allowed(db, chat_id, queued_session_id, sender):

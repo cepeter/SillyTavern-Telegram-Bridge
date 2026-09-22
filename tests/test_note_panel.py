@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_request_context
 
 ensure_application_extensions()
 
@@ -43,12 +43,12 @@ class NotePanelTests(unittest.TestCase):
 
     def test_note_panel_has_off_and_user_input(self):
         calls = []
-        original_request = _m_commands.telegram_request
-        _m_commands.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_commands.send_panel_request
+        _m_commands.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_note_menu("token", "chat", "existing note")
+            _m_panel_callback_routes.send_note_menu("token", "chat", "existing note", request_context=make_test_request_context(self.db))
         finally:
-            _m_commands.telegram_request = original_request
+            _m_commands.send_panel_request = original_request
         self.assertIn("note:off", {b["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for b in row})
         self.assertIn("note:input", {b["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for b in row})
         self.assertIn("Author's Note — on", calls[0][1]["text"])

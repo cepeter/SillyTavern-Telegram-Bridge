@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -25,14 +25,14 @@ class ItemPanelLayoutTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
-        self.old_request = _m_cards.telegram_request
+        self.old_request = _m_cards.send_panel_request
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
         self.calls = []
-        _m_cards.telegram_request = lambda _token, method, payload: self.calls.append((method, payload)) or {"message_id": 1}
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: self.calls.append((method, payload)) or {"message_id": 1}
 
     def tearDown(self):
-        _m_cards.telegram_request = self.old_request
+        _m_cards.send_panel_request = self.old_request
         self.db.close()
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
@@ -43,14 +43,14 @@ class ItemPanelLayoutTests(unittest.TestCase):
 
     def test_persona_rows_have_delete_callbacks(self):
         persona_service = make_test_persona_service(personas={"p1": {"name": "Punto"}, "p2": {"name": "Alt"}})
-        _m_command_routes.send_persona_menu("bot", "chat", "p1", persona_service=persona_service)
+        _m_command_routes.send_persona_menu("bot", "chat", "p1", persona_service=persona_service, request_context=make_test_request_context(self.db))
         callbacks = self._callbacks(self.calls[-1][1])
         self.assertEqual(sum(value.startswith("persona:delete:") for value in callbacks), 2)
         self.assertNotIn("persona:delete", callbacks)
 
     def test_preset_rows_have_delete_callbacks(self):
         _m_input_flows.save_generation_preset(self.db, "chat", "fast", {"temperature": 0.7})
-        _m_command_routes.send_preset_menu("bot", "chat", self.db)
+        _m_command_routes.send_preset_menu("bot", "chat", self.db, request_context=make_test_request_context(self.db))
         callbacks = self._callbacks(self.calls[-1][1])
         self.assertIn("enum:preset:save", callbacks)
         self.assertTrue(any(value.startswith("enum:presetdel:") for value in callbacks))
@@ -62,7 +62,7 @@ class ItemPanelLayoutTests(unittest.TestCase):
         _m_help.data_bank_documents = lambda _db, _chat: [("doc-1", "lore.json", 1, 2)]
         _m_help.rag_embedding_coverage = lambda _db, _chat: (2, 2)
         try:
-            _m_command_routes.send_databank_menu("bot", "chat", self.db)
+            _m_command_routes.send_databank_menu("bot", "chat", self.db, request_context=make_test_request_context(self.db))
         finally:
             _m_help.data_bank_documents = old_docs
             _m_help.rag_embedding_coverage = old_coverage
@@ -107,7 +107,7 @@ class ItemPanelLayoutTests(unittest.TestCase):
             "members": ["member.png"], "turn_user_id": "", "turn_users": [],
         })
         try:
-            _m_panel_callback_routes.send_group_menu(self.db, "bot", "chat", session)
+            _m_panel_callback_routes.send_group_menu(self.db, "bot", "chat", session, request_context=make_test_request_context(self.db, session["session_id"]))
         finally:
             _m_groups.card_fields_from_file = old_fields
         callbacks = self._callbacks(self.calls[-1][1])

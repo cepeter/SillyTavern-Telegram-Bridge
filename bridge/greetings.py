@@ -66,6 +66,8 @@ def send_greeting_menu(
     message_id: int | None = None,
     selected_index: int = 0,
     page: int | None = None,
+    *,
+    request_context,
 ) -> bool:
     """Show the opening-message chooser and preview the selected greeting."""
     options = greeting_options(fields)
@@ -136,7 +138,7 @@ def send_greeting_menu(
     if message_id is not None:
         payload["message_id"] = message_id
     try:
-        telegram_request(token, method, payload)
+        send_panel_request(token, method, payload, request_context=request_context)
     except RuntimeError as exc:
         if "not modified" in str(exc).casefold():
             logging.info("Greeting panel already shows the requested state")
@@ -165,6 +167,6 @@ def send_character_greeting(db: sqlite3.Connection, token: str, chat_id: str, fi
 
 # Explicit late imports replace transitional dependency injection.
 from bridge.telegram import (
+    send_panel_request,
     send_text,
-    telegram_request,
 )

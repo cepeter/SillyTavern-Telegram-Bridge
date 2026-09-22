@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
 
@@ -18,6 +18,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
         self.db = object()
         self.session = {"session_id": "session"}
         self.service = Mock()
+        self.request_context = make_test_request_context(self.db, "session")
         self.service.status.return_value = SimpleNamespace(
             session_id="session",
             message_count=7,
@@ -34,6 +35,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             "chat",
             self.session,
             sync_service=self.service,
+
         )
 
         self.service.status.assert_called_once_with(
@@ -77,6 +79,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
                 "chat",
                 self.session,
                 sync_service=self.service,
+
             )
 
         localtime.assert_called_once_with(123.0)
@@ -114,6 +117,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
                 "chat",
                 self.session,
                 sync_service=self.service,
+
             )
 
     def test_send_sync_menu_preserves_keyboard_and_message_id(self):
@@ -126,6 +130,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
                 self.session,
                 91,
                 sync_service=self.service,
+                request_context=self.request_context,
             )
 
         send_panel.assert_called_once()
@@ -135,6 +140,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
         self.assertEqual(token, "token")
         self.assertEqual(chat_id, "chat")
         self.assertEqual(message_id, 91)
+        self.assertIs(send_panel.call_args.kwargs["request_context"], self.request_context)
         self.assertEqual(
             markup,
             {
@@ -186,6 +192,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             "session",
             123,
             sync_service=self.service,
+            request_context=self.request_context,
         )
 
         self.assertFalse(handled)
@@ -210,6 +217,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
                 "session",
                 123,
                 sync_service=self.service,
+                request_context=self.request_context,
             )
 
         self.assertTrue(handled)
@@ -245,6 +253,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
                         "session",
                         123,
                         sync_service=self.service,
+                        request_context=self.request_context,
                     )
 
                 self.assertTrue(handled)
@@ -260,6 +269,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
                     self.session,
                     91,
                     sync_service=self.service,
+                    request_context=self.request_context,
                 )
 
     def test_sync_realtime_truncates_answer_and_refreshes(self):
@@ -280,6 +290,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
                 "session",
                 123,
                 sync_service=self.service,
+                request_context=self.request_context,
             )
 
         self.assertTrue(handled)
@@ -300,6 +311,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             self.session,
             91,
             sync_service=self.service,
+            request_context=self.request_context,
         )
 
     def test_sync_now_truncates_answer_and_refreshes(self):
@@ -320,6 +332,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
                 "session",
                 123,
                 sync_service=self.service,
+                request_context=self.request_context,
             )
 
         self.assertTrue(handled)
@@ -340,6 +353,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             self.session,
             91,
             sync_service=self.service,
+            request_context=self.request_context,
         )
 
     def test_unknown_sync_action_is_handled_without_mutation(self):
@@ -357,6 +371,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             "session",
             123,
             sync_service=self.service,
+            request_context=self.request_context,
         )
 
         self.assertTrue(handled)
@@ -404,7 +419,6 @@ class SyncUiOwnershipTests(unittest.TestCase):
             "\ndef handle_sync_callback(",
             source,
         )
-
 
 
 if __name__ == "__main__":

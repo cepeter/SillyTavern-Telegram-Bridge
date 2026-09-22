@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -71,51 +71,51 @@ class GroupTurnGatingTests(unittest.TestCase):
 
     def test_turn_controls_are_visible_only_in_manual_mode(self):
         calls = []
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, _method, payload: calls.append(payload) or {}
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
             state = _m_sync_api.group_state(self.db, "chat", "session")
             state["mode"] = "manual"
             _m_groups.save_group_state(self.db, "chat", "session", state)
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"})
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, request_context=make_test_request_context(self.db, "session", "user"))
             manual_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertEqual(manual_callbacks & {"group:claim", "group:pass"}, {"group:claim", "group:pass"})
             state["mode"] = "round_robin"
             _m_groups.save_group_state(self.db, "chat", "session", state)
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"})
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, request_context=make_test_request_context(self.db, "session", "user"))
             other_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertEqual(other_callbacks & {"group:claim", "group:pass"}, set())
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
 
     def test_group_panel_ignores_not_modified_response(self):
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
         try:
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, message_id=10)
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, message_id=10, request_context=make_test_request_context(self.db, "session", "user"))
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
 
     def test_new_group_session_button_only_appears_in_topic(self):
-        original_request = _m_cards.telegram_request
+        original_request = _m_cards.send_panel_request
         calls = []
-        _m_cards.telegram_request = lambda _token, _method, payload: calls.append(payload) or {}
+        _m_cards.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat|topic:7", {"session_id": "session"})
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat|topic:7", {"session_id": "session"}, request_context=make_test_request_context(self.db, "session", "user"))
             topic_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertIn("group:new_session", topic_callbacks)
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"})
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, request_context=make_test_request_context(self.db, "session", "user"))
             dm_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertNotIn("group:new_session", dm_callbacks)
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
     def test_group_command_is_rejected_in_direct_chat(self):
         sent = []
         original_send = _m_command_routes.send_text
         _m_command_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
         session = {"session_id": "session", "persona_id": "", "model_id": _m_memory_curator.DEFAULT_MODEL, "author_note": "", "world_file": "", "system_prompt": "", "response_language": "auto"}
         try:
-            handled = _m_message_commands.handle_command_route(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", _m_memory_curator.DEFAULT_MODEL, "", "Test User", services=make_test_application_services())
+            handled = _m_message_commands.handle_command_route(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", _m_memory_curator.DEFAULT_MODEL, "", "Test User", request_context=make_test_request_context(self.db, "session", "user"), services=make_test_application_services())
         finally:
             _m_command_routes.send_text = original_send
         self.assertTrue(handled)
@@ -127,29 +127,26 @@ class GroupTurnGatingTests(unittest.TestCase):
         opened = []
         original_close = _m_session_naming.close_panel_message
         original_menu = _m_session_naming.send_character_menu
-        original_context = _m_session_naming.set_panel_session_context
         original_send = _m_session_naming.send_text
         _m_session_naming.close_panel_message = lambda *_args, **_kwargs: None
-        _m_session_naming.send_character_menu = lambda _token, _chat, _character: opened.append(True)
-        _m_session_naming.set_panel_session_context = lambda session_id: opened.append(session_id)
+        _m_session_naming.send_character_menu = lambda _token, _chat, _character, **kwargs: opened.append(kwargs["request_context"].session_id)
         _m_session_naming.send_text = lambda *_args, **_kwargs: []
         callback = {"id": "callback", "from": {"id": "user"}, "data": "group:new_session", "message": {"message_id": 10, "chat": {"id": chat_id}}}
         try:
-            _m_callbacks.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user")
+            _m_callbacks.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user", request_context=make_test_request_context(self.db, session["session_id"], "user"))
             pending = _m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "")
             self.assertTrue(pending)
-            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
+            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"], "user"))
         finally:
             _m_session_naming.close_panel_message = original_close
             _m_session_naming.send_character_menu = original_menu
-            _m_session_naming.set_panel_session_context = original_context
             _m_session_naming.send_text = original_send
         active_id = _m_session_naming.get_meta(self.db, f"active_session:{chat_id}", "")
         setup = _m_panel_callback_routes.group_setup_state(self.db, chat_id, active_id)
         self.assertEqual(active_id, "group-77")
         self.assertIsNotNone(setup)
         self.assertEqual(setup["stage"], "character")
-        self.assertEqual(opened[-1], True)
+        self.assertEqual(opened[-1], "group-77")
 
     def test_group_wizard_chains_character_to_world_then_group(self):
         chat_id = "chat|topic:8"
@@ -168,7 +165,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         original_group_menu = _m_panel_callback_routes.send_group_menu
         opened_world = []
         opened_group = []
-        _m_panel_callback_routes.resolve_dynamic_callback_token = lambda _value, kind, _chat: "chosen.png" if kind == "character" else "lore.json"
+        _m_panel_callback_routes.resolve_dynamic_callback_token = lambda _value, kind, _chat, **_kwargs: "chosen.png" if kind == "character" else "lore.json"
         _m_panel_callback_routes.safe_character_path = lambda _name: Path("/tmp/chosen.png")
         _m_panel_callback_routes.safe_world_path = lambda _name: Path("/tmp/lore.json")
         card_content.safe_world_path = lambda _name: Path("/tmp/lore.json")
@@ -181,15 +178,15 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_panel_callback_routes.send_group_menu = lambda *_args, **_kwargs: opened_group.append(True)
         try:
             character_callback = self._callback("character:character-token")
-            _m_panel_callback_routes.handle_character_callback(self.db, "token", character_callback, lambda *_args: None, character_callback["data"], chat_id, character_callback["message"], session, session["session_id"], None)
+            _m_panel_callback_routes.handle_character_callback(self.db, "token", character_callback, lambda *_args: None, character_callback["data"], chat_id, character_callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"], "user"))
             setup = _m_panel_callback_routes.group_setup_state(self.db, chat_id, session["session_id"])
             self.assertEqual(setup["stage"], "world")
             self.assertEqual(_m_memory_curator.load_session(self.db, chat_id, session["session_id"], _m_memory_curator.DEFAULT_MODEL)["character_file"], "chosen.png")
             world_callback = self._callback("world:world-token")
-            _m_panel_callback_routes.handle_world_callback(self.db, "token", world_callback, lambda *_args: None, world_callback["data"], chat_id, world_callback["message"], session, session["session_id"], None)
+            _m_panel_callback_routes.handle_world_callback(self.db, "token", world_callback, lambda *_args: None, world_callback["data"], chat_id, world_callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"], "user"))
             self.assertEqual(_m_sync_core.active_world_files(_m_memory_curator.load_session(self.db, chat_id, session["session_id"], _m_memory_curator.DEFAULT_MODEL)["world_file"]), ["lore.json"])
             done_callback = self._callback("world:done")
-            _m_panel_callback_routes.handle_world_callback(self.db, "token", done_callback, lambda *_args: None, done_callback["data"], chat_id, done_callback["message"], session, session["session_id"], None)
+            _m_panel_callback_routes.handle_world_callback(self.db, "token", done_callback, lambda *_args: None, done_callback["data"], chat_id, done_callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"], "user"))
         finally:
             _m_panel_callback_routes.resolve_dynamic_callback_token = original_resolve
             _m_panel_callback_routes.safe_character_path = original_char_path
@@ -214,7 +211,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_session_naming.close_panel_message = lambda *_args, **_kwargs: None
         try:
             callback = self._callback("character:cancel")
-            handled = _m_panel_callback_routes.handle_character_callback(self.db, "token", callback, lambda *_args: None, callback["data"], chat_id, callback["message"], session, session["session_id"], None)
+            handled = _m_panel_callback_routes.handle_character_callback(self.db, "token", callback, lambda *_args: None, callback["data"], chat_id, callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"], "user"))
         finally:
             _m_session_naming.close_panel_message = original_close
         self.assertTrue(handled)

@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_request_context
 
 ensure_application_extensions()
 
@@ -39,7 +39,7 @@ class StartOnboardingTests(unittest.TestCase):
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
-                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None, make_test_application_services(),
+                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None, make_test_application_services(), request_context=make_test_request_context(self.db, self.session["session_id"]),
             )
         finally:
             _m_command_routes.send_text = original
@@ -52,11 +52,11 @@ class StartOnboardingTests(unittest.TestCase):
     def test_plain_start_opens_greeting_choice_panel_without_storing_message(self):
         opened = []
         original_menu = _m_command_routes.send_greeting_menu
-        _m_command_routes.send_greeting_menu = lambda _token, chat_id, fields, user_name: opened.append((chat_id, fields["first_mes"], user_name)) or True
+        _m_command_routes.send_greeting_menu = lambda _token, chat_id, fields, user_name, **_kwargs: opened.append((chat_id, fields["first_mes"], user_name)) or True
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "start", "start",
-                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None, make_test_application_services(),
+                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None, make_test_application_services(), request_context=make_test_request_context(self.db, self.session["session_id"]),
             )
         finally:
             _m_command_routes.send_greeting_menu = original_menu
@@ -70,14 +70,14 @@ class StartOnboardingTests(unittest.TestCase):
         original_menu = _m_command_routes.send_greeting_menu
         original_worlds = _m_command_routes.active_world_files
         _m_command_routes.send_text = lambda *_args, **_kwargs: self.fail("ready /start should open the greeting chooser")
-        _m_command_routes.send_greeting_menu = lambda _token, chat_id, fields, user_name: opened.append((chat_id, fields["first_mes"], user_name)) or True
+        _m_command_routes.send_greeting_menu = lambda _token, chat_id, fields, user_name, **_kwargs: opened.append((chat_id, fields["first_mes"], user_name)) or True
         _m_command_routes.active_world_files = lambda _value: ["world.json"]
         ready_session = dict(self.session)
         ready_session.update({"persona_id": "punto.png", "world_file": "world.json", "system_prompt": "Prompt"})
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
-                ready_session, ready_session["session_id"], _m_memory_curator.DEFAULT_MODEL, "punto.png", "User", None, make_test_application_services(),
+                ready_session, ready_session["session_id"], _m_memory_curator.DEFAULT_MODEL, "punto.png", "User", None, make_test_application_services(), request_context=make_test_request_context(self.db, self.session["session_id"]),
             )
         finally:
             _m_command_routes.send_text = original_send

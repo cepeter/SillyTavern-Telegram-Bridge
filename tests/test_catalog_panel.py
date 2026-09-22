@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
 
@@ -69,12 +69,12 @@ class CatalogPanelTests(unittest.TestCase):
 
     def test_model_selection_offers_story_or_utility_target(self):
         calls = []
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {"message_id": 1}
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {"message_id": 1}
         try:
-            _m_panel_callback_routes.send_model_target_menu("token", "chat", "main::model", "utility::model")
+            _m_panel_callback_routes.send_model_target_menu("token", "chat", "main::model", "utility::model", request_context=make_test_request_context())
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
         callbacks = [button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row]
         self.assertIn("modeltarget:story", callbacks)
         self.assertIn("modeltarget:utility", callbacks)
@@ -82,14 +82,14 @@ class CatalogPanelTests(unittest.TestCase):
 
     def test_model_panel_treats_not_modified_as_success(self):
         original_groups = _m_catalog.get_model_groups
-        original_request = _m_cards.telegram_request
+        original_request = _m_cards.send_panel_request
         _m_catalog.get_model_groups = lambda: {"provider": ("Provider", [("model", "provider::model")], True)}
-        _m_cards.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
+        _m_cards.send_panel_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
         try:
-            _m_panel_callback_routes.send_model_menu("token", "chat", "provider::model", message_id=10)
+            _m_panel_callback_routes.send_model_menu("token", "chat", "provider::model", message_id=10, request_context=make_test_request_context())
         finally:
             _m_catalog.get_model_groups = original_groups
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
 
 
 if __name__ == "__main__":
