@@ -168,6 +168,38 @@ class SyncSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("phase3_sync_poll(", chunk)
         self.assertIn("sync_service.poll(", chunk)
 
+    def test_realtime_worker_uses_supplied_sync_service_without_resolution(self):
+        class FakeDb:
+            in_transaction = False
+
+            def close(self):
+                pass
+
+        class FakeSyncService:
+            def __init__(self):
+                self.polls = 0
+
+            def poll(self, _db):
+                self.polls += 1
+
+        service = FakeSyncService()
+        with patch.object(
+            _m_sync_api,
+            "resolve_sync_service",
+            side_effect=AssertionError("worker resolved a compatibility service"),
+        ), patch.object(
+            _m_sync_api._PHASE3_STOP_EVENT,
+            "wait",
+            side_effect=[False, True],
+        ), patch.object(
+            _m_sync_api,
+            "db_connect",
+            return_value=FakeDb(),
+        ):
+            _m_sync_api._phase3_worker_loop(service)
+
+        self.assertEqual(service.polls, 1)
+
     def test_sync_service_has_no_runtime_or_telegram_dependency(self):
         source = (
             Path(__file__).parents[1] / "bridge" / "sync_service.py"
