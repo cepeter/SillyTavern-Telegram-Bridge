@@ -206,14 +206,39 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
 
     def test_common_has_no_import_time_process_resource_construction(self):
         source = (BRIDGE_DIR / "common.py").read_text(encoding="utf-8")
-        for forbidden in (
-            "logging.basicConfig(",
-            "LOG_FILE.parent.mkdir(",
-            "_GENERATION_EXECUTOR = concurrent.futures.ThreadPoolExecutor(",
-            "_UTILITY_EXECUTOR = concurrent.futures.ThreadPoolExecutor(",
-        ):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, source)
+        tree = ast.parse(source)
+
+        top_level_calls = []
+        executor_assignments = []
+        for node in tree.body:
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+                top_level_calls.append(node.value)
+            elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+                executor_assignments.append(node.value)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.value, ast.Call):
+                executor_assignments.append(node.value)
+
+        def dotted_name(node):
+            if isinstance(node, ast.Name):
+                return node.id
+            if isinstance(node, ast.Attribute):
+                prefix = dotted_name(node.value)
+                return f"{prefix}.{node.attr}" if prefix else node.attr
+            return ""
+
+        self.assertFalse(
+            any(
+                dotted_name(call.func) == "logging.basicConfig"
+                or dotted_name(call.func).endswith(".mkdir")
+                for call in top_level_calls
+            )
+        )
+        self.assertFalse(
+            any(
+                dotted_name(call.func).endswith(".ThreadPoolExecutor")
+                for call in executor_assignments
+            )
+        )
 
     def test_launcher_has_no_local_environment_parser(self):
         source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(
