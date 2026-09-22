@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from bridge.application_composition import initialize_extensions
 from bridge.memory_service import MemoryService
+from bridge.persona_service import PersonaService
 
 
 _INITIALIZED = False
@@ -33,4 +34,62 @@ def make_test_memory_service(*, purge_session_memory=None) -> MemoryService:
             if purge_session_memory is not None
             else (lambda *_args, **_kwargs: 0)
         ),
+    )
+
+
+def make_test_persona_service(*, personas=None) -> PersonaService:
+    """Return an explicit PersonaService for tests that do not compose startup."""
+    catalog = dict(
+        personas
+        or {
+            "test-user.png": {
+                "name": "Test User",
+                "description": "Test persona",
+                "sillytavern_avatar": "test-user.png",
+            }
+        }
+    )
+
+    def upsert(persona_id, name, description):
+        avatar = persona_id if str(persona_id).endswith(".png") else f"bridge-{persona_id}.png"
+        catalog[avatar] = {
+            "name": name,
+            "description": description,
+            "sillytavern_avatar": avatar,
+        }
+        return avatar
+
+    def delete(persona_id):
+        return catalog.pop(str(persona_id), None) is not None
+
+    return PersonaService(
+        load_personas=lambda: dict(catalog),
+        load_default_persona=lambda: next(iter(catalog), ""),
+        upsert_persona=upsert,
+        delete_persona=delete,
+        update_session_persona=lambda *_args, **_kwargs: None,
+        persona_reference_count=lambda *_args, **_kwargs: 0,
+    )
+
+
+def make_native_test_persona_service() -> PersonaService:
+    """Compose PersonaService from the same canonical collaborators as startup."""
+    from bridge.cards import default_persona_id
+    from bridge.input_flows import PERSONA_EDIT_LOCK
+    from bridge.persona_sync import (
+        delete_native_persona,
+        load_personas,
+        upsert_native_persona,
+    )
+    from bridge.repositories import count_persona_references
+    from bridge.telegram import update_session
+
+    return PersonaService(
+        load_personas=load_personas,
+        load_default_persona=default_persona_id,
+        upsert_persona=upsert_native_persona,
+        delete_persona=delete_native_persona,
+        update_session_persona=update_session,
+        persona_reference_count=count_persona_references,
+        persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
     )
