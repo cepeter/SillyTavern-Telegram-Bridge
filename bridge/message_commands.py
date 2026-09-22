@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bridge.composition import BridgeServices
+
 def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
     method = "editMessageText" if message_id else "sendMessage"
     payload = {
@@ -318,7 +323,6 @@ from bridge.card_content import card_fields_from_file
 from bridge.cards import send_session_menu
 from bridge.character_identity import reconcile_session_character
 from bridge.command_routes import handle_command_route
-from bridge.composition import BridgeServices
 from bridge.commands import edit_last_user
 from bridge.config import DEFAULT_USER_NAME
 from bridge.context_compaction import context_history_candidate_limit
