@@ -258,10 +258,130 @@ def handle_sync_callback(
     return True
 
 
-def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, sync_service: SyncService):
+def handle_greeting_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    persona_service,
+):
+    """Preview and commit a selected character-card opening greeting."""
+    if not data.startswith("greeting:"):
+        return False
+
+    parts = data.split(":")
+    action = parts[1] if len(parts) > 1 else ""
+    message_id = message.get("message_id")
+    fields = card_fields_from_file(session["character_file"])
+    options = greeting_options(fields)
+    persona_id = str(session.get("persona_id") or "")
+    user_name = (persona_service.name(persona_id) if persona_id else "") or DEFAULT_USER_NAME
+
+    if action == "cancel":
+        answer_callback(token, str(callback.get("id", "")), "Cancelled")
+        discard_panel_binding(db, chat_id, message_id)
+        close_panel_message(token, chat_id, callback)
+        return True
+
+    if not options:
+        answer_callback(token, str(callback.get("id", "")), "Greeting unavailable")
+        discard_panel_binding(db, chat_id, message_id)
+        close_panel_message(token, chat_id, callback)
+        send_text(token, chat_id, "This character has no opening greeting.")
+        return True
+
+    if action == "page":
+        try:
+            page = max(0, int(parts[2]))
+            selected_index = int(parts[3]) if len(parts) > 3 else 0
+        except (ValueError, IndexError):
+            answer_callback(token, str(callback.get("id", "")), "Greeting panel expired")
+            return True
+        if selected_index < 0 or selected_index >= len(options):
+            selected_index = 0
+        answer_callback(token, str(callback.get("id", "")), "Page")
+        send_greeting_menu(
+            token,
+            chat_id,
+            fields,
+            user_name,
+            message_id=message_id,
+            selected_index=selected_index,
+            page=page,
+        )
+        return True
+
+    if action in {"preview", "use"}:
+        try:
+            selected_index = int(parts[2])
+        except (ValueError, IndexError):
+            answer_callback(token, str(callback.get("id", "")), "Greeting choice expired")
+            return True
+        if selected_index < 0 or selected_index >= len(options):
+            answer_callback(token, str(callback.get("id", "")), "Greeting choice expired")
+            return True
+        label = greeting_choice_label(selected_index)
+        if action == "preview":
+            answer_callback(token, str(callback.get("id", "")), label)
+            send_greeting_menu(
+                token,
+                chat_id,
+                fields,
+                user_name,
+                message_id=message_id,
+                selected_index=selected_index,
+            )
+            return True
+
+        started = send_character_greeting(
+            db,
+            token,
+            chat_id,
+            fields,
+            session_id,
+            user_name,
+            selected_index,
+            operation_id,
+            "start_greeting",
+        )
+        answer_callback(
+            token,
+            str(callback.get("id", "")),
+            f"Started with {label}" if started else "Greeting already processed",
+        )
+        discard_panel_binding(db, chat_id, message_id)
+        close_panel_message(token, chat_id, callback)
+        return True
+
+    answer_callback(token, str(callback.get("id", "")), "Unknown greeting action")
+    return True
+
+
+def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, persona_service, sync_service: SyncService):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(token, callback, data, chat_id)
+    if handle_greeting_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        persona_service=persona_service,
+    ):
+        return True
     if handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
     if handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
@@ -705,6 +825,7 @@ from bridge.config import (
     CARD_FILE,
     DEFAULT_CHARACTER_FILE,
     DEFAULT_MODEL,
+    DEFAULT_USER_NAME,
     PENDING_SETTINGS_TTL_SECONDS,
 )
 from bridge.database import (
@@ -729,6 +850,12 @@ from bridge.generation import (
     keep_swipe_variant,
     last_user_variants,
     swipe_state_key,
+)
+from bridge.greetings import (
+    greeting_choice_label,
+    greeting_options,
+    send_character_greeting,
+    send_greeting_menu,
 )
 from bridge.group_core import group_setup_state
 from bridge.groups import (
