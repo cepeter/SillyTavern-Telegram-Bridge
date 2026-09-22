@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_SYSTEM_PYTHON: 1
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -34,7 +37,7 @@ jobs:
             requirements-dev.txt
 
       - name: Install locked runtime dependencies
-        run: uv pip install --python python --require-hashes --frozen -r requirements.lock
+        run: uv pip install --python python --require-hashes -r requirements.lock
 
       - name: Install development test tooling
         run: uv pip install --python python -r requirements-dev.txt
