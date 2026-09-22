@@ -496,6 +496,8 @@ def process_document_job(
                 model,
                 telegram_message_id=message_id,
                 memory_service=services.memory,
+                persona_service=services.persona,
+                group_director_service=services.group_director,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)
