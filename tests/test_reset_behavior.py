@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -48,7 +48,7 @@ class ResetBehaviorTests(unittest.TestCase):
         original_menu = _m_message_commands.send_reset_confirmation_menu
         setattr(_m_message_commands, "send_reset_confirmation_menu", lambda *_args, **_kwargs: opened.append(True))
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/reset", services=SimpleNamespace(memory=make_test_memory_service()))
+            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             setattr(_m_message_commands, "send_reset_confirmation_menu", original_menu)
         self.assertEqual(opened, [True])
