@@ -147,10 +147,13 @@ class DatabaseOptimizationTests(unittest.TestCase):
 
         original_event = _m_sync_api._PHASE3_STOP_EVENT
         original_connect = _m_sync_api.db_connect
-        original_poll = _m_sync_api.phase3_sync_poll
         stop_event = FakeStopEvent()
         connections = []
         polls = []
+
+        class FakeSync:
+            def poll(self, db):
+                polls.append(db)
 
         def connect():
             connection = FakeDb()
@@ -159,13 +162,11 @@ class DatabaseOptimizationTests(unittest.TestCase):
 
         _m_sync_api._PHASE3_STOP_EVENT = stop_event
         _m_sync_api.db_connect = connect
-        _m_sync_api.phase3_sync_poll = lambda db: polls.append(db)
         try:
-            _m_sync_api._phase3_worker_loop()
+            _m_sync_api._phase3_worker_loop(FakeSync())
         finally:
             _m_sync_api._PHASE3_STOP_EVENT = original_event
             _m_sync_api.db_connect = original_connect
-            _m_sync_api.phase3_sync_poll = original_poll
 
         self.assertEqual(len(connections), 1)
         self.assertEqual(polls, [connections[0], connections[0]])
