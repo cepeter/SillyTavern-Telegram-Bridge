@@ -43,11 +43,11 @@ class BridgeServices:
     db_factory: Callable[[], sqlite3.Connection]
     telegram: TelegramRuntime
     background: BackgroundRuntime
+    jobs: JobService
     group_director: GroupDirectorService | None = None
     memory: MemoryService | None = None
     persona: PersonaService | None = None
     sync: SyncService | None = None
-    jobs: JobService | None = None
 
 
 def load_bridge_config(
@@ -102,11 +102,11 @@ def build_bridge_services(
     db_factory: Callable[[], sqlite3.Connection],
     telegram: TelegramRuntime,
     background: BackgroundRuntime,
+    jobs: JobService,
     group_director: GroupDirectorService | None = None,
     memory: MemoryService | None = None,
     persona: PersonaService | None = None,
     sync: SyncService | None = None,
-    jobs: JobService | None = None,
 ) -> BridgeServices:
     return BridgeServices(
         config=config,

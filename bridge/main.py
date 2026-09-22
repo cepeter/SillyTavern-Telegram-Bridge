@@ -20,11 +20,6 @@ from bridge.extension_registry import (
 from bridge.group_director_service import (
     GroupDirectorService as _GroupDirectorService,
 )
-from bridge.job_runtime import (
-    DURABLE_WORKER_GUARD as _DURABLE_WORKER_GUARD,
-    compatibility_job_service as _compatibility_job_service,
-    jobs_for_services as _jobs_for_services,
-)
 from bridge.job_service import (
     DurableJob as _DurableJob,
     JobService as _JobService,
@@ -174,6 +169,10 @@ from bridge.memory import (
     session_summary_for_prompt,
 )
 
+_DURABLE_WORKER_GUARD = _DurableWorkerGuard(
+    _database._lightweight_db_connect
+)
+
 _SHUTDOWN_EVENT = threading.Event()
 
 
@@ -240,7 +239,7 @@ def process_message_job(
     token = services.config.bot_token
     api_key = services.config.api_key
     model = model_override or services.config.default_model
-    jobs = _jobs_for_services(services)
+    jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
@@ -311,7 +310,7 @@ def process_image_job(
 ) -> None:
     token = services.config.bot_token
     model = model_override or services.config.default_model
-    jobs = _jobs_for_services(services)
+    jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
@@ -363,7 +362,7 @@ def process_callback_job(
     job_id: int | None = None,
 ) -> None:
     token = services.config.bot_token
-    jobs = _jobs_for_services(services)
+    jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
@@ -427,7 +426,7 @@ def process_edit_job(
     token = services.config.bot_token
     api_key = services.config.api_key
     model = model_override or services.config.default_model
-    jobs = _jobs_for_services(services)
+    jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
@@ -475,28 +474,6 @@ def restore_poll_offset(db: sqlite3.Connection, fallback: int) -> int:
         return int(get_meta(db, "telegram_offset", str(fallback)) or fallback)
     except (TypeError, ValueError, sqlite3.Error):
         return int(fallback)
-
-
-def submit_durable_chat_job(
-    db: sqlite3.Connection,
-    background: _BackgroundRuntime,
-    label: str,
-    chat_id: str,
-    job_id: int,
-    function,
-    *args,
-) -> bool:
-    jobs = _compatibility_job_service(background)
-    return jobs.submit(
-        db,
-        int(job_id),
-        _JobSubmission(
-            label=str(label),
-            chat_id=str(chat_id),
-            worker=function,
-            args=tuple(args),
-        ),
-    )
 
 
 def resolve_recovered_job_submission(
@@ -600,25 +577,6 @@ def resolve_recovered_job_submission(
     return None
 
 
-def dispatch_recovered_jobs(
-    db: sqlite3.Connection,
-    services: _BridgeServices,
-    fields: dict,
-    *,
-    recover_running: bool = True,
-) -> None:
-    jobs = _jobs_for_services(services)
-    jobs.recover(
-        db,
-        lambda job: resolve_recovered_job_submission(
-            services,
-            fields,
-            job,
-        ),
-        recover_running=recover_running,
-    )
-
-
 def make_durable_backlog_dispatcher(
     services: _BridgeServices,
     fields: dict,
@@ -626,8 +584,7 @@ def make_durable_backlog_dispatcher(
     def dispatch() -> None:
         db = services.db_factory()
         try:
-            jobs = _jobs_for_services(services)
-            jobs.recover(
+            services.jobs.recover(
                 db,
                 lambda job: resolve_recovered_job_submission(
                     services,

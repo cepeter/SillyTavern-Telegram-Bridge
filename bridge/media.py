@@ -247,7 +247,7 @@ def process_voice_job(
     token = services.config.bot_token
     api_key = services.config.api_key
     model = model_override or services.config.default_model
-    jobs = _jobs_for_services(services)
+    jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
@@ -332,7 +332,6 @@ from bridge.database import (
     run_write_txn,
 )
 from bridge.expressions import deliver_expression
-from bridge.job_runtime import jobs_for_services as _jobs_for_services
 from bridge.message_commands import process_message
 from bridge.runtime_context import (
     set_db_connection_context,

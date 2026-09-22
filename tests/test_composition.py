@@ -265,6 +265,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 register_backlog_dispatcher=lambda _callback: None,
                 begin_shutdown=lambda: None,
             ),
+            jobs=Mock(),
             memory=self.memory_service,
             persona=self.persona_service,
             sync=self.sync_service,
@@ -638,6 +639,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                 send_text=lambda *_args, **_kwargs: None,
             ),
             background=self.background,
+            jobs=Mock(),
         )
 
     def tearDown(self):
@@ -647,44 +649,6 @@ class RecoveryCompositionTests(unittest.TestCase):
     def _submit(self, label, chat_id, function, *args):
         self.submitted.append((label, chat_id, function, args))
         return True
-
-    def test_submit_durable_chat_job_uses_injected_background_and_explicit_job_id(self):
-        fake_jobs = Mock()
-        fake_jobs.submit.return_value = True
-
-        with patch.object(
-            _m_main,
-            "_compatibility_job_service",
-            return_value=fake_jobs,
-        ):
-            queued = _m_main.submit_durable_chat_job(
-                self.db,
-                self.background,
-                "generation",
-                "chat",
-                41,
-                _m_main.process_message_job,
-                self.services,
-                {"name": "Mira"},
-                "chat",
-                "hello",
-                10,
-                None,
-                None,
-            )
-
-        self.assertTrue(queued)
-        self.assertEqual(
-            fake_jobs.submit.call_args.args[1],
-            41,
-        )
-        submission = fake_jobs.submit.call_args.args[2]
-        self.assertIsInstance(submission, JobSubmission)
-        self.assertEqual(submission.label, "generation")
-        self.assertEqual(submission.chat_id, "chat")
-        self.assertIs(submission.worker, _m_main.process_message_job)
-        self.assertEqual(submission.args[0], self.services)
-        fake_jobs.submit.assert_called_once()
 
     def test_recovered_job_resolver_preserves_stored_model_and_session(self):
         generation = DurableJob(
@@ -816,127 +780,6 @@ class RecoveryCompositionTests(unittest.TestCase):
             )
         )
 
-    def test_dispatch_recovered_jobs_is_compatibility_delegate(self):
-        fake_jobs = Mock()
-        with patch.object(
-            _m_main,
-            "_jobs_for_services",
-            return_value=fake_jobs,
-        ):
-            _m_main.dispatch_recovered_jobs(
-                self.db,
-                self.services,
-                {"name": "Mira"},
-                recover_running=False,
-            )
-
-        fake_jobs.recover.assert_called_once()
-        call = fake_jobs.recover.call_args
-        self.assertIs(call.args[0], self.db)
-        self.assertFalse(call.kwargs["recover_running"])
-        resolved = call.args[1](
-            DurableJob(
-                67,
-                "chat",
-                "session",
-                27,
-                "generation",
-                {"text": "hello"},
-            )
-        )
-        self.assertEqual(resolved.label, "generation")
-
-    def test_failed_background_submission_does_not_mark_job_scheduled(self):
-        background = BackgroundRuntime(
-            submit_chat=lambda *_args, **_kwargs: False,
-            register_backlog_dispatcher=lambda _callback: None,
-            begin_shutdown=lambda: None,
-        )
-        with patch.object(_m_main, "submit_chat_background",
-            side_effect=AssertionError("global background used"),
-        ), patch.object(_m_main, "mark_job_scheduled") as scheduled:
-            queued = _m_main.submit_durable_chat_job(
-                self.db,
-                background,
-                "generation",
-                "chat",
-                52,
-                _m_main.process_message_job,
-                self.services,
-                {"name": "Mira"},
-                "chat",
-                "hello",
-                10,
-                None,
-                None,
-            )
-        self.assertFalse(queued)
-        scheduled.assert_not_called()
-
-    def test_transient_worker_boot_requeues_on_injected_database_path(self):
-        job_id = _m_main.enqueue_job(
-            self.db,
-            901,
-            "chat",
-            "session",
-            901,
-            "generation",
-            {"text": "hello"},
-        )
-        self.assertTrue(_m_main.mark_job_scheduled(self.db, job_id))
-
-        def fail_connect():
-            raise sqlite3.OperationalError("database is locked")
-
-        failing_services = BridgeServices(
-            config=self.services.config,
-            db_factory=fail_connect,
-            telegram=self.services.telegram,
-            background=self.services.background,
-        )
-
-        def run_immediately(_label, _chat_id, function, *args):
-            function(*args)
-            return True
-
-        background = BackgroundRuntime(
-            submit_chat=run_immediately,
-            register_backlog_dispatcher=lambda _callback: None,
-            begin_shutdown=lambda: None,
-        )
-
-        old_db_file = bridge_config.DB_FILE
-        bridge_config.DB_FILE = Path(self.tmp.name) / "wrong.sqlite3"
-        try:
-            with patch.object(time, "sleep", return_value=None):
-                with self.assertRaisesRegex(
-                    sqlite3.OperationalError,
-                    "database is locked",
-                ):
-                    _m_main.submit_durable_chat_job(
-                        self.db,
-                        background,
-                        "generation",
-                        "chat",
-                        job_id,
-                        _m_main.process_message_job,
-                        failing_services,
-                        {"name": "Mira"},
-                        "chat",
-                        "hello",
-                        901,
-                        None,
-                        None,
-                    )
-        finally:
-            bridge_config.DB_FILE = old_db_file
-
-        state = self.db.execute(
-            "SELECT state FROM jobs WHERE job_id=?",
-            (job_id,),
-        ).fetchone()
-        self.assertEqual(state, ("queued",))
-
     def test_backlog_dispatcher_uses_injected_job_recovery(self):
         opened = []
         fake_jobs = Mock()
@@ -1051,6 +894,7 @@ class StartupCompositionTests(unittest.TestCase):
                 register_backlog_dispatcher=lambda _callback: None,
                 begin_shutdown=lambda: None,
             ),
+            jobs=Mock(),
         )
 
     def tearDown(self):
@@ -1220,12 +1064,6 @@ class StartupCompositionTests(unittest.TestCase):
         ), patch.object(_m_main, "card_fields", return_value={"name": "Mira"}
         ), patch.object(
             _m_main, "install_bridge_signal_handlers"
-        ), patch.object(
-            _m_main,
-            "dispatch_recovered_jobs",
-            side_effect=AssertionError(
-                "production startup must use services.jobs.recover"
-            ),
         ), patch.object(_m_main, "start_phase3_sync_worker"
         ) as start_sync, patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
         ), patch.object(_m_main, "shutdown_background_executors", return_value=True
@@ -1294,8 +1132,6 @@ class StartupCompositionTests(unittest.TestCase):
             ), patch.object(_m_main, "card_fields", return_value={"name": "Mira"}
             ), patch.object(
                 _m_main, "install_bridge_signal_handlers"
-            ), patch.object(
-                _m_main, "dispatch_recovered_jobs"
             ), patch.object(_m_main, "start_phase3_sync_worker"
             ), patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
             ), patch.object(_m_main, "shutdown_background_executors", return_value=True
@@ -1570,7 +1406,6 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
             "def process_image_job",
             "def process_callback_job",
             "def process_edit_job",
-            "def dispatch_recovered_jobs",
             "def make_durable_backlog_dispatcher",
             "def run_check",
         )

@@ -481,7 +481,7 @@ def process_document_job(
 ) -> None:
     token = services.config.bot_token
     model = model_override or services.config.default_model
-    jobs = _jobs_for_services(services)
+    jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
         set_db_connection_context(db)
@@ -598,7 +598,6 @@ from bridge.help_details import (
     help_text,
 )
 from bridge.input_flows import start_text_action_input
-from bridge.job_runtime import jobs_for_services as _jobs_for_services
 from bridge.language import (
     normalize_stt_language,
     RESPONSE_LANGUAGES,
