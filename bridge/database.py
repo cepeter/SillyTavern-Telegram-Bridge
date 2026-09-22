@@ -279,7 +279,23 @@ def set_meta(db: sqlite3.Connection, key: str, value: str) -> None:
     run_write_txn(db, write)
 
 
+def _retryable_model_turn_text(text: str) -> bool:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return False
+    parts = stripped.split(None, 1)
+    first = parts[0].casefold()
+    if first == "start" or first.startswith("/"):
+        return False
+    if first.startswith("@") and len(parts) > 1:
+        return not parts[1].lstrip().startswith("/")
+    return True
+
+
 def record_failed_turn(db: sqlite3.Connection, chat_id: str, telegram_message_id: int, text: str, model: str, error: str, session_id: str = "") -> None:
+    if not _retryable_model_turn_text(text):
+        return
+
     def write():
         now = time.time()
         db.execute("INSERT INTO failed_turns(chat_id,telegram_message_id,text,model,session_id,attempts,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,telegram_message_id) DO UPDATE SET session_id=excluded.session_id,attempts=attempts+1,last_error=excluded.last_error,updated_at=excluded.updated_at", (chat_id, str(telegram_message_id), text[:12000], model[:200], session_id[:200], 1, error[:1000], now, now))
@@ -288,7 +304,15 @@ def record_failed_turn(db: sqlite3.Connection, chat_id: str, telegram_message_id
 
 
 def latest_failed_turn(db: sqlite3.Connection, chat_id: str):
-    return db.execute("SELECT telegram_message_id,text,model,attempts,last_error,session_id FROM failed_turns WHERE chat_id=? ORDER BY updated_at DESC LIMIT 1", (chat_id,)).fetchone()
+    rows = db.execute(
+        "SELECT telegram_message_id,text,model,attempts,last_error,session_id "
+        "FROM failed_turns WHERE chat_id=? ORDER BY updated_at DESC",
+        (chat_id,),
+    ).fetchall()
+    return next(
+        (row for row in rows if _retryable_model_turn_text(row[1])),
+        None,
+    )
 
 
 def clear_failed_turn(db: sqlite3.Connection, chat_id: str, telegram_message_id: int | str) -> None:
