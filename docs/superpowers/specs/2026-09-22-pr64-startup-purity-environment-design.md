@@ -76,7 +76,7 @@ This means importing an application-support module mutates the filesystem, loggi
 - `CHARACTER_BACKUP_DIR`;
 - `LOG_FILE`.
 
-PR #64 makes `bridge.config` the canonical owner for all environment-derived runtime paths.
+`bridge.environment` remains the canonical owner of the environment-file path because it must be usable before application configuration is imported. PR #64 makes `bridge.config` the canonical owner for all other environment-derived runtime paths.
 
 ### 2.5 Startup validation is incomplete
 
@@ -108,7 +108,7 @@ PR #64 must:
 4. remove `bridge.common.load_env_file()`;
 5. make environment parsing strict and testable;
 6. preserve process-environment precedence over values from the environment file;
-7. move runtime path constants into `bridge.config`;
+7. keep environment-file path ownership in `bridge.environment` and move all other runtime path constants into `bridge.config`;
 8. ensure importing `bridge.common` creates no log directory/file and no thread pool;
 9. configure file logging explicitly during startup;
 10. ensure the log file receives private permissions when created;
@@ -276,19 +276,20 @@ The launcher no longer owns parsing logic.
 
 ## 8. Canonical runtime path ownership
 
-Move these constants to `bridge.config`:
+`bridge.environment` remains the sole owner of environment-file path resolution through `environment_file(...)`.
 
-- `ENV_FILE`;
+Move these other constants to `bridge.config`:
+
 - `LOG_FILE`;
 - `PROVIDER_CONFIG_FILE`;
 - `MODEL_CACHE_FILE`;
 - `CHARACTER_BACKUP_DIR`.
 
-Existing modules import them from `bridge.config`.
+Existing modules import them from their canonical owners.
+
+`enforce_runtime_permissions()` resolves the environment file through `bridge.environment.environment_file()` rather than maintaining a duplicate `ENV_FILE` constant.
 
 No compatibility re-export is added solely to preserve the old `bridge.common` ownership.
-
-`ENV_FILE` represents the configured runtime environment-file path for permissions/documentation after application import. The pre-import bootstrap itself remains owned by `bridge.environment`.
 
 ## 9. Logging lifecycle
 
@@ -577,7 +578,7 @@ PR #64 is complete when:
 3. Malformed environment files fail explicitly.
 4. Existing process environment wins over file values.
 5. `bridge.main` no longer loads the environment file.
-6. Runtime path constants have one canonical owner in `bridge.config`.
+6. Runtime paths have one canonical owner: the environment-file path in `bridge.environment`, all other migrated runtime paths in `bridge.config`.
 7. Importing `bridge.common` creates no log directory/file.
 8. Importing `bridge.common` creates no thread-pool executor.
 9. Logging is configured explicitly during startup.
