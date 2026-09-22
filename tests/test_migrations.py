@@ -205,173 +205,45 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def _columns(self, table):
-        return {
-            row[1]
-            for row in self.db.execute(
-                f"PRAGMA table_info({table})"
-            ).fetchall()
-        }
+    def test_initial_schema_is_single_current_baseline(self):
+        self.assertEqual(len(schema.SCHEMA_MIGRATIONS), 1)
+        migration = schema.SCHEMA_MIGRATIONS[0]
+        self.assertEqual((migration.version, migration.name), (1, "initial_schema"))
 
-    def _create_representative_legacy_schema(self):
-        self.db.executescript(
-            """
-            CREATE TABLE messages (
-                chat_id TEXT NOT NULL,
-                role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                created_at REAL NOT NULL
-            );
-            CREATE TABLE sessions (
-                chat_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                character_file TEXT NOT NULL,
-                model_id TEXT NOT NULL,
-                persona_id TEXT NOT NULL,
-                world_file TEXT NOT NULL,
-                created_at REAL NOT NULL,
-                updated_at REAL NOT NULL,
-                PRIMARY KEY(chat_id, session_id)
-            );
-            CREATE TABLE response_variants (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                user_content TEXT NOT NULL,
-                response TEXT NOT NULL,
-                variant_index INTEGER NOT NULL,
-                selected INTEGER NOT NULL DEFAULT 1,
-                created_at REAL NOT NULL
-            );
-            CREATE TABLE data_bank_documents (
-                chat_id TEXT NOT NULL,
-                document_id TEXT NOT NULL,
-                filename TEXT NOT NULL,
-                byte_size INTEGER NOT NULL,
-                chunk_count INTEGER NOT NULL,
-                version_number INTEGER NOT NULL DEFAULT 1,
-                active INTEGER NOT NULL DEFAULT 1,
-                created_at REAL NOT NULL,
-                updated_at REAL NOT NULL,
-                PRIMARY KEY(chat_id, document_id)
-            );
-            CREATE TABLE data_bank_embeddings (
-                chunk_id INTEGER PRIMARY KEY,
-                embedding_namespace TEXT NOT NULL,
-                dimensions INTEGER NOT NULL,
-                vector_json TEXT NOT NULL,
-                vector_signature INTEGER NOT NULL,
-                vector_norm REAL NOT NULL
-            );
-            CREATE TABLE rag_embedding_cache (
-                cache_key TEXT PRIMARY KEY,
-                dimensions INTEGER NOT NULL,
-                vector_json TEXT NOT NULL,
-                vector_norm REAL NOT NULL,
-                created_at REAL NOT NULL
-            );
-            CREATE TABLE failed_turns (
-                chat_id TEXT NOT NULL,
-                telegram_message_id TEXT NOT NULL,
-                text TEXT NOT NULL,
-                model TEXT NOT NULL,
-                attempts INTEGER NOT NULL DEFAULT 1,
-                last_error TEXT NOT NULL,
-                created_at REAL NOT NULL,
-                updated_at REAL NOT NULL,
-                PRIMARY KEY(chat_id, telegram_message_id)
-            );
-            CREATE TABLE panel_sessions (
-                chat_id TEXT NOT NULL,
-                message_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                expires_at REAL NOT NULL,
-                PRIMARY KEY(chat_id, message_id)
-            );
-            CREATE TABLE sync_bindings (
-                chat_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                sync_id TEXT NOT NULL,
-                last_hash TEXT NOT NULL DEFAULT '',
-                last_direction TEXT NOT NULL DEFAULT '',
-                last_synced_at REAL NOT NULL DEFAULT 0,
-                PRIMARY KEY(chat_id, session_id),
-                UNIQUE(chat_id, sync_id)
-            );
-            CREATE TABLE group_sessions (
-                chat_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                title TEXT NOT NULL DEFAULT 'Group chat',
-                enabled INTEGER NOT NULL DEFAULT 0,
-                turn_index INTEGER NOT NULL DEFAULT 0,
-                members_json TEXT NOT NULL DEFAULT '[]',
-                updated_at REAL NOT NULL,
-                PRIMARY KEY(chat_id, session_id)
-            );
-            """
-        )
-        self.db.execute(
-            "INSERT INTO messages(chat_id,role,content,created_at) "
-            "VALUES('chat','user','legacy message',1.0)"
-        )
-        self.db.execute(
-            "INSERT INTO sessions("
-            "chat_id,session_id,title,character_file,model_id,persona_id,"
-            "world_file,created_at,updated_at"
-            ") VALUES('chat','legacy','Legacy','','model','','',1.0,1.0)"
-        )
-        self.db.execute(
-            "INSERT INTO response_variants("
-            "chat_id,session_id,user_content,response,variant_index,selected,created_at"
-            ") VALUES('chat','legacy','u','a',0,1,1.0)"
-        )
-        self.db.execute(
-            "INSERT INTO data_bank_documents("
-            "chat_id,document_id,filename,byte_size,chunk_count,created_at,updated_at"
-            ") VALUES('chat','doc-1','notes.txt',1,1,1.0,1.0)"
-        )
-        self.db.execute(
-            "INSERT INTO failed_turns("
-            "chat_id,telegram_message_id,text,model,attempts,last_error,created_at,updated_at"
-            ") VALUES('chat','1','text','model',1,'err',1.0,1.0)"
-        )
-        self.db.execute(
-            "INSERT INTO panel_sessions(chat_id,message_id,session_id,expires_at) "
-            "VALUES('chat','1','legacy',9999999999.0)"
-        )
-        self.db.execute(
-            "INSERT INTO sync_bindings(chat_id,session_id,sync_id) "
-            "VALUES('chat','legacy','stb-legacy')"
-        )
-        self.db.execute(
-            "INSERT INTO group_sessions("
-            "chat_id,session_id,title,enabled,turn_index,members_json,updated_at"
-            ") VALUES('chat','legacy','Legacy',1,0,'[]',1.0)"
-        )
-        self.db.commit()
-
-    def test_core_baseline_bootstraps_empty_database(self):
+    def test_initial_schema_bootstraps_current_database(self):
         schema.initialize_database_schema(self.db)
 
         self.assertEqual(
             self.db.execute(
                 "SELECT version,name FROM schema_migrations ORDER BY version"
             ).fetchall(),
-            [
-                (migration.version, migration.name)
-                for migration in schema.SCHEMA_MIGRATIONS
-            ],
+            [(1, "initial_schema")],
         )
+
         for table in (
+            "meta",
             "messages",
             "sessions",
+            "response_variants",
             "generation_settings",
+            "generation_presets",
+            "session_summaries",
+            "hindsight_documents",
             "data_bank_documents",
+            "data_bank_chunks",
+            "data_bank_embeddings",
+            "rag_embedding_cache",
+            "processed_updates",
+            "failed_turns",
             "jobs",
+            "callback_tokens",
             "panel_sessions",
+            "operations",
             "sync_bindings",
+            "data_bank_fts",
             "group_sessions",
+            "scene_states",
+            "director_goals",
         ):
             with self.subTest(table=table):
                 self.assertIsNotNone(
@@ -382,72 +254,96 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
                     ).fetchone()
                 )
 
-    def test_core_baseline_upgrades_representative_legacy_schema(self):
-        self._create_representative_legacy_schema()
+        for object_type, name in (
+            ("index", "scene_states_updated_idx"),
+            ("trigger", "scene_states_session_delete"),
+            ("trigger", "director_goals_session_delete"),
+            ("trigger", "sessions_delete_sync_binding"),
+        ):
+            with self.subTest(name=name):
+                self.assertIsNotNone(
+                    self.db.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type=? AND name=?",
+                        (object_type, name),
+                    ).fetchone()
+                )
 
+    def test_initial_schema_requires_current_rag_embedding_metadata(self):
         schema.initialize_database_schema(self.db)
 
-        expected_columns = {
-            "messages": {
-                "session_id",
-                "telegram_message_id",
-                "telegram_message_ids",
-            },
-            "sessions": {
-                "author_note",
-                "system_prompt",
-                "response_language",
-            },
-            "response_variants": {"user_rowid"},
-            "failed_turns": {"session_id"},
-            "panel_sessions": {"owner_user_id"},
-            "sync_bindings": {
-                "conflict",
-                "last_error",
-                "last_checked_at",
-                "realtime_enabled",
-                "realtime_failures",
-                "realtime_next_retry_at",
-            },
-            "group_sessions": {
-                "mode",
-                "forced_speaker",
-                "turn_user_id",
-                "turn_users_json",
-            },
+        embedding_columns = {
+            row[1]: row
+            for row in self.db.execute(
+                "PRAGMA table_info(data_bank_embeddings)"
+            ).fetchall()
         }
-        for table, columns in expected_columns.items():
-            with self.subTest(table=table):
-                self.assertTrue(columns <= self._columns(table))
+        self.assertEqual(embedding_columns["embedding_namespace"][3], 1)
+        self.assertIsNone(embedding_columns["embedding_namespace"][4])
+        self.assertEqual(embedding_columns["vector_signature"][3], 1)
+        self.assertEqual(embedding_columns["vector_norm"][3], 1)
 
-        message = self.db.execute(
-            "SELECT content,session_id FROM messages"
-        ).fetchone()
-        self.assertEqual(message, ("legacy message", "default"))
-        self.assertEqual(
-            self.db.execute(
-                "SELECT title,author_note,response_language FROM sessions "
-                "WHERE session_id='legacy'"
-            ).fetchone(),
-            ("Legacy", "", "auto"),
-        )
-        self.assertEqual(
-            self.db.execute(
-                "SELECT filename,version_number,active "
-                "FROM data_bank_documents WHERE document_id='doc-1'"
-            ).fetchone(),
-            ("notes.txt", 1, 1),
-        )
+        cache_columns = {
+            row[1]: row
+            for row in self.db.execute(
+                "PRAGMA table_info(rag_embedding_cache)"
+            ).fetchall()
+        }
+        self.assertEqual(cache_columns["vector_norm"][3], 1)
 
-    def test_rag_baseline_contains_no_legacy_column_repair_logic(self):
-        import inspect
+    def test_production_schema_has_no_preproduction_upgrade_paths(self):
+        source = (
+            Path(__file__).parents[1] / "bridge" / "schema.py"
+        ).read_text(encoding="utf-8")
 
-        source = inspect.getsource(schema._ensure_rag_tables)
-        self.assertNotIn("PRAGMA table_info", source)
         self.assertNotIn("ALTER TABLE", source)
-        self.assertNotIn("legacy", source.casefold())
+        self.assertNotIn("PRAGMA table_info", source)
+        self.assertNotIn("_migration_002_scene_state", source)
+        self.assertNotIn("_migration_003_director_goals", source)
+        self.assertNotIn("_migration_004_sync_lifecycle_trigger", source)
+        self.assertNotIn('"core_baseline"', source)
 
-    def test_startup_cleanup_runs_when_core_migration_is_already_applied(self):
+    def test_preproduction_core_baseline_ledger_is_rejected(self):
+        self.db.execute(
+            "CREATE TABLE schema_migrations("
+            "version INTEGER PRIMARY KEY,"
+            "name TEXT NOT NULL,"
+            "applied_at REAL NOT NULL)"
+        )
+        self.db.execute(
+            "INSERT INTO schema_migrations VALUES(1,'core_baseline',1.0)"
+        )
+        self.db.execute(
+            "CREATE TABLE sessions("
+            "chat_id TEXT NOT NULL,"
+            "session_id TEXT NOT NULL,"
+            "PRIMARY KEY(chat_id, session_id))"
+        )
+        self.db.execute(
+            "CREATE TABLE sync_bindings("
+            "chat_id TEXT NOT NULL,"
+            "session_id TEXT NOT NULL)"
+        )
+        self.db.execute("CREATE TABLE sentinel(value TEXT NOT NULL)")
+        self.db.execute(
+            "INSERT INTO sentinel(value) VALUES('preserve-me')"
+        )
+        self.db.commit()
+
+        with self.assertRaisesRegex(MigrationError, "name mismatch"):
+            run_migrations(self.db, schema.SCHEMA_MIGRATIONS)
+
+        self.assertEqual(
+            self.db.execute("SELECT value FROM sentinel").fetchone()[0],
+            "preserve-me",
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT version,name FROM schema_migrations ORDER BY version"
+            ).fetchall(),
+            [(1, "core_baseline")],
+        )
+
+    def test_startup_cleanup_runs_when_initial_schema_is_already_applied(self):
         schema.initialize_database_schema(self.db)
         old = time.time() - 200 * 86400
         self.db.execute(
@@ -477,143 +373,7 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
             self.db.execute(
                 "SELECT COUNT(*) FROM schema_migrations"
             ).fetchone()[0],
-            len(schema.SCHEMA_MIGRATIONS),
-        )
-
-    def test_scene_and_director_migrations_create_expected_structures(self):
-        schema.initialize_database_schema(self.db)
-
-        applied = self.db.execute(
-            "SELECT version,name FROM schema_migrations ORDER BY version"
-        ).fetchall()
-        self.assertEqual(
-            applied,
-            [
-                (1, "core_baseline"),
-                (2, "scene_state"),
-                (3, "director_goals"),
-                (4, "sync_lifecycle_trigger"),
-            ],
-        )
-        for object_type, name in (
-            ("table", "scene_states"),
-            ("index", "scene_states_updated_idx"),
-            ("trigger", "scene_states_session_delete"),
-            ("table", "director_goals"),
-            ("trigger", "director_goals_session_delete"),
-        ):
-            with self.subTest(name=name):
-                self.assertIsNotNone(
-                    self.db.execute(
-                        "SELECT 1 FROM sqlite_master WHERE type=? AND name=?",
-                        (object_type, name),
-                    ).fetchone()
-                )
-
-        self.assertIsNotNone(
-            self.db.execute(
-                "SELECT 1 FROM sqlite_master "
-                "WHERE type='trigger' AND name='sessions_delete_sync_binding'"
-            ).fetchone()
-        )
-
-    def test_existing_scene_and_director_rows_survive_ledger_adoption(self):
-        schema._migration_001_core_baseline(self.db)
-        self.db.execute(
-            """CREATE TABLE scene_states (
-                chat_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                state_json TEXT NOT NULL DEFAULT '{}',
-                updated_through_rowid INTEGER NOT NULL DEFAULT 0,
-                updated_at REAL NOT NULL,
-                PRIMARY KEY(chat_id, session_id)
-            )"""
-        )
-        self.db.execute(
-            """CREATE TABLE director_goals (
-                chat_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                goal TEXT NOT NULL,
-                updated_at REAL NOT NULL,
-                PRIMARY KEY(chat_id, session_id)
-            )"""
-        )
-        self.db.execute(
-            "INSERT INTO scene_states VALUES("
-            "'chat','session','{\"location\":\"Station\"}',7,1.0)"
-        )
-        self.db.execute(
-            "INSERT INTO director_goals VALUES("
-            "'chat','session','Keep the letter sealed.',1.0)"
-        )
-        self.db.commit()
-
-        schema.initialize_database_schema(self.db)
-
-        self.assertEqual(
-            self.db.execute(
-                "SELECT state_json,updated_through_rowid FROM scene_states"
-            ).fetchone(),
-            ('{"location":"Station"}', 7),
-        )
-        self.assertEqual(
-            self.db.execute(
-                "SELECT goal FROM director_goals"
-            ).fetchone()[0],
-            "Keep the letter sealed.",
-        )
-
-
-    def test_current_schema_without_ledger_adopts_all_versions_without_data_loss(self):
-        for migration in schema.SCHEMA_MIGRATIONS:
-            migration.apply(self.db)
-        self.db.execute(
-            "INSERT INTO messages("
-            "chat_id,session_id,role,content,telegram_message_ids,created_at"
-            ") VALUES('chat','current','user','keep message','[]',1.0)"
-        )
-        self.db.execute(
-            "INSERT INTO scene_states("
-            "chat_id,session_id,state_json,updated_through_rowid,updated_at"
-            ") VALUES('chat','current','{\"location\":\"Cafe\"}',3,1.0)"
-        )
-        self.db.execute(
-            "INSERT INTO director_goals("
-            "chat_id,session_id,goal,updated_at"
-            ") VALUES('chat','current','Keep this goal.',1.0)"
-        )
-        self.db.commit()
-
-        schema.initialize_database_schema(self.db)
-
-        self.assertEqual(
-            self.db.execute(
-                "SELECT version,name FROM schema_migrations ORDER BY version"
-            ).fetchall(),
-            [
-                (1, "core_baseline"),
-                (2, "scene_state"),
-                (3, "director_goals"),
-                (4, "sync_lifecycle_trigger"),
-            ],
-        )
-        self.assertEqual(
-            self.db.execute(
-                "SELECT content FROM messages WHERE session_id='current'"
-            ).fetchone()[0],
-            "keep message",
-        )
-        self.assertEqual(
-            self.db.execute(
-                "SELECT state_json FROM scene_states WHERE session_id='current'"
-            ).fetchone()[0],
-            '{"location":"Cafe"}',
-        )
-        self.assertEqual(
-            self.db.execute(
-                "SELECT goal FROM director_goals WHERE session_id='current'"
-            ).fetchone()[0],
-            "Keep this goal.",
+            1,
         )
 
 

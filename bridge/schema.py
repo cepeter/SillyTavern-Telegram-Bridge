@@ -9,7 +9,7 @@ from bridge.migrations import (
     run_migrations as _run_migrations,
 )
 
-def _ensure_core_tables(db: sqlite3.Connection) -> None:
+def _create_core_tables(db: sqlite3.Connection) -> None:
     """Create metadata, messages, sessions, and response variant tables."""
     db.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     db.execute("""CREATE TABLE IF NOT EXISTS messages (
@@ -18,15 +18,9 @@ def _ensure_core_tables(db: sqlite3.Connection) -> None:
         role TEXT NOT NULL,
         content TEXT NOT NULL,
         telegram_message_id TEXT,
+        telegram_message_ids TEXT NOT NULL DEFAULT '[]',
         created_at REAL NOT NULL
     )""")
-    columns = {row[1] for row in db.execute("PRAGMA table_info(messages)").fetchall()}
-    if "session_id" not in columns:
-        db.execute("ALTER TABLE messages ADD COLUMN session_id TEXT NOT NULL DEFAULT 'default'")
-    if "telegram_message_id" not in columns:
-        db.execute("ALTER TABLE messages ADD COLUMN telegram_message_id TEXT")
-    if "telegram_message_ids" not in columns:
-        db.execute("ALTER TABLE messages ADD COLUMN telegram_message_ids TEXT NOT NULL DEFAULT '[]'")
     db.execute("""CREATE TABLE IF NOT EXISTS sessions (
         chat_id TEXT NOT NULL,
         session_id TEXT NOT NULL,
@@ -42,13 +36,6 @@ def _ensure_core_tables(db: sqlite3.Connection) -> None:
         updated_at REAL NOT NULL,
         PRIMARY KEY(chat_id, session_id)
     )""")
-    session_columns = {row[1] for row in db.execute("PRAGMA table_info(sessions)").fetchall()}
-    if "author_note" not in session_columns:
-        db.execute("ALTER TABLE sessions ADD COLUMN author_note TEXT NOT NULL DEFAULT ''")
-    if "system_prompt" not in session_columns:
-        db.execute("ALTER TABLE sessions ADD COLUMN system_prompt TEXT NOT NULL DEFAULT ''")
-    if "response_language" not in session_columns:
-        db.execute("ALTER TABLE sessions ADD COLUMN response_language TEXT NOT NULL DEFAULT 'auto'")
     db.execute("CREATE INDEX IF NOT EXISTS messages_session_idx ON messages(chat_id, session_id, created_at)")
     db.execute("CREATE INDEX IF NOT EXISTS messages_telegram_idx ON messages(chat_id, telegram_message_id)")
     db.execute("CREATE INDEX IF NOT EXISTS messages_session_created_idx ON messages(chat_id, session_id, created_at DESC)")
@@ -64,13 +51,10 @@ def _ensure_core_tables(db: sqlite3.Connection) -> None:
         selected INTEGER NOT NULL DEFAULT 1,
         created_at REAL NOT NULL
     )""")
-    variant_columns = {row[1] for row in db.execute("PRAGMA table_info(response_variants)").fetchall()}
-    if "user_rowid" not in variant_columns:
-        db.execute("ALTER TABLE response_variants ADD COLUMN user_rowid INTEGER NOT NULL DEFAULT 0")
     db.execute("CREATE INDEX IF NOT EXISTS variants_session_idx ON response_variants(chat_id, session_id, user_rowid, created_at)")
 
 
-def _ensure_generation_tables(db: sqlite3.Connection) -> None:
+def _create_generation_tables(db: sqlite3.Connection) -> None:
     """Create generation settings, presets, and summary tables."""
     db.execute("""CREATE TABLE IF NOT EXISTS generation_settings (
         chat_id TEXT NOT NULL,
@@ -112,8 +96,8 @@ def _ensure_generation_tables(db: sqlite3.Connection) -> None:
 
 
 
-def _ensure_rag_tables(db: sqlite3.Connection) -> None:
-    """Create the canonical Data Bank and embedding schema."""
+def _create_rag_tables(db: sqlite3.Connection) -> None:
+    """Create Data Bank and embedding tables."""
     db.execute("""CREATE TABLE IF NOT EXISTS data_bank_documents (
         chat_id TEXT NOT NULL,
         document_id TEXT NOT NULL,
@@ -153,8 +137,7 @@ def _ensure_rag_tables(db: sqlite3.Connection) -> None:
         created_at REAL NOT NULL
     )""")
 
-
-def _ensure_job_tables(db: sqlite3.Connection) -> None:
+def _create_job_tables(db: sqlite3.Connection) -> None:
     """Create durable update, failed-turn, and job tables and clean old rows."""
     db.execute("""CREATE TABLE IF NOT EXISTS processed_updates (
         update_id INTEGER PRIMARY KEY,
@@ -172,9 +155,6 @@ def _ensure_job_tables(db: sqlite3.Connection) -> None:
         updated_at REAL NOT NULL,
         PRIMARY KEY(chat_id, telegram_message_id)
     )""")
-    failed_columns = {row[1] for row in db.execute("PRAGMA table_info(failed_turns)").fetchall()}
-    if "session_id" not in failed_columns:
-        db.execute("ALTER TABLE failed_turns ADD COLUMN session_id TEXT NOT NULL DEFAULT ''")
     db.execute("""CREATE TABLE IF NOT EXISTS jobs (
         job_id INTEGER PRIMARY KEY AUTOINCREMENT,
         update_id INTEGER UNIQUE,
@@ -198,7 +178,7 @@ def _ensure_job_tables(db: sqlite3.Connection) -> None:
 
 
 
-def _ensure_panel_tables(db: sqlite3.Connection) -> None:
+def _create_application_tables(db: sqlite3.Connection) -> None:
     """Create callback, panel, operation, FTS, and group tables."""
     db.execute("""CREATE TABLE IF NOT EXISTS callback_tokens (
         token TEXT PRIMARY KEY,
@@ -216,9 +196,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         expires_at REAL NOT NULL,
         PRIMARY KEY(chat_id, message_id)
     )""")
-    panel_columns = {row[1] for row in db.execute("PRAGMA table_info(panel_sessions)").fetchall()}
-    if "owner_user_id" not in panel_columns:
-        db.execute("ALTER TABLE panel_sessions ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT ''")
     db.execute("CREATE INDEX IF NOT EXISTS panel_sessions_expires_idx ON panel_sessions(expires_at)")
     db.execute("""CREATE TABLE IF NOT EXISTS operations (
         operation_id TEXT PRIMARY KEY,
@@ -245,17 +222,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         PRIMARY KEY(chat_id, session_id),
         UNIQUE(chat_id, sync_id)
     )""")
-    sync_columns = {row[1] for row in db.execute("PRAGMA table_info(sync_bindings)").fetchall()}
-    for column, definition in {
-        "conflict": "TEXT NOT NULL DEFAULT ''",
-        "last_error": "TEXT NOT NULL DEFAULT ''",
-        "last_checked_at": "REAL NOT NULL DEFAULT 0",
-        "realtime_enabled": "INTEGER NOT NULL DEFAULT 0",
-        "realtime_failures": "INTEGER NOT NULL DEFAULT 0",
-        "realtime_next_retry_at": "REAL NOT NULL DEFAULT 0",
-    }.items():
-        if column not in sync_columns:
-            db.execute(f"ALTER TABLE sync_bindings ADD COLUMN {column} {definition}")
     db.execute("CREATE INDEX IF NOT EXISTS sync_bindings_realtime_idx ON sync_bindings(realtime_enabled, realtime_next_retry_at)")
     db.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS data_bank_fts USING fts5(
         content,
@@ -279,15 +245,6 @@ def _ensure_panel_tables(db: sqlite3.Connection) -> None:
         updated_at REAL NOT NULL,
         PRIMARY KEY(chat_id, session_id)
     )""")
-    group_columns = {row[1] for row in db.execute("PRAGMA table_info(group_sessions)").fetchall()}
-    if "mode" not in group_columns:
-        db.execute("ALTER TABLE group_sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'round_robin'")
-    if "forced_speaker" not in group_columns:
-        db.execute("ALTER TABLE group_sessions ADD COLUMN forced_speaker TEXT NOT NULL DEFAULT ''")
-    if "turn_user_id" not in group_columns:
-        db.execute("ALTER TABLE group_sessions ADD COLUMN turn_user_id TEXT NOT NULL DEFAULT ''")
-    if "turn_users_json" not in group_columns:
-        db.execute("ALTER TABLE group_sessions ADD COLUMN turn_users_json TEXT NOT NULL DEFAULT '[]'")
 
 
 
@@ -335,15 +292,12 @@ def _run_startup_database_cleanup(db: sqlite3.Connection) -> None:
     )
 
 
-def _migration_001_core_baseline(db: sqlite3.Connection) -> None:
-    _ensure_core_tables(db)
-    _ensure_generation_tables(db)
-    _ensure_rag_tables(db)
-    _ensure_job_tables(db)
-    _ensure_panel_tables(db)
-
-
-def _migration_002_scene_state(db: sqlite3.Connection) -> None:
+def _create_initial_schema(db: sqlite3.Connection) -> None:
+    _create_core_tables(db)
+    _create_generation_tables(db)
+    _create_rag_tables(db)
+    _create_job_tables(db)
+    _create_application_tables(db)
     db.execute(
         """CREATE TABLE IF NOT EXISTS scene_states (
             chat_id TEXT NOT NULL,
@@ -366,9 +320,6 @@ def _migration_002_scene_state(db: sqlite3.Connection) -> None:
             WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
         END"""
     )
-
-
-def _migration_003_director_goals(db: sqlite3.Connection) -> None:
     db.execute(
         """CREATE TABLE IF NOT EXISTS director_goals (
             chat_id TEXT NOT NULL,
@@ -386,11 +337,6 @@ def _migration_003_director_goals(db: sqlite3.Connection) -> None:
             WHERE chat_id=OLD.chat_id AND session_id=OLD.session_id;
         END"""
     )
-
-
-def _migration_004_sync_lifecycle_trigger(
-    db: sqlite3.Connection,
-) -> None:
     db.execute(
         """CREATE TRIGGER IF NOT EXISTS sessions_delete_sync_binding
         AFTER DELETE ON sessions
@@ -403,14 +349,7 @@ def _migration_004_sync_lifecycle_trigger(
 
 
 SCHEMA_MIGRATIONS = (
-    _Migration(1, "core_baseline", _migration_001_core_baseline),
-    _Migration(2, "scene_state", _migration_002_scene_state),
-    _Migration(3, "director_goals", _migration_003_director_goals),
-    _Migration(
-        4,
-        "sync_lifecycle_trigger",
-        _migration_004_sync_lifecycle_trigger,
-    ),
+    _Migration(1, "initial_schema", _create_initial_schema),
 )
 
 

@@ -765,6 +765,17 @@ python sillytavern_telegram_bridge.py --check
 This loads the environment, validates the native card, checks permissions, tests
 optional Live Sync auth, and verifies the Telegram bot identity.
 
+### Pre-production database reset
+
+SQLite now starts from one `initial_schema` migration containing the complete
+current schema and constraints. Databases created by earlier pre-production
+revisions are intentionally unsupported.
+
+Before starting this revision with an older development database, stop the
+bridge, archive the existing SQLite file if you need its data for inspection,
+then remove or rename the active database and let the bridge create a fresh
+one. The bridge does not automatically convert or delete an older database.
+
 Start the bridge:
 
 ```bash

@@ -346,7 +346,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
                 migration.version
                 for migration in _m_schema.SCHEMA_MIGRATIONS
             ),
-            (1, 2, 3, 4),
+            (1,),
         )
 
 
