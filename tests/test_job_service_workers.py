@@ -117,13 +117,9 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
     def test_message_worker_success_uses_job_service(self):
-        with patch.object(
-            _m_database,
-            "committed_assistant_for_message",
+        with patch.object(_m_main, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(
-            _m_message_commands,
-            "process_message",
+        ), patch.object(_m_main, "process_message",
         ):
             _m_main.process_message_job(
                 self.services,
@@ -168,13 +164,9 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
     def test_image_worker_success_and_failure_use_job_service(self):
-        with patch.object(
-            _m_database,
-            "committed_assistant_for_message",
+        with patch.object(_m_main, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(
-            _m_telegram,
-            "process_telegram_image",
+        ), patch.object(_m_main, "process_telegram_image",
         ):
             _m_main.process_image_job(
                 self.services,
@@ -191,13 +183,9 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
         self.jobs.calls.clear()
-        with patch.object(
-            _m_database,
-            "committed_assistant_for_message",
+        with patch.object(_m_main, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(
-            _m_telegram,
-            "process_telegram_image",
+        ), patch.object(_m_main, "process_telegram_image",
             side_effect=RuntimeError("image boom"),
         ):
             _m_main.process_image_job(
@@ -224,13 +212,9 @@ class JobWorkerServiceTests(unittest.TestCase):
             "from": {"id": "100"},
             "message": {"chat": {"id": "chat"}},
         }
-        with patch.object(
-            _m_database,
-            "operation_was_applied",
+        with patch.object(_m_main, "operation_was_applied",
             return_value=False,
-        ), patch.object(
-            _m_callbacks,
-            "process_callback",
+        ), patch.object(_m_main, "process_callback",
         ):
             _m_main.process_callback_job(
                 self.services,
@@ -244,13 +228,9 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
         self.jobs.calls.clear()
-        with patch.object(
-            _m_database,
-            "operation_was_applied",
+        with patch.object(_m_main, "operation_was_applied",
             return_value=False,
-        ), patch.object(
-            _m_callbacks,
-            "process_callback",
+        ), patch.object(_m_main, "process_callback",
             side_effect=RuntimeError("callback boom"),
         ):
             _m_main.process_callback_job(
@@ -298,9 +278,7 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
     def test_edit_worker_success_and_failure_use_job_service(self):
-        with patch.object(
-            _m_commands,
-            "edit_telegram_user_message",
+        with patch.object(_m_main, "edit_telegram_user_message",
         ):
             _m_main.process_edit_job(
                 self.services,
@@ -315,9 +293,7 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
         self.jobs.calls.clear()
-        with patch.object(
-            _m_commands,
-            "edit_telegram_user_message",
+        with patch.object(_m_main, "edit_telegram_user_message",
             side_effect=RuntimeError("edit boom"),
         ), patch.object(
             _m_main,
@@ -416,9 +392,7 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
     def test_document_worker_success_and_failure_use_job_service(self):
-        with patch.object(
-            _m_telegram,
-            "import_telegram_document",
+        with patch.object(_m_help, "import_telegram_document",
         ):
             _m_help.process_document_job(
                 self.services,
@@ -433,9 +407,7 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
         self.jobs.calls.clear()
-        with patch.object(
-            _m_telegram,
-            "import_telegram_document",
+        with patch.object(_m_help, "import_telegram_document",
             side_effect=RuntimeError("document boom"),
         ):
             _m_help.process_document_job(
@@ -458,17 +430,11 @@ class JobWorkerServiceTests(unittest.TestCase):
         self.jobs.actor = "777"
         seen = []
 
-        with patch.object(
-            _m_runtime_context,
-            "set_panel_actor_context",
+        with patch.object(_m_main, "set_panel_actor_context",
             side_effect=lambda value: seen.append(value),
-        ), patch.object(
-            _m_database,
-            "committed_assistant_for_message",
+        ), patch.object(_m_main, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(
-            _m_message_commands,
-            "process_message",
+        ), patch.object(_m_main, "process_message",
         ):
             _m_main.process_message_job(
                 self.services,
@@ -487,9 +453,7 @@ class JobWorkerServiceTests(unittest.TestCase):
             "from": {"id": "100"},
             "message": {"chat": {"id": "chat"}},
         }
-        with patch.object(
-            _m_runtime_context,
-            "set_panel_actor_context",
+        with patch.object(_m_main, "set_panel_actor_context",
             side_effect=lambda value: seen.append(value),
         ), patch.object(
             _m_database,
@@ -506,13 +470,9 @@ class JobWorkerServiceTests(unittest.TestCase):
 
         self.jobs.calls.clear()
         seen.clear()
-        with patch.object(
-            _m_runtime_context,
-            "set_panel_actor_context",
+        with patch.object(_m_media, "set_panel_actor_context",
             side_effect=lambda value: seen.append(value),
-        ), patch.object(
-            _m_database,
-            "committed_assistant_for_message",
+        ), patch.object(_m_media, "committed_assistant_for_message",
             return_value=None,
         ), patch.object(
             _m_media,

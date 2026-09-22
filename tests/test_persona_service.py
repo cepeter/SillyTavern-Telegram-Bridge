@@ -409,9 +409,7 @@ class PersonaCompatibilityServiceTests(unittest.TestCase):
                     "sillytavern_avatar": "native.png",
                 }
             },
-        ), patch.object(
-            _m_cards,
-            "default_persona_id",
+        ), patch.object(_m_persona_sync, "default_persona_id",
             return_value="native.png",
         ), patch.object(
             _m_persona_sync,

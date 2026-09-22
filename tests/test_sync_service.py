@@ -197,8 +197,7 @@ class SyncCompatibilityServiceTests(unittest.TestCase):
 
         with patch.object(
             _m_sync_api, "phase3_sync_poll", final_poll
-        ), patch.object(
-            _m_sync_core, "sync_binding"
+        ), patch.object(_m_sync_api, "sync_binding"
         ) as binding, patch.object(
             _m_sync_api, "phase3_sync_now"
         ) as sync_now, patch.object(

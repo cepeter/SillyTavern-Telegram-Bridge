@@ -8,6 +8,7 @@ import unittest
 
 import bridge.config as config
 import bridge.callbacks as _m_callbacks
+import bridge.cards as _m_cards
 import bridge.character_identity as _m_character_identity
 import bridge.command_routes as _m_command_routes
 import bridge.groups as _m_groups
@@ -24,14 +25,14 @@ class ItemPanelLayoutTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
-        self.old_request = _m_panel_callback_routes.telegram_request
+        self.old_request = _m_cards.telegram_request
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
         self.calls = []
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: self.calls.append((method, payload)) or {"message_id": 1}
+        _m_cards.telegram_request = lambda _token, method, payload: self.calls.append((method, payload)) or {"message_id": 1}
 
     def tearDown(self):
-        _m_panel_callback_routes.telegram_request = self.old_request
+        _m_cards.telegram_request = self.old_request
         self.db.close()
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
@@ -60,14 +61,14 @@ class ItemPanelLayoutTests(unittest.TestCase):
         self.assertNotIn("enum:presetdelete", callbacks)
 
     def test_databank_rows_have_versions_and_remove_callbacks(self):
-        old_docs = _m_status_panels.data_bank_documents
+        old_docs = _m_help.data_bank_documents
         old_coverage = _m_help.rag_embedding_coverage
-        _m_status_panels.data_bank_documents = lambda _db, _chat: [("doc-1", "lore.json", 1, 2)]
+        _m_help.data_bank_documents = lambda _db, _chat: [("doc-1", "lore.json", 1, 2)]
         _m_help.rag_embedding_coverage = lambda _db, _chat: (2, 2)
         try:
             _m_command_routes.send_databank_menu("bot", "chat", self.db)
         finally:
-            _m_status_panels.data_bank_documents = old_docs
+            _m_help.data_bank_documents = old_docs
             _m_help.rag_embedding_coverage = old_coverage
         callbacks = self._callbacks(self.calls[-1][1])
         self.assertTrue(any(value.startswith("enum:ragversions:") for value in callbacks))
@@ -75,35 +76,35 @@ class ItemPanelLayoutTests(unittest.TestCase):
 
     def test_character_upload_reports_duplicate_and_new_version(self):
         root = Path(self.tmp.name)
-        old_character_dir = _m_main.CHARACTER_DIR
-        old_backup_dir = _m_character_identity.CHARACTER_BACKUP_DIR
+        old_character_dir = _m_telegram.CHARACTER_DIR
+        old_backup_dir = _m_telegram.CHARACTER_BACKUP_DIR
         old_parse = _m_telegram.parse_png_chara_bytes
-        old_fields = _m_main.card_fields
-        old_send = _m_memory_curator.send_text
+        old_fields = _m_telegram.card_fields
+        old_send = _m_telegram.send_text
         sent = []
-        _m_main.CHARACTER_DIR = root / "characters"
-        _m_character_identity.CHARACTER_BACKUP_DIR = root / "backups"
+        _m_telegram.CHARACTER_DIR = root / "characters"
+        _m_telegram.CHARACTER_BACKUP_DIR = root / "backups"
         _m_telegram.parse_png_chara_bytes = lambda _raw: {"name": "Test Character"}
-        _m_main.card_fields = lambda _card: {"name": "Test Character"}
-        _m_memory_curator.send_text = lambda _token, _chat, text: sent.append(text) or []
+        _m_telegram.card_fields = lambda _card: {"name": "Test Character"}
+        _m_telegram.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             _m_telegram.import_character_card(self.db, "bot", "chat", "one.png", b"one")
             _m_telegram.import_character_card(self.db, "bot", "chat", "one.png", b"one")
             _m_telegram.import_character_card(self.db, "bot", "chat", "one.png", b"two")
         finally:
-            _m_main.CHARACTER_DIR = old_character_dir
-            _m_character_identity.CHARACTER_BACKUP_DIR = old_backup_dir
+            _m_telegram.CHARACTER_DIR = old_character_dir
+            _m_telegram.CHARACTER_BACKUP_DIR = old_backup_dir
             _m_telegram.parse_png_chara_bytes = old_parse
-            _m_main.card_fields = old_fields
-            _m_memory_curator.send_text = old_send
+            _m_telegram.card_fields = old_fields
+            _m_telegram.send_text = old_send
         self.assertIn("Duplicate character card:", sent[1])
         self.assertIn("New character-card version installed:", sent[2])
         self.assertIn("Previous version retained as Test_Character.png", sent[2])
 
     def test_group_rows_remove_members_without_card_delete_callback(self):
         session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
-        old_fields = _m_sync_api.card_fields_from_file
-        _m_sync_api.card_fields_from_file = lambda _filename: {"name": "Member"}
+        old_fields = _m_groups.card_fields_from_file
+        _m_groups.card_fields_from_file = lambda _filename: {"name": "Member"}
         _m_groups.save_group_state(self.db, "chat", session["session_id"], {
             "title": "Group", "enabled": True, "turn_index": 0,
             "mode": "round_robin", "forced_speaker": "",
@@ -112,7 +113,7 @@ class ItemPanelLayoutTests(unittest.TestCase):
         try:
             _m_panel_callback_routes.send_group_menu(self.db, "bot", "chat", session)
         finally:
-            _m_sync_api.card_fields_from_file = old_fields
+            _m_groups.card_fields_from_file = old_fields
         callbacks = self._callbacks(self.calls[-1][1])
         self.assertTrue(any(value.startswith("groupremove:") for value in callbacks))
         self.assertFalse(any(value.startswith("characterdelete") for value in callbacks))

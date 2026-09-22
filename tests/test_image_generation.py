@@ -36,15 +36,15 @@ class ImageGenerationTests(unittest.TestCase):
             "providers:\n  test-image:\n    name: Test Image\n    api_endpoint: https://images.example/v1\n    api_key_env: TEST_IMAGE_KEY\n    image_enabled: true\n    image_models: [test-model]\n",
             encoding="utf-8",
         )
-        self.old_catalog = _m_generation.PROVIDER_CONFIG_FILE
-        self.old_urlopen = _m_generation.strict_urlopen
+        self.old_catalog = _m_image_generation.PROVIDER_CONFIG_FILE
+        self.old_urlopen = _m_image_generation.strict_urlopen
         self.old_key = os.environ.get("TEST_IMAGE_KEY")
-        _m_generation.PROVIDER_CONFIG_FILE = self.catalog
+        _m_image_generation.PROVIDER_CONFIG_FILE = self.catalog
         os.environ["TEST_IMAGE_KEY"] = "test-key"
 
     def tearDown(self):
-        _m_generation.PROVIDER_CONFIG_FILE = self.old_catalog
-        _m_generation.strict_urlopen = self.old_urlopen
+        _m_image_generation.PROVIDER_CONFIG_FILE = self.old_catalog
+        _m_image_generation.strict_urlopen = self.old_urlopen
         if self.old_key is None:
             os.environ.pop("TEST_IMAGE_KEY", None)
         else:
@@ -59,7 +59,7 @@ class ImageGenerationTests(unittest.TestCase):
             captured.append((request, timeout))
             return _Response({"data": [{"b64_json": base64.b64encode(raw).decode(), "revised_prompt": "revised"}]})
 
-        _m_generation.strict_urlopen = fake_urlopen
+        _m_image_generation.strict_urlopen = fake_urlopen
         result = _m_image_generation.generate_image("test-image::test-model", "a small moon", "1024x1024")
         body = json.loads(captured[0][0].data.decode())
         self.assertEqual(result, (raw, "revised", "test-image::test-model"))

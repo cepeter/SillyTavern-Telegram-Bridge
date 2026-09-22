@@ -23,7 +23,7 @@ class ResetBehaviorTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         self.old_reset = getattr(_m_message_commands, "reset_session")
-        self.old_send = getattr(_m_telegram, "send_text")
+        self.old_send = getattr(_m_panel_callback_routes, "send_text")
         self.old_remove = getattr(_m_media, "remove_inline_keyboard")
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
@@ -31,7 +31,7 @@ class ResetBehaviorTests(unittest.TestCase):
 
     def tearDown(self):
         _m_panel_callback_routes.reset_session = self.old_reset
-        _m_memory_curator.send_text = self.old_send
+        _m_panel_callback_routes.send_text = self.old_send
         _m_panel_callback_routes.remove_inline_keyboard = self.old_remove
         self.db.close()
         config.DB_FILE = self.old_db
@@ -57,9 +57,9 @@ class ResetBehaviorTests(unittest.TestCase):
         sent = []
         removed = []
         original_answer = lambda *_args, **_kwargs: None
-        setattr(_m_message_commands, "reset_session", lambda *_args, **_kwargs: None)
-        setattr(_m_telegram, "send_text", lambda _token, _chat, text: sent.append(text) or [])
-        setattr(_m_media, "remove_inline_keyboard", lambda _token, callback: removed.append(callback))
+        setattr(_m_panel_callback_routes, "reset_session", lambda *_args, **_kwargs: None)
+        setattr(_m_panel_callback_routes, "send_text", lambda _token, _chat, text: sent.append(text) or [])
+        setattr(_m_panel_callback_routes, "remove_inline_keyboard", lambda _token, callback: removed.append(callback))
         callback = {"id": "callback-1", "message": {"message_id": 10, "chat": {"id": "chat"}}}
         handled = _m_panel_callback_routes.handle_reset_callback(
             self.db, "token", callback, original_answer, "reset:confirm", "chat",

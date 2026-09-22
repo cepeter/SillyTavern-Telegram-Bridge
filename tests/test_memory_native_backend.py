@@ -181,7 +181,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
-            _m_common,
+            _m_memory,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: (
                 queued.append(
@@ -334,7 +334,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
-            _m_common,
+            _m_memory,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: (
                 queued.append(
@@ -375,7 +375,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
-            _m_common,
+            _m_memory,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: (
                 queued.append(
@@ -415,7 +415,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         memory_backend.hindsight_client = lambda: fake
 
         with patch.object(
-            _m_common,
+            _m_memory,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: (
                 queued.append(

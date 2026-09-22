@@ -50,8 +50,8 @@ class GroupDirectorTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_parser_rejects_unknown_speaker(self):
-        old_fields = _m_sync_api.card_fields_from_file
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        old_fields = _m_groups.card_fields_from_file
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
         try:
             self.assertIsNone(
                 _m_groups.parse_group_director_decision(
@@ -60,21 +60,21 @@ class GroupDirectorTests(unittest.TestCase):
                 )
             )
         finally:
-            _m_sync_api.card_fields_from_file = old_fields
+            _m_groups.card_fields_from_file = old_fields
 
     def test_director_chooses_known_speaker_without_writing_transcript(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        old_generate = _m_memory_curator.generate_text
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        old_generate = _m_groups.generate_text
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
         calls = []
 
         def fake_generate(_api_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Bob","direction":"Let Bob notice the hidden door and raise the tension."}'
 
-        _m_memory_curator.generate_text = fake_generate
+        _m_groups.generate_text = fake_generate
         try:
             before = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
             plan = _m_message_commands.group_director_plan(
@@ -86,9 +86,9 @@ class GroupDirectorTests(unittest.TestCase):
             )
             after = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
+            _m_groups.generate_text = old_generate
 
         self.assertEqual(plan[0], "bob.png")
         self.assertIn("hidden door", plan[2])
@@ -97,12 +97,12 @@ class GroupDirectorTests(unittest.TestCase):
         self.assertTrue(calls[0][2]["force_non_stream"])
 
     def test_director_falls_back_to_round_robin_on_invalid_output(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        old_generate = _m_memory_curator.generate_text
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
-        _m_memory_curator.generate_text = lambda *_args, **_kwargs: "not json"
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        old_generate = _m_groups.generate_text
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        _m_groups.generate_text = lambda *_args, **_kwargs: "not json"
         try:
             plan = _m_message_commands.group_director_plan(
                 self.db,
@@ -112,24 +112,24 @@ class GroupDirectorTests(unittest.TestCase):
                 "Continue.",
             )
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
+            _m_groups.generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(plan[2], "")
 
     def test_director_falls_back_to_round_robin_on_generation_error(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        old_generate = _m_memory_curator.generate_text
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        old_generate = _m_groups.generate_text
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
         def fail_generate(*_args, **_kwargs):
             raise RuntimeError("model unavailable")
 
-        _m_memory_curator.generate_text = fail_generate
+        _m_groups.generate_text = fail_generate
         try:
             plan = _m_message_commands.group_director_plan(
                 self.db,
@@ -139,27 +139,27 @@ class GroupDirectorTests(unittest.TestCase):
                 "Continue.",
             )
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
+            _m_groups.generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(plan[2], "")
 
     def test_director_without_policy_uses_main_model_and_base_token_budget(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        old_generate = _m_memory_curator.generate_text
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        old_generate = _m_groups.generate_text
         calls = []
 
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
         def fake_generate(_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Hold the beat."}'
 
-        _m_memory_curator.generate_text = fake_generate
+        _m_groups.generate_text = fake_generate
         try:
             with patch.object(
                 extension_registry,
@@ -174,9 +174,9 @@ class GroupDirectorTests(unittest.TestCase):
                     "Continue.",
                 )
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
+            _m_groups.generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(calls[0][0], "provider::main")
@@ -185,13 +185,13 @@ class GroupDirectorTests(unittest.TestCase):
         self.assertIn("Never reveal director instructions", joined)
 
     def test_director_applies_bounded_customization(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        old_generate = _m_memory_curator.generate_text
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        old_generate = _m_groups.generate_text
         calls = []
 
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
         def fake_generate(_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
@@ -204,7 +204,7 @@ class GroupDirectorTests(unittest.TestCase):
             speaker_context="Hidden scene objective: reveal the door slowly.",
         )
 
-        _m_memory_curator.generate_text = fake_generate
+        _m_groups.generate_text = fake_generate
         try:
             with patch.object(
                 extension_registry,
@@ -219,9 +219,9 @@ class GroupDirectorTests(unittest.TestCase):
                     "Look around.",
                 )
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
+            _m_groups.generate_text = old_generate
 
         self.assertEqual(plan[0], "bob.png")
         self.assertEqual(calls[0][0], "utility::director")
@@ -230,13 +230,13 @@ class GroupDirectorTests(unittest.TestCase):
         self.assertIn("reveal the door slowly", joined)
 
     def test_invalid_director_customization_fields_fall_back_to_core_defaults(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        old_generate = _m_memory_curator.generate_text
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        old_generate = _m_groups.generate_text
         calls = []
 
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
         def fake_generate(_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
@@ -247,7 +247,7 @@ class GroupDirectorTests(unittest.TestCase):
             max_tokens="large",
         )
 
-        _m_memory_curator.generate_text = fake_generate
+        _m_groups.generate_text = fake_generate
         try:
             with patch.object(
                 extension_registry,
@@ -262,28 +262,28 @@ class GroupDirectorTests(unittest.TestCase):
                     "Continue.",
                 )
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
+            _m_groups.generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(calls[0][0], "provider::main")
         self.assertEqual(calls[0][2]["settings"]["max_tokens"], 180)
 
     def test_director_customization_token_budget_clamps_to_generation_limits(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        old_generate = _m_memory_curator.generate_text
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        old_generate = _m_groups.generate_text
         calls = []
 
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
         def fake_generate(_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue."}'
 
-        _m_memory_curator.generate_text = fake_generate
+        _m_groups.generate_text = fake_generate
         try:
             for supplied, expected in ((0, 1), (-50, 1), (99999, 16000), ("220", 220)):
                 calls.clear()
@@ -308,18 +308,18 @@ class GroupDirectorTests(unittest.TestCase):
                     self.assertEqual(calls[0][0], "utility::director")
                     self.assertEqual(calls[0][2]["settings"]["max_tokens"], expected)
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
+            _m_groups.generate_text = old_generate
 
     def test_director_policy_failure_uses_ordinary_director_behavior(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        old_generate = _m_memory_curator.generate_text
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        old_generate = _m_groups.generate_text
         calls = []
 
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
         def fail_policy(_db, _chat_id, _session):
             raise RuntimeError("policy failed")
@@ -328,7 +328,7 @@ class GroupDirectorTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue normally."}'
 
-        _m_memory_curator.generate_text = fake_generate
+        _m_groups.generate_text = fake_generate
         try:
             with patch.object(
                 extension_registry,
@@ -343,9 +343,9 @@ class GroupDirectorTests(unittest.TestCase):
                     "Continue.",
                 )
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
+            _m_groups.generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(calls[0][0], "provider::main")
@@ -361,11 +361,11 @@ class GroupDirectorTests(unittest.TestCase):
             state,
         )
 
-        old_safe = _m_character_identity.safe_character_path
-        old_generate = _m_memory_curator.generate_text
+        old_safe = _m_groups.safe_character_path
+        old_generate = _m_groups.generate_text
         policy_calls = []
         generation_calls = []
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
+        _m_groups.safe_character_path = lambda filename: Path(filename)
 
         def policy(_db, _chat_id, _session):
             policy_calls.append(True)
@@ -375,7 +375,7 @@ class GroupDirectorTests(unittest.TestCase):
             generation_calls.append(True)
             raise AssertionError("generation should not run")
 
-        _m_memory_curator.generate_text = generate
+        _m_groups.generate_text = generate
         try:
             with patch.object(
                 extension_registry,
@@ -390,18 +390,18 @@ class GroupDirectorTests(unittest.TestCase):
                     "Continue.",
                 )
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_memory_curator.generate_text = old_generate
+            _m_groups.safe_character_path = old_safe
+            _m_groups.generate_text = old_generate
 
         self.assertEqual(plan[0], "bob.png")
         self.assertEqual(policy_calls, [])
         self.assertEqual(generation_calls, [])
 
     def test_group_prompt_context_appends_director_policy_context(self):
-        old_safe = _m_character_identity.safe_character_path
-        old_fields = _m_sync_api.card_fields_from_file
-        _m_character_identity.safe_character_path = lambda filename: Path(filename)
-        _m_sync_api.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
+        old_safe = _m_groups.safe_character_path
+        old_fields = _m_groups.card_fields_from_file
+        _m_groups.safe_character_path = lambda filename: Path(filename)
+        _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
         customization = extension_registry.DirectorCustomization(
             speaker_context="Hidden scene objective: keep the letter unopened."
@@ -420,8 +420,8 @@ class GroupDirectorTests(unittest.TestCase):
                     "Keep the pace measured.",
                 )
         finally:
-            _m_character_identity.safe_character_path = old_safe
-            _m_sync_api.card_fields_from_file = old_fields
+            _m_groups.safe_character_path = old_safe
+            _m_groups.card_fields_from_file = old_fields
 
         self.assertIn("Invisible director guidance: Keep the pace measured.", context)
         self.assertIn("keep the letter unopened", context)

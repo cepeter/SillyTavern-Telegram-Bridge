@@ -13,6 +13,8 @@ import json
 import os
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.cards as _m_cards
+import bridge.input_flows as _m_input_flows
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
 import bridge.generation as _m_generation
@@ -174,12 +176,12 @@ class AuditRegressionTests(unittest.TestCase):
         }
         opened = []
         originals = {
-            "card": _m_sync_api.card_fields_from_file,
+            "card": _m_message_commands.card_fields_from_file,
             "persona": _m_command_routes.send_persona_menu,
             "preset": _m_command_routes.send_preset_menu,
             "branch": _m_command_routes.send_swipe_menu,
         }
-        _m_sync_api.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_persona_menu = lambda *_args, **_kwargs: opened.append("persona")
         _m_command_routes.send_preset_menu = lambda *_args, **_kwargs: opened.append("preset")
         _m_command_routes.send_swipe_menu = lambda *_args, **_kwargs: opened.append("branch")
@@ -187,7 +189,7 @@ class AuditRegressionTests(unittest.TestCase):
             for command in ("/persona user", "/preset use creative", "/branch 2"):
                 _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", command)
         finally:
-            _m_sync_api.card_fields_from_file = originals["card"]
+            _m_message_commands.card_fields_from_file = originals["card"]
             _m_command_routes.send_persona_menu = originals["persona"]
             _m_command_routes.send_preset_menu = originals["preset"]
             _m_command_routes.send_swipe_menu = originals["branch"]
@@ -206,18 +208,18 @@ class AuditRegressionTests(unittest.TestCase):
             "post_history_instructions": "",
         }
         sent = []
-        original_card = _m_sync_api.card_fields_from_file
-        original_send = _m_memory_curator.send_text
-        original_generate = _m_memory_curator.generate_text
-        _m_sync_api.card_fields_from_file = lambda _filename: fields
-        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        _m_memory_curator.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unknown provider action must not generate"))
+        original_card = _m_message_commands.card_fields_from_file
+        original_send = _m_command_routes.send_text
+        original_generate = _m_message_commands.generate_text
+        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
+        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unknown provider action must not generate"))
         try:
             _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/providers unknown")
         finally:
-            _m_sync_api.card_fields_from_file = original_card
-            _m_memory_curator.send_text = original_send
-            _m_memory_curator.generate_text = original_generate
+            _m_message_commands.card_fields_from_file = original_card
+            _m_command_routes.send_text = original_send
+            _m_message_commands.generate_text = original_generate
         self.assertEqual(sent, ["Unknown /providers action. Use /providers, /providers health, or /providers refresh."])
 
     def test_stscript_reset_opens_confirmation_panel(self):
@@ -238,54 +240,58 @@ class AuditRegressionTests(unittest.TestCase):
             "post_history_instructions": "",
         }
         opened = []
-        original_card = _m_sync_api.card_fields_from_file
+        original_card = _m_message_commands.card_fields_from_file
         original_panel = _m_command_routes.send_stscript_menu
-        _m_sync_api.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_stscript_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
             _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/stscript")
         finally:
-            _m_sync_api.card_fields_from_file = original_card
+            _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_stscript_menu = original_panel
         self.assertEqual(opened, [True])
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
 
     def test_stt_language_panel_has_auto_and_user_input(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_stt_language_menu("token", "chat", self.db)
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
         callbacks = {button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("enum:sttlanguage:auto", callbacks)
         self.assertIn("enum:stt:language_input", callbacks)
 
     def test_text_commands_open_scoped_input_and_cancel_clears_it(self):
         session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
-        original_send = _m_memory_curator.send_text
+        original_send = _m_input_flows.send_text
         sent = []
-        _m_memory_curator.send_text = lambda _token, _chat, text: sent.append(text) or [101]
+        _m_input_flows.send_text = lambda _token, _chat, text: sent.append(text) or [101]
         try:
             _m_command_routes.start_text_action_input(self.db, "token", "chat", session["session_id"], "edit", "Send replacement")
             self.assertIn("edit", _m_session_naming.get_meta(self.db, "text_action_input:chat", ""))
             self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}))
         finally:
-            _m_memory_curator.send_text = original_send
+            _m_input_flows.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "text_action_input:chat", ""), "")
         self.assertIn("Cancelled.", sent)
 
     def test_memory_databank_and_stscript_panels_expose_new_actions(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, _method, payload: calls.append(payload) or {}
+        original_request = _m_cards.telegram_request
+        original_stscript_request = _m_commands.telegram_request
+        request_stub = lambda _token, _method, payload: calls.append(payload) or {}
+        _m_cards.telegram_request = request_stub
+        _m_commands.telegram_request = request_stub
         try:
             _m_command_routes.send_memory_menu("token", "chat", self.db)
             _m_command_routes.send_databank_menu("token", "chat", self.db)
             _m_command_routes.send_stscript_menu("token", "chat")
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
+            _m_commands.telegram_request = original_stscript_request
         callbacks = {
             button["callback_data"]
             for payload in calls
@@ -310,18 +316,18 @@ class AuditRegressionTests(unittest.TestCase):
             "mes_example": "",
             "post_history_instructions": "",
         }
-        original_card = _m_sync_api.card_fields_from_file
-        original_menu = _m_command_routes.send_voice_input_menu
-        original_send = _m_memory_curator.send_text
-        _m_sync_api.card_fields_from_file = lambda _filename: fields
-        _m_command_routes.send_voice_input_menu = lambda *_args, **_kwargs: None
-        _m_memory_curator.send_text = lambda *_args, **_kwargs: []
+        original_card = _m_message_commands.card_fields_from_file
+        original_menu = _m_input_flows.send_voice_input_menu
+        original_send = _m_input_flows.send_text
+        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_input_flows.send_voice_input_menu = lambda *_args, **_kwargs: None
+        _m_input_flows.send_text = lambda *_args, **_kwargs: []
         try:
             _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "id")
         finally:
-            _m_sync_api.card_fields_from_file = original_card
-            _m_command_routes.send_voice_input_menu = original_menu
-            _m_memory_curator.send_text = original_send
+            _m_message_commands.card_fields_from_file = original_card
+            _m_input_flows.send_voice_input_menu = original_menu
+            _m_input_flows.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language:chat", ""), "id")
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language_input:chat", ""), "")
 
@@ -337,29 +343,29 @@ class AuditRegressionTests(unittest.TestCase):
             "post_history_instructions": "",
         }
         sent = []
-        original_card = _m_sync_api.card_fields_from_file
-        original_send = _m_memory_curator.send_text
-        original_generate = _m_memory_curator.generate_text
-        _m_sync_api.card_fields_from_file = lambda _filename: fields
-        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        _m_memory_curator.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed command must not generate"))
+        original_card = _m_message_commands.card_fields_from_file
+        original_send = _m_command_routes.send_text
+        original_generate = _m_message_commands.generate_text
+        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
+        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed command must not generate"))
         try:
             _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/model provider/model")
         finally:
-            _m_sync_api.card_fields_from_file = original_card
-            _m_memory_curator.send_text = original_send
-            _m_memory_curator.generate_text = original_generate
+            _m_message_commands.card_fields_from_file = original_card
+            _m_command_routes.send_text = original_send
+            _m_message_commands.generate_text = original_generate
         self.assertEqual(sent, ["Unknown or removed command. Use /help to see available commands."])
         self.assertEqual(_m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)["model_id"], session["model_id"])
 
     def test_preset_panel_has_save_action(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_preset_menu("token", "chat", self.db)
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
         callbacks = {button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("enum:preset:save", callbacks)
 
@@ -376,18 +382,18 @@ class AuditRegressionTests(unittest.TestCase):
             "post_history_instructions": "",
         }
         _m_session_naming.set_meta(self.db, "preset_save_input:chat", json.dumps({"session_id": session["session_id"], "expires_at": time.time() + 600}))
-        original_card = _m_sync_api.card_fields_from_file
-        original_menu = _m_command_routes.send_preset_menu
-        original_send = _m_memory_curator.send_text
-        _m_sync_api.card_fields_from_file = lambda _filename: fields
-        _m_command_routes.send_preset_menu = lambda *_args, **_kwargs: None
-        _m_memory_curator.send_text = lambda *_args, **_kwargs: []
+        original_card = _m_message_commands.card_fields_from_file
+        original_menu = _m_input_flows.send_preset_menu
+        original_send = _m_input_flows.send_text
+        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_input_flows.send_preset_menu = lambda *_args, **_kwargs: None
+        _m_input_flows.send_text = lambda *_args, **_kwargs: []
         try:
             _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "creative")
         finally:
-            _m_sync_api.card_fields_from_file = original_card
-            _m_command_routes.send_preset_menu = original_menu
-            _m_memory_curator.send_text = original_send
+            _m_message_commands.card_fields_from_file = original_card
+            _m_input_flows.send_preset_menu = original_menu
+            _m_input_flows.send_text = original_send
         self.assertIsNotNone(_m_commands.load_generation_preset(self.db, "chat", "creative"))
         self.assertEqual(_m_session_naming.get_meta(self.db, "preset_save_input:chat", ""), "")
 
@@ -408,28 +414,28 @@ class AuditRegressionTests(unittest.TestCase):
             "post_history_instructions": "",
         }
         sent = []
-        original_card = _m_sync_api.card_fields_from_file
+        original_card = _m_message_commands.card_fields_from_file
         original_panel = _m_message_commands.send_reset_confirmation_menu
-        original_purge = _m_main.purge_hindsight_session
+        original_purge = _m_memory.purge_hindsight_session
         original_reply = _m_message_commands.send_reply
-        original_generate = _m_memory_curator.generate_text
+        original_generate = _m_message_commands.generate_text
         panel = []
-        _m_sync_api.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_message_commands.send_reset_confirmation_menu = lambda *_args, **_kwargs: panel.append(True)
-        _m_main.purge_hindsight_session = lambda _db, _chat_id, _session_id: None
+        _m_memory.purge_hindsight_session = lambda _db, _chat_id, _session_id: None
         _m_message_commands.send_reply = lambda _token, _chat_id, text, *_args: sent.append(text)
-        _m_memory_curator.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate"))
+        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate"))
         try:
             _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/reset")
             self.assertEqual(panel, [True])
             self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
             _m_panel_callback_routes.reset_session(self.db, "token", "chat", session, operation_id=902)
         finally:
-            _m_sync_api.card_fields_from_file = original_card
+            _m_message_commands.card_fields_from_file = original_card
             _m_message_commands.send_reset_confirmation_menu = original_panel
-            _m_main.purge_hindsight_session = original_purge
+            _m_memory.purge_hindsight_session = original_purge
             _m_message_commands.send_reply = original_reply
-            _m_memory_curator.generate_text = original_generate
+            _m_message_commands.generate_text = original_generate
 
         rows = self.db.execute(
             "SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY rowid",
@@ -441,12 +447,12 @@ class AuditRegressionTests(unittest.TestCase):
 
     def test_reset_confirmation_panel_has_destructive_confirm_and_cancel(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_message_commands.telegram_request
+        _m_message_commands.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_message_commands.send_reset_confirmation_menu("token", "chat")
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_message_commands.telegram_request = original_request
         self.assertEqual(len(calls), 1)
         expected = "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n• Delete session SQLite data, and session documents.\n\nThis cannot be undone."
         self.assertEqual(calls[0][1]["text"], expected)
@@ -458,15 +464,15 @@ class AuditRegressionTests(unittest.TestCase):
         session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = {"name": "Test", "first_mes": ""}
         calls = []
-        original_purge = _m_main.purge_hindsight_session
-        original_reply = _m_memory_curator.send_text
-        _m_main.purge_hindsight_session = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
-        _m_memory_curator.send_text = lambda *_args, **_kwargs: None
+        original_purge = _m_memory.purge_hindsight_session
+        original_reply = _m_message_commands.send_text
+        _m_memory.purge_hindsight_session = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
+        _m_message_commands.send_text = lambda *_args, **_kwargs: None
         try:
             _m_panel_callback_routes.reset_session(self.db, "token", "chat", session)
         finally:
-            _m_main.purge_hindsight_session = original_purge
-            _m_memory_curator.send_text = original_reply
+            _m_memory.purge_hindsight_session = original_purge
+            _m_message_commands.send_text = original_reply
         self.assertEqual(calls, [("chat", session["session_id"])])
 
 
@@ -520,12 +526,12 @@ class AuditRegressionTests(unittest.TestCase):
 
     def test_memory_scope_panel_is_removed_and_search_keeps_text_input(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_memory_menu("token", "chat", self.db)
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
         payload = calls[0][1]
         callbacks = {button["callback_data"] for row in payload["reply_markup"]["inline_keyboard"] for button in row}
         self.assertNotIn("enum:memory:scope", callbacks)
@@ -533,14 +539,14 @@ class AuditRegressionTests(unittest.TestCase):
 
         session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         sent = []
-        original_send = _m_memory_curator.send_text
+        original_send = _m_memory.send_text
         original_recall = _m_memory.recall_memory_results
-        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text)
+        _m_memory.send_text = lambda _token, _chat_id, text: sent.append(text)
         _m_memory.recall_memory_results = lambda *_args, **_kwargs: [type("Result", (), {"text": "session fact"})()]
         try:
             _m_command_routes.handle_memory_command(self.db, "token", "chat", session, {"name": "Test"}, "/memory search session fact")
         finally:
-            _m_memory_curator.send_text = original_send
+            _m_memory.send_text = original_send
             _m_memory.recall_memory_results = original_recall
         self.assertEqual(sent, ["Recalled memories:\n- session fact"])
 

@@ -8,6 +8,10 @@ import unittest
 
 import bridge.config as config
 import bridge.catalog as _m_catalog
+import bridge.cards as _m_cards
+import bridge.groups as _m_groups
+import bridge.input_flows as _m_input_flows
+import bridge.status_panels as _m_status_panels
 import bridge.character_identity as _m_character_identity
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
@@ -25,16 +29,28 @@ class PanelificationTests(unittest.TestCase):
         self.db = _m_memory_curator.db_connect()
         self.session = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="panel")
         self.calls = []
-        self.old_panel = _m_panel_callback_routes.send_panel_message
-        self.old_card = _m_sync_api.card_fields_from_file
+        self.old_panels = {
+            "cards": _m_cards.send_panel_message,
+            "status": _m_status_panels.send_panel_message,
+            "catalog": _m_catalog.send_panel_message,
+            "groups": _m_groups.send_panel_message,
+        }
+        self.old_card = _m_message_commands.card_fields_from_file
         self.old_groups = _m_catalog.get_model_groups
-        _m_panel_callback_routes.send_panel_message = lambda *args, **kwargs: self.calls.append((args, kwargs))
-        _m_sync_api.card_fields_from_file = lambda _filename: {"name": "Test"}
+        panel_stub = lambda *args, **kwargs: self.calls.append((args, kwargs))
+        _m_cards.send_panel_message = panel_stub
+        _m_status_panels.send_panel_message = panel_stub
+        _m_catalog.send_panel_message = panel_stub
+        _m_groups.send_panel_message = panel_stub
+        _m_message_commands.card_fields_from_file = lambda _filename: {"name": "Test"}
         _m_catalog.get_model_groups = lambda: {}
 
     def tearDown(self):
-        _m_panel_callback_routes.send_panel_message = self.old_panel
-        _m_sync_api.card_fields_from_file = self.old_card
+        _m_cards.send_panel_message = self.old_panels["cards"]
+        _m_status_panels.send_panel_message = self.old_panels["status"]
+        _m_catalog.send_panel_message = self.old_panels["catalog"]
+        _m_groups.send_panel_message = self.old_panels["groups"]
+        _m_message_commands.card_fields_from_file = self.old_card
         _m_catalog.get_model_groups = self.old_groups
         self.db.close()
         config.DB_FILE = self.old_db
@@ -59,18 +75,18 @@ class PanelificationTests(unittest.TestCase):
         )
 
     def test_character_panel_has_inline_delete_actions(self):
-        old_paths = _m_character_identity.character_card_paths
-        old_display = _m_character_identity.character_display_name
-        old_callback_token = _m_panel_callback_routes.dynamic_callback_token
-        _m_character_identity.character_card_paths = lambda: [Path("active.png"), Path("other.png")]
-        _m_character_identity.character_display_name = lambda path: path.stem
-        _m_panel_callback_routes.dynamic_callback_token = lambda _kind, filename, _chat: "cb-" + filename
+        old_paths = _m_cards.character_card_paths
+        old_display = _m_cards.character_display_name
+        old_callback_token = _m_cards.dynamic_callback_token
+        _m_cards.character_card_paths = lambda: [Path("active.png"), Path("other.png")]
+        _m_cards.character_display_name = lambda path: path.stem
+        _m_cards.dynamic_callback_token = lambda _kind, filename, _chat: "cb-" + filename
         try:
             _m_session_naming.send_character_menu("bot-token", "chat", "active.png")
         finally:
-            _m_character_identity.character_card_paths = old_paths
-            _m_character_identity.character_display_name = old_display
-            _m_panel_callback_routes.dynamic_callback_token = old_callback_token
+            _m_cards.character_card_paths = old_paths
+            _m_cards.character_display_name = old_display
+            _m_cards.dynamic_callback_token = old_callback_token
         rows = self.calls[0][0][3]["inline_keyboard"]
         item_rows = rows[:2]
         self.assertTrue(all(len(row) == 2 for row in item_rows))
@@ -100,10 +116,10 @@ class PanelificationTests(unittest.TestCase):
         macro_calls = []
         old_memory = _m_command_routes.handle_memory_command
         old_group = _m_command_routes.handle_group_command
-        old_macro = _m_commands.handle_macro_command
+        old_macro = _m_input_flows.handle_macro_command
         _m_command_routes.handle_memory_command = lambda *args: memory_calls.append(args[-1])
         _m_command_routes.handle_group_command = lambda *args: group_calls.append(args[4])
-        _m_commands.handle_macro_command = lambda *args: macro_calls.append(args[-1])
+        _m_input_flows.handle_macro_command = lambda *args: macro_calls.append(args[-1])
         try:
             self.assertTrue(self._route("/memory search hidden fact"))
             self.assertEqual(memory_calls, ["/memory search hidden fact"])
@@ -114,20 +130,20 @@ class PanelificationTests(unittest.TestCase):
         finally:
             _m_command_routes.handle_memory_command = old_memory
             _m_command_routes.handle_group_command = old_group
-            _m_commands.handle_macro_command = old_macro
+            _m_input_flows.handle_macro_command = old_macro
     def test_world_menu_keeps_bot_token_for_telegram_request(self):
         old_world_paths = _m_catalog.world_file_paths
-        old_active_worlds = _m_sync_core.active_world_files
-        old_callback_token = _m_panel_callback_routes.dynamic_callback_token
+        old_active_worlds = _m_catalog.active_world_files
+        old_callback_token = _m_catalog.dynamic_callback_token
         _m_catalog.world_file_paths = lambda: [Path("lore.json")]
-        _m_sync_core.active_world_files = lambda _current: []
-        _m_panel_callback_routes.dynamic_callback_token = lambda _kind, _name, _chat: "callback-token"
+        _m_catalog.active_world_files = lambda _current: []
+        _m_catalog.dynamic_callback_token = lambda _kind, _name, _chat: "callback-token"
         try:
             _m_panel_callback_routes.send_world_menu("bot-token", "chat", "")
         finally:
             _m_catalog.world_file_paths = old_world_paths
-            _m_sync_core.active_world_files = old_active_worlds
-            _m_panel_callback_routes.dynamic_callback_token = old_callback_token
+            _m_catalog.active_world_files = old_active_worlds
+            _m_catalog.dynamic_callback_token = old_callback_token
         self.assertEqual(self.calls[0][0][0], "bot-token")
         payload = self.calls[0][0][3]
         self.assertEqual(payload["inline_keyboard"][0][0]["callback_data"], "world:callback-token")

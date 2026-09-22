@@ -22,30 +22,30 @@ class QuotedVoiceTests(unittest.TestCase):
 
     def test_user_quote_is_queued_for_tts_when_voice_is_enabled(self):
         calls = []
-        original_meta = _m_session_naming.get_meta
-        original_submit = _m_memory_curator.submit_background
-        _m_session_naming.get_meta = lambda *_args: "tts"
-        _m_memory_curator.submit_background = lambda *args: calls.append(args) or True
+        original_meta = _m_media.get_meta
+        original_submit = _m_media.submit_background
+        _m_media.get_meta = lambda *_args: "tts"
+        _m_media.submit_background = lambda *args: calls.append(args) or True
         try:
             queued = _m_message_commands.queue_user_quote_tts("token", "chat", '*waves* "Hello there."', object(), "session", 44)
         finally:
-            _m_session_naming.get_meta = original_meta
-            _m_memory_curator.submit_background = original_submit
+            _m_media.get_meta = original_meta
+            _m_media.submit_background = original_submit
         self.assertTrue(queued)
         self.assertEqual(calls[0][0], "tts")
         self.assertEqual(calls[0][2:5], ("token", "chat", "Hello there."))
 
     def test_user_quote_is_not_queued_when_voice_is_disabled(self):
         calls = []
-        original_meta = _m_session_naming.get_meta
-        original_submit = _m_memory_curator.submit_background
-        _m_session_naming.get_meta = lambda *_args: "off"
-        _m_memory_curator.submit_background = lambda *args: calls.append(args) or True
+        original_meta = _m_media.get_meta
+        original_submit = _m_media.submit_background
+        _m_media.get_meta = lambda *_args: "off"
+        _m_media.submit_background = lambda *args: calls.append(args) or True
         try:
             queued = _m_message_commands.queue_user_quote_tts("token", "chat", '"Hello there."', object(), "session", 44)
         finally:
-            _m_session_naming.get_meta = original_meta
-            _m_memory_curator.submit_background = original_submit
+            _m_media.get_meta = original_meta
+            _m_media.submit_background = original_submit
         self.assertFalse(queued)
         self.assertEqual(calls, [])
 
@@ -64,13 +64,13 @@ class QuotedVoiceTests(unittest.TestCase):
 
         calls = []
         original_expression = _m_media.deliver_expression
-        original_send = _m_memory_curator.send_text
-        original_meta = _m_session_naming.get_meta
-        original_submit = _m_memory_curator.submit_background
+        original_send = _m_media.send_text
+        original_meta = _m_media.get_meta
+        original_submit = _m_media.submit_background
         _m_media.deliver_expression = lambda *_args, **_kwargs: None
-        _m_memory_curator.send_text = lambda *_args, **_kwargs: [88]
-        _m_session_naming.get_meta = lambda *_args: "tts"
-        _m_memory_curator.submit_background = lambda *args: calls.append(args) or True
+        _m_media.send_text = lambda *_args, **_kwargs: [88]
+        _m_media.get_meta = lambda *_args: "tts"
+        _m_media.submit_background = lambda *args: calls.append(args) or True
         db = FakeDB()
         try:
             _m_message_commands.send_reply("token", "chat", '"Hello there."', db, "session", 7)
@@ -78,9 +78,9 @@ class QuotedVoiceTests(unittest.TestCase):
             _m_message_commands.send_reply("token", "chat", '"Changed reply."', db, "session", 7)
         finally:
             _m_media.deliver_expression = original_expression
-            _m_memory_curator.send_text = original_send
-            _m_session_naming.get_meta = original_meta
-            _m_memory_curator.submit_background = original_submit
+            _m_media.send_text = original_send
+            _m_media.get_meta = original_meta
+            _m_media.submit_background = original_submit
 
         first_id = calls[0][-1]
         self.assertEqual(first_id, calls[1][-1])

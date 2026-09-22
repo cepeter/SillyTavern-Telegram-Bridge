@@ -23,6 +23,20 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
         self.assertFalse((TESTS_DIR / "dependency_patch.py").exists())
         self.assertFalse((BRIDGE_DIR / "ordinary_dependencies.py").exists())
 
+    def test_test_setup_has_no_patch_propagation_magic(self):
+        source = (TESTS_DIR / "application_test_setup.py").read_text(
+            encoding="utf-8"
+        )
+        for forbidden in (
+            "ModuleType",
+            "sys.modules",
+            "__class__",
+            "_IdentityPropagatingModule",
+            "_install_identity_propagation",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []
         for root in (BRIDGE_DIR, TESTS_DIR):

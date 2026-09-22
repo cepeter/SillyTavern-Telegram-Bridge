@@ -329,10 +329,8 @@ class WorkerInjectionTests(unittest.TestCase):
                 kwargs=kwargs,
             )
 
-        with patch.object(
-            _m_database, "committed_assistant_for_message", return_value=None
-        ), patch.object(
-            _m_message_commands, "process_message", side_effect=fake_process_message
+        with patch.object(_m_main, "committed_assistant_for_message", return_value=None
+        ), patch.object(_m_main, "process_message", side_effect=fake_process_message
         ):
             _m_main.process_message_job(
                 self.services,
@@ -352,9 +350,7 @@ class WorkerInjectionTests(unittest.TestCase):
         captured = {}
         db = self._db_factory()
         try:
-            with patch.object(
-                _m_input_flows,
-                "handle_pending_input",
+            with patch.object(_m_message_commands, "handle_pending_input",
                 side_effect=lambda *_args, **kwargs:
                     captured.update(kwargs) or True,
             ):
@@ -390,9 +386,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 "chat",
                 "injected::model",
             )
-            with patch.object(
-                _m_status_panels,
-                "send_sync_menu",
+            with patch.object(_m_command_routes, "send_sync_menu",
                 side_effect=lambda *_args, **kwargs:
                     captured.update(kwargs),
             ):
@@ -431,9 +425,7 @@ class WorkerInjectionTests(unittest.TestCase):
             "message": {"chat": {"id": "chat"}},
         }
         try:
-            with patch.object(
-                _m_panel_callback_routes,
-                "handle_primary_panel_callback",
+            with patch.object(_m_callbacks, "handle_primary_panel_callback",
                 side_effect=lambda *_args, **kwargs:
                     captured.update(kwargs) or True,
             ):
@@ -457,9 +449,7 @@ class WorkerInjectionTests(unittest.TestCase):
         def fake_edit(*args, **kwargs):
             captured.update(kwargs)
 
-        with patch.object(
-            _m_commands,
-            "edit_telegram_user_message",
+        with patch.object(_m_main, "edit_telegram_user_message",
             side_effect=fake_edit,
         ):
             _m_main.process_edit_job(
@@ -486,21 +476,13 @@ class WorkerInjectionTests(unittest.TestCase):
         )
         db = self._db_factory()
         try:
-            with patch.object(
-                _m_database,
-                "latest_failed_turn",
+            with patch.object(_m_command_routes, "latest_failed_turn",
                 return_value=failed,
-            ), patch.object(
-                _m_database,
-                "committed_assistant_for_message",
+            ), patch.object(_m_command_routes, "committed_assistant_for_message",
                 return_value=None,
-            ), patch.object(
-                _m_message_commands,
-                "process_message",
+            ), patch.object(_m_command_routes, "process_message",
                 side_effect=lambda *_args, **kwargs: captured.update(kwargs),
-            ), patch.object(
-                _m_database,
-                "clear_failed_turn",
+            ), patch.object(_m_command_routes, "clear_failed_turn",
             ):
                 handled = _m_command_routes._handle_basic(
                     db,
@@ -528,11 +510,8 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_recovered_model_override_wins_over_config_default(self):
         captured = {}
 
-        with patch.object(
-            _m_database, "committed_assistant_for_message", return_value=None
-        ), patch.object(
-            _m_message_commands,
-            "process_message",
+        with patch.object(_m_main, "committed_assistant_for_message", return_value=None
+        ), patch.object(_m_main, "process_message",
             side_effect=lambda _db, _token, _key, model, *_args, **_kwargs:
                 captured.setdefault("model", model),
         ):
@@ -551,13 +530,9 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_image_worker_propagates_injected_memory_service(self):
         captured = {}
 
-        with patch.object(
-            _m_database,
-            "committed_assistant_for_message",
+        with patch.object(_m_main, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(
-            _m_telegram,
-            "process_telegram_image",
+        ), patch.object(_m_main, "process_telegram_image",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
             _m_main.process_image_job(
@@ -577,9 +552,7 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_document_worker_propagates_injected_memory_service(self):
         captured = {}
 
-        with patch.object(
-            _m_telegram,
-            "import_telegram_document",
+        with patch.object(_m_help, "import_telegram_document",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
             _m_help.process_document_job(
@@ -601,9 +574,7 @@ class WorkerInjectionTests(unittest.TestCase):
             "from": {"id": "100"},
             "message": {"chat": {"id": "chat"}},
         }
-        with patch.object(
-            _m_callbacks,
-            "process_callback",
+        with patch.object(_m_main, "process_callback",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
             _m_main.process_callback_job(
@@ -615,9 +586,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertIs(captured["services"], self.services)
 
     def test_callback_failure_uses_injected_send_text(self):
-        with patch.object(
-            _m_callbacks,
-            "process_callback",
+        with patch.object(_m_main, "process_callback",
             side_effect=RuntimeError("boom"),
         ), patch.object(
             _m_telegram,
@@ -883,11 +852,9 @@ class RecoveryCompositionTests(unittest.TestCase):
             register_backlog_dispatcher=lambda _callback: None,
             begin_shutdown=lambda: None,
         )
-        with patch.object(
-            _m_common,
-            "submit_chat_background",
+        with patch.object(_m_main, "submit_chat_background",
             side_effect=AssertionError("global background used"),
-        ), patch.object(_m_database, "mark_job_scheduled") as scheduled:
+        ), patch.object(_m_main, "mark_job_scheduled") as scheduled:
             queued = _m_main.submit_durable_chat_job(
                 self.db,
                 background,
@@ -1094,21 +1061,13 @@ class StartupCompositionTests(unittest.TestCase):
         return {"username": "bridge_bot"}
 
     def test_run_check_uses_prebuilt_services_without_reloading_environment(self):
-        with patch.object(
-            _m_common,
-            "load_env_file",
+        with patch.object(_m_common, "load_env_file",
             side_effect=AssertionError("run_check must not reload env"),
-        ), patch.object(
-            _m_card_content,
-            "card_fields",
+        ), patch.object(_m_main, "card_fields",
             return_value={"name": "Mira"},
-        ), patch.object(
-            _m_card_content,
-            "read_png_chara",
+        ), patch.object(_m_main, "read_png_chara",
             return_value={},
-        ), patch.object(
-            _m_sync_api,
-            "phase3_api_configured",
+        ), patch.object(_m_main, "phase3_api_configured",
             return_value=False,
         ):
             self.assertEqual(_m_main.run_check(self.services), 0)
@@ -1153,21 +1112,11 @@ class StartupCompositionTests(unittest.TestCase):
         )
 
     def test_startup_builds_persona_service_from_final_runtime_collaborators(self):
-        with patch.object(
-            _m_persona_sync,
-            "load_personas",
-        ) as load_personas, patch.object(
-            _m_cards,
-            "default_persona_id",
-        ) as default_persona, patch.object(
-            _m_persona_sync,
-            "upsert_native_persona",
-        ) as upsert_persona, patch.object(
-            _m_persona_sync,
-            "delete_native_persona",
-        ) as delete_persona, patch.object(
-            _m_telegram,
-            "update_session",
+        with patch.object(_m_main, "load_personas",
+        ) as load_personas, patch.object(_m_main, "default_persona_id",
+        ) as default_persona, patch.object(_m_main, "upsert_native_persona",
+        ) as upsert_persona, patch.object(_m_main, "delete_native_persona",
+        ) as delete_persona, patch.object(_m_main, "update_session",
         ) as update_session:
             services = _m_main._build_startup_services(self.config)
 
@@ -1185,24 +1134,12 @@ class StartupCompositionTests(unittest.TestCase):
         )
 
     def test_startup_builds_sync_service_from_final_runtime_collaborators(self):
-        with patch.object(
-            _m_sync_core,
-            "sync_binding",
-        ) as binding, patch.object(
-            _m_sync_api,
-            "phase3_sync_now",
-        ) as sync_now, patch.object(
-            _m_sync_api,
-            "phase3_toggle_realtime",
-        ) as toggle, patch.object(
-            _m_sync_api,
-            "phase3_sync_poll",
-        ) as poll, patch.object(
-            _m_sync_api,
-            "_phase3_disable",
-        ) as disable, patch.object(
-            _m_sync_api,
-            "phase3_api_configured",
+        with patch.object(_m_main, "sync_binding",
+        ) as binding, patch.object(_m_main, "phase3_sync_now",
+        ) as sync_now, patch.object(_m_main, "phase3_toggle_realtime",
+        ) as toggle, patch.object(_m_main, "phase3_sync_poll",
+        ) as poll, patch.object(_m_main, "_phase3_disable",
+        ) as disable, patch.object(_m_main, "phase3_api_configured",
         ) as configured:
             services = _m_main._build_startup_services(self.config)
 
@@ -1215,27 +1152,13 @@ class StartupCompositionTests(unittest.TestCase):
         self.assertIs(services.sync.api_configured, configured)
 
     def test_startup_builds_job_service_from_final_job_collaborators(self):
-        with patch.object(
-            _m_database,
-            "enqueue_job",
-        ) as enqueue, patch.object(
-            _m_database,
-            "job_actor_id",
-        ) as actor, patch.object(
-            _m_database,
-            "mark_job_scheduled",
-        ) as scheduled, patch.object(
-            _m_database,
-            "mark_job_running",
-        ) as running, patch.object(
-            _m_database,
-            "finish_job",
-        ) as finish, patch.object(
-            _m_database,
-            "recover_jobs",
-        ) as recover, patch.object(
-            _m_common,
-            "submit_chat_background",
+        with patch.object(_m_main, "enqueue_job",
+        ) as enqueue, patch.object(_m_main, "job_actor_id",
+        ) as actor, patch.object(_m_main, "mark_job_scheduled",
+        ) as scheduled, patch.object(_m_main, "mark_job_running",
+        ) as running, patch.object(_m_main, "finish_job",
+        ) as finish, patch.object(_m_main, "recover_jobs",
+        ) as recover, patch.object(_m_main, "submit_chat_background",
         ) as submit_chat:
             services = _m_main._build_startup_services(self.config)
 
@@ -1283,24 +1206,18 @@ class StartupCompositionTests(unittest.TestCase):
             argparse.ArgumentParser,
             "parse_args",
             return_value=parsed,
-        ), patch.object(
-            _m_common, "load_env_file"
-        ), patch.object(
-            _m_sync_api, "refresh_phase3_config"
-        ), patch.object(
-            _m_common, "enforce_runtime_permissions"
+        ), patch.object(_m_main, "load_env_file"
+        ), patch.object(_m_main, "refresh_phase3_config"
+        ), patch.object(_m_main, "enforce_runtime_permissions"
         ), patch.object(
             _m_main, "_load_startup_config", return_value=self.config
         ), patch.object(
             _m_main, "_build_startup_services", return_value=services
         ), patch.object(
             _m_main, "validate_startup_credential"
-        ), patch.object(
-            _m_help, "set_bot_commands"
-        ), patch.object(
-            _m_card_content, "read_png_chara", return_value={}
-        ), patch.object(
-            _m_card_content, "card_fields", return_value={"name": "Mira"}
+        ), patch.object(_m_main, "set_bot_commands"
+        ), patch.object(_m_main, "read_png_chara", return_value={}
+        ), patch.object(_m_main, "card_fields", return_value={"name": "Mira"}
         ), patch.object(
             _m_main, "install_bridge_signal_handlers"
         ), patch.object(
@@ -1309,14 +1226,10 @@ class StartupCompositionTests(unittest.TestCase):
             side_effect=AssertionError(
                 "production startup must use services.jobs.recover"
             ),
-        ), patch.object(
-            _m_sync_api, "start_phase3_sync_worker"
-        ) as start_sync, patch.object(
-            _m_sync_api, "stop_phase3_sync_worker", return_value=True
-        ), patch.object(
-            _m_common, "shutdown_background_executors", return_value=True
-        ), patch.object(
-            _m_database, "run_database_maintenance"
+        ), patch.object(_m_main, "start_phase3_sync_worker"
+        ) as start_sync, patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
+        ), patch.object(_m_main, "shutdown_background_executors", return_value=True
+        ), patch.object(_m_main, "run_database_maintenance"
         ):
             self.assertEqual(_m_main.main(), 0)
 
@@ -1367,40 +1280,28 @@ class StartupCompositionTests(unittest.TestCase):
                 argparse.ArgumentParser,
                 "parse_args",
                 return_value=parsed,
-            ), patch.object(
-                _m_common, "load_env_file"
-            ), patch.object(
-                _m_sync_api, "refresh_phase3_config"
-            ), patch.object(
-                _m_common, "enforce_runtime_permissions"
+            ), patch.object(_m_main, "load_env_file"
+            ), patch.object(_m_main, "refresh_phase3_config"
+            ), patch.object(_m_main, "enforce_runtime_permissions"
             ), patch.object(
                 _m_main, "_load_startup_config", return_value=self.config
             ), patch.object(
                 _m_main, "_build_startup_services", return_value=services
             ), patch.object(
                 _m_main, "validate_startup_credential"
-            ), patch.object(
-                _m_help, "set_bot_commands"
-            ), patch.object(
-                _m_card_content, "read_png_chara", return_value={}
-            ), patch.object(
-                _m_card_content, "card_fields", return_value={"name": "Mira"}
+            ), patch.object(_m_main, "set_bot_commands"
+            ), patch.object(_m_main, "read_png_chara", return_value={}
+            ), patch.object(_m_main, "card_fields", return_value={"name": "Mira"}
             ), patch.object(
                 _m_main, "install_bridge_signal_handlers"
             ), patch.object(
                 _m_main, "dispatch_recovered_jobs"
-            ), patch.object(
-                _m_sync_api, "start_phase3_sync_worker"
-            ), patch.object(
-                _m_sync_api, "stop_phase3_sync_worker", return_value=True
-            ), patch.object(
-                _m_common, "shutdown_background_executors", return_value=True
-            ), patch.object(
-                _m_database, "run_database_maintenance"
-            ), patch.object(
-                _m_catalog, "answer_callback"
-            ), patch.object(
-                _m_group_core, "group_user_turn_allowed", return_value=True
+            ), patch.object(_m_main, "start_phase3_sync_worker"
+            ), patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
+            ), patch.object(_m_main, "shutdown_background_executors", return_value=True
+            ), patch.object(_m_main, "run_database_maintenance"
+            ), patch.object(_m_main, "answer_callback"
+            ), patch.object(_m_main, "group_user_turn_allowed", return_value=True
             ):
                 self.assertEqual(_m_main.main(), 0)
         finally:
@@ -1628,15 +1529,9 @@ class StartupCompositionTests(unittest.TestCase):
             argparse.ArgumentParser,
             "parse_args",
             return_value=parsed,
-        ), patch.object(
-            _m_common,
-            "load_env_file",
-        ), patch.object(
-            _m_sync_api,
-            "refresh_phase3_config",
-        ), patch.object(
-            _m_common,
-            "enforce_runtime_permissions",
+        ), patch.object(_m_main, "load_env_file",
+        ), patch.object(_m_main, "refresh_phase3_config",
+        ), patch.object(_m_main, "enforce_runtime_permissions",
         ), patch.object(
             _m_main,
             "_load_startup_config",
@@ -1648,9 +1543,7 @@ class StartupCompositionTests(unittest.TestCase):
         ) as build_services, patch.object(
             _m_main,
             "validate_startup_credential",
-        ), patch.object(
-            _m_help,
-            "set_bot_commands",
+        ), patch.object(_m_main, "set_bot_commands",
         ), patch.object(
             _m_main,
             "run_check",
