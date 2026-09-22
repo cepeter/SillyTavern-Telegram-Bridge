@@ -64,6 +64,10 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
                     .default,
                     inspect.Parameter.empty,
                 )
+                self.assertNotIn(
+                    "None",
+                    str(BridgeServices.__dataclass_fields__[name].type),
+                )
 
     def test_legacy_durable_job_wrappers_are_deleted(self):
         source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
