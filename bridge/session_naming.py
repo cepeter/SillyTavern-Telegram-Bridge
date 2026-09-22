@@ -55,7 +55,7 @@ def start_session_name_input(db, token: str, chat_id: str, session: dict[str, st
     _clear_conflicting_inputs(db, token, chat_id)
     if message:
         discard_panel_binding(db, chat_id, message.get("message_id"))
-        close_panel_message(token, chat_id, {"message": message})
+        close_panel_message(db, token, chat_id, {"message": message})
     state = {
         "session_id": session["session_id"],
         "kind": "group" if kind == "group" else "standard",

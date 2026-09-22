@@ -170,7 +170,7 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
     if data.startswith("help:"):
         category = data.split(":", 1)[1]
         if category == "close":
-            close_panel_message(token, chat_id, message)
+            close_panel_message(db, token, chat_id, message)
             try:
                 answer_callback(token, str(callback.get("id", "")), "Closed")
             except Exception:

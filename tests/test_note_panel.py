@@ -182,7 +182,7 @@ class NotePanelTests(unittest.TestCase):
             return {}
         _m_callbacks.telegram_request = request
         try:
-            _m_session_naming.close_panel_message("token", "chat", {"message_id": 79, "chat": {"id": "chat"}})
+            _m_session_naming.close_panel_message(self.db, "token", "chat", {"message_id": 79, "chat": {"id": "chat"}})
         finally:
             _m_callbacks.telegram_request = original_request
         self.assertEqual([method for method, _payload in calls], ["deleteMessage", "editMessageText"])

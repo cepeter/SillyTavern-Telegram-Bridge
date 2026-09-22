@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices
 
-def close_panel_message(token: str, chat_id: str, callback: dict) -> None:
+def close_panel_message(db: sqlite3.Connection, token: str, chat_id: str, callback: dict) -> None:
     message = callback.get("message") or callback
     message_id = message.get("message_id")
     try:
@@ -16,19 +16,14 @@ def close_panel_message(token: str, chat_id: str, callback: dict) -> None:
             telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": "Panel closed.", "reply_markup": {"inline_keyboard": []}})
         except Exception:
             logging.warning("Panel close fallback failed", exc_info=True)
-    panel_db = None
-    owns_connection = False
     try:
-        panel_db = db_connection_context()
-        owns_connection = panel_db is None
-        panel_db = panel_db or db_connect()
-        panel_db.execute("DELETE FROM panel_sessions WHERE chat_id=? AND message_id=?", (str(chat_id), str(message_id)))
-        panel_db.commit()
+        db.execute(
+            "DELETE FROM panel_sessions WHERE chat_id=? AND message_id=?",
+            (str(chat_id), str(message_id)),
+        )
+        db.commit()
     except Exception:
         logging.debug("Could not remove closed panel binding", exc_info=True)
-    finally:
-        if owns_connection and panel_db is not None:
-            panel_db.close()
 
 
 def discard_panel_binding(db: sqlite3.Connection, chat_id: str, message_id: int | str | None) -> None:
@@ -70,7 +65,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
             send_text(token, chat_id, feedback)
         else:
             answer_callback(token, str(callback.get("id", "")), feedback)
-        close_panel_message(token, chat_id, callback)
+        close_panel_message(db, token, chat_id, callback)
         return
     session = load_session(db, chat_id, bound_session_id, DEFAULT_MODEL) if bound_session_id else ensure_session(db, chat_id, DEFAULT_MODEL)
     session_id = session["session_id"]
@@ -116,7 +111,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
     if data.startswith("group:") or data.startswith("groupchars:") or data.startswith("groupmode:"):
         if parse_topic_scope(chat_id)[1] is None:
             answer_callback(token, str(callback.get("id", "")), "Forum Topic required")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
             return
         if data.startswith("groupchars:") and not data.startswith("groupchars:page:"):
             parts = data.split(":", 2)
@@ -136,7 +131,6 @@ from bridge.catalog import answer_callback
 from bridge.common import parse_topic_scope
 from bridge.config import DEFAULT_MODEL
 from bridge.database import (
-    db_connect,
     panel_owner_for_message,
     panel_session_for_message,
 )
@@ -148,10 +142,7 @@ from bridge.panel_callback_routes import (
     handle_primary_panel_callback,
     handle_provider_model_callback,
 )
-from bridge.runtime_context import (
-    db_connection_context,
-    set_panel_session_context,
-)
+from bridge.runtime_context import set_panel_session_context
 from bridge.telegram import (
     ensure_session,
     load_session,

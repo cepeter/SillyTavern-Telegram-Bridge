@@ -299,15 +299,15 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
     message_id = message.get("message_id")
     if data == "enum:close":
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, {"message": message})
+        close_panel_message(db, token, chat_id, {"message": message})
         return
     if data == "enum:stscript:cancel":
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, {"message": message})
+        close_panel_message(db, token, chat_id, {"message": message})
         return
     if data == "enum:stscript:reset":
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, {"message": message})
+        close_panel_message(db, token, chat_id, {"message": message})
         send_reset_confirmation_menu(token, chat_id)
         return
     parts = data.split(":", 2)
@@ -318,7 +318,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
             pending_setting = {"key": key, "session_id": session["session_id"], "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
             set_meta(db, f"settings_input:{chat_id}", json.dumps(pending_setting))
             discard_panel_binding(db, chat_id, message_id)
-            close_panel_message(token, chat_id, {"message": message})
+            close_panel_message(db, token, chat_id, {"message": message})
             pending_setting["prompt_message_ids"] = send_text(token, chat_id, prompts[key] + " Send /cancel to leave it unchanged.")
             set_meta(db, f"settings_input:{chat_id}", json.dumps(pending_setting))
         return
@@ -349,7 +349,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         pending_stt = {"session_id": session["session_id"], "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
         set_meta(db, f"stt_language_input:{chat_id}", json.dumps(pending_stt))
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, {"message": message})
+        close_panel_message(db, token, chat_id, {"message": message})
         pending_stt["prompt_message_ids"] = send_text(token, chat_id, "Send a 2–8 letter STT language code such as id, en, or ja. Send /cancel to cancel.")
         set_meta(db, f"stt_language_input:{chat_id}", json.dumps(pending_stt))
     elif data.startswith("enum:sttlanguagepage:"):
@@ -395,7 +395,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         pending_preset = {"session_id": session["session_id"], "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
         set_meta(db, f"preset_save_input:{chat_id}", json.dumps(pending_preset))
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, {"message": message})
+        close_panel_message(db, token, chat_id, {"message": message})
         pending_preset["prompt_message_ids"] = send_text(token, chat_id, "Send a preset name (1–64 letters, numbers, hyphens, or underscores). Send /cancel to cancel.")
         set_meta(db, f"preset_save_input:{chat_id}", json.dumps(pending_preset))
     elif data == "enum:preset:back":

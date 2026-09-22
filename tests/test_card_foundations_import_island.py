@@ -619,7 +619,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                 self.assertTrue(hasattr(callback_tokens, name))
 
         self.assertIs(media.set_db_connection_context, context.set_db_connection_context)
-        self.assertIs(callbacks.db_connection_context, context.db_connection_context)
         self.assertIs(session_naming.set_panel_session_context, context.set_panel_session_context)
         self.assertIs(telegram.panel_actor_context, context.panel_actor_context)
         self.assertIs(

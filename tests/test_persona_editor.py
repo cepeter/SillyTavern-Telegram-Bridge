@@ -172,7 +172,7 @@ class PersonaEditorTests(unittest.TestCase):
         send_stub = lambda _token, _chat, _text: [501]
         _m_input_flows.send_text = send_stub
         _m_message_commands.send_text = send_stub
-        _m_input_flows.close_panel_message = lambda _token, _chat, _callback: None
+        _m_input_flows.close_panel_message = lambda _db, _token, _chat, _callback: None
         self.persona_service = make_native_test_persona_service()
 
     def tearDown(self):

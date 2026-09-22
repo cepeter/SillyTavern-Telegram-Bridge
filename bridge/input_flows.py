@@ -32,7 +32,7 @@ def start_text_action_input(db, token: str, chat_id: str, session_id: str, actio
     if callback:
         message_id = (callback.get("message") or {}).get("message_id")
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, callback)
+        close_panel_message(db, token, chat_id, callback)
     state["prompt_message_ids"] = send_text(token, chat_id, prompt + "\n\nSend /cancel to cancel.")
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
@@ -223,7 +223,7 @@ def start_persona_input(db, token: str, chat_id: str, session_id: str, mode: str
     state = {"session_id": session_id, "mode": mode, "persona_id": persona_id, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
     meta_key = f"persona_input:{chat_id}"
     discard_panel_binding(db, chat_id, (callback.get("message") or {}).get("message_id"))
-    close_panel_message(token, chat_id, callback)
+    close_panel_message(db, token, chat_id, callback)
     state["prompt_message_ids"] = send_text(
         token,
         chat_id,
@@ -518,7 +518,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         return True
     if value == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         return True
     if value == "off":
         persona_service.disable(
@@ -528,7 +528,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
             operation_id=operation_id,
         )
         answer_callback(token, str(callback.get("id", "")), "Persona off")
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         send_text(token, chat_id, "Persona disabled for this session.")
         return True
     if persona_service.select(
@@ -539,7 +539,7 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
         operation_id=operation_id,
     ):
         answer_callback(token, str(callback.get("id", "")), "Persona selected")
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         send_text(token, chat_id, f"Persona selected: {persona_service.name(value)}")
         return True
     answer_callback(token, str(callback.get("id", "")), "Persona not found")

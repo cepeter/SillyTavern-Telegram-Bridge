@@ -184,7 +184,7 @@ def handle_prompt_and_feature_callback(db, token, callback, answer_callback, dat
     message_id = message.get("message_id")
     if data == "prompt:close":
         answer_callback(token, str(callback.get("id", "")), "Closed")
-        close_panel_message(token, chat_id, callback)
+        close_panel_message(db, token, chat_id, callback)
         return True
     if data == "prompt:menu":
         send_prompt_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, memory_service=memory_service)
@@ -220,7 +220,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
         action = data.split(":", 1)[1]
         if action == "cancel" or action == "close":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
-            close_panel_message(token, chat_id, callback)
+            close_panel_message(db, token, chat_id, callback)
         elif action == "confirm":
             answer_callback(token, str(callback.get("id", "")), "Summarizing")
             handle_summary_command(db, token, chat_id, session)
@@ -229,7 +229,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
         action = data.split(":", 1)[1]
         if action == "close":
             answer_callback(token, str(callback.get("id", "")), "Closed")
-            close_panel_message(token, chat_id, callback)
+            close_panel_message(db, token, chat_id, callback)
         elif action == "status":
             send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or ""))
         elif action == "refresh":
@@ -247,7 +247,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
         action = data.split(":", 1)[1]
         if action == "close":
             answer_callback(token, str(callback.get("id", "")), "Closed")
-            close_panel_message(token, chat_id, callback)
+            close_panel_message(db, token, chat_id, callback)
         elif action == "set":
             start_text_action_input(db, token, chat_id, session_id, "director_goal", "Send the hidden Director objective (up to 1,200 characters).", callback)
         elif action == "clear":
@@ -259,7 +259,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
         action = data.split(":", 1)[1]
         if action == "close":
             answer_callback(token, str(callback.get("id", "")), "Closed")
-            close_panel_message(token, chat_id, callback)
+            close_panel_message(db, token, chat_id, callback)
         elif action == "refresh":
             if memory_mode(db, chat_id) != "on":
                 send_text(token, chat_id, "Hindsight memory is off. Enable /memory first.")

@@ -11,11 +11,11 @@ def handle_system_prompt_callback(db, token, callback, answer_callback, data, ch
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
         elif value == "off":
             update_session(db, chat_id, session_id, system_prompt="")
             answer_callback(token, str(callback.get("id", "")), "System Prompt off")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
             send_text(token, chat_id, "Session System Prompt disabled.")
         else:
             prompt = get_system_prompt_choice(value)
@@ -24,7 +24,7 @@ def handle_system_prompt_callback(db, token, callback, answer_callback, data, ch
             else:
                 update_session(db, chat_id, session_id, system_prompt=prompt)
                 answer_callback(token, str(callback.get("id", "")), "System Prompt selected")
-                remove_inline_keyboard(token, callback)
+                remove_inline_keyboard(db, token, callback)
                 send_text(token, chat_id, f"System Prompt selected: {value}")
         return True
     return False
@@ -37,7 +37,7 @@ def handle_note_callback(db, token, callback, answer_callback, data, chat_id, me
         if action == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
             discard_panel_binding(db, chat_id, message.get("message_id"))
-            close_panel_message(token, chat_id, callback)
+            close_panel_message(db, token, chat_id, callback)
             return True
         if action == "off":
             update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="author_note_off", author_note="")
@@ -49,7 +49,7 @@ def handle_note_callback(db, token, callback, answer_callback, data, chat_id, me
             set_meta(db, f"note_input:{chat_id}", json.dumps(pending_note))
             answer_callback(token, str(callback.get("id", "")), "User input")
             discard_panel_binding(db, chat_id, message.get("message_id"))
-            close_panel_message(token, chat_id, callback)
+            close_panel_message(db, token, chat_id, callback)
             pending_note["prompt_message_ids"] = send_text(token, chat_id, "Send Author's Note text (1–2,000 characters). Send /cancel to cancel.")
             set_meta(db, f"note_input:{chat_id}", json.dumps(pending_note))
             return True
@@ -69,7 +69,7 @@ def handle_language_callback(db, token, callback, answer_callback, data, chat_id
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
             return True
         try:
             language = set_response_language(db, chat_id, session_id, value, operation_id=operation_id)
@@ -77,7 +77,7 @@ def handle_language_callback(db, token, callback, answer_callback, data, chat_id
             answer_callback(token, str(callback.get("id", "")), "Language choice expired")
             return True
         answer_callback(token, str(callback.get("id", "")), "Language selected")
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         send_text(token, chat_id, f"Model response language set to: {response_language_label(language)}.")
         return True
     return False
@@ -89,7 +89,7 @@ def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, m
         action = data.split(":", 1)[1]
         if action == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
             return True
         if action != "confirm":
             answer_callback(token, str(callback.get("id", "")), "Unknown reset action")
@@ -102,7 +102,7 @@ def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, m
             send_text(token, chat_id, "Reset cancelled because Hindsight memory purge failed. No session data was deleted.")
             return True
         answer_callback(token, str(callback.get("id", "")), "Reset complete")
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         send_text(token, chat_id, "Reset complete. The active session was cleared.")
         return True
     return False
@@ -115,13 +115,13 @@ def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, m
         user_row, variants = last_user_variants(db, chat_id, session_id)
         if not variants:
             answer_callback(token, str(callback.get("id", "")), "No variants")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
             return True
         current = int(get_meta(db, swipe_state_key(chat_id, session_id), str(variants[-1][0])))
         indexes = [int(row[0]) for row in variants]
         if action == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
             return True
         if action in {"prev", "next"}:
             position = indexes.index(current) if current in indexes else 0
@@ -158,7 +158,7 @@ def handle_expression_callback(db, token, callback, answer_callback, data, chat_
         return True
     if value == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         return True
     if value not in {"auto", "off"} and value not in discover_expression_assets(session["character_file"]):
         answer_callback(token, str(callback.get("id", "")), "Expression unavailable")
@@ -196,7 +196,7 @@ def handle_sync_callback(
             str(callback.get("id", "")),
             "Closed",
         )
-        close_panel_message(token, chat_id, callback)
+        close_panel_message(db, token, chat_id, callback)
     elif action in {"menu", "status"}:
         answer_callback(
             token,
@@ -287,13 +287,13 @@ def handle_greeting_callback(
     if action == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, callback)
+        close_panel_message(db, token, chat_id, callback)
         return True
 
     if not options:
         answer_callback(token, str(callback.get("id", "")), "Greeting unavailable")
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, callback)
+        close_panel_message(db, token, chat_id, callback)
         send_text(token, chat_id, "This character has no opening greeting.")
         return True
 
@@ -357,7 +357,7 @@ def handle_greeting_callback(
             f"Started with {label}" if started else "Greeting already processed",
         )
         discard_panel_binding(db, chat_id, message_id)
-        close_panel_message(token, chat_id, callback)
+        close_panel_message(db, token, chat_id, callback)
         return True
 
     answer_callback(token, str(callback.get("id", "")), "Unknown greeting action")
@@ -512,7 +512,7 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
             if get_meta(db, f"character_session_input:{chat_id}", ""):
                 set_meta(db, f"character_session_input:{chat_id}", "")
             discard_panel_binding(db, chat_id, message.get("message_id"))
-            close_panel_message(token, chat_id, callback)
+            close_panel_message(db, token, chat_id, callback)
         elif safe_character_path(value):
             character_name = card_fields_from_file(value)["name"]
             setup = group_setup_state(db, chat_id, session_id)
@@ -521,7 +521,7 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
             set_meta(db, f"character_session_input:{chat_id}", json.dumps({"character_file": Path(value).name, "character_name": character_name, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}))
             answer_callback(token, str(callback.get("id", "")), "Choose session")
             discard_panel_binding(db, chat_id, message.get("message_id"))
-            close_panel_message(token, chat_id, callback)
+            close_panel_message(db, token, chat_id, callback)
             send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id)
         else:
             answer_callback(token, str(callback.get("id", "")), "Character not found")
@@ -546,7 +546,7 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
             answer_callback(token, str(callback.get("id", "")), f"Deletion refused: {reason}")
             return True
         answer_callback(token, str(callback.get("id", "")), "Session deleted")
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"))
         return True
     if data.startswith("sessiondelete:"):
@@ -580,7 +580,7 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
             set_meta(db, f"character_session_input:{chat_id}", "")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
         elif value == "new":
             answer_callback(token, str(callback.get("id", "")), "Enter session name")
             start_session_name_input(db, token, chat_id, session, message=message)
@@ -594,7 +594,7 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
                     target_title = next((item["title"] for item in list_sessions(db, chat_id) if item["session_id"] == value), value)
                     update_session(db, chat_id, value, operation_id=operation_id, operation_kind="character_select", character_file=Path(pending_character["character_file"]).name)
                     set_meta(db, f"character_session_input:{chat_id}", "")
-                remove_inline_keyboard(token, callback)
+                remove_inline_keyboard(db, token, callback)
                 if pending_character:
                     send_text(token, chat_id, f"Character selected for session '{target_title}': {pending_character.get('character_name') or Path(pending_character['character_file']).stem}")
                 else:
@@ -646,12 +646,12 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
             if setup:
                 set_meta(db, f"group_setup:{chat_id}", "")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
         elif value == "done":
             answer_callback(token, str(callback.get("id", "")), "Saved")
             if setup:
                 set_meta(db, f"group_setup:{chat_id}", "")
-            remove_inline_keyboard(token, callback)
+            remove_inline_keyboard(db, token, callback)
             if setup:
                 send_group_menu(db, token, chat_id, session)
         elif value == "off":
@@ -722,7 +722,7 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
         return True
     if data == "models:cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
-        remove_inline_keyboard(token, callback)
+        remove_inline_keyboard(db, token, callback)
         return True
     if data == "models:back":
         answer_callback(token, str(callback.get("id", "")), "Back to providers")
