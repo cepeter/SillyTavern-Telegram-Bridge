@@ -168,12 +168,13 @@ _BACKGROUND_MAX_SCOPED_QUEUES = 1024
 BACKGROUND_MAX_JOBS = 8
 _GENERATION_SLOTS = threading.BoundedSemaphore(6)
 _UTILITY_SLOTS = threading.BoundedSemaphore(4)
-_GENERATION_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=3, thread_name_prefix="st-generation")
-_UTILITY_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="st-utility")
+_GENERATION_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = None
+_UTILITY_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = None
 _GENERATION_LABELS = {"generation", "command", "retry", "regen", "continue", "edit", "summarize"}
 _CHAT_LOCKS: dict[str, threading.Lock] = {}
 _CHAT_LOCKS_GUARD = threading.Lock()
 _BACKGROUND_STATE_LOCK = threading.Lock()
+_EXECUTOR_LOCK = threading.Lock()
 _BACKGROUND_FUTURES: set[concurrent.futures.Future] = set()
 _BACKGROUND_ACCEPTING = True
 
@@ -183,8 +184,24 @@ def chat_job_lock(chat_id: str) -> threading.Lock:
         return _CHAT_LOCKS.setdefault(str(chat_id), threading.Lock())
 
 
-def _executor_for(label: str):
-    return _GENERATION_EXECUTOR if label in _GENERATION_LABELS else _UTILITY_EXECUTOR
+def _executor_for(label: str) -> concurrent.futures.ThreadPoolExecutor:
+    global _GENERATION_EXECUTOR, _UTILITY_EXECUTOR
+
+    with _EXECUTOR_LOCK:
+        if label in _GENERATION_LABELS:
+            if _GENERATION_EXECUTOR is None:
+                _GENERATION_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=3,
+                    thread_name_prefix="st-generation",
+                )
+            return _GENERATION_EXECUTOR
+
+        if _UTILITY_EXECUTOR is None:
+            _UTILITY_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+                max_workers=2,
+                thread_name_prefix="st-utility",
+            )
+        return _UTILITY_EXECUTOR
 
 
 def _admission_slot(label: str) -> threading.BoundedSemaphore:
@@ -270,10 +287,21 @@ def begin_background_shutdown() -> None:
 
 
 def shutdown_background_executors(timeout: float = 20.0) -> bool:
+    global _GENERATION_EXECUTOR, _UTILITY_EXECUTOR
+
     begin_background_shutdown()
     drained = drain_background_jobs(timeout)
-    _GENERATION_EXECUTOR.shutdown(wait=drained, cancel_futures=not drained)
-    _UTILITY_EXECUTOR.shutdown(wait=drained, cancel_futures=not drained)
+
+    with _EXECUTOR_LOCK:
+        generation = _GENERATION_EXECUTOR
+        utility = _UTILITY_EXECUTOR
+        _GENERATION_EXECUTOR = None
+        _UTILITY_EXECUTOR = None
+
+    if generation is not None:
+        generation.shutdown(wait=drained, cancel_futures=not drained)
+    if utility is not None:
+        utility.shutdown(wait=drained, cancel_futures=not drained)
     return drained
 
 
