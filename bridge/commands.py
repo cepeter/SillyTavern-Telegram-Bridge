@@ -52,8 +52,7 @@ _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
 
 
 
-def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service=None, persona_service=None) -> None:
-    memory_service = resolve_memory_service(memory_service)
+def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service: MemoryService, persona_service=None) -> None:
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_current_speaker(db, chat_id, session, caption)
     group_context = ""
@@ -110,10 +109,9 @@ def regenerate_edited_turn(
     new_text: str,
     operation_id: int | str | None = None,
     *,
-    memory_service=None,
+    memory_service: MemoryService,
     persona_service=None,
 ) -> None:
-    memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
     def deliver_recovered_edit():
@@ -406,8 +404,7 @@ def apply_preset_action(db: sqlite3.Connection, token: str, chat_id: str, sessio
     send_text(token, chat_id, f"Preset deleted: {name}" if delete_generation_preset(db, chat_id, name) else f"Preset not found: {name}")
 
 
-def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], *, memory_service=None) -> str:
-    memory_service = resolve_memory_service(memory_service)
+def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], *, memory_service: MemoryService) -> str:
     message_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0]
     summary, covered_until = memory_service.summary_status(db, chat_id, session["session_id"])
     docs = data_bank_documents(db, chat_id)
@@ -467,7 +464,7 @@ from bridge.media import (
     send_reply,
     send_typing,
 )
-from bridge.memory import resolve_memory_service
+from bridge.memory_service import MemoryService
 from bridge.memory_backend import (
     memory_mode,
     memory_scope,
