@@ -9,6 +9,7 @@ import unittest
 import bridge.config as config
 import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
+import bridge.greetings as _m_greetings
 import bridge.memory_curator as _m_memory_curator
 import bridge.sync_core as _m_sync_core
 class StartOnboardingTests(unittest.TestCase):
@@ -34,15 +35,15 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_explains_optional_setup_without_greeting(self):
         sent = []
-        original = _m_memory_curator.send_text
-        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text) or []
+        original = _m_command_routes.send_text
+        _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
                 self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None,
             )
         finally:
-            _m_memory_curator.send_text = original
+            _m_command_routes.send_text = original
         self.assertTrue(handled)
         self.assertEqual(len(sent), 1)
         self.assertIn("Persona, World Info, and System Prompt are optional", sent[0])
@@ -51,15 +52,15 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_plain_start_sends_and_stores_character_greeting(self):
         sent = []
-        original = _m_memory_curator.send_text
-        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text) or [77]
+        original = _m_greetings.send_text
+        _m_greetings.send_text = lambda _token, _chat_id, text: sent.append(text) or [77]
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "start", "start",
                 self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None,
             )
         finally:
-            _m_memory_curator.send_text = original
+            _m_command_routes.send_text = original
         self.assertTrue(handled)
         self.assertEqual(sent, ["Hello from the character."])
         row = self.db.execute("SELECT role, content FROM messages").fetchone()
@@ -67,12 +68,12 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_sends_greeting_when_all_setup_is_enabled(self):
         sent = []
-        original_send = _m_memory_curator.send_text
+        original_send = _m_command_routes.send_text
         original_greeting = _m_command_routes.send_character_greeting
-        original_worlds = _m_sync_core.active_world_files
-        _m_memory_curator.send_text = lambda _token, _chat_id, text: sent.append(text) or []
+        original_worlds = _m_command_routes.active_world_files
+        _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         _m_command_routes.send_character_greeting = lambda *_args, **_kwargs: sent.append("GREETING") or True
-        _m_sync_core.active_world_files = lambda _value: ["world.json"]
+        _m_command_routes.active_world_files = lambda _value: ["world.json"]
         ready_session = dict(self.session)
         ready_session.update({"persona_id": "punto.png", "world_file": "world.json", "system_prompt": "Prompt"})
         try:
@@ -81,9 +82,9 @@ class StartOnboardingTests(unittest.TestCase):
                 ready_session, ready_session["session_id"], _m_memory_curator.DEFAULT_MODEL, "punto.png", "User", None,
             )
         finally:
-            _m_memory_curator.send_text = original_send
+            _m_command_routes.send_text = original_send
             _m_command_routes.send_character_greeting = original_greeting
-            _m_sync_core.active_world_files = original_worlds
+            _m_command_routes.active_world_files = original_worlds
         self.assertTrue(handled)
         self.assertEqual(sent, ["GREETING"])
 

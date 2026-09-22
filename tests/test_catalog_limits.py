@@ -17,6 +17,7 @@ import bridge.command_routes as _m_command_routes
 import bridge.common as _m_common
 import bridge.input_flows as _m_input_flows
 import bridge.main as _m_main
+import bridge.message_commands as _m_message_commands
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.persona_sync as _m_persona_sync
@@ -28,6 +29,7 @@ class CatalogLimitTests(unittest.TestCase):
         root = Path(self.tmp.name)
         self.old_character = _m_main.CHARACTER_DIR
         self.old_config_character = config.CHARACTER_DIR
+        self.old_telegram_character = _m_telegram.CHARACTER_DIR
         self.old_world = _m_catalog.WORLD_DIR
         self.old_config_world = config.WORLD_DIR
         self.old_prompts = _m_common.SYSTEM_PROMPTS_DIR
@@ -42,6 +44,7 @@ class CatalogLimitTests(unittest.TestCase):
         self.old_db = config.DB_FILE
         _m_main.CHARACTER_DIR = root / "characters"
         config.CHARACTER_DIR = _m_main.CHARACTER_DIR
+        _m_telegram.CHARACTER_DIR = _m_main.CHARACTER_DIR
         _m_catalog.WORLD_DIR = root / "worlds"
         config.WORLD_DIR = _m_catalog.WORLD_DIR
         _m_common.SYSTEM_PROMPTS_DIR = root / "prompts"
@@ -66,6 +69,7 @@ class CatalogLimitTests(unittest.TestCase):
         self.db.close()
         _m_main.CHARACTER_DIR = self.old_character
         config.CHARACTER_DIR = self.old_config_character
+        _m_telegram.CHARACTER_DIR = self.old_telegram_character
         _m_catalog.WORLD_DIR = self.old_world
         config.WORLD_DIR = self.old_config_world
         _m_common.SYSTEM_PROMPTS_DIR = self.old_prompts
@@ -108,12 +112,12 @@ class CatalogLimitTests(unittest.TestCase):
         settings = {"power_user": {"personas": personas, "persona_descriptions": {key: {"description": "d"} for key in personas}}}
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(settings), encoding="utf-8")
         calls = []
-        original = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_persona_menu("token", "chat", "")
         finally:
-            _m_panel_callback_routes.telegram_request = original
+            _m_cards.telegram_request = original
         callbacks = [button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row]
         self.assertEqual(sum(value.startswith("persona:t") for value in callbacks), 8)
         self.assertIn("page 1/5", calls[-1][1]["text"])
@@ -122,27 +126,27 @@ class CatalogLimitTests(unittest.TestCase):
         personas = {f"p{index:02}.png": f"Persona {index}" for index in range(40)}
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps({"power_user": {"personas": personas, "persona_descriptions": {key: {"description": "d"} for key in personas}}}), encoding="utf-8")
         sent = []
-        original = _m_memory_curator.send_text
-        _m_memory_curator.send_text = lambda _token, _chat, text: sent.append(text) or []
+        original = _m_message_commands.send_text
+        _m_message_commands.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             state = {"session_id": self.session["session_id"], "mode": "create", "persona_id": "", "expires_at": time.time() + 60}
             self.assertTrue(_m_input_flows._handle_persona_input(self.db, "token", "chat", self.session, "p40 | Persona 40 | description", state, None))
         finally:
-            _m_memory_curator.send_text = original
+            _m_message_commands.send_text = original
         self.assertTrue(any("40 maximum" in text for text in sent))
 
     def test_character_upload_rejects_item_41_without_deleting_existing(self):
         for index in range(40):
             (_m_main.CHARACTER_DIR / f"{index:02}.png").write_bytes(b"existing")
         sent = []
-        old_parse, old_fields, old_send = _m_telegram.parse_png_chara_bytes, _m_main.card_fields, _m_memory_curator.send_text
+        old_parse, old_fields, old_send = _m_telegram.parse_png_chara_bytes, _m_telegram.card_fields, _m_telegram.send_text
         _m_telegram.parse_png_chara_bytes = lambda _raw: {"name": "Forty One"}
-        _m_main.card_fields = lambda _card: {"name": "Forty One"}
-        _m_memory_curator.send_text = lambda _token, _chat, text: sent.append(text) or []
+        _m_telegram.card_fields = lambda _card: {"name": "Forty One"}
+        _m_telegram.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             _m_telegram.import_character_card(self.db, "token", "chat", "new.png", b"new")
         finally:
-            _m_telegram.parse_png_chara_bytes, _m_main.card_fields, _m_memory_curator.send_text = old_parse, old_fields, old_send
+            _m_telegram.parse_png_chara_bytes, _m_telegram.card_fields, _m_telegram.send_text = old_parse, old_fields, old_send
         self.assertEqual(len(list(_m_main.CHARACTER_DIR.glob("*.png"))), 40)
         self.assertTrue(any("40 maximum" in text for text in sent))
 

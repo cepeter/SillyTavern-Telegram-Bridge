@@ -11,6 +11,7 @@ from pathlib import Path
 import bridge.config as config
 import bridge.callbacks as _m_callbacks
 import bridge.catalog as _m_catalog
+import bridge.cards as _m_cards
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
@@ -64,12 +65,12 @@ class WorldManagementTests(unittest.TestCase):
     def test_world_panel_has_upload_and_delete_actions(self):
         (_m_catalog.WORLD_DIR / "lore.json").write_text(json.dumps({"entries": {}}), encoding="utf-8")
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_panel_callback_routes.send_world_menu("token", "chat", "")
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
         keyboard = calls[-1][1]["reply_markup"]["inline_keyboard"]
         callbacks = [button["callback_data"] for row in keyboard for button in row]
         self.assertIn("world:upload", callbacks)
@@ -79,15 +80,15 @@ class WorldManagementTests(unittest.TestCase):
         callback = {"id": "cb", "data": "world:upload", "message": {"message_id": 7}}
         answers = []
         sent = []
-        original_send = _m_memory_curator.send_text
-        original_discard = _m_session_naming.discard_panel_binding
-        _m_memory_curator.send_text = lambda *_args, **_kwargs: sent.append(True) or []
-        _m_session_naming.discard_panel_binding = lambda *_args, **_kwargs: None
+        original_send = _m_panel_callback_routes.send_text
+        original_discard = _m_panel_callback_routes.discard_panel_binding
+        _m_panel_callback_routes.send_text = lambda *_args, **_kwargs: sent.append(True) or []
+        _m_panel_callback_routes.discard_panel_binding = lambda *_args, **_kwargs: None
         try:
             _m_panel_callback_routes.handle_world_callback(self.db, "token", callback, lambda *_args: answers.append(True), callback["data"], "chat", callback["message"], self.session, self.session["session_id"], None)
         finally:
-            _m_memory_curator.send_text = original_send
-            _m_session_naming.discard_panel_binding = original_discard
+            _m_panel_callback_routes.send_text = original_send
+            _m_panel_callback_routes.discard_panel_binding = original_discard
         state = json.loads(_m_session_naming.get_meta(self.db, "world_upload:chat"))
         self.assertEqual(state["session_id"], self.session["session_id"])
         self.assertGreater(state["expires_at"], time.time())

@@ -3,6 +3,7 @@ from application_test_setup import ensure_application_extensions
 ensure_application_extensions()
 
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
 
@@ -10,6 +11,8 @@ import bridge.config as config
 import time
 import bridge.callbacks as _m_callbacks
 import bridge.main as _m_main
+import bridge.memory as _m_memory
+import bridge.cards as _m_cards
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
@@ -19,12 +22,12 @@ class SessionDeletionTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
-        self.original_purge = _m_main.purge_hindsight_session
+        self.original_purge = _m_memory.purge_hindsight_session
         self.purged = []
-        _m_main.purge_hindsight_session = lambda _db, chat_id, session_id: self.purged.append((chat_id, session_id)) or 0
+        _m_memory.purge_hindsight_session = lambda _db, chat_id, session_id: self.purged.append((chat_id, session_id)) or 0
 
     def tearDown(self):
-        _m_main.purge_hindsight_session = self.original_purge
+        _m_memory.purge_hindsight_session = self.original_purge
         self.db.close()
         self.tmp.cleanup()
 
@@ -42,7 +45,8 @@ class SessionDeletionTests(unittest.TestCase):
         self.db.commit()
 
         deleted, reason = _m_panel_callback_routes.delete_session_data(
-            self.db, "chat", inactive["session_id"], active["session_id"], operation_id=701
+            self.db, "chat", inactive["session_id"], active["session_id"], operation_id=701,
+            memory_service=SimpleNamespace(purge_session=lambda _db, chat_id, session_id: self.purged.append((chat_id, session_id)) or 0),
         )
 
         self.assertTrue(deleted, reason)
@@ -61,9 +65,10 @@ class SessionDeletionTests(unittest.TestCase):
             ("chat", inactive["session_id"], "user", "keep", time.time()),
         )
         self.db.commit()
-        _m_main.purge_hindsight_session = lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))
-
-        deleted, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", inactive["session_id"], active["session_id"])
+        deleted, reason = _m_panel_callback_routes.delete_session_data(
+            self.db, "chat", inactive["session_id"], active["session_id"],
+            memory_service=SimpleNamespace(purge_session=lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))),
+        )
 
         self.assertFalse(deleted)
         self.assertIn("Hindsight cleanup failed", reason)
@@ -89,12 +94,12 @@ class SessionDeletionTests(unittest.TestCase):
         active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         inactive = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive")
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_panel_callback_routes.send_session_menu("token", "chat", [active, inactive], active["session_id"])
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
         rows = calls[0][1]["reply_markup"]["inline_keyboard"]
         callbacks = [button["callback_data"] for row in rows for button in row]
         self.assertEqual(sum(value.startswith("sessiondelete:") for value in callbacks), 1)

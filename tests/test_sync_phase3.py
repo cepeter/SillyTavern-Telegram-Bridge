@@ -23,6 +23,7 @@ import bridge.session_naming as _m_session_naming
 import bridge.status_panels as _m_status_panels
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
+import bridge.telegram as _m_telegram
 import bridge.card_content as _m_card_content
 import bridge.cards as _m_cards
 import bridge.database as _m_database
@@ -136,15 +137,18 @@ class Phase3SyncTests(unittest.TestCase):
         self.old_password = _m_sync_api.PHASE3_SYNC_API_PASSWORD
         self.old_interval = _m_sync_api.PHASE3_SYNC_INTERVAL_SECONDS
         self.old_timeout = _m_sync_api.PHASE3_SYNC_TIMEOUT_SECONDS
-        self.old_client = _m_persona_sync.phase3_client
-        self.old_card = _m_sync_api.card_fields_from_file
+        self.old_client = _m_sync_api.phase3_client
+        self.old_sync_api_card = _m_sync_api.card_fields_from_file
+        self.old_sync_core_card = _m_sync_core.card_fields_from_file
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         _m_sync_api.PHASE3_SYNC_API_URL = "http://127.0.0.1:8000"
-        _m_sync_api.card_fields_from_file = lambda _name: {"name": "Test", "first_mes": "", "description": "", "personality": "", "scenario": ""}
+        card_stub = lambda _name: {"name": "Test", "first_mes": "", "description": "", "personality": "", "scenario": ""}
+        _m_sync_api.card_fields_from_file = card_stub
+        _m_sync_core.card_fields_from_file = card_stub
         self.db = _m_memory_curator.db_connect()
         self.session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="phase3")
         self.fake = _FakeApi()
-        _m_persona_sync.phase3_client = lambda: self.fake
+        _m_sync_api.phase3_client = lambda: self.fake
 
     def tearDown(self):
         self.db.close()
@@ -154,8 +158,9 @@ class Phase3SyncTests(unittest.TestCase):
         _m_sync_api.PHASE3_SYNC_API_PASSWORD = self.old_password
         _m_sync_api.PHASE3_SYNC_INTERVAL_SECONDS = self.old_interval
         _m_sync_api.PHASE3_SYNC_TIMEOUT_SECONDS = self.old_timeout
-        _m_persona_sync.phase3_client = self.old_client
-        _m_sync_api.card_fields_from_file = self.old_card
+        _m_sync_api.phase3_client = self.old_client
+        _m_sync_api.card_fields_from_file = self.old_sync_api_card
+        _m_sync_core.card_fields_from_file = self.old_sync_core_card
         self.tmp.cleanup()
 
     def _add(self, content):
@@ -278,9 +283,7 @@ class Phase3SyncTests(unittest.TestCase):
             _m_sync_api,
             "_phase3_disable",
             side_effect=AssertionError("raw disable bypassed service"),
-        ), patch.object(
-            _m_status_panels,
-            "send_sync_menu",
+        ), patch.object(_m_panel_callback_routes, "send_sync_menu",
             return_value=None,
         ):
             handled = _m_panel_callback_routes.handle_sync_callback(
@@ -313,9 +316,7 @@ class Phase3SyncTests(unittest.TestCase):
             _m_sync_api,
             "phase3_toggle_realtime",
             side_effect=AssertionError("raw toggle bypassed service"),
-        ), patch.object(
-            _m_status_panels,
-            "send_sync_menu",
+        ), patch.object(_m_panel_callback_routes, "send_sync_menu",
             return_value=None,
         ):
             handled = _m_panel_callback_routes.handle_sync_callback(
@@ -344,7 +345,7 @@ class Phase3SyncTests(unittest.TestCase):
             "id": "cb",
             "message": {"message_id": 90, "chat": {"id": "chat"}},
         }
-        with patch.object(_m_status_panels, "send_sync_menu", return_value=None):
+        with patch.object(_m_panel_callback_routes, "send_sync_menu", return_value=None):
             handled = _m_panel_callback_routes.handle_sync_callback(
                 self.db,
                 "token",
@@ -399,9 +400,7 @@ class Phase3SyncTests(unittest.TestCase):
         self.fake.records[1]["mes"] = "Remote edit"
 
         retained = []
-        with patch.object(
-            _m_memory,
-            "retain_session_memory",
+        with patch.object(_m_sync_core, "retain_session_memory",
             side_effect=lambda *args, **kwargs:
                 retained.append((args, kwargs)),
         ):
@@ -438,29 +437,19 @@ class Phase3SyncTests(unittest.TestCase):
         )
         self.db.commit()
 
-        with patch.object(
-            _m_cards,
-            "get_persona",
+        with patch.object(_m_telegram, "get_persona",
             side_effect=lambda persona_id: (
                 {"name": "Existing"}
                 if persona_id == "existing.png"
                 else None
             ),
-        ), patch.object(
-            _m_card_content,
-            "safe_world_path",
+        ), patch.object(_m_telegram, "safe_world_path",
             return_value=True,
-        ), patch.object(
-            card_content,
-            "safe_world_path",
-            return_value=True,
-        ), patch.object(
-            _m_memory,
-            "retain_session_memory",
+        ), patch.object(_m_telegram, "active_world_files",
+            return_value=["existing.json"],
+        ), patch.object(_m_sync_core, "retain_session_memory",
             return_value=None,
-        ), patch.object(
-            _m_card_content,
-            "card_fields_from_file",
+        ), patch.object(_m_sync_core, "card_fields_from_file",
             return_value={"name": "Test"},
         ):
             current = _m_memory_curator.load_session(
@@ -508,9 +497,7 @@ class Phase3SyncTests(unittest.TestCase):
         )
         retained = []
 
-        with patch.object(
-            _m_memory,
-            "retain_session_memory",
+        with patch.object(_m_sync_core, "retain_session_memory",
             side_effect=lambda db, chat_id, session, fields:
                 retained.append(
                     (
@@ -520,9 +507,7 @@ class Phase3SyncTests(unittest.TestCase):
                         fields["name"],
                     )
                 ),
-        ), patch.object(
-            _m_card_content,
-            "card_fields_from_file",
+        ), patch.object(_m_sync_core, "card_fields_from_file",
             return_value={"name": "patched-card"},
         ):
             _m_sync_api.apply_sync_snapshot(
@@ -555,9 +540,7 @@ class Phase3SyncTests(unittest.TestCase):
         )
         retained = []
 
-        with patch.object(
-            _m_memory,
-            "retain_session_memory",
+        with patch.object(_m_sync_core, "retain_session_memory",
             side_effect=lambda db, chat_id, session, fields:
                 retained.append(
                     (
@@ -567,9 +550,7 @@ class Phase3SyncTests(unittest.TestCase):
                         fields["name"],
                     )
                 ),
-        ), patch.object(
-            _m_card_content,
-            "card_fields_from_file",
+        ), patch.object(_m_sync_core, "card_fields_from_file",
             return_value={"name": "patched-card"},
         ):
             _m_sync_core._SYNC_SNAPSHOT_INTEGRITY.apply(
@@ -595,12 +576,12 @@ class Phase3SyncTests(unittest.TestCase):
 
     def test_sync_panel_exposes_realtime_control(self):
         calls = []
-        original = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_panel_callback_routes.send_sync_menu("token", "chat", self.db, self.session)
         finally:
-            _m_panel_callback_routes.telegram_request = original
+            _m_cards.telegram_request = original
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("sync:realtime", callbacks)
         self.assertNotIn("sync:auto", callbacks)
@@ -750,9 +731,7 @@ class SyncWorkerInjectionTests(unittest.TestCase):
             _m_sync_api,
             "_PHASE3_STOP_EVENT",
             self.FakeStopEvent([False, True]),
-        ), patch.object(
-            _m_database,
-            "db_connect",
+        ), patch.object(_m_sync_api, "db_connect",
             return_value=db,
         ), patch.object(
             _m_sync_api,
@@ -780,9 +759,7 @@ class SyncWorkerInjectionTests(unittest.TestCase):
             _m_sync_api,
             "_PHASE3_STOP_EVENT",
             self.FakeStopEvent([False, False, True]),
-        ), patch.object(
-            _m_database,
-            "db_connect",
+        ), patch.object(_m_sync_api, "db_connect",
             side_effect=lambda: next(connections),
         ):
             _m_sync_api._phase3_worker_loop(sync_service=FakeSync())
@@ -804,9 +781,7 @@ class SyncWorkerInjectionTests(unittest.TestCase):
             _m_sync_api,
             "_PHASE3_STOP_EVENT",
             self.FakeStopEvent([False, True]),
-        ), patch.object(
-            _m_database,
-            "db_connect",
+        ), patch.object(_m_sync_api, "db_connect",
             return_value=db,
         ), patch.object(
             _m_sync_api,

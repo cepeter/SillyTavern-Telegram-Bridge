@@ -9,6 +9,7 @@ import unittest
 
 import bridge.config as config
 import bridge.callbacks as _m_callbacks
+import bridge.cards as _m_cards
 import bridge.catalog as _m_catalog
 import bridge.command_routes as _m_command_routes
 import bridge.director_goals as _m_director_goals
@@ -17,6 +18,7 @@ import bridge.help_details as _m_help_details
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.scene_state as _m_scene_state
+import bridge.status_panels as _m_status_panels
 import bridge.session_naming as _m_session_naming
 import bridge.sync_core as _m_sync_core
 class HelpDrilldownTests(unittest.TestCase):
@@ -31,8 +33,8 @@ class HelpDrilldownTests(unittest.TestCase):
 
     def test_category_renders_command_buttons_and_detail(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_help_menu("token", "chat", "basic")
             buttons = [button for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row]
@@ -46,12 +48,12 @@ class HelpDrilldownTests(unittest.TestCase):
             detail_callbacks = {button["callback_data"] for row in detail["reply_markup"]["inline_keyboard"] for button in row}
             self.assertEqual(detail_callbacks, {"help:basic", "help:close"})
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
 
     def test_help_copy_explains_topics_and_actions(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_help_menu("token", "chat")
             root = calls[-1][1]
@@ -65,7 +67,7 @@ class HelpDrilldownTests(unittest.TestCase):
             _m_command_routes.send_help_menu("token", "chat", "basic", 77, 0)
             self.assertIn("What it does:", calls[-1][1]["text"])
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
 
     def test_command_detail_callback_rejects_stale_index(self):
         answers = []
@@ -80,12 +82,12 @@ class HelpDrilldownTests(unittest.TestCase):
 
     def test_category_command_list_is_paginated_at_eight(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_help_menu("token", "chat", "generation")
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
         buttons = [button for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row]
         command_buttons = [button for button in buttons if button["callback_data"].startswith("help:cmd:")]
         self.assertEqual(len(command_buttons), 8)
@@ -108,12 +110,12 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertNotIn("file sync", detail.lower())
         self.assertIn("Refresh status only redraws state", detail)
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_help.telegram_request
+        _m_help.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_help.set_bot_commands("token")
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_help.telegram_request = original_request
         commands = {item["command"]: item["description"] for item in calls[-1][1]["commands"]}
         self.assertEqual(commands["sync"], "Open Live API Sync controls")
 
@@ -123,12 +125,12 @@ class HelpDrilldownTests(unittest.TestCase):
         second = _m_sync_core.ensure_sync_binding(self.db, "chat", session["session_id"])
         self.assertEqual(first["sync_id"], second["sync_id"])
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
             _m_panel_callback_routes.send_sync_menu("token", "chat", self.db, session)
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertEqual(callbacks, {"sync:realtime", "sync:now", "sync:status", "sync:close"})
 
@@ -143,8 +145,8 @@ class HelpDrilldownTests(unittest.TestCase):
 
     def test_help_command_fast_path_always_renders_panel(self):
         calls = []
-        original_send = _m_command_routes.send_help_menu
-        _m_command_routes.send_help_menu = lambda *args, **kwargs: calls.append((args, kwargs))
+        original_send = _m_help_details.send_help_menu
+        _m_help_details.send_help_menu = lambda *args, **kwargs: calls.append((args, kwargs))
         try:
             self.assertEqual(_m_help_details.normalize_help_command("/help@SillyTavernPunzmeBot"), "")
             self.assertEqual(_m_help_details.normalize_help_command("/help scene refresh"), "scene refresh")
@@ -155,7 +157,7 @@ class HelpDrilldownTests(unittest.TestCase):
             self.assertEqual(calls[-1][0], ("token", "chat"))
             self.assertFalse(_m_command_routes.send_help_command("token", "chat", "/helper"))
         finally:
-            _m_command_routes.send_help_menu = original_send
+            _m_help_details.send_help_menu = original_send
 
     def test_help_callbacks_are_marked_for_fast_path(self):
         self.assertTrue(_m_help_details.is_help_callback("help:menu"))
@@ -165,9 +167,9 @@ class HelpDrilldownTests(unittest.TestCase):
     def test_read_only_and_feature_commands_render_panels(self):
         session = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="panel-session")
         calls = []
-        original_panel = _m_panel_callback_routes.send_panel_message
+        original_panel = _m_status_panels.send_panel_message
         original_groups = _m_catalog.get_model_groups
-        _m_panel_callback_routes.send_panel_message = lambda *args, **kwargs: calls.append((args, kwargs))
+        _m_status_panels.send_panel_message = lambda *args, **kwargs: calls.append((args, kwargs))
         _m_catalog.get_model_groups = lambda: {}
         try:
             _m_command_routes.send_prompt_menu("token", "chat", self.db, session, {"name": "Test"})
@@ -180,7 +182,7 @@ class HelpDrilldownTests(unittest.TestCase):
             _m_memory_curator.send_curated_memory_menu("token", "chat", self.db, session)
             self.assertIn("curated:refresh", str(calls[-1]))
         finally:
-            _m_panel_callback_routes.send_panel_message = original_panel
+            _m_status_panels.send_panel_message = original_panel
             _m_catalog.get_model_groups = original_groups
 
 if __name__ == "__main__":

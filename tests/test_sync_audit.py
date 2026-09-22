@@ -3,6 +3,7 @@ from application_test_setup import ensure_application_extensions
 ensure_application_extensions()
 
 from pathlib import Path
+from types import SimpleNamespace
 import sqlite3
 import tempfile
 import unittest
@@ -239,18 +240,14 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
         self.db.commit()
 
-        original_purge = _m_main.purge_hindsight_session
-        _m_main.purge_hindsight_session = lambda *_args: 0
-        try:
-            deleted, reason = _m_panel_callback_routes.delete_session_data(
-                self.db,
-                "chat",
-                inactive["session_id"],
-                active["session_id"],
-                operation_id=991,
-            )
-        finally:
-            _m_main.purge_hindsight_session = original_purge
+        deleted, reason = _m_panel_callback_routes.delete_session_data(
+            self.db,
+            "chat",
+            inactive["session_id"],
+            active["session_id"],
+            operation_id=991,
+            memory_service=SimpleNamespace(purge_session=lambda *_args: 0),
+        )
 
         self.assertTrue(deleted, reason)
         self.assertIsNone(

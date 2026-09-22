@@ -112,16 +112,10 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             _m_generation,
             "generate_text",
             side_effect=AssertionError("provider must not run"),
-        ), patch.object(
-            _m_media,
-            "delete_outgoing_message_row",
-        ) as delete_current, patch.object(
-            _m_telegram,
-            "telegram_request",
+        ), patch.object(_m_generation, "delete_outgoing_message_row",
+        ) as delete_current, patch.object(_m_generation, "telegram_request",
             return_value={},
-        ) as telegram, patch.object(
-            _m_media,
-            "send_reply",
+        ) as telegram, patch.object(_m_generation, "send_reply",
         ) as send_reply:
             _m_message_commands.regenerate_last(
                 self.db,
@@ -249,16 +243,10 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             _m_generation,
             "generate_text",
             side_effect=AssertionError("provider must not run"),
-        ), patch.object(
-            _m_media,
-            "delete_outgoing_message_row",
-        ), patch.object(
-            _m_telegram,
-            "telegram_request",
+        ), patch.object(_m_generation, "delete_outgoing_message_row",
+        ), patch.object(_m_generation, "telegram_request",
             return_value={},
-        ), patch.object(
-            _m_media,
-            "send_reply",
+        ), patch.object(_m_generation, "send_reply",
         ) as send_reply:
             _m_message_commands.continue_last(
                 self.db,
@@ -295,20 +283,12 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             {"old_message_ids": ["61"], "user_rowid": user_rowid},
         )
 
-        with patch.object(
-            _m_generation,
-            "generate_text",
+        with patch.object(_m_commands, "generate_text",
             side_effect=AssertionError("provider must not run"),
-        ), patch.object(
-            _m_media,
-            "delete_outgoing_message_row",
-        ), patch.object(
-            _m_telegram,
-            "telegram_request",
+        ), patch.object(_m_commands, "delete_outgoing_message_row",
+        ), patch.object(_m_commands, "telegram_request",
             return_value={},
-        ), patch.object(
-            _m_media,
-            "send_reply",
+        ), patch.object(_m_commands, "send_reply",
         ) as send_reply:
             _m_commands.regenerate_edited_turn(
                 self.db,
@@ -388,20 +368,12 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self._operation(operation_id, "local_committed", "regen")
         memory = object()
 
-        with patch.object(
-            _m_telegram,
-            "load_session",
+        with patch.object(_m_message_commands, "load_session",
             return_value=self.session,
-        ), patch.object(
-            _m_card_content,
-            "card_fields_from_file",
+        ), patch.object(_m_message_commands, "card_fields_from_file",
             return_value=self.fields,
-        ), patch.object(
-            _m_generation,
-            "regenerate_last",
-        ) as regen, patch.object(
-            _m_media,
-            "send_reply",
+        ), patch.object(_m_message_commands, "regenerate_last",
+        ) as regen, patch.object(_m_message_commands, "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
             _m_message_commands.process_message(
@@ -424,20 +396,12 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self._operation(operation_id, "local_committed", "continue")
         memory = object()
 
-        with patch.object(
-            _m_telegram,
-            "load_session",
+        with patch.object(_m_message_commands, "load_session",
             return_value=self.session,
-        ), patch.object(
-            _m_card_content,
-            "card_fields_from_file",
+        ), patch.object(_m_message_commands, "card_fields_from_file",
             return_value=self.fields,
-        ), patch.object(
-            _m_generation,
-            "continue_last",
-        ) as continuation, patch.object(
-            _m_media,
-            "send_reply",
+        ), patch.object(_m_message_commands, "continue_last",
+        ) as continuation, patch.object(_m_message_commands, "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
             _m_message_commands.process_message(
@@ -460,20 +424,12 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self._operation(operation_id, "local_committed", "edit")
         memory = object()
 
-        with patch.object(
-            _m_telegram,
-            "load_session",
+        with patch.object(_m_message_commands, "load_session",
             return_value=self.session,
-        ), patch.object(
-            _m_card_content,
-            "card_fields_from_file",
+        ), patch.object(_m_message_commands, "card_fields_from_file",
             return_value=self.fields,
-        ), patch.object(
-            _m_commands,
-            "edit_last_user",
-        ) as edit, patch.object(
-            _m_media,
-            "send_reply",
+        ), patch.object(_m_message_commands, "edit_last_user",
+        ) as edit, patch.object(_m_message_commands, "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
             _m_message_commands.process_message(

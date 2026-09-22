@@ -10,6 +10,7 @@ import bridge.config as config
 import time
 import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
+import bridge.memory as _m_memory
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 class TaskModelRoutingTests(unittest.TestCase):
@@ -56,12 +57,12 @@ class TaskModelRoutingTests(unittest.TestCase):
         self.db.commit()
 
         seen_models = []
-        original_generate = _m_memory_curator.generate_text
-        _m_memory_curator.generate_text = lambda _key, model, _messages, **_kwargs: seen_models.append(model) or "Blue key in drawer."
+        original_generate = _m_memory.generate_text
+        _m_memory.generate_text = lambda _key, model, _messages, **_kwargs: seen_models.append(model) or "Blue key in drawer."
         try:
             summary = _m_groups.generate_session_summary(self.db, "chat", self.session, force=True)
         finally:
-            _m_memory_curator.generate_text = original_generate
+            _m_memory.generate_text = original_generate
 
         self.assertEqual(summary, "Blue key in drawer.")
         self.assertEqual(seen_models, ["cheap::summary-model"])

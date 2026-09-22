@@ -11,6 +11,8 @@ import bridge.config as config
 import json
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.cards as _m_cards
+import bridge.command_routes as _m_command_routes
 import bridge.character_identity as _m_character_identity
 import bridge.groups as _m_groups
 import bridge.main as _m_main
@@ -20,6 +22,7 @@ import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
+import bridge.telegram as _m_telegram
 class GroupTurnGatingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -68,8 +71,8 @@ class GroupTurnGatingTests(unittest.TestCase):
 
     def test_turn_controls_are_visible_only_in_manual_mode(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, _method, payload: calls.append(payload) or {}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, _method, payload: calls.append(payload) or {}
         try:
             state = _m_sync_api.group_state(self.db, "chat", "session")
             state["mode"] = "manual"
@@ -83,20 +86,20 @@ class GroupTurnGatingTests(unittest.TestCase):
             other_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertEqual(other_callbacks & {"group:claim", "group:pass"}, set())
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
 
     def test_group_panel_ignores_not_modified_response(self):
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
         try:
             _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, message_id=10)
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
 
     def test_new_group_session_button_only_appears_in_topic(self):
-        original_request = _m_panel_callback_routes.telegram_request
+        original_request = _m_cards.telegram_request
         calls = []
-        _m_panel_callback_routes.telegram_request = lambda _token, _method, payload: calls.append(payload) or {}
+        _m_cards.telegram_request = lambda _token, _method, payload: calls.append(payload) or {}
         try:
             _m_panel_callback_routes.send_group_menu(self.db, "token", "chat|topic:7", {"session_id": "session"})
             topic_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
@@ -105,16 +108,16 @@ class GroupTurnGatingTests(unittest.TestCase):
             dm_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertNotIn("group:new_session", dm_callbacks)
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
     def test_group_command_is_rejected_in_direct_chat(self):
         sent = []
-        original_send = _m_memory_curator.send_text
-        _m_memory_curator.send_text = lambda _token, _chat, text: sent.append(text) or []
+        original_send = _m_command_routes.send_text
+        _m_command_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
         session = {"session_id": "session", "persona_id": "", "model_id": _m_memory_curator.DEFAULT_MODEL, "author_note": "", "world_file": "", "system_prompt": "", "response_language": "auto"}
         try:
             handled = _m_message_commands.handle_command_route(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", _m_memory_curator.DEFAULT_MODEL, "", "Test User")
         finally:
-            _m_memory_curator.send_text = original_send
+            _m_command_routes.send_text = original_send
         self.assertTrue(handled)
         self.assertEqual(sent, ["Group sessions are available only inside a Telegram Forum Topic."])
 
@@ -125,11 +128,11 @@ class GroupTurnGatingTests(unittest.TestCase):
         original_close = _m_session_naming.close_panel_message
         original_menu = _m_session_naming.send_character_menu
         original_context = _m_session_naming.set_panel_session_context
-        original_send = _m_memory_curator.send_text
+        original_send = _m_session_naming.send_text
         _m_session_naming.close_panel_message = lambda *_args, **_kwargs: None
         _m_session_naming.send_character_menu = lambda _token, _chat, _character: opened.append(True)
         _m_session_naming.set_panel_session_context = lambda session_id: opened.append(session_id)
-        _m_memory_curator.send_text = lambda *_args, **_kwargs: []
+        _m_session_naming.send_text = lambda *_args, **_kwargs: []
         callback = {"id": "callback", "from": {"id": "user"}, "data": "group:new_session", "message": {"message_id": 10, "chat": {"id": chat_id}}}
         try:
             _m_callbacks.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user")
@@ -140,7 +143,7 @@ class GroupTurnGatingTests(unittest.TestCase):
             _m_session_naming.close_panel_message = original_close
             _m_session_naming.send_character_menu = original_menu
             _m_session_naming.set_panel_session_context = original_context
-            _m_memory_curator.send_text = original_send
+            _m_session_naming.send_text = original_send
         active_id = _m_session_naming.get_meta(self.db, f"active_session:{chat_id}", "")
         setup = _m_panel_callback_routes.group_setup_state(self.db, chat_id, active_id)
         self.assertEqual(active_id, "group-77")
@@ -153,23 +156,27 @@ class GroupTurnGatingTests(unittest.TestCase):
         session = _m_callbacks.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
         _m_session_naming.set_meta(self.db, f"group_setup:{chat_id}", json.dumps({"session_id": session["session_id"], "stage": "character", "expires_at": time.time() + 600}))
         original_resolve = _m_panel_callback_routes.resolve_dynamic_callback_token
-        original_char_path = _m_character_identity.safe_character_path
-        original_world_path = _m_sync_core.safe_world_path
+        original_char_path = _m_panel_callback_routes.safe_character_path
+        original_world_path = _m_panel_callback_routes.safe_world_path
         original_canonical_world_path = card_content.safe_world_path
-        original_fields = _m_sync_api.card_fields_from_file
-        original_close = _m_session_naming.close_panel_message
+        original_telegram_world_path = _m_telegram.safe_world_path
+        original_fields = _m_panel_callback_routes.card_fields_from_file
+        original_close = _m_panel_callback_routes.close_panel_message
         original_world_menu = _m_panel_callback_routes.send_world_menu
+        original_groups_world_menu = _m_groups.send_world_menu
         original_remove = _m_panel_callback_routes.remove_inline_keyboard
         original_group_menu = _m_panel_callback_routes.send_group_menu
         opened_world = []
         opened_group = []
         _m_panel_callback_routes.resolve_dynamic_callback_token = lambda _value, kind, _chat: "chosen.png" if kind == "character" else "lore.json"
-        _m_character_identity.safe_character_path = lambda _name: Path("/tmp/chosen.png")
-        _m_sync_core.safe_world_path = lambda _name: Path("/tmp/lore.json")
+        _m_panel_callback_routes.safe_character_path = lambda _name: Path("/tmp/chosen.png")
+        _m_panel_callback_routes.safe_world_path = lambda _name: Path("/tmp/lore.json")
         card_content.safe_world_path = lambda _name: Path("/tmp/lore.json")
-        _m_sync_api.card_fields_from_file = lambda _name: {"name": "Chosen"}
-        _m_session_naming.close_panel_message = lambda *_args, **_kwargs: None
+        _m_telegram.safe_world_path = lambda _name: Path("/tmp/lore.json")
+        _m_panel_callback_routes.card_fields_from_file = lambda _name: {"name": "Chosen"}
+        _m_panel_callback_routes.close_panel_message = lambda *_args, **_kwargs: None
         _m_panel_callback_routes.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
+        _m_groups.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
         _m_panel_callback_routes.remove_inline_keyboard = lambda *_args, **_kwargs: None
         _m_panel_callback_routes.send_group_menu = lambda *_args, **_kwargs: opened_group.append(True)
         try:
@@ -185,12 +192,14 @@ class GroupTurnGatingTests(unittest.TestCase):
             _m_panel_callback_routes.handle_world_callback(self.db, "token", done_callback, lambda *_args: None, done_callback["data"], chat_id, done_callback["message"], session, session["session_id"], None)
         finally:
             _m_panel_callback_routes.resolve_dynamic_callback_token = original_resolve
-            _m_character_identity.safe_character_path = original_char_path
-            _m_sync_core.safe_world_path = original_world_path
+            _m_panel_callback_routes.safe_character_path = original_char_path
+            _m_panel_callback_routes.safe_world_path = original_world_path
             card_content.safe_world_path = original_canonical_world_path
-            _m_sync_api.card_fields_from_file = original_fields
-            _m_session_naming.close_panel_message = original_close
+            _m_telegram.safe_world_path = original_telegram_world_path
+            _m_panel_callback_routes.card_fields_from_file = original_fields
+            _m_panel_callback_routes.close_panel_message = original_close
             _m_panel_callback_routes.send_world_menu = original_world_menu
+            _m_groups.send_world_menu = original_groups_world_menu
             _m_panel_callback_routes.remove_inline_keyboard = original_remove
             _m_panel_callback_routes.send_group_menu = original_group_menu
         self.assertTrue(opened_world)

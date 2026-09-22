@@ -221,12 +221,12 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertEqual(calls, 2)
 
     def test_auto_language_render_returns_original_without_backend_call(self):
-        original_generate = _m_memory_curator.generate_text
-        _m_memory_curator.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("auto must not render"))
+        original_generate = _m_generation.generate_text
+        _m_generation.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("auto must not render"))
         try:
             result = _m_message_commands.render_response_language("", "model", "original", "auto", "session", {})
         finally:
-            _m_memory_curator.generate_text = original_generate
+            _m_generation.generate_text = original_generate
         self.assertEqual(result, "original")
 
     def test_fixed_language_render_uses_minimal_indonesian_rewrite(self):
@@ -237,13 +237,13 @@ class GenerationContinuationTests(unittest.TestCase):
             captured.update({"messages": messages, "session_id": session_id, "settings": settings})
             return "hasil Indonesia"
 
-        _m_memory_curator.generate_text = fake_generate
+        _m_generation.generate_text = fake_generate
         try:
             result = _m_message_commands.render_response_language(
                 "", "model", "English source", "id", "telegram:chat:session", dict(_m_sync_core.GENERATION_DEFAULTS)
             )
         finally:
-            _m_memory_curator.generate_text = original_generate
+            _m_generation.generate_text = original_generate
         self.assertEqual(result, "hasil Indonesia")
         self.assertEqual(captured["session_id"], "telegram:chat:session:language-render")
         self.assertIn("Bahasa Indonesia (id)", captured["messages"][0]["content"])

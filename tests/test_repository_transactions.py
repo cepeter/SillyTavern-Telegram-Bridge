@@ -546,29 +546,29 @@ class GroupTransactionTests(unittest.TestCase):
         fields = {"name": "One"}
 
         with patch.object(
-            _m_rag_core, "rag_retrieval_bundle", return_value={}
+            _m_message_commands, "rag_retrieval_bundle", return_value={}
         ), patch.object(
-            _m_generation, "build_chat_messages", return_value=[]
+            _m_message_commands, "build_chat_messages", return_value=[]
         ), patch.object(
             _m_memory_backend, "recall_memory_context", return_value=""
         ), patch.object(
             _m_memory, "session_summary_for_prompt", return_value=""
         ), patch.object(
-            _m_rag_core, "rag_context_for_prompt", return_value=""
+            _m_message_commands, "rag_context_for_prompt", return_value=""
         ), patch.object(
-            _m_media, "send_typing", return_value=None
+            _m_message_commands, "send_typing", return_value=None
         ), patch.object(
-            _m_generation, "generate_text", return_value="Reply"
+            _m_message_commands, "generate_text", return_value="Reply"
         ), patch.object(
-            _m_rag_core, "rag_citation_footer", return_value=""
+            _m_message_commands, "rag_citation_footer", return_value=""
         ), patch.object(
-            _m_generation, "render_response_language", return_value="Reply"
+            _m_message_commands, "render_response_language", return_value="Reply"
         ), patch.object(
             _m_memory, "retain_session_memory", return_value=None
         ), patch.object(
-            _m_media, "queue_user_quote_tts", return_value=None
+            _m_message_commands, "queue_user_quote_tts", return_value=None
         ), patch.object(
-            _m_media, "send_reply", return_value=None
+            _m_message_commands, "send_reply", return_value=None
         ):
             _m_message_commands.generate_and_store_reply(
                 self.db,
@@ -599,33 +599,27 @@ class GroupTransactionTests(unittest.TestCase):
         }
 
         with patch.object(
-            _m_group_core, "group_current_speaker", return_value=group_turn
+            _m_commands, "group_current_speaker", return_value=group_turn
         ), patch.object(
-            _m_card_content, "card_fields_from_file", return_value={"name": "One"}
+            _m_commands, "card_fields_from_file", return_value={"name": "One"}
         ), patch.object(
-            _m_groups, "group_prompt_context", return_value=""
+            _m_commands, "group_prompt_context", return_value=""
         ), patch.object(
-            _m_rag_core, "rag_retrieval_bundle", return_value={}
+            _m_commands, "rag_retrieval_bundle", return_value={}
         ), patch.object(
-            _m_generation, "build_chat_messages", return_value=[]
+            _m_commands, "build_chat_messages", return_value=[]
         ), patch.object(
-            _m_memory_backend, "recall_memory_context", return_value=""
+            _m_commands, "rag_context_for_prompt", return_value=""
         ), patch.object(
-            _m_memory, "session_summary_for_prompt", return_value=""
+            _m_commands, "send_typing", return_value=None
         ), patch.object(
-            _m_rag_core, "rag_context_for_prompt", return_value=""
+            _m_commands, "generate_text", return_value="Reply"
         ), patch.object(
-            _m_media, "send_typing", return_value=None
+            _m_commands, "rag_citation_footer", return_value=""
         ), patch.object(
-            _m_generation, "generate_text", return_value="Reply"
+            _m_commands, "render_session_response", return_value="Reply"
         ), patch.object(
-            _m_rag_core, "rag_citation_footer", return_value=""
-        ), patch.object(
-            _m_generation, "render_session_response", return_value="Reply"
-        ), patch.object(
-            _m_memory, "retain_session_memory", return_value=None
-        ), patch.object(
-            _m_media, "send_reply", return_value=None
+            _m_commands, "send_reply", return_value=None
         ):
             _m_commands.process_image_message(
                 self.db,

@@ -32,12 +32,18 @@ class OpenCodeMuseTests(unittest.TestCase):
         self.old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
         _m_generation.resolve_provider_model = lambda _model: ("opencode-free", "muse-spark-1.3-contributor-free")
         _m_generation.get_provider_spec = lambda _provider: {"transport": "opencode_muse", "api_endpoint": "https://opencode.ai/zen/v1"}
+        self.old_main_resolve = _m_main.resolve_provider_model
+        self.old_main_spec = _m_main.get_provider_spec
+        _m_main.resolve_provider_model = _m_generation.resolve_provider_model
+        _m_main.get_provider_spec = _m_generation.get_provider_spec
         os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "opencode.ai"
 
     def tearDown(self):
         _m_generation.resolve_provider_model = self.old_resolve
         _m_generation.get_provider_spec = self.old_spec
         _m_generation.strict_urlopen = self.old_urlopen
+        _m_main.resolve_provider_model = self.old_main_resolve
+        _m_main.get_provider_spec = self.old_main_spec
         if self.old_hosts is None:
             os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
         else:
@@ -53,13 +59,13 @@ class OpenCodeMuseTests(unittest.TestCase):
 
     def test_startup_still_requires_credentials_for_keyed_transport(self):
         old_key = os.environ.pop("LLM_API_KEY", None)
-        old_spec = _m_generation.get_provider_spec
-        _m_generation.get_provider_spec = lambda _provider: {"transport": "openai_chat"}
+        old_spec = _m_main.get_provider_spec
+        _m_main.get_provider_spec = lambda _provider: {"transport": "openai_chat"}
         try:
             with self.assertRaisesRegex(RuntimeError, "required provider credential"):
                 _m_main.validate_startup_credential("provider::model")
         finally:
-            _m_generation.get_provider_spec = old_spec
+            _m_main.get_provider_spec = old_spec
             if old_key is not None:
                 os.environ["LLM_API_KEY"] = old_key
 

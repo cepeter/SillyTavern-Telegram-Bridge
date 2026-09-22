@@ -28,15 +28,15 @@ class SessionCommandRoutingTests(unittest.TestCase):
 
     def test_session_command_routes_before_character_card_load(self):
         calls = []
-        old_menu = _m_panel_callback_routes.send_session_menu
-        old_loader = _m_sync_api.card_fields_from_file
-        _m_panel_callback_routes.send_session_menu = lambda _token, chat_id, sessions, active_id, *_args: calls.append((chat_id, sessions, active_id))
-        _m_sync_api.card_fields_from_file = lambda _name: (_ for _ in ()).throw(AssertionError("character loader must not run"))
+        old_menu = _m_message_commands.send_session_menu
+        old_loader = _m_message_commands.card_fields_from_file
+        _m_message_commands.send_session_menu = lambda _token, chat_id, sessions, active_id, *_args: calls.append((chat_id, sessions, active_id))
+        _m_message_commands.card_fields_from_file = lambda _name: (_ for _ in ()).throw(AssertionError("character loader must not run"))
         try:
             _m_message_commands.process_message(self.db, "token", "key", "provider/model", {}, "chat", "/session", telegram_message_id=1)
         finally:
-            _m_panel_callback_routes.send_session_menu = old_menu
-            _m_sync_api.card_fields_from_file = old_loader
+            _m_message_commands.send_session_menu = old_menu
+            _m_message_commands.card_fields_from_file = old_loader
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][0], "chat")
         self.assertEqual(calls[0][2], "active")

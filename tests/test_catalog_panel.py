@@ -9,12 +9,13 @@ from pathlib import Path
 
 import os
 import bridge.catalog as _m_catalog
+import bridge.cards as _m_cards
 import bridge.generation as _m_generation
 import bridge.panel_callback_routes as _m_panel_callback_routes
 class CatalogPanelTests(unittest.TestCase):
     def test_hive_health_uses_streaming_chat_completion_not_models(self):
-        old_config = _m_generation.PROVIDER_CONFIG_FILE
-        old_request = _m_generation.strict_urlopen
+        old_config = _m_catalog.PROVIDER_CONFIG_FILE
+        old_request = _m_catalog.strict_urlopen
         old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
         calls = []
 
@@ -42,15 +43,15 @@ class CatalogPanelTests(unittest.TestCase):
                 "    transport: chat_completions\n    health_check: chat_completion\n    models:\n      - zai-org/glm-5.3-flash\n",
                 encoding="utf-8",
             )
-            _m_generation.PROVIDER_CONFIG_FILE = config
-            _m_generation.strict_urlopen = fake_urlopen
+            _m_catalog.PROVIDER_CONFIG_FILE = config
+            _m_catalog.strict_urlopen = fake_urlopen
             os.environ["TEST_HIVE_KEY"] = "test-only"
             os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "api-cdn.thehive.ai"
             try:
                 result = _m_catalog.provider_health_checks("hive")
             finally:
-                _m_generation.PROVIDER_CONFIG_FILE = old_config
-                _m_generation.strict_urlopen = old_request
+                _m_catalog.PROVIDER_CONFIG_FILE = old_config
+                _m_catalog.strict_urlopen = old_request
                 os.environ.pop("TEST_HIVE_KEY", None)
                 if old_hosts is None:
                     os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
@@ -68,12 +69,12 @@ class CatalogPanelTests(unittest.TestCase):
 
     def test_model_selection_offers_story_or_utility_target(self):
         calls = []
-        original_request = _m_panel_callback_routes.telegram_request
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {"message_id": 1}
+        original_request = _m_cards.telegram_request
+        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {"message_id": 1}
         try:
             _m_panel_callback_routes.send_model_target_menu("token", "chat", "main::model", "utility::model")
         finally:
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
         callbacks = [button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row]
         self.assertIn("modeltarget:story", callbacks)
         self.assertIn("modeltarget:utility", callbacks)
@@ -81,14 +82,14 @@ class CatalogPanelTests(unittest.TestCase):
 
     def test_model_panel_treats_not_modified_as_success(self):
         original_groups = _m_catalog.get_model_groups
-        original_request = _m_panel_callback_routes.telegram_request
+        original_request = _m_cards.telegram_request
         _m_catalog.get_model_groups = lambda: {"provider": ("Provider", [("model", "provider::model")], True)}
-        _m_panel_callback_routes.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
+        _m_cards.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
         try:
             _m_panel_callback_routes.send_model_menu("token", "chat", "provider::model", message_id=10)
         finally:
             _m_catalog.get_model_groups = original_groups
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_cards.telegram_request = original_request
 
 
 if __name__ == "__main__":

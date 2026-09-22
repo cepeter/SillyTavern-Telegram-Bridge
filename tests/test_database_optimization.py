@@ -146,7 +146,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
                 self.closed = True
 
         original_event = _m_sync_api._PHASE3_STOP_EVENT
-        original_connect = _m_memory_curator.db_connect
+        original_connect = _m_sync_api.db_connect
         original_poll = _m_sync_api.phase3_sync_poll
         stop_event = FakeStopEvent()
         connections = []
@@ -158,13 +158,13 @@ class DatabaseOptimizationTests(unittest.TestCase):
             return connection
 
         _m_sync_api._PHASE3_STOP_EVENT = stop_event
-        _m_memory_curator.db_connect = connect
+        _m_sync_api.db_connect = connect
         _m_sync_api.phase3_sync_poll = lambda db: polls.append(db)
         try:
             _m_sync_api._phase3_worker_loop()
         finally:
             _m_sync_api._PHASE3_STOP_EVENT = original_event
-            _m_memory_curator.db_connect = original_connect
+            _m_sync_api.db_connect = original_connect
             _m_sync_api.phase3_sync_poll = original_poll
 
         self.assertEqual(len(connections), 1)

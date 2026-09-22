@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import bridge.expressions as _m_expressions
+import bridge.config as config
 import bridge.main as _m_main
 import bridge.media as _m_media
 import bridge.panel_callback_routes as _m_panel_callback_routes
@@ -17,24 +18,24 @@ class ExpressionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
-        self.old_character_dir = _m_main.CHARACTER_DIR
-        self.old_card_file = _m_panel_callback_routes.CARD_FILE
-        self.old_st_dir = _m_persona_sync.SILLYTAVERN_DIR
-        _m_main.CHARACTER_DIR = self.root / "characters"
-        _m_main.CHARACTER_DIR.mkdir()
-        _m_panel_callback_routes.CARD_FILE = _m_main.CHARACTER_DIR / "Alisha.png"
-        _m_panel_callback_routes.CARD_FILE.write_bytes(b"fixed")
-        _m_persona_sync.SILLYTAVERN_DIR = self.root / "st"
-        (_m_persona_sync.SILLYTAVERN_DIR / "public/img/default-expressions").mkdir(parents=True)
+        self.old_character_dir = config.CHARACTER_DIR
+        self.old_card_file = _m_expressions.CARD_FILE
+        self.old_st_dir = _m_expressions.SILLYTAVERN_DIR
+        config.CHARACTER_DIR = self.root / "characters"
+        config.CHARACTER_DIR.mkdir()
+        _m_expressions.CARD_FILE = config.CHARACTER_DIR / "Alisha.png"
+        _m_expressions.CARD_FILE.write_bytes(b"fixed")
+        _m_expressions.SILLYTAVERN_DIR = self.root / "st"
+        (_m_expressions.SILLYTAVERN_DIR / "public/img/default-expressions").mkdir(parents=True)
 
     def tearDown(self):
-        _m_main.CHARACTER_DIR = self.old_character_dir
-        _m_panel_callback_routes.CARD_FILE = self.old_card_file
-        _m_persona_sync.SILLYTAVERN_DIR = self.old_st_dir
+        config.CHARACTER_DIR = self.old_character_dir
+        _m_expressions.CARD_FILE = self.old_card_file
+        _m_expressions.SILLYTAVERN_DIR = self.old_st_dir
         self.temp.cleanup()
 
     def test_native_discovery_strips_sillytavern_suffixes(self):
-        sprite_dir = _m_main.CHARACTER_DIR / "Alisha"
+        sprite_dir = config.CHARACTER_DIR / "Alisha"
         sprite_dir.mkdir()
         for name in ("joy.png", "joy-1.png", "sadness.expressive.webp"):
             (sprite_dir / name).write_bytes(b"image")
@@ -48,7 +49,7 @@ class ExpressionTests(unittest.TestCase):
         self.assertEqual(_m_expressions.classify_expression("an unrelated sentence", assets), "neutral")
 
     def test_menu_exposes_auto_off_and_native_labels(self):
-        sprite_dir = _m_main.CHARACTER_DIR / "Alisha"
+        sprite_dir = config.CHARACTER_DIR / "Alisha"
         sprite_dir.mkdir()
         (sprite_dir / "joy.png").write_bytes(b"image")
         for index in range(13):
@@ -64,7 +65,7 @@ class ExpressionTests(unittest.TestCase):
         self.assertIn("expression:asset9", page_callbacks)
 
     def test_delivery_deduplicates_same_effective_asset(self):
-        sprite_dir = _m_main.CHARACTER_DIR / "Alisha"
+        sprite_dir = config.CHARACTER_DIR / "Alisha"
         sprite_dir.mkdir()
         (sprite_dir / "joy.png").write_bytes(b"image")
         db = sqlite3.connect(":memory:")

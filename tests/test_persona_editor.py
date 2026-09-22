@@ -159,17 +159,28 @@ class PersonaEditorTests(unittest.TestCase):
         self.db = _m_memory_curator.db_connect()
         self.session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="persona-session")
         self.calls = []
-        self.old_request = _m_panel_callback_routes.telegram_request
-        self.old_send_text = _m_memory_curator.send_text
-        self.old_close = _m_session_naming.close_panel_message
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: self.calls.append((method, payload)) or {"message_id": 500}
-        _m_memory_curator.send_text = lambda _token, _chat, _text: [501]
-        _m_session_naming.close_panel_message = lambda _token, _chat, _callback: None
+        self.old_panel_request = _m_panel_callback_routes.telegram_request
+        self.old_cards_request = _m_cards.telegram_request
+        self.old_input_request = _m_input_flows.telegram_request
+        self.old_input_send_text = _m_input_flows.send_text
+        self.old_pending_send_text = _m_message_commands.send_text
+        self.old_input_close = _m_input_flows.close_panel_message
+        request_stub = lambda _token, method, payload: self.calls.append((method, payload)) or {"message_id": 500}
+        _m_panel_callback_routes.telegram_request = request_stub
+        _m_cards.telegram_request = request_stub
+        _m_input_flows.telegram_request = request_stub
+        send_stub = lambda _token, _chat, _text: [501]
+        _m_input_flows.send_text = send_stub
+        _m_message_commands.send_text = send_stub
+        _m_input_flows.close_panel_message = lambda _token, _chat, _callback: None
 
     def tearDown(self):
-        _m_panel_callback_routes.telegram_request = self.old_request
-        _m_memory_curator.send_text = self.old_send_text
-        _m_session_naming.close_panel_message = self.old_close
+        _m_panel_callback_routes.telegram_request = self.old_panel_request
+        _m_cards.telegram_request = self.old_cards_request
+        _m_input_flows.telegram_request = self.old_input_request
+        _m_input_flows.send_text = self.old_input_send_text
+        _m_message_commands.send_text = self.old_pending_send_text
+        _m_input_flows.close_panel_message = self.old_input_close
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_cache
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
         _m_persona_sync.phase3_api_configured = self.old_phase3
@@ -367,9 +378,7 @@ class PersonaEditorTests(unittest.TestCase):
         fake = FakePersonaService()
         services = type("Services", (), {"persona": fake})()
         captured = {}
-        with patch.object(
-            _m_cards,
-            "send_persona_menu",
+        with patch.object(_m_command_routes, "send_persona_menu",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
             handled = _m_command_routes._handle_entities(

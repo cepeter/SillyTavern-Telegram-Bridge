@@ -52,8 +52,8 @@ class SceneStateEngineTests(unittest.TestCase):
     def test_refresh_uses_utility_model_and_injects_state_into_continuity(self):
         self._add_turn()
         seen = []
-        original_generate = _m_memory_curator.generate_text
-        _m_memory_curator.generate_text = lambda _key, model, _messages, **_kwargs: seen.append(model) or (
+        original_generate = _m_scene_state.generate_text
+        _m_scene_state.generate_text = lambda _key, model, _messages, **_kwargs: seen.append(model) or (
             '{"location":"Central station","weather":"heavy rain",'
             '"participants":{"Mira":{"clothing":"blue coat","holding":"red umbrella"}},'
             '"facts":["The group just arrived."]}'
@@ -64,7 +64,7 @@ class SceneStateEngineTests(unittest.TestCase):
             )
             prompt_state = _m_main.session_summary_for_prompt(self.db, "chat", self.session)
         finally:
-            _m_memory_curator.generate_text = original_generate
+            _m_scene_state.generate_text = original_generate
 
         self.assertEqual(seen, ["utility::model"])
         self.assertEqual(state["location"], "Central station")
@@ -82,12 +82,12 @@ class SceneStateEngineTests(unittest.TestCase):
         self._add_turn()
         _m_session_naming.set_meta(self.db, "memory_mode:chat", "off")
         queued = []
-        original_submit = _m_memory_curator.submit_background
-        _m_memory_curator.submit_background = lambda name, fn, *args, **kwargs: queued.append((name, fn, args))
+        original_submit = _m_scene_state.submit_background
+        _m_scene_state.submit_background = lambda name, fn, *args, **kwargs: queued.append((name, fn, args))
         try:
             _m_sync_core.retain_session_memory(self.db, "chat", self.session, {"name": "Mira"})
         finally:
-            _m_memory_curator.submit_background = original_submit
+            _m_scene_state.submit_background = original_submit
 
         self.assertTrue(any(name == "scene_state_refresh" for name, _fn, _args in queued))
 
@@ -160,7 +160,7 @@ class SceneStateEngineTests(unittest.TestCase):
             "_repo_upsert_scene_state_if_fresh",
             side_effect=reject_stale,
         ), patch.object(
-            _m_generation,
+            _m_scene_state,
             "generate_text",
             side_effect=fake_generate,
         ):
