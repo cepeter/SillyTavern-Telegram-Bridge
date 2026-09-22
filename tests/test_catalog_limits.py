@@ -78,17 +78,11 @@ class CatalogLimitTests(unittest.TestCase):
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
-    def test_system_prompt_catalog_ignores_legacy_single_file_fallback(self):
-        legacy = self.tmp.name and Path(self.tmp.name) / "legacy-prompt.txt"
-        legacy.write_text("legacy prompt", encoding="utf-8")
-        config.SYSTEM_PROMPTS_FILE = str(legacy)
+    def test_system_prompt_catalog_uses_directory_only(self):
         directory_prompt = _m_common.SYSTEM_PROMPTS_DIR / "Only.txt"
         directory_prompt.write_text("directory prompt", encoding="utf-8")
 
-        try:
-            prompts = _m_cards.load_system_prompts()
-        finally:
-            del config.SYSTEM_PROMPTS_FILE
+        prompts = _m_cards.load_system_prompts()
 
         self.assertEqual(
             prompts,
