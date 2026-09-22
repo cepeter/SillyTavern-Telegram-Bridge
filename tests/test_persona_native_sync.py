@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_native_test_persona_service
 
 ensure_application_extensions()
 
@@ -125,7 +125,7 @@ class NativePersonaSyncTests(unittest.TestCase):
         self.assertEqual(self._read()["power_user"]["personas"][avatar], "Writer")
 
     def test_persona_panel_has_no_bridge_import_export_actions(self):
-        _m_command_routes.send_persona_menu("token", "chat", "native.png")
+        _m_command_routes.send_persona_menu("token", "chat", "native.png", persona_service=make_native_test_persona_service())
         callbacks = {button["callback_data"] for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertNotIn("persona:native_import", callbacks)
         self.assertNotIn("persona:native_export", callbacks)
