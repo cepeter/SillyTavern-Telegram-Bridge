@@ -640,7 +640,6 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 document,
                 "provider::model",
                 memory_service=memory,
-                persona_service=make_test_persona_service(),
             )
 
         self.assertIs(captured["memory_service"], memory)
