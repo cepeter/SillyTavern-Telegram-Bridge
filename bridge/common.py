@@ -43,6 +43,7 @@ from bridge.config import (
     CARD_TOTAL_MAX_CHARS,
     CATALOG_MAX_ITEMS,
     CHARACTER_BACKUP_DIR as _CHARACTER_BACKUP_DIR,
+    CHARACTER_BACKUP_DIR as _CHARACTER_BACKUP_DIR,
     CHARACTER_DIR,
     DB_FILE,
     DEFAULT_CHARACTER_FILE,
@@ -54,6 +55,8 @@ from bridge.config import (
     HINDSIGHT_DEFAULT_URL,
     HINDSIGHT_RECALL_MAX_TOKENS,
     HINDSIGHT_RETAIN_MAX_MESSAGES,
+    LOG_FILE as _LOG_FILE,
+    MODEL_CACHE_FILE as _MODEL_CACHE_FILE,
     LOG_FILE as _LOG_FILE,
     MODEL_CACHE_FILE as _MODEL_CACHE_FILE,
     PROVIDER_CONFIG_FILE as _PROVIDER_CONFIG_FILE,
@@ -75,11 +78,13 @@ from bridge.config import (
     SUMMARY_UPDATE_INTERVAL,
     SYNC_MAX_BYTES,
     PENDING_SETTINGS_TTL_SECONDS,
+    PROVIDER_CONFIG_FILE as _PROVIDER_CONFIG_FILE,
     REASONING_LEVELS,
     SILLYTAVERN_DIR,
     SYSTEM_PROMPTS_DIR,
     WORLD_DIR,
 )
+from bridge.environment import environment_file
 from bridge.environment import environment_file
 from bridge.runtime_context import (
     db_connection_context,
@@ -129,10 +134,10 @@ MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
 MODEL_CHOICES = []
 
-_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+__LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[RotatingFileHandler(str(LOG_FILE), maxBytes=10 * 1024 * 1024, backupCount=5)],
+    handlers=[RotatingFileHandler(str(_LOG_FILE), maxBytes=10 * 1024 * 1024, backupCount=5)],
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
