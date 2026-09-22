@@ -52,13 +52,18 @@ _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
 
 
 
-def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
+def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_current_speaker(db, chat_id, session, caption)
     group_context = ""
     if group_turn:
         fields = card_fields_from_file(group_turn[0])
-        group_context = group_prompt_context(db, chat_id, session, group_turn[0])
+        group_context = group_director_service.prompt_context(
+            db,
+            chat_id,
+            session,
+            group_turn[0],
+        )
     image_data_uri = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
     rows = db.execute("SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session["session_id"])).fetchall()
     history_rows = [(row[0], row[1]) for row in rows[-MAX_HISTORY_MESSAGES:]]
@@ -453,12 +458,12 @@ from bridge.generation import (
     render_session_response,
     save_response_variant,
 )
+from bridge.group_director_service import GroupDirectorService
 from bridge.group_core import (
     advance_group_turn,
     group_current_speaker,
     group_state,
 )
-from bridge.groups import group_prompt_context
 from bridge.media import (
     delete_outgoing_message_row,
     send_reply,
