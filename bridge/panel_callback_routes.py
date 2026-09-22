@@ -258,7 +258,7 @@ def handle_sync_callback(
     return True
 
 
-def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, sync_service=None):
+def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, sync_service: SyncService):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(token, callback, data, chat_id)
