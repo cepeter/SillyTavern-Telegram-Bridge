@@ -45,6 +45,23 @@ class RetryModelTurnOnlyTests(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertIsNone(database.latest_failed_turn(self.db, "chat"))
 
+    def test_start_with_text_remains_retryable_model_turn(self):
+        database.record_failed_turn(
+            self.db,
+            "chat",
+            51,
+            "start hello",
+            "provider::model",
+            "model failed",
+            "session-b",
+        )
+
+        failed = database.latest_failed_turn(self.db, "chat")
+
+        self.assertIsNotNone(failed)
+        self.assertEqual(str(failed[0]), "51")
+        self.assertEqual(failed[1], "start hello")
+
     def test_latest_failed_turn_skips_legacy_command_rows(self):
         database.record_failed_turn(
             self.db,

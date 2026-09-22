@@ -285,7 +285,7 @@ def _retryable_model_turn_text(text: str) -> bool:
         return False
     parts = stripped.split(None, 1)
     first = parts[0].casefold()
-    if first == "start" or first.startswith("/"):
+    if stripped.casefold() == "start" or first.startswith("/"):
         return False
     if first.startswith("@") and len(parts) > 1:
         return not parts[1].lstrip().startswith("/")
