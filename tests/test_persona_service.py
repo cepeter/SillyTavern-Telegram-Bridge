@@ -395,6 +395,19 @@ class PersonaSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("get_persona(", chunk)
 
 
+    def test_persona_application_paths_do_not_resolve_compatibility_service(self):
+        root = Path(__file__).parents[1] / "bridge"
+        for filename in (
+            "input_flows.py",
+            "callbacks.py",
+            "message_commands.py",
+            "generation.py",
+        ):
+            source = (root / filename).read_text(encoding="utf-8")
+            self.assertNotIn("resolve_persona_service", source, filename)
+            self.assertNotIn("compatibility_persona_service", source, filename)
+
+
 class PersonaCompatibilityServiceTests(unittest.TestCase):
     def test_compatibility_service_late_binds_final_runtime_collaborators(self):
         calls = []
