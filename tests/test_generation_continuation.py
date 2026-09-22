@@ -11,8 +11,9 @@ import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.sync_core as _m_sync_core
 class _FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status=200):
         self.payload = payload
+        self.status = status
 
     def __enter__(self):
         return self
@@ -61,6 +62,38 @@ class GenerationContinuationTests(unittest.TestCase):
             os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
         else:
             os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = self.old_hosts
+
+    def test_missing_assistant_content_logs_redacted_response_diagnostics(self):
+        _m_generation.strict_urlopen = lambda _request, **_kwargs: _FakeResponse(
+            {
+                "id": "response-id",
+                "object": "chat.completion",
+                "model": "test/model",
+                "choices": [
+                    {"message": {"content": ""}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 0},
+            },
+            status=502,
+        )
+        with self.assertLogs("bridge.generation", level="WARNING") as captured:
+            with self.assertRaisesRegex(RuntimeError, "backend returned no assistant content"):
+                _m_generation.generate_text(
+                    "",
+                    "test",
+                    [{"role": "user", "content": "Write a complete answer."}],
+                    settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+                )
+
+        logs = "\\n".join(captured.output)
+        self.assertIn("provider=openrouter", logs)
+        self.assertIn("model=test/model", logs)
+        self.assertIn("http_status=502", logs)
+        self.assertIn("choice_count=1", logs)
+        self.assertIn("finish_reason=stop", logs)
+        self.assertIn("response_keys=", logs)
+        self.assertNotIn("Write a complete answer", logs)
+        self.assertNotIn("test-only", logs)
 
     def test_empty_stream_length_retries_with_larger_non_stream_budget(self):
         self.original_spec = _m_generation.get_provider_spec

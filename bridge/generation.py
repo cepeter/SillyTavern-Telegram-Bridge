@@ -296,6 +296,21 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
                     recovered = _recovery_settings(generation)
                     if recovered:
                         return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=True, _recovery_attempt=_recovery_attempt + 1)
+                http_status = getattr(response, "status", None)
+                if http_status is None:
+                    getcode = getattr(response, "getcode", None)
+                    http_status = getcode() if callable(getcode) else None
+                logging.getLogger(__name__).warning(
+                    "Provider response missing assistant content: "
+                    "provider=%s model=%s http_status=%s choice_count=%s "
+                    "finish_reason=%s response_keys=%s",
+                    provider_id,
+                    actual_model,
+                    http_status,
+                    len(choices),
+                    finish_reason,
+                    sorted(result.keys()),
+                )
                 raise RuntimeError("backend returned no assistant content")
             content = str(content).strip()
             if finish_reason != "length":
