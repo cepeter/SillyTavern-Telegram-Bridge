@@ -43,7 +43,7 @@ jobs:
         run: python -m pip check
 
       - name: Run full test suite
-        run: python -m pytest -q
+        run: python -m pytest -q -n auto --maxprocesses=4 --dist=loadfile
 
   dependency-audit:
     runs-on: ubuntu-latest
@@ -65,7 +65,7 @@ jobs:
             requirements.lock
 
       - name: Install pip-audit
-        run: uv pip install --system --python python pip-audit
+        run: uv pip install --system --python python pip-audit==2.10.1
 
       - name: Audit locked dependencies
-        run: python -m pip_audit -r requirements.lock
+        run: python -m pip_audit --no-deps --disable-pip -r requirements.lock
