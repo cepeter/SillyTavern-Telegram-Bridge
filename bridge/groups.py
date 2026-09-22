@@ -108,7 +108,7 @@ def apply_group_setup_character(db: sqlite3.Connection, token: str, callback: di
     set_meta(db, f"group_setup:{chat_id}", json.dumps(setup))
     answer_callback(token, str(callback.get("id", "")), "Choose World Info")
     discard_panel_binding(db, chat_id, message.get("message_id"))
-    close_panel_message(token, chat_id, callback)
+    close_panel_message(db, token, chat_id, callback)
     send_world_menu(token, chat_id, "", None, 0)
     return True
 def send_group_character_menu(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], action: str, message_id: int | None = None, page: int = 0) -> None:
@@ -175,7 +175,7 @@ def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str
         handle_group_command(db, token, chat_id, session, "/" + data.replace(":", " "), operation_id)
         send_group_menu(db, token, chat_id, session, message_id)
     elif data == "group:close":
-        remove_inline_keyboard(token, {"message": message})
+        remove_inline_keyboard(db, token, {"message": message})
     elif data.startswith("groupremoveconfirm:"):
         filename = resolve_dynamic_callback_token(data.split(":", 1)[1], "group_character", chat_id) or ""
         state = group_state(db, chat_id, session["session_id"])

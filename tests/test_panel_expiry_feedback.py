@@ -34,7 +34,7 @@ class PanelExpiryFeedbackTests(unittest.TestCase):
         original_send, original_answer, original_close = _m_callbacks.send_text, _m_callbacks.answer_callback, _m_callbacks.close_panel_message
         _m_callbacks.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         _m_callbacks.answer_callback = lambda _token, _callback_id, text: answered.append(text)
-        _m_callbacks.close_panel_message = lambda _token, _chat_id, value: closed.append(value)
+        _m_callbacks.close_panel_message = lambda _db, _token, _chat_id, value: closed.append(value)
         callback = {"id": "callback-501", "from": {"id": "user-1"}, "data": "note:off", "_queued": True, "message": {"message_id": 501, "chat": {"id": "chat"}}}
         try:
             _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
@@ -55,7 +55,7 @@ class PanelExpiryFeedbackTests(unittest.TestCase):
         original_send, original_answer, original_close = _m_callbacks.send_text, _m_callbacks.answer_callback, _m_callbacks.close_panel_message
         _m_callbacks.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         _m_callbacks.answer_callback = lambda _token, _callback_id, text: answered.append(text)
-        _m_callbacks.close_panel_message = lambda _token, _chat_id, value: closed.append(value)
+        _m_callbacks.close_panel_message = lambda _db, _token, _chat_id, value: closed.append(value)
         callback = {"id": "callback-502", "from": {"id": "user-1"}, "data": "persona:off", "message": {"message_id": 502, "chat": {"id": "chat"}}}
         try:
             _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())

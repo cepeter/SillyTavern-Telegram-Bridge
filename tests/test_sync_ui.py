@@ -219,6 +219,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             "Closed",
         )
         close.assert_called_once_with(
+            self.db,
             "token",
             "chat",
             callback,

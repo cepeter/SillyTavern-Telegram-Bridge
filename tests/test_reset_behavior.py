@@ -60,7 +60,7 @@ class ResetBehaviorTests(unittest.TestCase):
         original_answer = lambda *_args, **_kwargs: None
         setattr(_m_panel_callback_routes, "reset_session", lambda *_args, **_kwargs: None)
         setattr(_m_panel_callback_routes, "send_text", lambda _token, _chat, text: sent.append(text) or [])
-        setattr(_m_panel_callback_routes, "remove_inline_keyboard", lambda _token, callback: removed.append(callback))
+        setattr(_m_panel_callback_routes, "remove_inline_keyboard", lambda _db, _token, callback: removed.append(callback))
         callback = {"id": "callback-1", "message": {"message_id": 10, "chat": {"id": "chat"}}}
         handled = _m_panel_callback_routes.handle_reset_callback(
             self.db, "token", callback, original_answer, "reset:confirm", "chat",

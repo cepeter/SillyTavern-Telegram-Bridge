@@ -20,12 +20,12 @@ def _resolve_media_command(configured: str, label: str) -> str:
         raise OSError(f"required {label} executable is unavailable: {configured}")
     return resolved
 
-def remove_inline_keyboard(token: str, callback: dict) -> None:
+def remove_inline_keyboard(db: sqlite3.Connection, token: str, callback: dict) -> None:
     message = callback.get("message") or callback
     chat_id = str((message.get("chat") or {}).get("id", ""))
     message_id = message.get("message_id")
     if chat_id and message_id:
-        close_panel_message(token, chat_id, callback)
+        close_panel_message(db, token, chat_id, callback)
 
 
 def send_voice(token: str, chat_id: str, path: Path, caption: str = "") -> bool:
