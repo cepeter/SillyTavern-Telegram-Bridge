@@ -185,10 +185,6 @@ class JobWorkerServiceTests(unittest.TestCase):
             self.lifecycle_names(),
             ["start", "complete"],
         )
-        self.assertIs(
-            voice_message.call_args.kwargs["services"],
-            self.services,
-        )
 
         self.jobs.calls.clear()
         with patch.object(_m_main, "committed_assistant_for_message",
@@ -370,6 +366,10 @@ class JobWorkerServiceTests(unittest.TestCase):
         self.assertEqual(
             self.lifecycle_names(),
             ["start", "complete"],
+        )
+        self.assertIs(
+            voice_message.call_args.kwargs["services"],
+            self.services,
         )
 
         self.jobs.calls.clear()
