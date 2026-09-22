@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import MISSING
 import ast
+import inspect
 import unittest
+
+from bridge.composition import BridgeServices, build_bridge_services
 
 
 REPO_ROOT = Path(__file__).parents[1]
@@ -36,6 +40,42 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, source)
+
+
+    def test_durable_job_compatibility_module_is_deleted(self):
+        self.assertFalse((BRIDGE_DIR / "job_runtime.py").exists())
+
+    def test_job_service_is_required_by_composition(self):
+        self.assertIs(
+            BridgeServices.__dataclass_fields__["jobs"].default,
+            MISSING,
+        )
+        self.assertIs(
+            inspect.signature(build_bridge_services)
+            .parameters["jobs"]
+            .default,
+            inspect.Parameter.empty,
+        )
+
+    def test_legacy_durable_job_wrappers_are_deleted(self):
+        source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
+        self.assertNotIn("def submit_durable_chat_job(", source)
+        self.assertNotIn("def dispatch_recovered_jobs(", source)
+
+    def test_no_durable_job_fallback_helpers_remain(self):
+        forbidden = {
+            "compatibility_job_service",
+            "jobs_for_services",
+            "_compatibility_job_service",
+            "_jobs_for_services",
+        }
+        offenders = {}
+        for path in sorted(BRIDGE_DIR.glob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            hits = sorted(name for name in forbidden if name in source)
+            if hits:
+                offenders[path.relative_to(REPO_ROOT).as_posix()] = hits
+        self.assertEqual(offenders, {})
 
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []

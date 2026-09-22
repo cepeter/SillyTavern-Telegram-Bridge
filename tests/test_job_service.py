@@ -428,17 +428,17 @@ def function_chunk(source: str, function_name: str) -> str:
 
 
 class JobServiceSourceBoundaryTests(unittest.TestCase):
-    def test_recovery_wrappers_do_not_own_raw_repository_loop(self):
+    def test_backlog_dispatcher_uses_injected_job_service(self):
         source = (
             Path(__file__).parents[1] / "bridge" / "main.py"
         ).read_text(encoding="utf-8")
         chunk = function_chunk(
             source,
-            "def dispatch_recovered_jobs",
+            "def make_durable_backlog_dispatcher",
         )
         self.assertNotIn("recover_jobs(", chunk)
         self.assertNotIn("json.loads(", chunk)
-        self.assertIn(".recover(", chunk)
+        self.assertIn("services.jobs.recover(", chunk)
 
     def test_job_service_is_ordinary_import_boundary(self):
         source = (
