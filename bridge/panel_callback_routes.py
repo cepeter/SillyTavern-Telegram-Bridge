@@ -273,7 +273,19 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         return True
     if handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, memory_service=memory_service):
         return True
-    if handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+    if handle_prompt_and_feature_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        memory_service=memory_service,
+    ):
         return True
     if handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
