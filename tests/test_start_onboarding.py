@@ -9,7 +9,6 @@ import unittest
 import bridge.config as config
 import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
-import bridge.greetings as _m_greetings
 import bridge.memory_curator as _m_memory_curator
 import bridge.sync_core as _m_sync_core
 class StartOnboardingTests(unittest.TestCase):
@@ -50,29 +49,28 @@ class StartOnboardingTests(unittest.TestCase):
         self.assertIn("Type `start`", sent[0])
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 0)
 
-    def test_plain_start_sends_and_stores_character_greeting(self):
-        sent = []
-        original = _m_greetings.send_text
-        _m_greetings.send_text = lambda _token, _chat_id, text: sent.append(text) or [77]
+    def test_plain_start_opens_greeting_choice_panel_without_storing_message(self):
+        opened = []
+        original_menu = _m_command_routes.send_greeting_menu
+        _m_command_routes.send_greeting_menu = lambda _token, chat_id, fields, user_name: opened.append((chat_id, fields["first_mes"], user_name)) or True
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "start", "start",
                 self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None, make_test_application_services(),
             )
         finally:
-            _m_command_routes.send_text = original
+            _m_command_routes.send_greeting_menu = original_menu
         self.assertTrue(handled)
-        self.assertEqual(sent, ["Hello from the character."])
-        row = self.db.execute("SELECT role, content FROM messages").fetchone()
-        self.assertEqual(tuple(row), ("assistant", "Hello from the character."))
+        self.assertEqual(opened, [("chat", "Hello from the character.", "User")])
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 0)
 
-    def test_slash_start_sends_greeting_when_all_setup_is_enabled(self):
-        sent = []
+    def test_slash_start_opens_greeting_choice_panel_when_all_setup_is_enabled(self):
+        opened = []
         original_send = _m_command_routes.send_text
-        original_greeting = _m_command_routes.send_character_greeting
+        original_menu = _m_command_routes.send_greeting_menu
         original_worlds = _m_command_routes.active_world_files
-        _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        _m_command_routes.send_character_greeting = lambda *_args, **_kwargs: sent.append("GREETING") or True
+        _m_command_routes.send_text = lambda *_args, **_kwargs: self.fail("ready /start should open the greeting chooser")
+        _m_command_routes.send_greeting_menu = lambda _token, chat_id, fields, user_name: opened.append((chat_id, fields["first_mes"], user_name)) or True
         _m_command_routes.active_world_files = lambda _value: ["world.json"]
         ready_session = dict(self.session)
         ready_session.update({"persona_id": "punto.png", "world_file": "world.json", "system_prompt": "Prompt"})
@@ -83,10 +81,10 @@ class StartOnboardingTests(unittest.TestCase):
             )
         finally:
             _m_command_routes.send_text = original_send
-            _m_command_routes.send_character_greeting = original_greeting
+            _m_command_routes.send_greeting_menu = original_menu
             _m_command_routes.active_world_files = original_worlds
         self.assertTrue(handled)
-        self.assertEqual(sent, ["GREETING"])
+        self.assertEqual(opened, [("chat", "Hello from the character.", "User")])
 
 
 if __name__ == "__main__":
