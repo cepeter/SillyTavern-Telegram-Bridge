@@ -15,8 +15,7 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     telegram_request(token, method, payload)
 
 
-def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None, *, memory_service=None) -> None:
-    memory_service = resolve_memory_service(memory_service)
+def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None, *, memory_service: MemoryService) -> None:
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "reset"):
             return
@@ -54,9 +53,8 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
     set_meta(db, meta_key, json.dumps(state))
 
 
-def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service=None, persona_service=None) -> None:
+def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service: MemoryService, persona_service=None) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
-    memory_service = resolve_memory_service(memory_service)
     history_rows = timed_call("history_load", db.execute,
         "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
         (chat_id, session_id, context_history_candidate_limit()),
@@ -381,10 +379,8 @@ from bridge.media import (
     send_reply,
     send_typing,
 )
-from bridge.memory import (
-    clear_session_summary,
-    resolve_memory_service,
-)
+from bridge.memory import clear_session_summary
+from bridge.memory_service import MemoryService
 from bridge.performance import timed_call
 from bridge.rag_core import (
     rag_citation_footer,
