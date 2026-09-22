@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -603,8 +603,6 @@ class GroupTransactionTests(unittest.TestCase):
         ), patch.object(
             _m_commands, "card_fields_from_file", return_value={"name": "One"}
         ), patch.object(
-            _m_commands, "group_prompt_context", return_value=""
-        ), patch.object(
             _m_commands, "rag_retrieval_bundle", return_value={}
         ), patch.object(
             _m_commands, "build_chat_messages", return_value=[]
@@ -630,7 +628,9 @@ class GroupTransactionTests(unittest.TestCase):
                 self.chat_id,
                 "caption",
                 b"image",
-             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
+             memory_service=make_test_memory_service(),
+             persona_service=make_test_persona_service(),
+             group_director_service=make_test_application_services().group_director)
 
         self._assert_group_reply_transaction_committed()
 
