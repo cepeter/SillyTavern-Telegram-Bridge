@@ -82,6 +82,24 @@ class AlternateGreetingTests(unittest.TestCase):
         self.assertIn("greeting:preview:2", callbacks)
         self.assertIn("greeting:use:0", callbacks)
 
+    def test_greeting_menu_ignores_unchanged_preview(self):
+        original_request = getattr(_m_greetings, "telegram_request", None)
+        _m_greetings.telegram_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("Telegram API failed: message is not modified")
+        )
+        fields = {
+            "name": "Character",
+            "first_mes": "Primary",
+            "alternate_greetings": json.dumps(["Alt"]),
+        }
+        try:
+            self.assertTrue(_m_greetings.send_greeting_menu("token", "chat", fields, "User"))
+        finally:
+            if original_request is None:
+                delattr(_m_greetings, "telegram_request")
+            else:
+                _m_greetings.telegram_request = original_request
+
     def test_greeting_callback_uses_selected_alternate_once(self):
         services = make_test_application_services()
         fields = {

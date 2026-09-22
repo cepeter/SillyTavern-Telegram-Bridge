@@ -26,6 +26,7 @@ from bridge.panel_utils import (
     panel_page,
 )
 
+import logging
 import random
 
 
@@ -134,7 +135,13 @@ def send_greeting_menu(
     method = "editMessageText" if message_id is not None else "sendMessage"
     if message_id is not None:
         payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    try:
+        telegram_request(token, method, payload)
+    except RuntimeError as exc:
+        if "not modified" in str(exc).casefold():
+            logging.info("Greeting panel already shows the requested state")
+            return True
+        raise
     return True
 
 
