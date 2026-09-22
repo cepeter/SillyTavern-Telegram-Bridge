@@ -45,17 +45,25 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
     def test_durable_job_compatibility_module_is_deleted(self):
         self.assertFalse((BRIDGE_DIR / "job_runtime.py").exists())
 
-    def test_job_service_is_required_by_composition(self):
-        self.assertIs(
-            BridgeServices.__dataclass_fields__["jobs"].default,
-            MISSING,
-        )
-        self.assertIs(
-            inspect.signature(build_bridge_services)
-            .parameters["jobs"]
-            .default,
-            inspect.Parameter.empty,
-        )
+    def test_all_application_services_are_required_by_composition(self):
+        for name in (
+            "jobs",
+            "group_director",
+            "memory",
+            "persona",
+            "sync",
+        ):
+            with self.subTest(name=name):
+                self.assertIs(
+                    BridgeServices.__dataclass_fields__[name].default,
+                    MISSING,
+                )
+                self.assertIs(
+                    inspect.signature(build_bridge_services)
+                    .parameters[name]
+                    .default,
+                    inspect.Parameter.empty,
+                )
 
     def test_legacy_durable_job_wrappers_are_deleted(self):
         source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
