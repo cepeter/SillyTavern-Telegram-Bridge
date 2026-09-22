@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_application_services
 
 ensure_application_extensions()
 
@@ -40,7 +40,7 @@ class StartOnboardingTests(unittest.TestCase):
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
-                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None,
+                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None, make_test_application_services(),
             )
         finally:
             _m_command_routes.send_text = original
@@ -57,7 +57,7 @@ class StartOnboardingTests(unittest.TestCase):
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "start", "start",
-                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None,
+                self.session, self.session["session_id"], _m_memory_curator.DEFAULT_MODEL, "", "User", None, make_test_application_services(),
             )
         finally:
             _m_command_routes.send_text = original
@@ -79,7 +79,7 @@ class StartOnboardingTests(unittest.TestCase):
         try:
             handled = _m_command_routes._handle_basic(
                 self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, self.fields, "chat", "/start", "/start",
-                ready_session, ready_session["session_id"], _m_memory_curator.DEFAULT_MODEL, "punto.png", "User", None,
+                ready_session, ready_session["session_id"], _m_memory_curator.DEFAULT_MODEL, "punto.png", "User", None, make_test_application_services(),
             )
         finally:
             _m_command_routes.send_text = original_send
