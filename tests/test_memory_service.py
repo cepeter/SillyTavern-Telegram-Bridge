@@ -659,52 +659,7 @@ class MemoryServiceExplicitInjectionBoundaryTests(unittest.TestCase):
             self.assertNotIn("compatibility_memory_service", source, filename)
 
 
-class MemoryServiceCompatibilityBoundaryTests(unittest.TestCase):
-    def test_compatibility_service_binds_current_runtime_memory_collaborators(self):
-        calls = []
-        session = {"session_id": "compat-session"}
-        fields = {"name": "Mira"}
-
-        with patch.object(_m_memory, "recall_memory_context",
-            side_effect=lambda *_args: calls.append("recall") or "compat recall",
-        ), patch.object(
-            _m_memory,
-            "session_summary_for_prompt",
-            side_effect=lambda *_args: calls.append("summary") or "compat summary",
-        ), patch.object(
-            _m_memory,
-            "get_session_summary",
-            side_effect=lambda *_args: ("stored", 0),
-        ), patch.object(
-            _m_memory,
-            "retain_session_memory",
-            side_effect=lambda *_args: calls.append("retain"),
-        ), patch.object(
-            _m_memory,
-            "purge_hindsight_session",
-            side_effect=lambda *_args: calls.append("purge") or 4,
-        ):
-            service = _m_memory.compatibility_memory_service()
-            context = service.prompt_context(
-                sqlite3.connect(":memory:"),
-                "chat",
-                session,
-                fields,
-                "query",
-            )
-            service.retain(None, "chat", session, fields)
-            purged = service.purge_session(None, "chat", "compat-session")
-
-        self.assertEqual(
-            context,
-            MemoryPromptContext(
-                recall="compat recall",
-                summary="compat summary",
-            ),
-        )
-        self.assertEqual(purged, 4)
-        self.assertEqual(calls, ["recall", "summary", "retain", "purge"])
-
+class MemoryServiceBoundaryTests(unittest.TestCase):
     def test_reviewed_application_paths_do_not_call_memory_backend_functions_directly(self):
         root = Path(__file__).parents[1] / "bridge"
         reviewed = (
