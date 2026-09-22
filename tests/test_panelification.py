@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -73,7 +73,7 @@ class PanelificationTests(unittest.TestCase):
             _m_memory_curator.DEFAULT_MODEL,
             session.get("persona_id") or "",
             "user",
-            services=SimpleNamespace(memory=make_test_memory_service()),
+            services=make_test_application_services(memory=make_test_memory_service()),
         )
 
     def test_character_panel_has_inline_delete_actions(self):
