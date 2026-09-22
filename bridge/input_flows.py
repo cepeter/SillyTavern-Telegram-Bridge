@@ -43,7 +43,7 @@ def handle_inline_text_action(db, token: str, api_key: str, chat_id: str, sessio
     return _handle_text_action_input(db, token, api_key, chat_id, session, fields, value, state, operation_id, memory_service=memory_service, persona_service=persona_service)
 
 
-def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, stripped: str, state: dict, operation_id: int | None, *, memory_service=None, persona_service=None) -> bool:
+def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, stripped: str, state: dict, operation_id: int | None, *, memory_service: MemoryService, persona_service=None) -> bool:
     meta_key = f"text_action_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
