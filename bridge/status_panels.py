@@ -54,10 +54,9 @@ def sync_status_text(
     chat_id,
     session,
     *,
-    sync_service=None,
+    sync_service,
 ):
     """Render Live API Sync status for the active session."""
-    sync_service = resolve_sync_service(sync_service)
     status = sync_service.status(
         db,
         chat_id,
@@ -95,10 +94,9 @@ def send_sync_menu(
     session,
     message_id=None,
     *,
-    sync_service=None,
+    sync_service,
 ):
     """Send or edit the Live API Sync panel."""
-    sync_service = resolve_sync_service(sync_service)
     payload = {
         "chat_id": chat_id,
         "text": sync_status_text(
@@ -344,6 +342,5 @@ from bridge.scene_state import (
     get_scene_state,
     refresh_scene_state_now,
 )
-from bridge.sync_api import resolve_sync_service
 from bridge.telegram import send_text
 from pathlib import Path
