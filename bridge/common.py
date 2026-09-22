@@ -81,9 +81,6 @@ from bridge.config import (
     WORLD_DIR,
 )
 from bridge.environment import environment_file
-from bridge.runtime_defaults import (
-    PROCESSED_UPDATE_RETENTION_SECONDS,
-)
 
 TOPIC_SCOPE_SEPARATOR = "|topic:"
 

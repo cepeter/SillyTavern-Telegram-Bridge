@@ -19,11 +19,15 @@ class RuntimeImportIslandTests(unittest.TestCase):
             check=False,
         )
 
-    def test_runtime_defaults_is_ordinary_only_and_has_existing_retention_value(self):
+    def test_schema_owns_processed_update_retention_default(self):
+        self.assertFalse(
+            (REPO_ROOT / "bridge" / "runtime_defaults.py").exists()
+        )
         completed = self._run_python(
             "import sys\n"
-            "import bridge.runtime_defaults as defaults\n"
-            "assert defaults.PROCESSED_UPDATE_RETENTION_SECONDS == 30 * 86400\n"
+            "import bridge.schema as schema\n"
+            "assert schema.PROCESSED_UPDATE_RETENTION_SECONDS == 30 * 86400\n"
+            "assert 'bridge.runtime_defaults' not in sys.modules\n"
             "assert 'bridge.runtime' not in sys.modules\n"
             "assert 'bridge.common' not in sys.modules\n"
         )
@@ -69,7 +73,6 @@ class RuntimeImportIslandTests(unittest.TestCase):
 
     def test_migrated_modules_do_not_import_bridge_runtime(self):
         for filename in (
-            "runtime_defaults.py",
             "performance.py",
             "native_cache.py",
             "schema.py",
