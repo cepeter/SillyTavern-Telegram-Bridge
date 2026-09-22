@@ -345,15 +345,15 @@ def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: di
 
 
 def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
-    session = ensure_session(db, chat_id, default_model)
-    fields = card_fields_from_file(session["character_file"])
     row = db.execute("SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND telegram_message_id=? ORDER BY rowid DESC LIMIT 1", (chat_id, str(message_id))).fetchone()
-    if row is None or row[2] != "user" or row[1] != session["session_id"]:
-        send_text(token, chat_id, "Edited message was not found in the active session.")
+    if row is None or row[2] != "user":
+        send_text(token, chat_id, "Edited message was not found.")
         return
     if not new_text.strip():
         send_text(token, chat_id, "Edited message cannot be empty.")
         return
+    session = load_session(db, chat_id, str(row[1]), default_model)
+    fields = card_fields_from_file(session["character_file"])
     regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(row[0]), new_text.strip()[:12000], operation_id=operation_id, memory_service=memory_service, persona_service=persona_service)
 
 
@@ -485,6 +485,7 @@ from bridge.rag_core import (
 )
 from bridge.telegram import (
     ensure_session,
+    load_session,
     send_text,
     telegram_request,
 )
