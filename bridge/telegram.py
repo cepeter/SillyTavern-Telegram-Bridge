@@ -192,8 +192,7 @@ def send_session_delete_confirm(token: str, chat_id: str, session_id: str, title
     send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
 
 
-def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None, *, memory_service=None) -> tuple[bool, str]:
-    memory_service = resolve_memory_service(memory_service)
+def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None, *, memory_service: MemoryService) -> tuple[bool, str]:
     if target_session_id == active_session_id:
         return False, "active session"
     exists = db.execute("SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, target_session_id)).fetchone()
@@ -305,7 +304,7 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     return raw
 
 
-def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service=None, persona_service=None) -> None:
+def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service: MemoryService, persona_service=None) -> None:
     if file_size > IMAGE_MAX_BYTES:
         send_text(token, chat_id, "Image is too large. The limit is 8 MB.")
         return
@@ -439,7 +438,7 @@ def import_world_info_document(db: sqlite3.Connection, token: str, chat_id: str,
         send_text(token, chat_id, f"World Info imported: {target.name}. Open /world to enable it.")
 
 
-def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None, *, memory_service=None) -> None:
+def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None, *, memory_service: MemoryService) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
     file_size = int(document.get("file_size") or 0)
@@ -573,6 +572,6 @@ from bridge.expressions import (
     expression_mode_key,
 )
 from bridge.generation import swipe_state_key
-from bridge.memory import resolve_memory_service
+from bridge.memory_service import MemoryService
 from bridge.persona_sync import NATIVE_PERSONA_SETTINGS_FILE
 from bridge.session_naming import normalize_session_title
