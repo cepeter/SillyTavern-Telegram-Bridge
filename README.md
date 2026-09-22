@@ -184,6 +184,18 @@ The default character name used as a display fallback is derived from
 `SILLYTAVERN_DEFAULT_CHARACTER` (the filename without extension), so renaming
 the file renames the fallback too.
 
+The executable loads the environment file **before importing application
+modules**. The default file is
+`~/.local/share/sillytavern-telegram/.env`, or use
+`SILLYTAVERN_ENV_FILE` to choose another path. A missing file is allowed when
+the process environment already supplies configuration; existing process
+environment values always take precedence over file values. Environment files
+use strict `KEY=VALUE` syntax (with optional `export ` and matching quotes),
+and malformed assignments stop startup instead of being silently ignored.
+
+`SILLYTAVERN_TELEGRAM_ALLOWED_USERS` is required and every retained
+comma-separated value must be a numeric Telegram user ID.
+
 **Need custom paths?** These overrides are available:
 
 ```dotenv
@@ -562,9 +574,11 @@ World Info files; files referenced by any session are protected.
 $SILLYTAVERN_DIR/data/default-user/sysprompt/
 ```
 
-JSON files use `name` and `content` fields. TXT files work as a fallback. The
-bridge currently ignores native `post_history` fields. Prompt bodies stay
-private — menus and `/status` only show labels or status.
+JSON files use `name` and `content` fields. TXT files in that directory are
+also supported. The directory is the sole System Prompt source; the bridge no
+longer supports a separate single-file prompt fallback. The bridge currently
+ignores native `post_history` fields. Prompt bodies stay private — menus and
+`/status` only show labels or status.
 
 ### Expressions
 
@@ -700,7 +714,11 @@ and never replaces the original conversation history.
 
 - **🔐 Keep secrets out of Git.** That includes `.env`, provider YAML, SQLite
   files, logs, cards, Personas, and private prompts.
-- **👥 Lock down access** with `SILLYTAVERN_TELEGRAM_ALLOWED_USERS`.
+- **👥 Lock down access** with the required numeric
+  `SILLYTAVERN_TELEGRAM_ALLOWED_USERS` allowlist.
+- **🧩 Startup stays explicit.** Environment bootstrap happens before
+  application imports, logging is configured during startup, and background
+  executors are created only when work is submitted.
 - **🌐 HTTPS for anything external.** Loopback is fine for local services.
 - **🚫 Credentials are never displayed.** Provider hosts are validated before
   keys are attached. Health output never shows them.
