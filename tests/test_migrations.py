@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -5,12 +9,10 @@ import time
 import unittest
 
 import bridge.config as config
-from dependency_patch import dependency_module
-
-_m_director_goals = dependency_module("bridge.director_goals")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_scene_state = dependency_module("bridge.scene_state")
-_m_session_naming = dependency_module("bridge.session_naming")
+import bridge.director_goals as _m_director_goals
+import bridge.memory_curator as _m_memory_curator
+import bridge.scene_state as _m_scene_state
+import bridge.session_naming as _m_session_naming
 import bridge.schema as schema
 from bridge.migrations import Migration, MigrationError, run_migrations
 

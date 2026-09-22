@@ -10,9 +10,6 @@ import symtable
 import sys
 import unittest
 
-from bridge.ordinary_dependencies import declared_dependencies_for
-
-
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
 
@@ -142,11 +139,9 @@ class Phase7CFinalRuntimeCutoverTests(unittest.TestCase):
         path = BRIDGE_DIR / "main.py"
         source = path.read_text(encoding="utf-8")
         bound = _bound_names(source)
-        declared = set(declared_dependencies_for("bridge.main"))
         unresolved = sorted(
             _referenced_globals(source, "main.py")
             - bound
-            - declared
             - set(dir(builtins))
             - {"__file__", "__name__", "__package__"}
         )
@@ -161,12 +156,11 @@ class Phase7CFinalRuntimeCutoverTests(unittest.TestCase):
         ]
         self.assertEqual(detail, [], "\n".join(detail))
 
-    def test_main_declared_dependencies_never_source_runtime(self):
-        for name, (source_module, _attribute) in declared_dependencies_for(
-            "bridge.main"
-        ).items():
-            with self.subTest(name=name):
-                self.assertNotEqual(source_module, "bridge.runtime")
+    def test_main_has_no_transitional_dependency_composition(self):
+        source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
+        self.assertFalse((BRIDGE_DIR / "ordinary_dependencies.py").exists())
+        self.assertNotIn("ordinary_dependencies", source)
+        self.assertNotIn("complete_application_dependencies", source)
 
     def test_runtime_compatibility_module_is_retired(self):
         self.assertFalse((BRIDGE_DIR / "runtime.py").exists())

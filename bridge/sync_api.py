@@ -1,9 +1,6 @@
 """Optional near-real-time sync through SillyTavern's loopback HTTP API."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import json
 import logging
 import os
@@ -472,4 +469,23 @@ def stop_phase3_sync_worker(timeout: float = 5.0) -> bool:
     return stopped
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.card_content import card_fields_from_file
+from bridge.common import chat_job_lock
+from bridge.config import DEFAULT_MODEL
+from bridge.database import (
+    db_connect,
+    run_write_txn,
+    sync_transcript_hash,
+)
+from bridge.group_core import group_state
+from bridge.sync_core import (
+    apply_sync_snapshot,
+    build_sync_records,
+    set_sync_state,
+    sync_binding,
+    sync_file_id,
+    sync_local_rows,
+    SYNC_MAX_PAYLOAD_BYTES,
+)
+from bridge.telegram import load_session

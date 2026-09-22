@@ -10,9 +10,6 @@ from bridge.panel_utils import (
     panel_page,
 )
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import re
 
 RESPONSE_LANGUAGES = (
@@ -141,4 +138,9 @@ def handle_language_command(db: sqlite3.Connection, token: str, chat_id: str, se
     send_text(token, chat_id, f"Model response language set to: {response_language_label(language)}.")
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.telegram import (
+    send_text,
+    telegram_request,
+    update_session,
+)

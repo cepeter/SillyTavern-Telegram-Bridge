@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import base64
 import json
 import tempfile
@@ -5,12 +9,8 @@ import unittest
 from pathlib import Path
 
 import os
-from dependency_patch import dependency_module
-
-_m_generation = dependency_module("bridge.generation")
-_m_image_generation = dependency_module("bridge.image_generation")
-
-
+import bridge.generation as _m_generation
+import bridge.image_generation as _m_image_generation
 class _Response:
     def __init__(self, payload):
         self.payload = payload

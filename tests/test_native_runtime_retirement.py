@@ -19,30 +19,9 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
     def test_runtime_test_facade_is_deleted(self):
         self.assertFalse((TESTS_DIR / "runtime_test_facade.py").exists())
 
-    def test_dependency_patch_helper_rejects_runtime_facade(self):
-        from dependency_patch import dependency_module
-
-        with self.assertRaises(ValueError):
-            dependency_module("bridge.runtime")
-
-    def test_dependency_patch_updates_matching_direct_imports_only(self):
-        import bridge.generation as generation
-        import bridge.network_security as network_security
-        from dependency_patch import dependency_module
-
-        proxy = dependency_module("bridge.generation")
-        original = generation.strict_urlopen
-        marker = object()
-        unrelated = object()
-        generation.unrelated_patch_probe = unrelated
-        try:
-            proxy.strict_urlopen = marker
-            self.assertIs(generation.strict_urlopen, marker)
-            self.assertIs(network_security.strict_urlopen, marker)
-            self.assertIs(generation.unrelated_patch_probe, unrelated)
-        finally:
-            proxy.strict_urlopen = original
-            del generation.unrelated_patch_probe
+    def test_transitional_dependency_helpers_are_deleted(self):
+        self.assertFalse((TESTS_DIR / "dependency_patch.py").exists())
+        self.assertFalse((BRIDGE_DIR / "ordinary_dependencies.py").exists())
 
     def test_no_python_source_imports_runtime_compatibility(self):
         offenders = []

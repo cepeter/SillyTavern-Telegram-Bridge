@@ -1,9 +1,6 @@
 """Confirmed, fast-forward-only bridge self-update workflow."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import json
 import os
 import re
@@ -183,4 +180,10 @@ def handle_update_callback(token: str, callback: dict, data: str, chat_id: str) 
     return True
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.catalog import answer_callback
+from bridge.media import remove_inline_keyboard
+from bridge.telegram import (
+    send_text,
+    telegram_request,
+)

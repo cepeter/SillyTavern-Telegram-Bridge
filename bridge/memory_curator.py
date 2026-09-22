@@ -7,9 +7,6 @@ the background executor and uses the session utility-model route.
 """
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import hashlib
 import json
 import logging
@@ -403,4 +400,25 @@ def register_memory_curator_extensions() -> None:
         )
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import sqlite3
+from bridge.common import submit_background
+from bridge.config import DEFAULT_MODEL
+from bridge.database import (
+    db_connect,
+    get_generation_settings,
+    task_model_for_session,
+    write_transaction,
+)
+from bridge.generation import generate_text
+from bridge.media import send_typing
+from bridge.memory_backend import (
+    _retain_with_client,
+    hindsight_session_prefix,
+    memory_mode,
+)
+from bridge.status_panels import send_curated_memory_menu
+from bridge.telegram import (
+    load_session,
+    send_text,
+)

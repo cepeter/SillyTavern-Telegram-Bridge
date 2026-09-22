@@ -1,17 +1,17 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import tempfile
 import unittest
 
 import bridge.config as config
-from dependency_patch import dependency_module
-
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_sync_api = dependency_module("bridge.sync_api")
-
-
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.session_naming as _m_session_naming
+import bridge.sync_api as _m_sync_api
 class SessionCommandRoutingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -8,8 +8,6 @@ from bridge.database import (
     set_meta,
 )
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 from bridge.rag_core import (
     _embedding_row,
     extract_pdf_data_bank_text,
@@ -109,4 +107,6 @@ def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, c
     send_text(token, chat_id, "Use /databank on, /databank off, /databank list, /databank search <query>, /databank versions <filename>, /databank activate <filename> <version>, or /databank remove <filename> confirm.")
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.common import MAX_TELEGRAM_LENGTH
+from bridge.telegram import send_text

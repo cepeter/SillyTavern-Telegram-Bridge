@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 def close_panel_message(token: str, chat_id: str, callback: dict) -> None:
     message = callback.get("message") or callback
     message_id = message.get("message_id")
@@ -127,4 +125,33 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
     handle_provider_model_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import logging
+import sqlite3
+from bridge.callback_tokens import resolve_dynamic_callback_token
+from bridge.catalog import answer_callback
+from bridge.common import parse_topic_scope
+from bridge.config import DEFAULT_MODEL
+from bridge.database import (
+    db_connect,
+    panel_owner_for_message,
+    panel_session_for_message,
+)
+from bridge.groups import handle_group_panel_callback
+from bridge.help import handle_enum_callback
+from bridge.media import remove_inline_keyboard
+from bridge.panel_callback_routes import (
+    handle_entity_panel_callback,
+    handle_primary_panel_callback,
+    handle_provider_model_callback,
+)
+from bridge.runtime_context import (
+    db_connection_context,
+    set_panel_session_context,
+)
+from bridge.telegram import (
+    ensure_session,
+    load_session,
+    send_text,
+    telegram_request,
+)

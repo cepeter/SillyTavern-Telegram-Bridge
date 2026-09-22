@@ -1,17 +1,17 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import tempfile
 import unittest
 
 import bridge.config as config
-from dependency_patch import dependency_module
-
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_rag = dependency_module("bridge.rag")
-_m_session_naming = dependency_module("bridge.session_naming")
-
-
+import bridge.callbacks as _m_callbacks
+import bridge.memory_curator as _m_memory_curator
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.rag as _m_rag
+import bridge.session_naming as _m_session_naming
 class PdfWorkerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

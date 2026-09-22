@@ -1,9 +1,6 @@
 """Shared transcript and checkpoint primitives for Live API Sync."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import json
 from pathlib import Path
 import sqlite3
@@ -262,4 +259,37 @@ def set_sync_state(
     db.commit()
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import logging
+from bridge.card_content import (
+    active_world_files,
+    card_fields_from_file,
+    encode_world_files,
+    safe_character_path,
+    safe_world_path,
+)
+from bridge.cards import (
+    get_persona,
+    persona_name,
+)
+from bridge.config import (
+    DEFAULT_USER_NAME,
+    GENERATION_DEFAULTS,
+)
+from bridge.database import (
+    ensure_sync_binding,
+    get_generation_settings,
+    parse_generation_setting,
+    sync_transcript_hash,
+    update_generation_settings,
+)
+from bridge.generation import save_response_variant
+from bridge.language import normalize_response_language
+from bridge.memory import (
+    get_session_summary,
+    retain_session_memory,
+)
+from bridge.telegram import (
+    load_session,
+    update_session,
+)

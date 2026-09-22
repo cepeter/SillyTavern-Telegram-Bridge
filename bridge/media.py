@@ -1,8 +1,6 @@
 """Resolve a configured media tool to an existing executable."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 import threading
 
 import os
@@ -301,4 +299,48 @@ def get_provider_spec(provider_id: str) -> dict:
         return {}
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import hashlib
+import json
+import logging
+import re
+import sqlite3
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from bridge.callbacks import close_panel_message
+from bridge.common import (
+    chat_job_lock,
+    parse_topic_scope,
+    PROVIDER_CONFIG_FILE,
+    STT_DEFAULT_MODEL,
+    STT_MAX_BYTES,
+    submit_background,
+    TTS_MAX_CHARS,
+)
+from bridge.config import BRIDGE_HOME
+from bridge.database import (
+    begin_operation,
+    clear_failed_turn,
+    committed_assistant_for_message,
+    db_connect,
+    get_meta,
+    operation_was_applied,
+    record_operation,
+    run_write_txn,
+)
+from bridge.expressions import deliver_expression
+from bridge.job_runtime import jobs_for_services as _jobs_for_services
+from bridge.message_commands import process_message
+from bridge.runtime_context import (
+    set_db_connection_context,
+    set_panel_actor_context,
+)
+from bridge.telegram import (
+    download_telegram_file,
+    ensure_session,
+    send_text,
+    telegram_request,
+)

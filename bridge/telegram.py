@@ -67,7 +67,6 @@ from bridge.runtime_context import (
     panel_session_context,
 )
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
 from bridge.config import SYNC_MAX_BYTES
 from bridge.common import MAX_TELEGRAM_LENGTH
 
@@ -555,4 +554,25 @@ def send_text(token: str, chat_id: str, text: str) -> list[int]:
     return message_ids
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.cards import (
+    default_persona_id,
+    get_persona,
+    send_panel_message,
+)
+from bridge.catalog import install_world_info_document
+from bridge.commands import process_image_message
+from bridge.common import (
+    CHARACTER_BACKUP_DIR,
+    DEFAULT_ALLOWED_USER,
+    IMAGE_MAX_BYTES,
+    parse_topic_scope,
+)
+from bridge.expressions import (
+    expression_last_key,
+    expression_mode_key,
+)
+from bridge.generation import swipe_state_key
+from bridge.memory import resolve_memory_service
+from bridge.persona_sync import NATIVE_PERSONA_SETTINGS_FILE
+from bridge.session_naming import normalize_session_title

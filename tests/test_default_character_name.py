@@ -1,12 +1,12 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import unittest
 
 import bridge.config as config
-from dependency_patch import dependency_module
-
-_m_main = dependency_module("bridge.main")
-
-
+import bridge.main as _m_main
 class DefaultCharacterNameTests(unittest.TestCase):
     def test_fallback_name_follows_configured_default_card(self):
         original = config.DEFAULT_CHARACTER_FILE

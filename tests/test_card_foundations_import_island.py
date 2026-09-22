@@ -573,22 +573,14 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, source)
 
-    def test_cards_shell_keeps_telegram_and_persona_collaborators_late_bound(self):
+    def test_cards_shell_declares_telegram_and_persona_collaborators_explicitly(self):
         source = (
             REPO_ROOT / "bridge" / "cards.py"
         ).read_text(encoding="utf-8")
 
-        for forbidden in (
-            "import bridge.telegram",
-            "from bridge.telegram import",
-            "import bridge.persona_sync",
-            "from bridge.persona_sync import",
-        ):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, source)
-
+        self.assertIn("from bridge.telegram import telegram_request", source)
+        self.assertIn("from bridge.persona_sync import (", source)
         for collaborator in (
-            "telegram_request",
             "resolve_persona_service",
             "load_personas",
             "_native_settings",
@@ -596,9 +588,12 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             with self.subTest(collaborator=collaborator):
                 self.assertIn(collaborator, source)
 
+        self.assertNotIn("ordinary_dependencies", source)
+        self.assertNotIn("_bind_module_dependencies", source)
+
 
     def test_card_foundation_exports_are_canonical_without_facade(self):
-        import bridge.main  # completes transitional ordinary dependency bindings
+        import bridge.main
         import bridge.callback_tokens as callback_tokens
         import bridge.card_content as card_content
         import bridge.cards as cards

@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -8,24 +12,20 @@ import bridge.memory_backend as memory_backend
 import json
 import os
 import time
-from dependency_patch import dependency_module
-
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_command_routes = dependency_module("bridge.command_routes")
-_m_commands = dependency_module("bridge.commands")
-_m_generation = dependency_module("bridge.generation")
-_m_language = dependency_module("bridge.language")
-_m_main = dependency_module("bridge.main")
-_m_memory = dependency_module("bridge.memory")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_status_panels = dependency_module("bridge.status_panels")
-_m_sync_api = dependency_module("bridge.sync_api")
-_m_sync_core = dependency_module("bridge.sync_core")
-
-
+import bridge.callbacks as _m_callbacks
+import bridge.command_routes as _m_command_routes
+import bridge.commands as _m_commands
+import bridge.generation as _m_generation
+import bridge.language as _m_language
+import bridge.main as _m_main
+import bridge.memory as _m_memory
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.session_naming as _m_session_naming
+import bridge.status_panels as _m_status_panels
+import bridge.sync_api as _m_sync_api
+import bridge.sync_core as _m_sync_core
 class AuditRegressionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -1,9 +1,6 @@
 """Scoped session-name input flow shared by all new-session entry points."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import json
 from pathlib import Path
 import time
@@ -109,4 +106,30 @@ def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, s
     return True
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.callbacks import (
+    close_panel_message,
+    discard_panel_binding,
+)
+from bridge.cards import send_character_menu
+from bridge.common import delete_pending_input_prompts
+from bridge.config import (
+    DEFAULT_MODEL,
+    PENDING_SETTINGS_TTL_SECONDS,
+)
+from bridge.database import (
+    get_meta,
+    set_meta,
+)
+from bridge.groups import start_group_session
+from bridge.input_flows import (
+    _cancel_pending,
+    pending_character_for_session,
+)
+from bridge.message_commands import send_pending_input_message
+from bridge.runtime_context import set_panel_session_context
+from bridge.telegram import (
+    create_session,
+    send_text,
+    update_session,
+)

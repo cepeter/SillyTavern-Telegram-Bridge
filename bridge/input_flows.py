@@ -1,8 +1,6 @@
 """Open one scoped free-form input action and close its originating panel."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 import threading
 
 def _decode_pending_state(raw: str, meta_key: str) -> dict:
@@ -554,4 +552,69 @@ def handle_persona_callback(db, token, callback, answer_callback, data, chat_id,
     return True
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import html
+import json
+import logging
+import re
+import sqlite3
+import time
+from bridge.callback_tokens import (
+    dynamic_callback_token,
+    resolve_dynamic_callback_token,
+)
+from bridge.callbacks import (
+    close_panel_message,
+    discard_panel_binding,
+)
+from bridge.card_content import (
+    card_fields_from_file,
+    safe_character_path,
+)
+from bridge.cards import (
+    send_panel_message,
+    send_persona_menu,
+)
+from bridge.commands import (
+    edit_last_user,
+    handle_macro_command,
+    send_note_menu,
+)
+from bridge.common import delete_pending_input_prompts
+from bridge.config import PENDING_SETTINGS_TTL_SECONDS
+from bridge.database import (
+    get_generation_settings,
+    get_meta,
+    parse_generation_setting,
+    save_generation_preset,
+    set_meta,
+    update_generation_settings,
+)
+from bridge.director_goals import set_director_goal
+from bridge.help import (
+    send_databank_menu,
+    send_memory_menu,
+    send_preset_menu,
+    send_settings_menu,
+    send_stt_language_menu,
+    send_voice_input_menu,
+)
+from bridge.image_generation import handle_imagine_prompt
+from bridge.language import (
+    normalize_stt_language,
+    stt_language_label,
+)
+from bridge.media import remove_inline_keyboard
+from bridge.memory import handle_memory_command
+from bridge.memory_backend import remember_fact
+from bridge.message_commands import send_pending_input_message
+from bridge.persona_delete_panel import send_persona_delete_menu
+from bridge.persona_sync import resolve_persona_service
+from bridge.rag import handle_data_bank_command
+from bridge.session_naming import handle_session_name_input
+from bridge.status_panels import send_director_goal_menu
+from bridge.telegram import (
+    send_text,
+    telegram_request,
+    update_session,
+)

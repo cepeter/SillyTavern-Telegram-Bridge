@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 from bridge.network_security import (
     strict_urlopen,
     validate_provider_endpoint,
@@ -1044,4 +1042,62 @@ def continue_last(
     )
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import json
+import logging
+import os
+import sqlite3
+import urllib.error
+import urllib.parse
+import urllib.request
+from bridge.card_content import (
+    active_world_files,
+    build_system_prompt,
+    build_world_info,
+    replace_macros,
+)
+from bridge.common import (
+    DEFAULT_PROVIDER_URL,
+    PROVIDER_CONFIG_FILE,
+)
+from bridge.config import (
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_USER_NAME,
+    GENERATION_DEFAULTS,
+    HINDSIGHT_CONTEXT_MAX_CHARS,
+    RAG_MAX_CONTEXT_CHARS,
+    SUMMARY_MAX_CHARS,
+)
+from bridge.database import (
+    begin_operation,
+    get_generation_settings,
+    get_meta,
+    operation_phase,
+    record_operation,
+    run_write_txn,
+    set_meta,
+    set_operation_phase,
+)
+from bridge.language import (
+    normalize_response_language,
+    response_language_instruction,
+    response_language_label,
+)
+from bridge.media import (
+    delete_outgoing_message_row,
+    get_provider_spec,
+    send_reply,
+    send_typing,
+)
+from bridge.memory import resolve_memory_service
+from bridge.persona_sync import resolve_persona_service
+from bridge.rag_core import (
+    rag_citation_footer,
+    rag_context_for_prompt,
+    rag_retrieval_bundle,
+)
+from bridge.telegram import (
+    send_text,
+    telegram_request,
+)
+from pathlib import Path

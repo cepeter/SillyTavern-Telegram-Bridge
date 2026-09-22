@@ -10,9 +10,6 @@ import symtable
 import sys
 import unittest
 
-from bridge.ordinary_dependencies import declared_dependencies_for
-
-
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
 
@@ -160,15 +157,9 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
         for filename in MIGRATED_RUNTIME_FILES:
             source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")
             bound = _module_bound_names(source)
-            declared = set(
-                declared_dependencies_for(
-                    "bridge." + filename.removesuffix(".py")
-                )
-            )
             unresolved = sorted(
                 _referenced_globals(source, filename)
                 - bound
-                - declared
                 - builtin_names
                 - {"__file__", "__name__", "__package__"}
             )
@@ -183,17 +174,13 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
                 failures.append(filename + ": " + "; ".join(detail))
         self.assertEqual(failures, [], "\n".join(failures))
 
-    def test_declared_dependencies_never_point_to_runtime_or_main(self):
-        for module_name in (
-            "bridge." + filename.removesuffix(".py")
-            for filename in MIGRATED_RUNTIME_FILES
-        ):
-            for name, (source_module, _attribute) in declared_dependencies_for(module_name).items():
-                with self.subTest(module=module_name, name=name):
-                    self.assertNotIn(
-                        source_module,
-                        {"bridge.runtime", "bridge.main"},
-                    )
+    def test_transitional_dependency_injector_is_retired(self):
+        self.assertFalse((BRIDGE_DIR / "ordinary_dependencies.py").exists())
+        for filename in MIGRATED_RUNTIME_FILES:
+            source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")
+            with self.subTest(filename=filename):
+                self.assertNotIn("ordinary_dependencies", source)
+                self.assertNotIn("_bind_module_dependencies", source)
 
     def test_migrated_modules_do_not_import_runtime(self):
         for filename in MIGRATED_RUNTIME_FILES:

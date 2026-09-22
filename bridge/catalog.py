@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
     import yaml
     config = yaml.safe_load(PROVIDER_CONFIG_FILE.read_text(encoding="utf-8")) or {}
@@ -313,4 +311,38 @@ def answer_callback(token: str, callback_id: str, text: str) -> None:
     })
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import json
+import logging
+import os
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from bridge.callback_tokens import dynamic_callback_token
+from bridge.card_content import (
+    active_world_files,
+    safe_world_path,
+    world_file_paths,
+)
+from bridge.cards import send_panel_message
+from bridge.common import (
+    MODEL_CACHE_FILE,
+    MODEL_CHOICES,
+    MODEL_REFRESH_SECONDS,
+    PROVIDER_CONFIG_FILE,
+)
+from bridge.config import WORLD_DIR
+from bridge.generation import opencode_muse_headers
+from bridge.network_security import (
+    strict_urlopen,
+    validate_provider_endpoint,
+)
+from bridge.panel_utils import (
+    panel_label,
+    panel_navigation,
+    panel_page,
+)
+from bridge.telegram import telegram_request
+from pathlib import Path

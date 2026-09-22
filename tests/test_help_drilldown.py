@@ -1,24 +1,24 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
 import bridge.config as config
-from dependency_patch import dependency_module
-
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_catalog = dependency_module("bridge.catalog")
-_m_command_routes = dependency_module("bridge.command_routes")
-_m_director_goals = dependency_module("bridge.director_goals")
-_m_help = dependency_module("bridge.help")
-_m_help_details = dependency_module("bridge.help_details")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_scene_state = dependency_module("bridge.scene_state")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_sync_core = dependency_module("bridge.sync_core")
-
-
+import bridge.callbacks as _m_callbacks
+import bridge.catalog as _m_catalog
+import bridge.command_routes as _m_command_routes
+import bridge.director_goals as _m_director_goals
+import bridge.help as _m_help
+import bridge.help_details as _m_help_details
+import bridge.memory_curator as _m_memory_curator
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.scene_state as _m_scene_state
+import bridge.session_naming as _m_session_naming
+import bridge.sync_core as _m_sync_core
 class HelpDrilldownTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

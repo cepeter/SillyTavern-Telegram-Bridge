@@ -1,18 +1,18 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import tempfile
 import unittest
 
 import bridge.config as config
 import bridge.rag_core as rag_core
-from dependency_patch import dependency_module
-
-_m_help = dependency_module("bridge.help")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_rag = dependency_module("bridge.rag")
-_m_status_panels = dependency_module("bridge.status_panels")
-_m_telegram = dependency_module("bridge.telegram")
-
-
+import bridge.help as _m_help
+import bridge.memory_curator as _m_memory_curator
+import bridge.rag as _m_rag
+import bridge.status_panels as _m_status_panels
+import bridge.telegram as _m_telegram
 class DocumentVersioningTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

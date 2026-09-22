@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import tempfile
 import unittest
@@ -5,18 +9,14 @@ from unittest.mock import patch
 
 import bridge.config as config
 import time
-from dependency_patch import dependency_module
-
-_m_main = dependency_module("bridge.main")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_scene_state = dependency_module("bridge.scene_state")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_sync_core = dependency_module("bridge.sync_core")
-_m_generation = dependency_module("bridge.generation")
-
-
+import bridge.main as _m_main
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.scene_state as _m_scene_state
+import bridge.session_naming as _m_session_naming
+import bridge.sync_core as _m_sync_core
+import bridge.generation as _m_generation
 class SceneStateEngineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

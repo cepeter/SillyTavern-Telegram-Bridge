@@ -1,13 +1,15 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import sqlite3
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from dependency_patch import dependency_module
-
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_persona_sync = dependency_module("bridge.persona_sync")
-_m_cards = dependency_module("bridge.cards")
+import bridge.message_commands as _m_message_commands
+import bridge.persona_sync as _m_persona_sync
+import bridge.cards as _m_cards
 from bridge.persona_service import PersonaService
 
 

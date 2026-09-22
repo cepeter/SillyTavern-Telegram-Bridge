@@ -1,13 +1,13 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import tempfile
 import unittest
 from pathlib import Path
 
 import subprocess
-from dependency_patch import dependency_module
-
-_m_update = dependency_module("bridge.update")
-
-
+import bridge.update as _m_update
 class UpdatePanelTests(unittest.TestCase):
     def test_update_panel_uses_installed_version_and_release_notes(self):
         text = _m_update.update_menu_text("0.2.007", "0.2.008", "Added safer updates.")

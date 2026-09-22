@@ -1,20 +1,22 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from dependency_patch import dependency_module
-
-_m_help = dependency_module("bridge.help")
-_m_main = dependency_module("bridge.main")
-_m_media = dependency_module("bridge.media")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_commands = dependency_module("bridge.commands")
-_m_database = dependency_module("bridge.database")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_runtime_context = dependency_module("bridge.runtime_context")
-_m_telegram = dependency_module("bridge.telegram")
+import bridge.help as _m_help
+import bridge.main as _m_main
+import bridge.media as _m_media
+import bridge.memory_curator as _m_memory_curator
+import bridge.callbacks as _m_callbacks
+import bridge.commands as _m_commands
+import bridge.database as _m_database
+import bridge.message_commands as _m_message_commands
+import bridge.runtime_context as _m_runtime_context
+import bridge.telegram as _m_telegram
 from bridge.composition import (
     BackgroundRuntime,
     BridgeConfig,

@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,16 +13,12 @@ import bridge.extension_registry as registry
 import bridge.config as config
 import bridge.memory_backend as memory_backend
 import time
-from dependency_patch import dependency_module
-
-_m_main = dependency_module("bridge.main")
-_m_memory = dependency_module("bridge.memory")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_sync_core = dependency_module("bridge.sync_core")
-_m_common = dependency_module("bridge.common")
-
-
+import bridge.main as _m_main
+import bridge.memory as _m_memory
+import bridge.memory_curator as _m_memory_curator
+import bridge.session_naming as _m_session_naming
+import bridge.sync_core as _m_sync_core
+import bridge.common as _m_common
 class _FakeDocuments:
     def __init__(self):
         self.documents = {}

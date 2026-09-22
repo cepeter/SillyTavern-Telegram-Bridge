@@ -1,9 +1,6 @@
 """Read-only status and prompt inspection panels."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import json
 
 
@@ -292,4 +289,61 @@ def send_summary_menu(token, chat_id, db, session, message_id=None):
     send_panel_message(token, chat_id, text, markup, message_id)
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import time
+from bridge.callbacks import close_panel_message
+from bridge.card_content import (
+    active_world_files,
+    card_fields_from_file,
+    system_prompt_label,
+)
+from bridge.cards import (
+    persona_name,
+    send_panel_message,
+)
+from bridge.commands import prompt_diagnostics
+from bridge.config import DEFAULT_MODEL
+from bridge.context_compaction import (
+    context_history_candidate_limit,
+    context_input_budget_tokens,
+)
+from bridge.database import (
+    get_generation_settings,
+    get_meta,
+    task_model_for_session,
+)
+from bridge.director_goals import (
+    get_director_goal,
+    set_director_goal,
+)
+from bridge.expressions import expression_mode_key
+from bridge.group_core import (
+    group_member_labels,
+    group_state,
+)
+from bridge.groups import handle_summary_command
+from bridge.help import send_memory_menu
+from bridge.input_flows import start_text_action_input
+from bridge.language import response_language_label
+from bridge.media import send_typing
+from bridge.memory import get_session_summary
+from bridge.memory_backend import (
+    memory_mode,
+    memory_scope,
+)
+from bridge.memory_curator import (
+    curate_memory_now,
+    curated_memory_text,
+)
+from bridge.rag_core import (
+    data_bank_documents,
+    rag_mode,
+)
+from bridge.scene_state import (
+    clear_scene_state,
+    get_scene_state,
+    refresh_scene_state_now,
+)
+from bridge.sync_api import resolve_sync_service
+from bridge.telegram import send_text
+from pathlib import Path

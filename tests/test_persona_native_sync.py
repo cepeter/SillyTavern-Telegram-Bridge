@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import json
 from pathlib import Path
 import tempfile
@@ -5,14 +9,10 @@ import unittest
 from unittest.mock import patch
 
 import logging
-from dependency_patch import dependency_module
-
-_m_command_routes = dependency_module("bridge.command_routes")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_persona_sync = dependency_module("bridge.persona_sync")
-_m_sync_core = dependency_module("bridge.sync_core")
-
-
+import bridge.command_routes as _m_command_routes
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.persona_sync as _m_persona_sync
+import bridge.sync_core as _m_sync_core
 class NativePersonaSyncTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

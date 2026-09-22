@@ -1,8 +1,6 @@
 """Handle System Prompt selection, disable, and pagination callbacks."""
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 def handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
     if data.startswith("systemprompt:"):
         value = data.split(":", 1)[1]
@@ -655,4 +653,109 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
     return True
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import json
+import logging
+import time
+from bridge.callback_tokens import (
+    dynamic_callback_token,
+    resolve_dynamic_callback_token,
+)
+from bridge.callbacks import (
+    close_panel_message,
+    discard_panel_binding,
+)
+from bridge.card_content import (
+    active_world_files,
+    card_fields_from_file,
+    encode_world_files,
+    get_system_prompt_choice,
+    safe_character_path,
+    safe_world_path,
+)
+from bridge.cards import (
+    send_character_delete_confirm,
+    send_character_delete_menu,
+    send_character_info_menu,
+    send_character_menu,
+    send_panel_message,
+    send_session_menu,
+)
+from bridge.catalog import (
+    delete_world_info_file,
+    refresh_model_catalog,
+    send_model_menu,
+    send_model_target_menu,
+    send_provider_health_menu,
+    send_world_menu,
+)
+from bridge.commands import send_note_menu
+from bridge.config import (
+    CARD_FILE,
+    DEFAULT_CHARACTER_FILE,
+    DEFAULT_MODEL,
+    PENDING_SETTINGS_TTL_SECONDS,
+)
+from bridge.database import (
+    begin_operation,
+    clear_model_target_selection,
+    get_meta,
+    get_model_target_selection,
+    record_operation,
+    set_meta,
+    set_model_target_selection,
+    set_task_model,
+    task_model_for_session,
+)
+from bridge.expressions import (
+    discover_expression_assets,
+    expression_last_key,
+    expression_mode_key,
+    send_expression_menu,
+)
+from bridge.generation import (
+    edit_swipe_menu,
+    keep_swipe_variant,
+    last_user_variants,
+    swipe_state_key,
+)
+from bridge.group_core import group_setup_state
+from bridge.groups import (
+    apply_group_setup_character,
+    send_group_menu,
+)
+from bridge.help import send_system_prompt_menu
+from bridge.help_details import handle_help_callback
+from bridge.input_flows import (
+    handle_persona_callback,
+    pending_character_for_session,
+)
+from bridge.language import (
+    response_language_label,
+    send_language_menu,
+    set_response_language,
+)
+from bridge.media import (
+    delete_outgoing_messages,
+    remove_inline_keyboard,
+)
+from bridge.message_commands import reset_session
+from bridge.session_naming import start_session_name_input
+from bridge.status_panels import (
+    handle_prompt_and_feature_callback,
+    send_sync_menu,
+)
+from bridge.sync_api import resolve_sync_service
+from bridge.telegram import (
+    character_delete_references,
+    delete_session_data,
+    list_sessions,
+    send_session_delete_confirm,
+    send_session_delete_menu,
+    send_text,
+    telegram_request,
+    update_session,
+    verify_character_card_backup,
+)
+from bridge.update import handle_update_callback
+from pathlib import Path

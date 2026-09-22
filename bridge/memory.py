@@ -21,8 +21,6 @@ from bridge.database import (
     task_model_for_session,
 )
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 from bridge.memory_backend import (
     _memory_hindsight_conversation_snapshot,
     _memory_hindsight_epoch,
@@ -230,4 +228,7 @@ def resolve_memory_service(memory_service=None) -> _MemoryService:
     return memory_service if memory_service is not None else compatibility_memory_service()
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.common import submit_background
+from bridge.generation import generate_text
+from bridge.telegram import send_text

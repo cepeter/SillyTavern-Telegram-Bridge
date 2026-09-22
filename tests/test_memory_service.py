@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 from types import SimpleNamespace
 import sqlite3
@@ -7,28 +11,25 @@ from unittest.mock import patch
 
 import bridge.config as config
 import time
-from dependency_patch import dependency_module
-
-_m_commands = dependency_module("bridge.commands")
-_m_help = dependency_module("bridge.help")
-_m_main = dependency_module("bridge.main")
-_m_memory = dependency_module("bridge.memory")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_card_content = dependency_module("bridge.card_content")
-_m_command_routes = dependency_module("bridge.command_routes")
-_m_database = dependency_module("bridge.database")
-_m_generation = dependency_module("bridge.generation")
-_m_group_core = dependency_module("bridge.group_core")
-_m_input_flows = dependency_module("bridge.input_flows")
-_m_language = dependency_module("bridge.language")
-_m_media = dependency_module("bridge.media")
-_m_memory_backend = dependency_module("bridge.memory_backend")
-_m_rag_core = dependency_module("bridge.rag_core")
-_m_telegram = dependency_module("bridge.telegram")
-
+import bridge.commands as _m_commands
+import bridge.help as _m_help
+import bridge.main as _m_main
+import bridge.memory as _m_memory
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.session_naming as _m_session_naming
+import bridge.card_content as _m_card_content
+import bridge.command_routes as _m_command_routes
+import bridge.database as _m_database
+import bridge.generation as _m_generation
+import bridge.group_core as _m_group_core
+import bridge.input_flows as _m_input_flows
+import bridge.language as _m_language
+import bridge.media as _m_media
+import bridge.memory_backend as _m_memory_backend
+import bridge.rag_core as _m_rag_core
+import bridge.telegram as _m_telegram
 from bridge.memory_service import MemoryPromptContext, MemoryService
 
 

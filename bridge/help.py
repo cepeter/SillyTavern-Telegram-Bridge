@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
 from bridge.composition import BridgeServices as _BridgeServices
 
 HELP_CATEGORIES = {
@@ -559,4 +557,72 @@ def set_bot_commands(token: str) -> None:
         logging.warning("Could not register Telegram command menu", exc_info=True)
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import json
+import logging
+import sqlite3
+import time
+from bridge.callback_tokens import (
+    dynamic_callback_token,
+    resolve_dynamic_callback_token,
+)
+from bridge.callbacks import (
+    close_panel_message,
+    discard_panel_binding,
+)
+from bridge.card_content import (
+    get_system_prompt_choice,
+    system_prompt_callback_token,
+    system_prompt_choices,
+)
+from bridge.cards import send_panel_message
+from bridge.commands import apply_preset_action
+from bridge.common import (
+    chat_job_lock,
+    STT_DEFAULT_MODEL,
+)
+from bridge.config import (
+    GENERATION_DEFAULTS,
+    PENDING_SETTINGS_TTL_SECONDS,
+    REASONING_LEVELS,
+)
+from bridge.database import (
+    get_generation_settings,
+    get_meta,
+    preset_names,
+    set_meta,
+    update_generation_settings,
+)
+from bridge.help_details import (
+    help_markup,
+    help_text,
+)
+from bridge.input_flows import start_text_action_input
+from bridge.job_runtime import jobs_for_services as _jobs_for_services
+from bridge.language import (
+    normalize_stt_language,
+    RESPONSE_LANGUAGES,
+    stt_language_label,
+)
+from bridge.memory_backend import memory_mode
+from bridge.message_commands import send_reset_confirmation_menu
+from bridge.panel_utils import (
+    panel_label,
+    panel_navigation,
+    panel_page,
+)
+from bridge.rag import handle_data_bank_command
+from bridge.rag_core import (
+    activate_data_bank_version,
+    data_bank_document_versions,
+    data_bank_documents,
+    rag_embedding_coverage,
+    rag_mode,
+    reindex_data_bank_documents,
+)
+from bridge.runtime_context import set_db_connection_context
+from bridge.telegram import (
+    import_telegram_document,
+    send_text,
+    telegram_request,
+)

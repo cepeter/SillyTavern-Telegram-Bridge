@@ -1,13 +1,13 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 import concurrent.futures
 import unittest
 
-from dependency_patch import dependency_module
-
-_m_common = dependency_module("bridge.common")
-_m_main = dependency_module("bridge.main")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-
-
+import bridge.common as _m_common
+import bridge.main as _m_main
+import bridge.memory_curator as _m_memory_curator
 class BackgroundLifecycleTests(unittest.TestCase):
     def test_drain_background_jobs_observes_tracked_futures(self):
         future = concurrent.futures.Future()

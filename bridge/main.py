@@ -46,17 +46,133 @@ from bridge.repositories import (
 from bridge.scheduler_safety import (
     DurableWorkerGuard as _DurableWorkerGuard,
 )
-from bridge.ordinary_dependencies import (
-    complete_application_dependencies as _complete_application_dependencies,
-)
 from bridge.application_composition import (
     initialize_extensions as _initialize_extensions,
 )
 
-# Complete every declared module-local dependency before startup state is
-# constructed. This is ordinary module composition; no source is exec-loaded
-# into this namespace.
-_complete_application_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import argparse
+import json
+import logging
+import os
+import signal
+import sqlite3
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from bridge.callbacks import process_callback
+from bridge.cards import default_persona_id
+from bridge.catalog import answer_callback
+from bridge.commands import edit_telegram_user_message
+from bridge.config import (
+    CARD_FILE,
+    CHARACTER_DIR,
+    DB_FILE,
+    DEFAULT_CHARACTER_FILE,
+)
+from bridge.generation import (
+    generate_text,
+    resolve_provider_model,
+)
+from bridge.help import (
+    process_document_job,
+    set_bot_commands,
+)
+from bridge.help_details import (
+    handle_help_callback,
+    is_help_callback,
+    send_help_command,
+)
+from bridge.input_flows import PERSONA_EDIT_LOCK
+from bridge.media import (
+    get_provider_spec,
+    process_voice_job,
+    send_reply,
+)
+from bridge.memory_backend import recall_memory_context
+from bridge.message_commands import process_message
+from bridge.persona_sync import (
+    delete_native_persona,
+    load_personas,
+    upsert_native_persona,
+)
+from bridge.runtime_context import (
+    set_db_connection_context,
+    set_panel_actor_context,
+)
+from bridge.sync_core import sync_binding
+from pathlib import Path
+from bridge.sync_api import (
+    SillyTavernApiError,
+    _phase3_disable,
+    phase3_api_configured,
+    phase3_client,
+    phase3_sync_now,
+    phase3_sync_poll,
+    phase3_toggle_realtime,
+    refresh_phase3_config,
+    start_phase3_sync_worker,
+    stop_phase3_sync_worker,
+)
+from bridge.group_core import (
+    advance_group_turn,
+    group_current_speaker,
+    group_member_labels,
+    group_state,
+    group_user_turn_allowed,
+)
+from bridge.common import (
+    begin_background_shutdown,
+    chat_job_lock,
+    enforce_runtime_permissions,
+    load_env_file,
+    register_durable_backlog_dispatcher,
+    shutdown_background_executors,
+    submit_chat_background,
+    topic_scope_from_message,
+)
+from bridge.card_content import (
+    card_fields,
+    card_fields_from_file,
+    read_png_chara,
+    safe_character_path,
+)
+from bridge.database import (
+    clear_failed_turn,
+    committed_assistant_for_message,
+    db_connect,
+    enqueue_job,
+    finish_job,
+    get_generation_settings,
+    get_meta,
+    job_actor_id,
+    mark_job_running,
+    mark_job_scheduled,
+    operation_phase,
+    operation_was_applied,
+    record_failed_turn,
+    record_operation,
+    recover_jobs,
+    run_database_maintenance,
+    run_write_txn,
+    set_meta,
+)
+from bridge.telegram import (
+    ensure_session,
+    load_session,
+    process_telegram_image,
+    send_text,
+    telegram_request,
+    update_session,
+)
+from bridge.memory import (
+    get_session_summary,
+    purge_hindsight_session,
+    retain_session_memory,
+    session_summary_for_prompt,
+)
 
 _SHUTDOWN_EVENT = threading.Event()
 

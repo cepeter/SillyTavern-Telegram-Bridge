@@ -1,18 +1,18 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 import time
-from dependency_patch import dependency_module
-
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_status_panels = dependency_module("bridge.status_panels")
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_cards = dependency_module("bridge.cards")
-_m_sync_api = dependency_module("bridge.sync_api")
-
-
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.status_panels as _m_status_panels
+import bridge.callbacks as _m_callbacks
+import bridge.cards as _m_cards
+import bridge.sync_api as _m_sync_api
 class SyncUiBehaviorTests(unittest.TestCase):
     def setUp(self):
         self.db = object()

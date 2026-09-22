@@ -1,17 +1,17 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import tempfile
 import unittest
 
 import bridge.config as config
 import time
-from dependency_patch import dependency_module
-
-_m_groups = dependency_module("bridge.groups")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_session_naming = dependency_module("bridge.session_naming")
-
-
+import bridge.groups as _m_groups
+import bridge.memory_curator as _m_memory_curator
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.session_naming as _m_session_naming
 class TaskModelRoutingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

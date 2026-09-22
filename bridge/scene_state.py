@@ -7,9 +7,6 @@ continuity context used by every build_chat_messages caller.
 """
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 import json
 import logging
 import re
@@ -375,4 +372,20 @@ def register_scene_state_extensions() -> None:
         _register_command_route("scene_state", _scene_state_command_route)
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+import sqlite3
+from bridge.common import submit_background
+from bridge.config import DEFAULT_MODEL
+from bridge.database import (
+    db_connect,
+    get_generation_settings,
+    task_model_for_session,
+    write_transaction,
+)
+from bridge.generation import generate_text
+from bridge.media import send_typing
+from bridge.status_panels import send_scene_menu
+from bridge.telegram import (
+    load_session,
+    send_text,
+)

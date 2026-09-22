@@ -1,3 +1,7 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import tempfile
 import unittest
@@ -6,20 +10,16 @@ import bridge.card_content as card_content
 import bridge.config as config
 import json
 import time
-from dependency_patch import dependency_module
-
-_m_callbacks = dependency_module("bridge.callbacks")
-_m_character_identity = dependency_module("bridge.character_identity")
-_m_groups = dependency_module("bridge.groups")
-_m_main = dependency_module("bridge.main")
-_m_memory_curator = dependency_module("bridge.memory_curator")
-_m_message_commands = dependency_module("bridge.message_commands")
-_m_panel_callback_routes = dependency_module("bridge.panel_callback_routes")
-_m_session_naming = dependency_module("bridge.session_naming")
-_m_sync_api = dependency_module("bridge.sync_api")
-_m_sync_core = dependency_module("bridge.sync_core")
-
-
+import bridge.callbacks as _m_callbacks
+import bridge.character_identity as _m_character_identity
+import bridge.groups as _m_groups
+import bridge.main as _m_main
+import bridge.memory_curator as _m_memory_curator
+import bridge.message_commands as _m_message_commands
+import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.session_naming as _m_session_naming
+import bridge.sync_api as _m_sync_api
+import bridge.sync_core as _m_sync_core
 class GroupTurnGatingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

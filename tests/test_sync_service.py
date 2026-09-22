@@ -1,12 +1,14 @@
+from application_test_setup import ensure_application_extensions
+
+ensure_application_extensions()
+
 from pathlib import Path
 import sqlite3
 import unittest
 from unittest.mock import patch
 
-from dependency_patch import dependency_module
-
-_m_sync_api = dependency_module("bridge.sync_api")
-_m_sync_core = dependency_module("bridge.sync_core")
+import bridge.sync_api as _m_sync_api
+import bridge.sync_core as _m_sync_core
 from bridge.sync_service import SyncService, SyncStatus
 
 

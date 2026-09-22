@@ -5,9 +5,6 @@ modules. This file remains exec-loaded until the Phase 7 UI migration.
 """
 from __future__ import annotations
 
-from bridge.ordinary_dependencies import bind_module_dependencies as _bind_module_dependencies
-
-
 from pathlib import Path
 import logging
 
@@ -188,4 +185,10 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
     send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
 
 
-_bind_module_dependencies(__name__, globals())
+# Explicit late imports replace transitional dependency injection.
+from bridge.persona_sync import (
+    _native_settings,
+    load_personas,
+    resolve_persona_service,
+)
+from bridge.telegram import telegram_request
