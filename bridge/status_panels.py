@@ -145,7 +145,7 @@ def send_sync_menu(
     )
 
 
-def prompt_panel_text(db, chat_id, session, fields, section="overview"):
+def prompt_panel_text(db, chat_id, session, fields, section="overview", *, memory_service):
     if section == "budget":
         return (
             f"Prompt budget\nContext input budget: ~{context_input_budget_tokens()} tokens\n"
@@ -161,10 +161,10 @@ def prompt_panel_text(db, chat_id, session, fields, section="overview"):
     if section == "group":
         group = group_state(db, chat_id, session["session_id"])
         return f"Prompt group context\nEnabled: {'on' if group['enabled'] else 'off'}\nMode: {group['mode']}\nMembers: {len(group['members'])}"
-    return prompt_diagnostics(db, chat_id, session, fields)
+    return prompt_diagnostics(db, chat_id, session, fields, memory_service=memory_service)
 
 
-def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, section="overview"):
+def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, section="overview", *, memory_service):
     labels = {
         "overview": "Prompt inspector",
         "budget": "Prompt budget",
@@ -178,10 +178,10 @@ def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, secti
             [{"text": "⬅️ Status", "callback_data": "prompt:status"}, {"text": "❌ Close", "callback_data": "prompt:close"}],
         ]
     }
-    send_panel_message(token, chat_id, labels.get(section, labels["overview"]) + "\n\n" + prompt_panel_text(db, chat_id, session, fields, section), markup, message_id)
+    send_panel_message(token, chat_id, labels.get(section, labels["overview"]) + "\n\n" + prompt_panel_text(db, chat_id, session, fields, section, memory_service=memory_service), markup, message_id)
 
 
-def handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
+def handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service):
     """Handle legacy prompt and feature callbacks; status itself is text-only."""
     message_id = message.get("message_id")
     if data == "prompt:close":
@@ -189,13 +189,13 @@ def handle_prompt_and_feature_callback(db, token, callback, answer_callback, dat
         close_panel_message(token, chat_id, callback)
         return True
     if data == "prompt:menu":
-        send_prompt_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id)
+        send_prompt_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, memory_service=memory_service)
         return True
     if data.startswith("prompt:"):
         if data == "prompt:status":
             send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or ""))
         elif data.rsplit(":", 1)[1] in {"budget", "memory", "group"}:
-            send_prompt_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, data.rsplit(":", 1)[1])
+            send_prompt_menu(token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, data.rsplit(":", 1)[1], memory_service=memory_service)
         return True
     if data.startswith(("scene:", "goal:", "curated:", "summary:")):
         return handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
