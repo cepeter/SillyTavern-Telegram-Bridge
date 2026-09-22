@@ -16,3 +16,12 @@ Tasks 1-5: branch implementation validated after stale-test migration by CI #109
 Task 6: Ruling: The planned source-substring guard for executor construction falsely matched lazy creation inside _executor_for(). Replace it with an AST guard over module-level statements only; behavioral subprocess tests remain primary evidence. Cost if wrong: an import-time side effect could escape the source guard, mitigated by test_startup_purity importing bridge.common in isolation.
 
 Final review: Important fixed — approved spec requires BridgeConfig and provider credential validation before runtime permission/log resource setup. Added test_main_validates_config_and_credential_before_runtime_resources; CI #1097 RED proved the mismatch. Production startup reordered to match the spec. Cost if wrong: invalid configuration could still mutate runtime filesystem/logging before failing startup.
+
+Task 1: complete — strict bridge.environment parser/bootstrap contract implemented and covered by tests/test_environment.py plus launcher-order guard; validated in full CI #1099.
+Task 2: complete — runtime paths centralized, common compatibility ownership removed, and system prompts are directory-only; validated in full CI #1099.
+Task 3: complete — logging is explicit, idempotent, private, and import-pure; validated by isolated subprocess tests and full CI #1099.
+Task 4: complete — generation/utility executors are lazy, reused, and safely detached on shutdown; validated by lifecycle tests and full CI #1099.
+Task 5: complete — Telegram allowlist is required/numeric and late environment loading is retired; validated by composition guards and full CI #1099.
+Task 6: complete — documentation, examples, residue guards, and exact-head validation completed; CI #1099: 702 unittest tests, 702 pytest tests with 466 subtests, dependency audit clean.
+Final review: self-review (no subagent tool).
+Final: fixed startup resource ordering — test_main_validates_config_and_credential_before_runtime_resources RED in CI #1097, GREEN in CI #1099; full suite 702 unittest / 702 pytest + 466 subtests.
