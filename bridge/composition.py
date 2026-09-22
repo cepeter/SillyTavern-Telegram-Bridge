@@ -82,12 +82,12 @@ def load_bridge_config(
 
 def validate_bridge_config(config: BridgeConfig) -> None:
     if not config.bot_token:
-        raise ValueError("required Telegram bot token is missing from .env")
+        raise ValueError("required Telegram bot token is missing from environment")
     if not config.default_model:
-        raise ValueError("required SILLYTAVERN_MODEL is missing from .env")
+        raise ValueError("required SILLYTAVERN_MODEL is missing from environment")
     if not config.default_character_file:
         raise ValueError(
-            "required SILLYTAVERN_DEFAULT_CHARACTER is missing from .env"
+            "required SILLYTAVERN_DEFAULT_CHARACTER is missing from environment"
         )
     if not config.card_file.is_file():
         raise ValueError(
@@ -97,7 +97,7 @@ def validate_bridge_config(config: BridgeConfig) -> None:
 
     if not config.allowed_users:
         raise ValueError(
-            "required SILLYTAVERN_TELEGRAM_ALLOWED_USERS is missing from .env"
+            "required SILLYTAVERN_TELEGRAM_ALLOWED_USERS is missing from environment"
         )
 
     invalid_users = sorted(
