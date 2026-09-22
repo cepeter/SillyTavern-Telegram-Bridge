@@ -559,7 +559,7 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
     return False
 
 
-def handle_entity_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, persona_service=None):
+def handle_entity_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, persona_service):
     """Dispatch character, session, persona, and World Info callbacks."""
     if handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id):
         return True
