@@ -329,7 +329,7 @@ def regenerate_edited_turn(
     )
 
 
-def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, memory_service=None, persona_service=None) -> None:
+def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, memory_service: MemoryService, persona_service=None) -> None:
     session_id = session["session_id"]
     rows = db.execute("SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session_id)).fetchall()
     last_user = next((row for row in reversed(rows) if row[1] == "user"), None)
