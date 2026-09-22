@@ -583,10 +583,9 @@ def regenerate_last(
     chat_id: str,
     operation_id: int | str | None = None,
     *,
-    memory_service=None,
+    memory_service: MemoryService,
     persona_service=None,
 ) -> None:
-    memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
     def deliver_recovered_regen():
@@ -860,10 +859,9 @@ def continue_last(
     chat_id: str,
     operation_id: int | str | None = None,
     *,
-    memory_service=None,
+    memory_service: MemoryService,
     persona_service=None,
 ) -> None:
-    memory_service = resolve_memory_service(memory_service)
     session_id = session["session_id"]
 
     def deliver_recovered_continue():
@@ -1104,7 +1102,7 @@ from bridge.media import (
     send_reply,
     send_typing,
 )
-from bridge.memory import resolve_memory_service
+from bridge.memory_service import MemoryService
 from bridge.persona_sync import resolve_persona_service
 from bridge.rag_core import (
     rag_citation_footer,
