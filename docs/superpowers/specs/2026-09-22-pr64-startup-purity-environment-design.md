@@ -185,7 +185,7 @@ It would either preserve stale values or require a broad mutable-config redesign
 
 A process-global mutable configuration registry would remove import-order concerns but create a new hidden dependency surface.
 
-The repository already has explicit immutable `BridgeConfig` for startup credentials and service composition. PR #64 should not add another runtime configuration mechanism.
+The repository already has explicit immutable `BridgeConfig` for startup credentials and service composition. PR #64 must not add another runtime configuration mechanism.
 
 ## 6. Environment bootstrap contract
 
@@ -270,7 +270,7 @@ if __name__ == "__main__":
 
 The import after `bootstrap_environment()` is intentional and must be preserved.
 
-An architecture test should guard that bootstrap occurs before importing `bridge.main`.
+An architecture test must guard that bootstrap occurs before importing `bridge.main`.
 
 The launcher no longer owns parsing logic.
 
@@ -379,7 +379,7 @@ required SILLYTAVERN_TELEGRAM_ALLOWED_USERS is missing from .env
 
 It must reject any value that is not decimal digits.
 
-The error should identify invalid values without exposing credentials.
+The error must identify invalid values without exposing credentials.
 
 The allowlist remains immutable in `BridgeConfig`.
 
@@ -532,7 +532,7 @@ Extend composition tests for:
 
 ### 16.7 Compatibility residue guards
 
-Architecture tests should reject:
+Architecture tests must reject:
 
 - `def load_env_file(`;
 - launcher-local `def bootstrap_env(`;
