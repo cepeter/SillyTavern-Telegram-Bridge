@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_native_test_persona_service
+from application_test_setup import ensure_application_extensions, make_native_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -122,12 +122,12 @@ class CatalogLimitTests(unittest.TestCase):
         settings = {"power_user": {"personas": personas, "persona_descriptions": {key: {"description": "d"} for key in personas}}}
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(settings), encoding="utf-8")
         calls = []
-        original = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_persona_menu("token", "chat", "", persona_service=make_native_test_persona_service())
+            _m_command_routes.send_persona_menu("token", "chat", "", persona_service=make_native_test_persona_service(), request_context=make_test_request_context(self.db))
         finally:
-            _m_cards.telegram_request = original
+            _m_cards.send_panel_request = original
         callbacks = [button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row]
         self.assertEqual(sum(value.startswith("persona:t") for value in callbacks), 8)
         self.assertIn("page 1/5", calls[-1][1]["text"])
@@ -140,7 +140,7 @@ class CatalogLimitTests(unittest.TestCase):
         _m_message_commands.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             state = {"session_id": self.session["session_id"], "mode": "create", "persona_id": "", "expires_at": time.time() + 60}
-            self.assertTrue(_m_input_flows._handle_persona_input(self.db, "token", "chat", self.session, "p40 | Persona 40 | description", state, None, persona_service=make_native_test_persona_service()))
+            self.assertTrue(_m_input_flows._handle_persona_input(self.db, "token", "chat", self.session, "p40 | Persona 40 | description", state, None, persona_service=make_native_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
         finally:
             _m_message_commands.send_text = original
         self.assertTrue(any("40 maximum" in text for text in sent))

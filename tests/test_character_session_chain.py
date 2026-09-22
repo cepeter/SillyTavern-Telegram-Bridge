@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service
+from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -37,14 +37,14 @@ class CharacterSessionChainTests(unittest.TestCase):
         original_fields = _m_panel_callback_routes.card_fields_from_file
         original_close = _m_panel_callback_routes.close_panel_message
         original_menu = _m_panel_callback_routes.send_session_menu
-        _m_panel_callback_routes.resolve_dynamic_callback_token = lambda *_args: "chosen.png"
+        _m_panel_callback_routes.resolve_dynamic_callback_token = lambda *_args, **_kwargs: "chosen.png"
         _m_panel_callback_routes.safe_character_path = lambda _name: Path("/tmp/chosen.png")
         _m_panel_callback_routes.card_fields_from_file = lambda _name: {"name": "Chosen"}
         _m_panel_callback_routes.close_panel_message = lambda *_args, **_kwargs: None
         _m_panel_callback_routes.send_session_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
             callback = self._callback("character:token")
-            handled = _m_panel_callback_routes.handle_character_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], session, session["session_id"], None)
+            handled = _m_panel_callback_routes.handle_character_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"]))
         finally:
             _m_panel_callback_routes.resolve_dynamic_callback_token = original_resolve
             _m_panel_callback_routes.safe_character_path = original_safe
@@ -72,7 +72,7 @@ class CharacterSessionChainTests(unittest.TestCase):
         _m_panel_callback_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             callback = self._callback("session:target")
-            handled = _m_panel_callback_routes.handle_session_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], current, current["session_id"], None, memory_service=make_test_memory_service())
+            handled = _m_panel_callback_routes.handle_session_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], current, current["session_id"], None, memory_service=make_test_memory_service(), request_context=make_test_request_context(self.db, current["session_id"]))
         finally:
             _m_input_flows.safe_character_path = original_safe
             _m_panel_callback_routes.remove_inline_keyboard = original_remove

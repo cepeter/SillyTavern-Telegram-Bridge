@@ -4,10 +4,6 @@ import hashlib
 import logging
 import time
 
-from bridge.database import db_connect
-from bridge.runtime_context import db_connection_context
-
-
 _CALLBACK_TOKEN_VALUES: dict[
     str,
     tuple[str, str, str, float],
@@ -15,26 +11,21 @@ _CALLBACK_TOKEN_VALUES: dict[
 _CALLBACK_TOKEN_TTL_SECONDS = 900
 
 
-def _use_db_connection(action, error_message: str):
-    """Run action(conn) on ambient/short-lived DB; log failures."""
-    conn = db_connection_context()
-    owns_connection = conn is None
+def _run_db_action(db, action, error_message: str):
+    """Run action(db) on the explicit request/job database; log failures."""
     try:
-        conn = conn or db_connect()
-        return action(conn)
+        return action(db)
     except Exception:
         logging.debug(error_message, exc_info=True)
         return None
-    finally:
-        if owns_connection and conn is not None:
-            conn.close()
 
 
 def dynamic_callback_token(
     kind: str,
     value: str,
     chat_id: str = "",
-    db=None,
+    *,
+    db,
 ) -> str:
     raw = f"{kind}|{chat_id}|{value}"
     token = (
@@ -66,19 +57,11 @@ def dynamic_callback_token(
         )
         conn.commit()
 
-    if db is not None:
-        try:
-            persist(db)
-        except Exception:
-            logging.debug(
-                "Could not persist callback token",
-                exc_info=True,
-            )
-    else:
-        _use_db_connection(
-            persist,
-            "Could not persist callback token",
-        )
+    _run_db_action(
+        db,
+        persist,
+        "Could not persist callback token",
+    )
     return token
 
 
@@ -86,6 +69,8 @@ def resolve_dynamic_callback_token(
     token: str,
     kind: str,
     chat_id: str = "",
+    *,
+    db,
 ) -> str | None:
     item = _CALLBACK_TOKEN_VALUES.get(str(token))
     if item is None:
@@ -107,7 +92,8 @@ def resolve_dynamic_callback_token(
                 return found
             return None
 
-        item = _use_db_connection(
+        item = _run_db_action(
+            db,
             load,
             "Could not load callback token",
         )
@@ -139,7 +125,8 @@ def resolve_dynamic_callback_token(
             )
             conn.commit()
 
-        _use_db_connection(
+        _run_db_action(
+            db,
             forget,
             "Could not remove expired callback token",
         )

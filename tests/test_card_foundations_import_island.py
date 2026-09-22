@@ -355,7 +355,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
 
     def test_callback_token_scope_mismatch_invalidates_cache_and_database(self):
         import bridge.callback_tokens as callback_tokens
-        import bridge.runtime_context as runtime_context
 
         db = sqlite3.connect(":memory:")
         try:
@@ -367,7 +366,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                 "chat_id TEXT NOT NULL,"
                 "expires_at REAL NOT NULL)"
             )
-            runtime_context.set_db_connection_context(db)
             token = callback_tokens.dynamic_callback_token(
                 "world",
                 "lore.json",
@@ -380,6 +378,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                     token,
                     "world",
                     "chat-b",
+                    db=db,
                 )
             )
             self.assertNotIn(
@@ -393,13 +392,11 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                 ).fetchone()
             )
         finally:
-            runtime_context.set_db_connection_context(None)
             callback_tokens._CALLBACK_TOKEN_VALUES.clear()
             db.close()
 
-    def test_callback_token_persistent_fallback_restores_cache(self):
+    def test_callback_token_persistent_database_restores_cache(self):
         import bridge.callback_tokens as callback_tokens
-        import bridge.runtime_context as runtime_context
 
         callback_tokens._CALLBACK_TOKEN_VALUES.clear()
         db = sqlite3.connect(":memory:")
@@ -412,7 +409,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                 "chat_id TEXT NOT NULL,"
                 "expires_at REAL NOT NULL)"
             )
-            runtime_context.set_db_connection_context(db)
             token = callback_tokens.dynamic_callback_token(
                 "persona",
                 "p1",
@@ -426,6 +422,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                     token,
                     "persona",
                     "chat",
+                    db=db,
                 ),
                 "p1",
             )
@@ -434,13 +431,11 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                 callback_tokens._CALLBACK_TOKEN_VALUES,
             )
         finally:
-            runtime_context.set_db_connection_context(None)
             callback_tokens._CALLBACK_TOKEN_VALUES.clear()
             db.close()
 
     def test_callback_token_expiry_invalidates_memory_and_database(self):
         import bridge.callback_tokens as callback_tokens
-        import bridge.runtime_context as runtime_context
 
         db = sqlite3.connect(":memory:")
         try:
@@ -452,7 +447,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                 "chat_id TEXT NOT NULL,"
                 "expires_at REAL NOT NULL)"
             )
-            runtime_context.set_db_connection_context(db)
             token = "texpired"
             callback_tokens._CALLBACK_TOKEN_VALUES[token] = (
                 "world",
@@ -479,6 +473,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                     token,
                     "world",
                     "chat",
+                    db=db,
                 )
             )
             self.assertNotIn(
@@ -492,7 +487,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                 ).fetchone()
             )
         finally:
-            runtime_context.set_db_connection_context(None)
             callback_tokens._CALLBACK_TOKEN_VALUES.clear()
             db.close()
 
@@ -578,7 +572,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             REPO_ROOT / "bridge" / "cards.py"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("from bridge.telegram import telegram_request", source)
+        self.assertIn("from bridge.telegram import send_panel_request", source)
         self.assertIn("from bridge.persona_service import PersonaService", source)
         self.assertIn("from bridge.persona_sync import (", source)
         for collaborator in (
@@ -618,9 +612,11 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             with self.subTest(group="callback_tokens", name=name):
                 self.assertTrue(hasattr(callback_tokens, name))
 
-        self.assertIs(media.set_db_connection_context, context.set_db_connection_context)
-        self.assertIs(session_naming.set_panel_session_context, context.set_panel_session_context)
-        self.assertIs(telegram.panel_actor_context, context.panel_actor_context)
+        self.assertFalse(hasattr(media, "set_db_connection_context"))
+        self.assertFalse(hasattr(session_naming, "set_panel_session_context"))
+        self.assertFalse(hasattr(telegram, "panel_session_context"))
+        self.assertFalse(hasattr(telegram, "panel_actor_context"))
+        self.assertFalse(hasattr(telegram, "db_connection_context"))
         self.assertIs(
             panel_callback_routes.dynamic_callback_token,
             callback_tokens.dynamic_callback_token,

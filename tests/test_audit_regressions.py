@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -255,12 +255,12 @@ class AuditRegressionTests(unittest.TestCase):
 
     def test_stt_language_panel_has_auto_and_user_input(self):
         calls = []
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_stt_language_menu("token", "chat", self.db)
+            _m_command_routes.send_stt_language_menu("token", "chat", self.db, request_context=make_test_request_context(self.db))
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
         callbacks = {button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("enum:sttlanguage:auto", callbacks)
         self.assertIn("enum:stt:language_input", callbacks)
@@ -273,7 +273,7 @@ class AuditRegressionTests(unittest.TestCase):
         try:
             _m_command_routes.start_text_action_input(self.db, "token", "chat", session["session_id"], "edit", "Send replacement")
             self.assertIn("edit", _m_session_naming.get_meta(self.db, "text_action_input:chat", ""))
-            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, memory_service=make_test_memory_service(), persona_service=make_test_persona_service()))
+            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"])))
         finally:
             _m_input_flows.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "text_action_input:chat", ""), "")
@@ -281,18 +281,18 @@ class AuditRegressionTests(unittest.TestCase):
 
     def test_memory_databank_and_stscript_panels_expose_new_actions(self):
         calls = []
-        original_request = _m_cards.telegram_request
-        original_stscript_request = _m_commands.telegram_request
+        original_request = _m_cards.send_panel_request
+        original_stscript_request = _m_commands.send_panel_request
         request_stub = lambda _token, _method, payload: calls.append(payload) or {}
-        _m_cards.telegram_request = request_stub
-        _m_commands.telegram_request = request_stub
+        _m_cards.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
+        _m_commands.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
-            _m_command_routes.send_memory_menu("token", "chat", self.db)
-            _m_command_routes.send_databank_menu("token", "chat", self.db)
-            _m_command_routes.send_stscript_menu("token", "chat")
+            _m_command_routes.send_memory_menu("token", "chat", self.db, request_context=make_test_request_context(self.db))
+            _m_command_routes.send_databank_menu("token", "chat", self.db, request_context=make_test_request_context(self.db))
+            _m_command_routes.send_stscript_menu("token", "chat", request_context=make_test_request_context(self.db))
         finally:
-            _m_cards.telegram_request = original_request
-            _m_commands.telegram_request = original_stscript_request
+            _m_cards.send_panel_request = original_request
+            _m_commands.send_panel_request = original_stscript_request
         callbacks = {
             button["callback_data"]
             for payload in calls
@@ -361,12 +361,12 @@ class AuditRegressionTests(unittest.TestCase):
 
     def test_preset_panel_has_save_action(self):
         calls = []
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_preset_menu("token", "chat", self.db)
+            _m_command_routes.send_preset_menu("token", "chat", self.db, request_context=make_test_request_context(self.db))
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
         callbacks = {button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("enum:preset:save", callbacks)
 
@@ -448,12 +448,12 @@ class AuditRegressionTests(unittest.TestCase):
 
     def test_reset_confirmation_panel_has_destructive_confirm_and_cancel(self):
         calls = []
-        original_request = _m_message_commands.telegram_request
-        _m_message_commands.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_message_commands.send_panel_request
+        _m_message_commands.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_message_commands.send_reset_confirmation_menu("token", "chat")
+            _m_message_commands.send_reset_confirmation_menu("token", "chat", request_context=make_test_request_context(self.db))
         finally:
-            _m_message_commands.telegram_request = original_request
+            _m_message_commands.send_panel_request = original_request
         self.assertEqual(len(calls), 1)
         expected = "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n• Delete session SQLite data, and session documents.\n\nThis cannot be undone."
         self.assertEqual(calls[0][1]["text"], expected)
@@ -535,12 +535,12 @@ class AuditRegressionTests(unittest.TestCase):
 
     def test_memory_scope_panel_is_removed_and_search_keeps_text_input(self):
         calls = []
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_memory_menu("token", "chat", self.db)
+            _m_command_routes.send_memory_menu("token", "chat", self.db, request_context=make_test_request_context(self.db))
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
         payload = calls[0][1]
         callbacks = {button["callback_data"] for row in payload["reply_markup"]["inline_keyboard"] for button in row}
         self.assertNotIn("enum:memory:scope", callbacks)

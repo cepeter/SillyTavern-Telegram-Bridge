@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_native_test_persona_service
+from application_test_setup import ensure_application_extensions, make_native_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -35,11 +35,11 @@ class NativePersonaSyncTests(unittest.TestCase):
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
         _m_persona_sync.phase3_api_configured = lambda: False
         self.calls = []
-        self.old_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: self.calls.append((method, payload)) or {}
+        self.old_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: self.calls.append((method, payload)) or {}
 
     def tearDown(self):
-        _m_cards.telegram_request = self.old_request
+        _m_cards.send_panel_request = self.old_request
         _m_persona_sync.phase3_api_configured = self.old_phase3
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_cache
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
@@ -125,7 +125,7 @@ class NativePersonaSyncTests(unittest.TestCase):
         self.assertEqual(self._read()["power_user"]["personas"][avatar], "Writer")
 
     def test_persona_panel_has_no_bridge_import_export_actions(self):
-        _m_command_routes.send_persona_menu("token", "chat", "native.png", persona_service=make_native_test_persona_service())
+        _m_command_routes.send_persona_menu("token", "chat", "native.png", persona_service=make_native_test_persona_service(), request_context=make_test_request_context())
         callbacks = {button["callback_data"] for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertNotIn("persona:native_import", callbacks)
         self.assertNotIn("persona:native_export", callbacks)

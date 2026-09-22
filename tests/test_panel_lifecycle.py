@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_request_context
 
 ensure_application_extensions()
 
@@ -101,12 +101,12 @@ class PanelLifecycleTests(unittest.TestCase):
         session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         _m_sync_core.update_generation_settings(self.db, "chat", session["session_id"], temperature=0.7, max_tokens=900, top_p=0.8, frequency_penalty=0.2, presence_penalty=-0.1, stop_sequences="END")
         calls = []
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_settings_menu("token", "chat", self.db, session["session_id"])
+            _m_command_routes.send_settings_menu("token", "chat", self.db, session["session_id"], request_context=make_test_request_context(self.db, session["session_id"]))
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
         text = calls[0][1]["text"]
         for value in ("temperature=0.7", "max_tokens=900", "top_p=0.8", "frequency_penalty=0.2", "presence_penalty=-0.1", "stop_sequences=END"):
             self.assertIn(value, text)
@@ -141,9 +141,9 @@ class PanelLifecycleTests(unittest.TestCase):
         _m_telegram.bind_panel_session(self.db, "chat", 105, session["session_id"])
         calls = []
         original_answer = _m_callbacks.answer_callback
-        original_request = _m_panel_callback_routes.telegram_request
+        original_request = _m_panel_callback_routes.send_panel_request
         _m_callbacks.answer_callback = lambda *_args, **_kwargs: None
-        _m_panel_callback_routes.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        _m_panel_callback_routes.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         callback = {
             "id": "callback-105",
             "from": {"id": "user-1"},
@@ -154,7 +154,7 @@ class PanelLifecycleTests(unittest.TestCase):
             _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
             _m_callbacks.answer_callback = original_answer
-            _m_panel_callback_routes.telegram_request = original_request
+            _m_panel_callback_routes.send_panel_request = original_request
         self.assertEqual([method for method, _payload in calls], ["editMessageText"])
         self.assertEqual(calls[0][1]["message_id"], 105)
         buttons = calls[0][1]["reply_markup"]["inline_keyboard"]

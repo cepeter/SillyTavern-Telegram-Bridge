@@ -9,6 +9,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from bridge.application_composition import initialize_extensions
+from bridge.composition import RequestContext
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.sync_service import SyncService
@@ -23,6 +24,15 @@ def ensure_application_extensions() -> None:
         return
     initialize_extensions()
     _INITIALIZED = True
+
+
+def make_test_request_context(
+    db=None,
+    session_id: str = "test-session",
+    actor_id: str = "test-user",
+) -> RequestContext:
+    """Return an explicit request context for panel/router tests."""
+    return RequestContext(db, session_id, actor_id)
 
 
 def make_test_memory_service(*, purge_session_memory=None) -> MemoryService:

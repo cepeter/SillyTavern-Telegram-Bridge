@@ -93,6 +93,8 @@ def handle_director_goal_command(
     chat_id: str,
     session: dict[str, str],
     command: str,
+    *,
+    request_context,
 ) -> None:
     if parse_topic_scope(chat_id)[1] is None:
         send_text(token, chat_id, "Director goals are available only inside a Telegram Forum Topic.")
@@ -102,7 +104,7 @@ def handle_director_goal_command(
     suffix = raw[len("/group goal"):].strip()
     current = get_director_goal(db, chat_id, session["session_id"])
     if not suffix or suffix.casefold() == "status":
-        send_director_goal_menu(token, chat_id, db, session)
+        send_director_goal_menu( token, chat_id, db, session, request_context=request_context)
         return
     if suffix.casefold() in {"clear", "off", "none"}:
         set_director_goal(db, chat_id, session["session_id"], "")
@@ -132,9 +134,11 @@ def _director_goal_command_route(
     current_persona,
     user_name,
     operation_id=None,
+    *,
+    request_context,
 ):
     if command == "/group goal" or command.startswith("/group goal "):
-        handle_director_goal_command(db, token, chat_id, session, stripped)
+        handle_director_goal_command(db, token, chat_id, session, stripped, request_context=request_context)
         return True
     return False
 

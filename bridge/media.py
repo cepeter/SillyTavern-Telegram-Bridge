@@ -220,7 +220,7 @@ def transcribe_audio_bytes(raw: bytes, suffix: str = ".ogg", model_name: str | N
     return text[:12000]
 
 
-def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, voice: dict, message_id: int, queued_session_id: str | None = None, *, services: _BridgeServices) -> None:
+def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, voice: dict, message_id: int, queued_session_id: str | None = None, *, actor_id: str = "", services: _BridgeServices) -> None:
     if get_meta(db, f"stt_mode:{chat_id}", "on") != "on":
         send_text(token, chat_id, "Voice input is disabled. Use /voice_input on to enable it.")
         return
@@ -243,6 +243,7 @@ def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, mode
         transcript,
         message_id,
         queued_session_id=queued_session_id,
+        actor_id=actor_id,
         services=services,
     )
 
@@ -263,11 +264,10 @@ def process_voice_job(
     jobs = services.jobs
     with chat_job_lock(chat_id):
         db = services.db_factory()
-        set_db_connection_context(db)
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
-            set_panel_actor_context(jobs.actor_id(db, job_id))
+            actor_id = jobs.actor_id(db, job_id)
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 if json.loads(existing[2] or "[]"):
@@ -291,6 +291,7 @@ def process_voice_job(
                 voice,
                 message_id,
                 queued_session_id=queued_session_id,
+                actor_id=actor_id,
                 services=services,
             )
             if job_id is not None:
@@ -301,8 +302,6 @@ def process_voice_job(
                 jobs.fail(db, job_id, exc)
             services.telegram.send_text(token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings.")
         finally:
-            set_panel_actor_context(None)
-            set_db_connection_context(None)
             db.close()
 
 
@@ -356,10 +355,6 @@ from bridge.database import (
 )
 from bridge.expressions import deliver_expression
 from bridge.message_commands import process_message
-from bridge.runtime_context import (
-    set_db_connection_context,
-    set_panel_actor_context,
-)
 from bridge.telegram import (
     download_telegram_file,
     ensure_session,

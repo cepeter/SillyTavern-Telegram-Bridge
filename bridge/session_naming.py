@@ -72,7 +72,7 @@ def _cancel_session_name_input(db, token: str, chat_id: str, state: dict) -> Non
     set_meta(db, f"character_session_input:{chat_id}", "")
 
 
-def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, str], stripped: str, state: dict, operation_id: int | None) -> bool:
+def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, str], stripped: str, state: dict, operation_id: int | None, *, request_context) -> bool:
     """Validate the title, then atomically create and activate the requested session."""
     meta_key = f"session_name_input:{chat_id}"
     if _is_cancel_input(stripped):
@@ -90,9 +90,13 @@ def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, s
         new_id = f"group-{operation_id}" if operation_id is not None else f"group-{time.time_ns()}"
         new_session = start_group_session(db, chat_id, model_id, title=title, session_id=new_id)
         _cancel_pending(db, token, chat_id, meta_key, state)
-        set_panel_session_context(new_session["session_id"])
+        new_request_context = RequestContext(
+            db,
+            new_session["session_id"],
+            request_context.actor_id,
+        )
         send_text(token, chat_id, f"New group session started: {title}")
-        send_character_menu(token, chat_id, new_session["character_file"])
+        send_character_menu(token, chat_id, new_session["character_file"], request_context=new_request_context)
         return True
     new_id = f"job-{operation_id}" if operation_id is not None else None
     pending_character = pending_character_for_session(db, chat_id)
@@ -127,7 +131,7 @@ from bridge.input_flows import (
     pending_character_for_session,
 )
 from bridge.message_commands import send_pending_input_message
-from bridge.runtime_context import set_panel_session_context
+from bridge.composition import RequestContext
 from bridge.telegram import (
     create_session,
     send_text,

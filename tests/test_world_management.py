@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
 
@@ -65,12 +65,12 @@ class WorldManagementTests(unittest.TestCase):
     def test_world_panel_has_upload_and_delete_actions(self):
         (_m_catalog.WORLD_DIR / "lore.json").write_text(json.dumps({"entries": {}}), encoding="utf-8")
         calls = []
-        original_request = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_world_menu("token", "chat", "")
+            _m_panel_callback_routes.send_world_menu("token", "chat", "", request_context=make_test_request_context(self.db, self.session["session_id"]))
         finally:
-            _m_cards.telegram_request = original_request
+            _m_cards.send_panel_request = original_request
         keyboard = calls[-1][1]["reply_markup"]["inline_keyboard"]
         callbacks = [button["callback_data"] for row in keyboard for button in row]
         self.assertIn("world:upload", callbacks)
@@ -85,7 +85,7 @@ class WorldManagementTests(unittest.TestCase):
         _m_panel_callback_routes.send_text = lambda *_args, **_kwargs: sent.append(True) or []
         _m_panel_callback_routes.discard_panel_binding = lambda *_args, **_kwargs: None
         try:
-            _m_panel_callback_routes.handle_world_callback(self.db, "token", callback, lambda *_args: answers.append(True), callback["data"], "chat", callback["message"], self.session, self.session["session_id"], None)
+            _m_panel_callback_routes.handle_world_callback(self.db, "token", callback, lambda *_args: answers.append(True), callback["data"], "chat", callback["message"], self.session, self.session["session_id"], None, request_context=make_test_request_context(self.db, self.session["session_id"]))
         finally:
             _m_panel_callback_routes.send_text = original_send
             _m_panel_callback_routes.discard_panel_binding = original_discard

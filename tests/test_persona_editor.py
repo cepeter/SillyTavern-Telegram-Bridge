@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service, make_native_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_memory_service, make_native_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -158,17 +158,18 @@ class PersonaEditorTests(unittest.TestCase):
         _m_persona_sync.phase3_api_configured = lambda: False
         self.db = _m_memory_curator.db_connect()
         self.session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="persona-session")
+        self.request_context = make_test_request_context(self.db, self.session["session_id"])
         self.calls = []
         self.old_panel_request = _m_panel_callback_routes.telegram_request
-        self.old_cards_request = _m_cards.telegram_request
-        self.old_input_request = _m_input_flows.telegram_request
+        self.old_cards_request = _m_cards.send_panel_request
+        self.old_input_request = _m_input_flows.send_panel_request
         self.old_input_send_text = _m_input_flows.send_text
         self.old_pending_send_text = _m_message_commands.send_text
         self.old_input_close = _m_input_flows.close_panel_message
-        request_stub = lambda _token, method, payload: self.calls.append((method, payload)) or {"message_id": 500}
+        request_stub = lambda _token, method, payload, **_kwargs: self.calls.append((method, payload)) or {"message_id": 500}
         _m_panel_callback_routes.telegram_request = request_stub
-        _m_cards.telegram_request = request_stub
-        _m_input_flows.telegram_request = request_stub
+        _m_cards.send_panel_request = request_stub
+        _m_input_flows.send_panel_request = request_stub
         send_stub = lambda _token, _chat, _text: [501]
         _m_input_flows.send_text = send_stub
         _m_message_commands.send_text = send_stub
@@ -177,8 +178,8 @@ class PersonaEditorTests(unittest.TestCase):
 
     def tearDown(self):
         _m_panel_callback_routes.telegram_request = self.old_panel_request
-        _m_cards.telegram_request = self.old_cards_request
-        _m_input_flows.telegram_request = self.old_input_request
+        _m_cards.send_panel_request = self.old_cards_request
+        _m_input_flows.send_panel_request = self.old_input_request
         _m_input_flows.send_text = self.old_input_send_text
         _m_message_commands.send_text = self.old_pending_send_text
         _m_input_flows.close_panel_message = self.old_input_close
@@ -225,7 +226,7 @@ class PersonaEditorTests(unittest.TestCase):
                 "writer | Writer | I write concise notes.",
                 operation_id=12,
                 persona_service=fake,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), request_context=self.request_context)
 
         self.assertTrue(handled)
         call = fake.calls[-1]
@@ -258,7 +259,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session,
                 "Updated Name | Updated description",
                 persona_service=fake,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), request_context=self.request_context)
 
         self.assertTrue(handled)
         self.assertEqual(
@@ -282,7 +283,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session,
                 "bad input",
                 persona_service=fake,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), request_context=self.request_context)
         )
         self.assertEqual(fake.calls, [])
         current = json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
@@ -304,7 +305,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session,
                 "writer | Writer | Description",
                 persona_service=fake,
-             memory_service=make_test_memory_service())
+             memory_service=make_test_memory_service(), request_context=self.request_context)
         )
         self.assertTrue(
             json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
@@ -324,6 +325,7 @@ class PersonaEditorTests(unittest.TestCase):
             "chat",
             "injected.png",
             persona_service=fake,
+            request_context=self.request_context,
         )
         payload = self.calls[-1][1]
         labels = [
@@ -349,6 +351,7 @@ class PersonaEditorTests(unittest.TestCase):
             "injected.png",
             77,
             persona_service=fake,
+            request_context=self.request_context,
         )
         self.assertIn("Injected Persona", self.calls[-1][1]["text"])
         self.assertIn(
@@ -375,6 +378,7 @@ class PersonaEditorTests(unittest.TestCase):
             "chat",
             "current.png",
             persona_service=fake,
+            request_context=self.request_context,
         )
         labels = [
             button["text"]
@@ -403,13 +407,14 @@ class PersonaEditorTests(unittest.TestCase):
                 "provider/model",
                 self.session.get("persona_id") or "",
                 services=services,
+                request_context=self.request_context,
             )
         self.assertTrue(handled)
         self.assertIs(captured["persona_service"], fake)
 
     def test_native_catalog_loads_and_create_selects_avatar(self):
         self._start("create")
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes.", memory_service=make_test_memory_service(),
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes.", memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-writer.png"], "Writer")
@@ -424,7 +429,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_edit_name_and_description_updates_native_settings(self):
         self._start("edit", "bridge-user.png")
-        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Updated Name | Updated description", memory_service=make_test_memory_service(),
+        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Updated Name | Updated description", memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,)
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Updated Name")
@@ -433,7 +438,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_edit_description_only_preserves_native_name(self):
         self._start("edit_description", "bridge-user.png")
-        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Description only", memory_service=make_test_memory_service(),
+        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Description only", memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,)
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Test User")
@@ -444,7 +449,7 @@ class PersonaEditorTests(unittest.TestCase):
         self.session = _m_memory_curator.load_session(self.db, "chat", self.session["session_id"], "provider/model")
         answers = []
         handled = _m_panel_callback_routes.handle_persona_callback(self.db, "token", {"id": "cb"}, lambda _t, _i, text: answers.append(text), "persona:edit", "chat", {"message_id": 77}, self.session, "persona-session", None,
-                persona_service=self.persona_service,)
+                persona_service=self.persona_service, request_context=self.request_context,)
         self.assertTrue(handled)
         self.assertEqual(answers, ["Review persona"])
         self.assertIn("Original description", self.calls[-1][1]["text"])
@@ -457,6 +462,7 @@ class PersonaEditorTests(unittest.TestCase):
             "persona",
             "other.png",
             "chat",
+            db=self.db,
         )
         answers = []
         with patch.object(
@@ -476,6 +482,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session["session_id"],
                 33,
                 persona_service=fake,
+                request_context=self.request_context,
             )
 
         self.assertTrue(handled)
@@ -503,6 +510,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session["session_id"],
                 34,
                 persona_service=fake,
+                request_context=self.request_context,
             )
 
         self.assertTrue(handled)
@@ -516,6 +524,7 @@ class PersonaEditorTests(unittest.TestCase):
             "persona",
             "other.png",
             "chat",
+            db=self.db,
         )
         answers = []
         with patch.object(
@@ -535,6 +544,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session["session_id"],
                 None,
                 persona_service=fake,
+                request_context=self.request_context,
             )
 
         self.assertTrue(handled)
@@ -553,6 +563,7 @@ class PersonaEditorTests(unittest.TestCase):
             "persona",
             "other.png",
             "chat",
+            db=self.db,
         )
         answers = []
         handled = _m_panel_callback_routes.handle_persona_callback(
@@ -567,6 +578,7 @@ class PersonaEditorTests(unittest.TestCase):
             self.session["session_id"],
             None,
             persona_service=fake,
+            request_context=self.request_context,
         )
         self.assertTrue(handled)
         self.assertEqual(
@@ -578,7 +590,7 @@ class PersonaEditorTests(unittest.TestCase):
         target = _m_persona_sync.upsert_native_persona("shared", "Shared", "Shared description")
         other = _m_session_naming.create_session(self.db, "other-chat", "provider/model", session_id="other-session")
         _m_session_naming.update_session(self.db, "other-chat", other["session_id"], persona_id=target)
-        token_value = _m_panel_callback_routes.dynamic_callback_token("persona", target, "chat")
+        token_value = _m_panel_callback_routes.dynamic_callback_token("persona", target, "chat", db=self.db)
         answers = []
 
         handled = _m_panel_callback_routes.handle_persona_callback(
@@ -593,6 +605,7 @@ class PersonaEditorTests(unittest.TestCase):
             self.session["session_id"],
             None,
                 persona_service=self.persona_service,
+            request_context=self.request_context,
         )
 
         self.assertTrue(handled)
@@ -601,7 +614,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_invalid_create_keeps_pending_state_and_native_file(self):
         state = self._start("create")
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "bad input", memory_service=make_test_memory_service(),
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "bad input", memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         self.assertEqual(self._settings(), self.native)
         current = json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
@@ -610,7 +623,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_cancel_clears_pending_persona_input(self):
         self._start("create")
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/cancel", memory_service=make_test_memory_service(),
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/cancel", memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         self.assertEqual(_m_session_naming.get_meta(self.db, "persona_input:chat"), "")
         self.assertEqual(self._settings(), self.native)
@@ -619,7 +632,7 @@ class PersonaEditorTests(unittest.TestCase):
         self._start("create")
         other = dict(self.session)
         other["session_id"] = "other-session"
-        self.assertFalse(_m_message_commands.handle_pending_input(self.db, "token", "chat", other, "writer | Writer | Should not apply", memory_service=make_test_memory_service(),
+        self.assertFalse(_m_message_commands.handle_pending_input(self.db, "token", "chat", other, "writer | Writer | Should not apply", memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         self.assertEqual(self._settings(), self.native)
 
@@ -628,7 +641,7 @@ class PersonaEditorTests(unittest.TestCase):
         original_save = _m_persona_sync._save_native_settings
         _m_persona_sync._save_native_settings = lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))
         try:
-            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update", memory_service=make_test_memory_service(),
+            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update", memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         finally:
             _m_persona_sync._save_native_settings = original_save

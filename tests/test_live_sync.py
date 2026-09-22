@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_native_test_sync_service
+from application_test_setup import ensure_application_extensions, make_native_test_sync_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -298,6 +298,7 @@ class Phase3SyncTests(unittest.TestCase):
                 "phase3",
                 None,
                 sync_service=fake,
+                request_context=make_test_request_context(self.db, "phase3"),
             )
 
         self.assertTrue(handled)
@@ -331,6 +332,7 @@ class Phase3SyncTests(unittest.TestCase):
                 "phase3",
                 None,
                 sync_service=fake,
+                request_context=make_test_request_context(self.db, "phase3"),
             )
 
         self.assertTrue(handled)
@@ -358,6 +360,7 @@ class Phase3SyncTests(unittest.TestCase):
                 "phase3",
                 None,
                 sync_service=fake,
+                request_context=make_test_request_context(self.db, "phase3"),
             )
 
         self.assertTrue(handled)
@@ -576,8 +579,8 @@ class Phase3SyncTests(unittest.TestCase):
 
     def test_sync_panel_exposes_realtime_control(self):
         calls = []
-        original = _m_cards.telegram_request
-        _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original = _m_cards.send_panel_request
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
             _m_panel_callback_routes.send_sync_menu(
                 "token",
@@ -585,9 +588,10 @@ class Phase3SyncTests(unittest.TestCase):
                 self.db,
                 self.session,
                 sync_service=make_native_test_sync_service(),
+                request_context=make_test_request_context(self.db, "phase3"),
             )
         finally:
-            _m_cards.telegram_request = original
+            _m_cards.send_panel_request = original
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertIn("sync:realtime", callbacks)
         self.assertNotIn("sync:auto", callbacks)
@@ -616,6 +620,7 @@ class Phase3SyncTests(unittest.TestCase):
                 "phase3",
                 None,
                 sync_service=make_native_test_sync_service(),
+                request_context=make_test_request_context(self.db, "phase3"),
             )
         finally:
             _m_sync_api.phase3_sync_now = original_sync

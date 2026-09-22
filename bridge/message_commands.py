@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices
 
-def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
+def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
     method = "editMessageText" if message_id else "sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -17,7 +17,7 @@ def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | Non
     }
     if message_id:
         payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_request(token, method, payload, request_context=request_context)
 
 
 def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None, *, memory_service: MemoryService) -> None:
@@ -153,7 +153,7 @@ def _operation_command(text):
     return command
 
 
-def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None, *, services: BridgeServices) -> None:
+def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None, *, actor_id: str = "", services: BridgeServices) -> None:
     stripped = text.strip()
     command = stripped.lower()
     command_parts = command.split(None, 1)
@@ -166,7 +166,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     command = " ".join(command_parts)
     session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
     session_id = session["session_id"]
-    set_panel_session_context(session_id)
+    request_context = RequestContext(db, session_id, actor_id)
     memory_service = services.memory
     persona_service = services.persona
     if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
@@ -228,7 +228,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
             db.commit()
             return
     if command == "/reset":
-        send_reset_confirmation_menu(token, chat_id)
+        send_reset_confirmation_menu( token, chat_id, request_context=request_context)
         return
     if handle_pending_input(
         db,
@@ -241,10 +241,11 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         operation_id=operation_id,
         memory_service=memory_service,
         persona_service=persona_service,
+        request_context=request_context,
     ):
         return
     if command == "/session":
-        send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id)
+        send_session_menu( token, chat_id, list_sessions(db, chat_id), session_id, request_context=request_context)
         return
     session = reconcile_session_character(db, chat_id, session)
     fields = card_fields_from_file(session["character_file"])
@@ -292,6 +293,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         current_persona,
         user_name,
         operation_id=operation_id,
+        request_context=request_context,
         services=services,
     ):
         return
@@ -371,8 +373,9 @@ from bridge.rag_core import (
     rag_context_for_prompt,
     rag_retrieval_bundle,
 )
-from bridge.runtime_context import set_panel_session_context
+from bridge.composition import RequestContext
 from bridge.telegram import (
+    send_panel_request,
     ensure_session,
     list_sessions,
     load_session,

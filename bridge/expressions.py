@@ -142,7 +142,7 @@ def expression_menu_markup(character_file: str, current: str = "off", page: int 
     return {"inline_keyboard": rows}
 
 
-def send_expression_menu(token: str, chat_id: str, session: dict, db: sqlite3.Connection, message_id: int | None = None, page: int = 0) -> None:
+def send_expression_menu(token: str, chat_id: str, session: dict, db: sqlite3.Connection, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     current = get_meta(db, expression_mode_key(chat_id, session["session_id"]), "off")
     assets = discover_expression_assets(session["character_file"])
     _page_options, current_page, total_pages = panel_page(list(assets.items()), page)
@@ -153,7 +153,7 @@ def send_expression_menu(token: str, chat_id: str, session: dict, db: sqlite3.Co
     if message_id:
         method = "editMessageText"
         payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_request(token, method, payload, request_context=request_context)
 
 
 # Explicit late imports replace transitional dependency injection.
@@ -182,5 +182,5 @@ from bridge.panel_utils import (
     panel_navigation,
     panel_page,
 )
-from bridge.telegram import telegram_request
+from bridge.telegram import send_panel_request
 from pathlib import Path

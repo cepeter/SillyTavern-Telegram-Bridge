@@ -37,8 +37,8 @@ def is_session_scoped_panel_callback(data: str) -> bool:
     return data.startswith(("character", "persona", "session", "world", "systemprompt", "language", "note", "reset", "sync", "greeting:", "status:", "prompt:", "scene:", "goal:", "curated:", "summary:", "swipe:", "expression:", "update:", "models", "provider", "model", "group", "groupchars", "groupmode", "enum:settings", "enum:preset", "enum:rag", "enum:stt"))
 
 
-def process_callback(db: sqlite3.Connection, token: str, callback: dict, operation_id: int | None = None, *, services: BridgeServices) -> None:
-    sender = str((callback.get("from") or {}).get("id", ""))
+def process_callback(db: sqlite3.Connection, token: str, callback: dict, operation_id: int | None = None, *, actor_id: str = "", services: BridgeServices) -> None:
+    sender = str(actor_id or (callback.get("from") or {}).get("id", ""))
     message = callback.get("message") or {}
     chat_id = str((message.get("chat") or {}).get("id", ""))
     data = str(callback.get("data") or "")
@@ -69,7 +69,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         return
     session = load_session(db, chat_id, bound_session_id, DEFAULT_MODEL) if bound_session_id else ensure_session(db, chat_id, DEFAULT_MODEL)
     session_id = session["session_id"]
-    set_panel_session_context(session_id)
+    request_context = RequestContext(db, session_id, sender)
     memory_service = services.memory
     persona_service = services.persona
     sync_service = services.sync
@@ -88,6 +88,7 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         memory_service=memory_service,
         persona_service=persona_service,
         sync_service=sync_service,
+        request_context=request_context,
     ):
         return
     if handle_entity_panel_callback(
@@ -103,10 +104,11 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         operation_id,
         memory_service=memory_service,
         persona_service=persona_service,
+        request_context=request_context,
     ):
         return
     if data.startswith("enum:"):
-        handle_enum_callback(db, token, chat_id, session, data, message)
+        handle_enum_callback(db, token, chat_id, session, data, message, request_context=request_context)
         return
     if data.startswith("group:") or data.startswith("groupchars:") or data.startswith("groupmode:"):
         if parse_topic_scope(chat_id)[1] is None:
@@ -116,11 +118,11 @@ def process_callback(db: sqlite3.Connection, token: str, callback: dict, operati
         if data.startswith("groupchars:") and not data.startswith("groupchars:page:"):
             parts = data.split(":", 2)
             if len(parts) == 3:
-                resolved = resolve_dynamic_callback_token(parts[2], "group_character", chat_id)
+                resolved = resolve_dynamic_callback_token(parts[2], "group_character", chat_id, db=db)
                 data = f"groupchars:{parts[1]}:{resolved or ''}"
-        handle_group_panel_callback(db, token, chat_id, session, data, message, operation_id, sender_id=sender)
+        handle_group_panel_callback(db, token, chat_id, session, data, message, operation_id, sender_id=sender, request_context=request_context)
         return
-    handle_provider_model_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
+    handle_provider_model_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context)
 
 
 # Explicit late imports replace transitional dependency injection.
@@ -142,7 +144,7 @@ from bridge.panel_callback_routes import (
     handle_primary_panel_callback,
     handle_provider_model_callback,
 )
-from bridge.runtime_context import set_panel_session_context
+from bridge.composition import RequestContext
 from bridge.telegram import (
     ensure_session,
     load_session,

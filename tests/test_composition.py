@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
 
@@ -489,6 +489,7 @@ class WorkerInjectionTests(unittest.TestCase):
                     session["model_id"],
                     session.get("persona_id") or "",
                     "User",
+                    request_context=make_test_request_context(db, session["session_id"]),
                     services=self.services,
                 )
         finally:
@@ -584,7 +585,8 @@ class WorkerInjectionTests(unittest.TestCase):
                     "",
                     "Mira",
                     None,
-                    services=self.services,
+                    self.services,
+                    request_context=make_test_request_context(db, "active-session"),
                 )
         finally:
             db.close()

@@ -61,11 +61,7 @@ from bridge.rag_core import (
     rag_mode,
 )
 
-from bridge.runtime_context import (
-    db_connection_context,
-    panel_actor_context,
-    panel_session_context,
-)
+from bridge.composition import RequestContext
 
 from bridge.config import CHARACTER_BACKUP_DIR, SYNC_MAX_BYTES
 from bridge.common import MAX_TELEGRAM_LENGTH
@@ -174,22 +170,22 @@ def list_sessions(db: sqlite3.Connection, chat_id: str) -> list[dict[str, str]]:
     return [_session_row_dict(row) for row in rows]
 
 
-def send_session_delete_menu(token: str, chat_id: str, sessions: list[dict[str, str]], active_id: str, message_id: int | None = None, page: int = 0) -> None:
+def send_session_delete_menu(token: str, chat_id: str, sessions: list[dict[str, str]], active_id: str, message_id: int | None = None, page: int = 0, *, request_context) -> None:
     options = [(item["session_id"], item["title"] or item["session_id"]) for item in sessions if item["session_id"] != active_id]
     page_options, current_page, total_pages = panel_page(options, page)
-    rows = [[{"text": panel_label(label), "callback_data": "sessiondelete:" + dynamic_callback_token("session", session_id, chat_id)}] for session_id, label in page_options]
+    rows = [[{"text": panel_label(label), "callback_data": "sessiondelete:" + dynamic_callback_token("session", session_id, chat_id, db=request_context.db)}] for session_id, label in page_options]
     navigation = panel_navigation("sessiondelete", current_page, total_pages)
     if navigation:
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "session:back"}, {"text": "❌ Close", "callback_data": "session:cancel"}])
     text = f"Choose an inactive session to delete (page {current_page + 1}/{total_pages}). Session-scoped Hindsight documents are deleted; memories from other sessions remain."
-    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id)
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def send_session_delete_confirm(token: str, chat_id: str, session_id: str, title: str, message_id: int | None = None) -> None:
-    token_value = dynamic_callback_token("session", session_id, chat_id)
+def send_session_delete_confirm(token: str, chat_id: str, session_id: str, title: str, message_id: int | None = None, *, request_context) -> None:
+    token_value = dynamic_callback_token("session", session_id, chat_id, db=request_context.db)
     payload = {"chat_id": chat_id, "text": f"Delete session '{panel_label(title)}'?\n\nThis removes its SQLite transcript, variants, summary, generation settings, group state, failed turns, session record, and session-scoped Hindsight documents. Memories from other sessions remain. The active session cannot be deleted. Cleanup fails closed if Hindsight is unavailable. This cannot be undone.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "sessiondeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "session:back"}]]}}
-    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id)
+    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id, request_context=request_context)
 
 
 def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None, *, memory_service: MemoryService) -> tuple[bool, str]:
@@ -238,7 +234,6 @@ def allowed_users() -> set[str]:
 
 def telegram_request(token: str, method: str, payload: dict | None = None) -> dict:
     request_payload = dict(payload or {})
-    scoped_chat_id = str(request_payload.get("chat_id", "")) if request_payload.get("chat_id") is not None else ""
     if request_payload.get("chat_id") is not None:
         chat_id, thread_id = parse_topic_scope(str(request_payload["chat_id"]))
         request_payload["chat_id"] = chat_id
@@ -273,22 +268,24 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
                 continue
             raise RuntimeError(f"Telegram {method} failed: {detail}")
         break
-    if request_payload.get("reply_markup") and method in {"sendMessage", "editMessageText"}:
-        bound_session = panel_session_context()
-        bound_owner = panel_actor_context()
-        api_result = result.get("result") or {}
-        bound_message_id = api_result.get("message_id") if isinstance(api_result, dict) else None
-        bound_message_id = bound_message_id or request_payload.get("message_id")
-        if bound_session and bound_message_id:
-            panel_db = db_connection_context()
-            owns_connection = panel_db is None
-            try:
-                panel_db = panel_db or db_connect()
-                bind_panel_session(panel_db, scoped_chat_id, bound_message_id, bound_session, bound_owner)
-            finally:
-                if owns_connection and panel_db is not None:
-                    panel_db.close()
     return result["result"]
+
+
+def send_panel_request(token: str, method: str, payload: dict, *, request_context: RequestContext) -> dict:
+    scoped_chat_id = str(payload.get("chat_id", "")) if payload.get("chat_id") is not None else ""
+    result = telegram_request(token, method, payload)
+    if payload.get("reply_markup") and method in {"sendMessage", "editMessageText"}:
+        bound_message_id = result.get("message_id") if isinstance(result, dict) else None
+        bound_message_id = bound_message_id or payload.get("message_id")
+        if request_context.session_id and bound_message_id:
+            bind_panel_session(
+                request_context.db,
+                scoped_chat_id,
+                bound_message_id,
+                request_context.session_id,
+                request_context.actor_id,
+            )
+    return result
 
 
 def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_BYTES) -> bytes:

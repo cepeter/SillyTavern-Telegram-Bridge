@@ -357,16 +357,16 @@ def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str,
     regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(row[0]), new_text.strip()[:12000], operation_id=operation_id, memory_service=memory_service, persona_service=persona_service)
 
 
-def send_stscript_menu(token: str, chat_id: str, message_id: int | None = None) -> None:
+def send_stscript_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
     """Show the allowlisted STscript actions without accepting arbitrary scripts."""
     payload = {"chat_id": chat_id, "text": "Safe STscript actions:\n\nReset clears only the active session after confirmation.", "reply_markup": {"inline_keyboard": [[{"text": "♻️ Reset", "callback_data": "enum:stscript:reset"}], [{"text": "❌ Close", "callback_data": "enum:stscript:cancel"}]]}}
     method = "editMessageText" if message_id else "sendMessage"
     if message_id:
         payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_request(token, method, payload, request_context=request_context)
 
 
-def send_note_menu(token: str, chat_id: str, current_note: str, message_id: int | None = None) -> None:
+def send_note_menu(token: str, chat_id: str, current_note: str, message_id: int | None = None, *, request_context) -> None:
     state = "on" if str(current_note or "").strip() else "off"
     text = f"Author's Note — {state}\nCurrent length: {len(str(current_note or '').strip())} characters\nChoose an action:"
     method = "editMessageText" if message_id else "sendMessage"
@@ -376,7 +376,7 @@ def send_note_menu(token: str, chat_id: str, current_note: str, message_id: int 
     ]}}
     if message_id:
         payload["message_id"] = message_id
-    telegram_request(token, method, payload)
+    send_panel_request(token, method, payload, request_context=request_context)
 
 
 def handle_macro_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict, command_text: str) -> None:
@@ -484,6 +484,7 @@ from bridge.rag_core import (
     rag_retrieval_bundle,
 )
 from bridge.telegram import (
+    send_panel_request,
     ensure_session,
     load_session,
     send_text,

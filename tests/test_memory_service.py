@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -452,6 +452,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "provider::model",
                 "",
                 "User",
+                request_context=make_test_request_context(self.db, self.session["session_id"]),
                 services=make_test_application_services(memory=memory),
             )
 

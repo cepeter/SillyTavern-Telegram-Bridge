@@ -38,6 +38,13 @@ class BackgroundRuntime:
 
 
 @dataclass(frozen=True)
+class RequestContext:
+    db: sqlite3.Connection = field(repr=False)
+    session_id: str
+    actor_id: str = ""
+
+
+@dataclass(frozen=True)
 class BridgeServices:
     config: BridgeConfig
     db_factory: Callable[[], sqlite3.Connection]

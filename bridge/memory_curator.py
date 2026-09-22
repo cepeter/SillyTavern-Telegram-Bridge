@@ -336,10 +336,12 @@ def handle_curated_memory_command(
     session: dict[str, str],
     fields: dict[str, str],
     command: str,
+    *,
+    request_context,
 ) -> None:
     suffix = command[len("/memory curated"):].strip().casefold()
     if suffix in {"", "status"}:
-        send_curated_memory_menu(token, chat_id, db, session)
+        send_curated_memory_menu( token, chat_id, db, session, request_context=request_context)
         return
     if suffix == "refresh":
         if memory_mode(db, chat_id) != "on":
@@ -378,9 +380,11 @@ def _memory_curator_command_route(
     current_persona,
     user_name,
     operation_id=None,
+    *,
+    request_context,
 ):
     if command == "/memory curated" or command.startswith("/memory curated "):
-        handle_curated_memory_command(db, token, api_key, chat_id, session, fields, command)
+        handle_curated_memory_command(db, token, api_key, chat_id, session, fields, command, request_context=request_context)
         return True
     return False
 
