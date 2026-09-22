@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -215,7 +215,7 @@ class PersonaEditorTests(unittest.TestCase):
                 "writer | Writer | I write concise notes.",
                 operation_id=12,
                 persona_service=fake,
-            )
+             memory_service=make_test_memory_service())
 
         self.assertTrue(handled)
         call = fake.calls[-1]
@@ -248,7 +248,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session,
                 "Updated Name | Updated description",
                 persona_service=fake,
-            )
+             memory_service=make_test_memory_service())
 
         self.assertTrue(handled)
         self.assertEqual(
@@ -272,7 +272,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session,
                 "bad input",
                 persona_service=fake,
-            )
+             memory_service=make_test_memory_service())
         )
         self.assertEqual(fake.calls, [])
         current = json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
@@ -294,7 +294,7 @@ class PersonaEditorTests(unittest.TestCase):
                 self.session,
                 "writer | Writer | Description",
                 persona_service=fake,
-            )
+             memory_service=make_test_memory_service())
         )
         self.assertTrue(
             json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
@@ -399,7 +399,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_native_catalog_loads_and_create_selects_avatar(self):
         self._start("create")
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes."))
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes.", memory_service=make_test_memory_service()))
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-writer.png"], "Writer")
         self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-writer.png"]["description"], "I write concise notes.")
@@ -413,7 +413,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_edit_name_and_description_updates_native_settings(self):
         self._start("edit", "bridge-user.png")
-        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Updated Name | Updated description")
+        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Updated Name | Updated description", memory_service=make_test_memory_service())
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Updated Name")
         self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-user.png"]["description"], "Updated description")
@@ -421,7 +421,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_edit_description_only_preserves_native_name(self):
         self._start("edit_description", "bridge-user.png")
-        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Description only")
+        _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Description only", memory_service=make_test_memory_service())
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Test User")
         self.assertEqual(settings["power_user"]["persona_descriptions"]["bridge-user.png"]["description"], "Description only")
@@ -586,7 +586,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_invalid_create_keeps_pending_state_and_native_file(self):
         state = self._start("create")
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "bad input"))
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "bad input", memory_service=make_test_memory_service()))
         self.assertEqual(self._settings(), self.native)
         current = json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
         self.assertEqual(current["mode"], "create")
@@ -594,7 +594,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_cancel_clears_pending_persona_input(self):
         self._start("create")
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/cancel"))
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/cancel", memory_service=make_test_memory_service()))
         self.assertEqual(_m_session_naming.get_meta(self.db, "persona_input:chat"), "")
         self.assertEqual(self._settings(), self.native)
 
@@ -602,7 +602,7 @@ class PersonaEditorTests(unittest.TestCase):
         self._start("create")
         other = dict(self.session)
         other["session_id"] = "other-session"
-        self.assertFalse(_m_message_commands.handle_pending_input(self.db, "token", "chat", other, "writer | Writer | Should not apply"))
+        self.assertFalse(_m_message_commands.handle_pending_input(self.db, "token", "chat", other, "writer | Writer | Should not apply", memory_service=make_test_memory_service()))
         self.assertEqual(self._settings(), self.native)
 
     def test_save_failure_keeps_native_settings_and_pending_state(self):
@@ -610,7 +610,7 @@ class PersonaEditorTests(unittest.TestCase):
         original_save = _m_persona_sync._save_native_settings
         _m_persona_sync._save_native_settings = lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))
         try:
-            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update"))
+            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update", memory_service=make_test_memory_service()))
         finally:
             _m_persona_sync._save_native_settings = original_save
         self.assertEqual(self._settings(), self.native)
