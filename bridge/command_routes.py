@@ -1,8 +1,12 @@
 """Handle onboarding, status, retry, and prompt inspection commands."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
-from bridge.composition import BridgeServices
+
+if TYPE_CHECKING:
+    from bridge.composition import BridgeServices
 
 def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id, services):
     if command.startswith("/help "):
