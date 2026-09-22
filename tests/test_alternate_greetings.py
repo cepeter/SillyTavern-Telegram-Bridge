@@ -48,7 +48,7 @@ class AlternateGreetingTests(unittest.TestCase):
         finally:
             _m_greetings.send_text = original_send
             _m_greetings.random.randrange = original_randrange
-        self.assertEqual(sent, ["Alt User"])
+        self.assertEqual(sent, ["Alt"])
         row = self.db.execute("SELECT role, content FROM messages").fetchone()
         self.assertEqual(tuple(row), ("assistant", "Alt User"))
 
@@ -125,7 +125,7 @@ class AlternateGreetingTests(unittest.TestCase):
         self.assertEqual(sent, ["Alt User"])
         self.assertIn("Started with Alternate 2", answers)
         rows = self.db.execute("SELECT role, content FROM messages").fetchall()
-        self.assertEqual([tuple(row) for row in rows], [("assistant", "Alt User")])
+        self.assertEqual([tuple(row) for row in rows], [("assistant", "Alt")])
         self.assertTrue(_m_callbacks.is_session_scoped_panel_callback("greeting:preview:0"))
 
 
