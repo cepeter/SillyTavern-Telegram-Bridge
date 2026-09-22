@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service
 
 ensure_application_extensions()
 
@@ -309,6 +309,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 None,
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
+                group_director_service=make_test_application_services().group_director,
             )
 
         self.assertEqual(captured["memory_context"], "service recall")
@@ -452,7 +453,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "provider::model",
                 "",
                 "User",
-                services=SimpleNamespace(memory=memory),
+                services=make_test_application_services(memory=memory),
             )
 
         self.assertTrue(handled)
@@ -477,10 +478,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 "replacement text",
-                services=SimpleNamespace(
-                    memory=memory,
-                    group_director=None,
-                ),
+                services=make_test_application_services(memory=memory),
             )
 
         self.assertIs(captured["memory_service"], memory)
@@ -600,6 +598,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "provider::model",
                 memory_service=memory,
                 persona_service=make_test_persona_service(),
+                group_director_service=make_test_application_services().group_director,
             )
 
         self.assertIs(captured["memory_service"], memory)
@@ -640,6 +639,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 document,
                 "provider::model",
                 memory_service=memory,
+                persona_service=make_test_persona_service(),
+                group_director_service=make_test_application_services().group_director,
             )
 
         self.assertIs(captured["memory_service"], memory)
