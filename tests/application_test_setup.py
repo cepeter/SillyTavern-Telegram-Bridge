@@ -7,6 +7,7 @@ dependency binding.
 from __future__ import annotations
 
 from bridge.application_composition import initialize_extensions
+from bridge.memory_service import MemoryService
 
 
 _INITIALIZED = False
@@ -18,3 +19,14 @@ def ensure_application_extensions() -> None:
         return
     initialize_extensions()
     _INITIALIZED = True
+
+
+def make_test_memory_service() -> MemoryService:
+    """Return a stateless explicit MemoryService for tests unrelated to memory."""
+    return MemoryService(
+        recall_context=lambda *_args, **_kwargs: "",
+        summary_for_prompt=lambda *_args, **_kwargs: "",
+        summary_state=lambda *_args, **_kwargs: ("", 0),
+        retain_session=lambda *_args, **_kwargs: None,
+        purge_session_memory=lambda *_args, **_kwargs: 0,
+    )
