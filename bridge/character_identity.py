@@ -86,8 +86,6 @@ from bridge.card_content import (
     character_card_paths,
     safe_character_path,
 )
-from bridge.common import (
-    CHARACTER_BACKUP_DIR,
-    IMAGE_MAX_BYTES,
-)
+from bridge.common import IMAGE_MAX_BYTES
+from bridge.config import CHARACTER_BACKUP_DIR
 from bridge.telegram import update_session
