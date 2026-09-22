@@ -78,6 +78,10 @@ class JobWorkerServiceTests(unittest.TestCase):
                 begin_shutdown=lambda: None,
             ),
             jobs=self.jobs,
+            group_director=object(),
+            memory=object(),
+            persona=object(),
+            sync=object(),
         )
 
     def tearDown(self):
