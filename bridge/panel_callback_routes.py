@@ -183,12 +183,11 @@ def handle_sync_callback(
     session_id,
     operation_id,
     *,
-    sync_service=None,
+    sync_service: SyncService,
 ):
     """Handle Live API Sync callbacks."""
     if not data.startswith("sync:"):
         return False
-    sync_service = resolve_sync_service(sync_service)
     action = data.split(":", 1)[1]
     message_id = message.get("message_id")
     if action == "close":
@@ -757,7 +756,7 @@ from bridge.status_panels import (
     handle_prompt_and_feature_callback,
     send_sync_menu,
 )
-from bridge.sync_api import resolve_sync_service
+from bridge.sync_service import SyncService
 from bridge.telegram import (
     character_delete_references,
     delete_session_data,
