@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_native_test_sync_service
 
 ensure_application_extensions()
 
@@ -404,7 +404,7 @@ class Phase3SyncTests(unittest.TestCase):
             side_effect=lambda *args, **kwargs:
                 retained.append((args, kwargs)),
         ):
-            result = _m_sync_api.resolve_sync_service().sync_now(
+            result = make_native_test_sync_service().sync_now(
                 self.db,
                 "chat",
                 "phase3",
@@ -579,7 +579,13 @@ class Phase3SyncTests(unittest.TestCase):
         original = _m_cards.telegram_request
         _m_cards.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_sync_menu("token", "chat", self.db, self.session)
+            _m_panel_callback_routes.send_sync_menu(
+                "token",
+                "chat",
+                self.db,
+                self.session,
+                sync_service=make_native_test_sync_service(),
+            )
         finally:
             _m_cards.telegram_request = original
         callbacks = {button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
@@ -598,7 +604,19 @@ class Phase3SyncTests(unittest.TestCase):
         answers = []
         callback = {"id": "cb", "message": {"message_id": 90, "chat": {"id": "chat"}}}
         try:
-            handled = _m_panel_callback_routes.handle_sync_callback(self.db, "token", callback, lambda _token, _id, text: answers.append(text), "sync:now", "chat", callback["message"], self.session, "phase3", None)
+            handled = _m_panel_callback_routes.handle_sync_callback(
+                self.db,
+                "token",
+                callback,
+                lambda _token, _id, text: answers.append(text),
+                "sync:now",
+                "chat",
+                callback["message"],
+                self.session,
+                "phase3",
+                None,
+                sync_service=make_native_test_sync_service(),
+            )
         finally:
             _m_sync_api.phase3_sync_now = original_sync
             _m_panel_callback_routes.send_sync_menu = original_menu
@@ -768,31 +786,9 @@ class SyncWorkerInjectionTests(unittest.TestCase):
         self.assertTrue(first.closed)
         self.assertTrue(second.closed)
 
-    def test_worker_without_injected_service_resolves_compatibility_service(self):
-        db = self.FakeDb()
-        calls = []
-
-        class FakeSync:
-            def poll(self, actual_db):
-                calls.append(actual_db)
-
-        fake = FakeSync()
-        with patch.object(
-            _m_sync_api,
-            "_PHASE3_STOP_EVENT",
-            self.FakeStopEvent([False, True]),
-        ), patch.object(_m_sync_api, "db_connect",
-            return_value=db,
-        ), patch.object(
-            _m_sync_api,
-            "resolve_sync_service",
-            return_value=fake,
-        ) as resolver:
+    def test_worker_requires_injected_sync_service(self):
+        with self.assertRaises(TypeError):
             _m_sync_api._phase3_worker_loop()
-
-        resolver.assert_called_once_with(None)
-        self.assertEqual(calls, [db])
-
 
 if __name__ == "__main__":
     unittest.main()
