@@ -470,7 +470,15 @@ class AuditRegressionTests(unittest.TestCase):
         _m_memory.purge_hindsight_session = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
         _m_message_commands.send_text = lambda *_args, **_kwargs: None
         try:
-            _m_panel_callback_routes.reset_session(self.db, "token", "chat", session, memory_service=make_test_memory_service())
+            _m_panel_callback_routes.reset_session(
+                self.db,
+                "token",
+                "chat",
+                session,
+                memory_service=make_test_memory_service(
+                    purge_session_memory=_m_memory.purge_hindsight_session,
+                ),
+            )
         finally:
             _m_memory.purge_hindsight_session = original_purge
             _m_message_commands.send_text = original_reply
