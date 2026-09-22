@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_memory_service
 
 ensure_application_extensions()
 
@@ -300,7 +300,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 user_rowid,
                 "replacement",
                 operation_id=operation_id,
-            )
+             memory_service=make_test_memory_service())
 
         self.assertIn(
             "✏️ Edited message regenerated.",
@@ -356,7 +356,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 1,
                 "replacement",
                 operation_id=operation_id,
-            )
+             memory_service=make_test_memory_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
