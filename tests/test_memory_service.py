@@ -309,7 +309,6 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 None,
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
-                group_director_service=make_test_application_services().group_director,
             )
 
         self.assertEqual(captured["memory_context"], "service recall")
@@ -563,6 +562,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 b"image-bytes",
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
+                group_director_service=make_test_application_services().group_director,
             )
 
         self.assertEqual(captured["memory_context"], "image recall")
