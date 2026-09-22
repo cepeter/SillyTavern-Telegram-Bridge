@@ -342,6 +342,7 @@ def process_image_job(
                 queued_session_id=queued_session_id,
                 memory_service=services.memory,
                 persona_service=services.persona,
+                group_director_service=services.group_director,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)
