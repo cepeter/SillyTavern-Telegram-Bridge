@@ -32,7 +32,6 @@ class RagScalingTests(unittest.TestCase):
         count: int,
         needle_index: int | None = None,
         semantic_target_index: int | None = None,
-        with_signatures: bool = True,
     ):
         now = time.time()
         document_id = "doc-large"
@@ -55,23 +54,19 @@ class RagScalingTests(unittest.TestCase):
             vector = [1.0, 0.0]
             if semantic_target_index is not None and index != semantic_target_index:
                 vector = [-1.0, 0.0]
-            if with_signatures:
-                self.db.execute(
-                    "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature) "
-                    "VALUES(?,?,?,?,?)",
-                    (
-                        chunk_id,
-                        self.namespace,
-                        2,
-                        json.dumps(vector),
-                        _m_rag.embedding_signature(vector),
-                    ),
-                )
-            else:
-                self.db.execute(
-                    "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json) VALUES(?,?,?,?)",
-                    (chunk_id, self.namespace, 2, json.dumps(vector)),
-                )
+            self.db.execute(
+                "INSERT INTO data_bank_embeddings("
+                "chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm"
+                ") VALUES(?,?,?,?,?,?)",
+                (
+                    chunk_id,
+                    self.namespace,
+                    2,
+                    json.dumps(vector),
+                    _m_rag.embedding_signature(vector),
+                    0.0,
+                ),
+            )
             self.db.execute(
                 "INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)",
                 (content, "chat", document_id, "large.txt", chunk_id),
@@ -218,26 +213,30 @@ class RagScalingTests(unittest.TestCase):
         self.assertEqual(transaction_states, [False, False, False])
         self.assertFalse(self.db.in_transaction)
 
-    def test_legacy_embedding_signatures_are_backfilled_lazily(self):
-        self._insert_chunks(30, with_signatures=False)
-        self.assertEqual(
-            self.db.execute(
-                "SELECT COUNT(*) FROM data_bank_embeddings WHERE vector_signature IS NOT NULL"
-            ).fetchone()[0],
-            0,
-        )
-        updated = _m_rag.backfill_rag_embedding_signatures(
-            self.db,
-            "chat",
-            self.namespace,
-            limit=10,
-        )
-        self.assertEqual(updated, 10)
-        self.assertEqual(
-            self.db.execute(
-                "SELECT COUNT(*) FROM data_bank_embeddings WHERE vector_signature IS NOT NULL"
-            ).fetchone()[0],
-            10,
+    def test_rag_embedding_schema_is_canonical_without_legacy_backfill(self):
+        columns = {
+            row[1]: row
+            for row in self.db.execute(
+                "PRAGMA table_info(data_bank_embeddings)"
+            ).fetchall()
+        }
+        self.assertEqual(columns["embedding_namespace"][3], 1)
+        self.assertIsNone(columns["embedding_namespace"][4])
+        self.assertEqual(columns["vector_signature"][3], 1)
+        self.assertIsNone(columns["vector_signature"][4])
+        self.assertEqual(columns["vector_norm"][3], 1)
+        self.assertIsNone(columns["vector_norm"][4])
+
+        cache_columns = {
+            row[1]: row
+            for row in self.db.execute(
+                "PRAGMA table_info(rag_embedding_cache)"
+            ).fetchall()
+        }
+        self.assertEqual(cache_columns["vector_norm"][3], 1)
+        self.assertIsNone(cache_columns["vector_norm"][4])
+        self.assertFalse(
+            hasattr(rag_core, "backfill_rag_embedding_signatures")
         )
 
 

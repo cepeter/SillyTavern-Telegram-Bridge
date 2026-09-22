@@ -209,40 +209,6 @@ def rag_semantic_candidate_limit() -> int:
     return max(64, min(value, MAX_SEMANTIC_CANDIDATE_LIMIT))
 
 
-def backfill_rag_embedding_signatures(
-    db: sqlite3.Connection,
-    chat_id: str,
-    embedding_namespace: str,
-    limit: int = 512,
-) -> int:
-    """Lazily upgrade legacy embedding rows without blocking startup."""
-    rows = db.execute(
-        "SELECT e.chunk_id,e.vector_json "
-        "FROM data_bank_embeddings e "
-        "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-        "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? "
-        "AND e.vector_signature IS NULL "
-        "ORDER BY e.chunk_id LIMIT ?",
-        (str(chat_id), str(embedding_namespace), max(0, int(limit))),
-    ).fetchall()
-    updated = 0
-    for chunk_id, vector_json in rows:
-        try:
-            vector = [float(value) for value in json.loads(vector_json)]
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
-        db.execute(
-            "UPDATE data_bank_embeddings SET vector_signature=? "
-            "WHERE chunk_id=? AND vector_signature IS NULL",
-            (embedding_signature(vector), int(chunk_id)),
-        )
-        updated += 1
-    if updated:
-        db.commit()
-    return updated
-
-
 def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, raw: bytes) -> tuple[str, int]:
     if len(raw) > RAG_MAX_FILE_BYTES:
         raise ValueError("Data Bank file exceeds 10 MB")
@@ -390,7 +356,6 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
     if query_vector:
         query_norm = embedding_norm(query_vector)
         namespace = rag_embedding_namespace()
-        backfill_rag_embedding_signatures(db, chat_id, namespace)
         semantic_ids = semantic_candidate_chunk_ids(
             db,
             chat_id,

@@ -113,7 +113,7 @@ def _ensure_generation_tables(db: sqlite3.Connection) -> None:
 
 
 def _ensure_rag_tables(db: sqlite3.Connection) -> None:
-    """Create Data Bank and embedding tables."""
+    """Create the canonical Data Bank and embedding schema."""
     db.execute("""CREATE TABLE IF NOT EXISTS data_bank_documents (
         chat_id TEXT NOT NULL,
         document_id TEXT NOT NULL,
@@ -126,32 +126,6 @@ def _ensure_rag_tables(db: sqlite3.Connection) -> None:
         updated_at REAL NOT NULL,
         PRIMARY KEY(chat_id, document_id)
     )""")
-    document_columns = {row[1] for row in db.execute("PRAGMA table_info(data_bank_documents)").fetchall()}
-    versioning_migration = "version_number" not in document_columns or "active" not in document_columns
-    if "version_number" not in document_columns:
-        db.execute("ALTER TABLE data_bank_documents ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1")
-    if "active" not in document_columns:
-        db.execute("ALTER TABLE data_bank_documents ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
-    if versioning_migration:
-        rows = db.execute(
-            "SELECT chat_id,filename,document_id FROM data_bank_documents "
-            "ORDER BY chat_id,filename,created_at,document_id"
-        ).fetchall()
-        groups = {}
-        for row_chat_id, row_filename, row_document_id in rows:
-            groups.setdefault((str(row_chat_id), str(row_filename)), []).append(str(row_document_id))
-        for (row_chat_id, row_filename), document_ids in groups.items():
-            for version_number, row_document_id in enumerate(document_ids, start=1):
-                db.execute(
-                    "UPDATE data_bank_documents SET version_number=?,active=? "
-                    "WHERE chat_id=? AND document_id=?",
-                    (
-                        version_number,
-                        int(version_number == len(document_ids)),
-                        row_chat_id,
-                        row_document_id,
-                    ),
-                )
     db.execute("""CREATE TABLE IF NOT EXISTS data_bank_chunks (
         chunk_id INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_id TEXT NOT NULL,
@@ -161,19 +135,12 @@ def _ensure_rag_tables(db: sqlite3.Connection) -> None:
     )""")
     db.execute("""CREATE TABLE IF NOT EXISTS data_bank_embeddings (
         chunk_id INTEGER PRIMARY KEY,
-        embedding_namespace TEXT NOT NULL DEFAULT 'legacy',
+        embedding_namespace TEXT NOT NULL,
         dimensions INTEGER NOT NULL,
         vector_json TEXT NOT NULL,
-        vector_signature INTEGER,
-        vector_norm REAL
+        vector_signature INTEGER NOT NULL,
+        vector_norm REAL NOT NULL
     )""")
-    embedding_columns = {row[1] for row in db.execute("PRAGMA table_info(data_bank_embeddings)").fetchall()}
-    if "embedding_namespace" not in embedding_columns:
-        db.execute("ALTER TABLE data_bank_embeddings ADD COLUMN embedding_namespace TEXT NOT NULL DEFAULT 'legacy'")
-    if "vector_signature" not in embedding_columns:
-        db.execute("ALTER TABLE data_bank_embeddings ADD COLUMN vector_signature INTEGER")
-    if "vector_norm" not in embedding_columns:
-        db.execute("ALTER TABLE data_bank_embeddings ADD COLUMN vector_norm REAL")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_documents_active_idx ON data_bank_documents(chat_id, active, filename, version_number)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_chunks_chat_chunk_idx ON data_bank_chunks(chat_id, chunk_id)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_namespace_chunk_idx ON data_bank_embeddings(embedding_namespace, chunk_id)")
@@ -182,12 +149,10 @@ def _ensure_rag_tables(db: sqlite3.Connection) -> None:
         cache_key TEXT PRIMARY KEY,
         dimensions INTEGER NOT NULL,
         vector_json TEXT NOT NULL,
-        vector_norm REAL,
+        vector_norm REAL NOT NULL,
         created_at REAL NOT NULL
     )""")
-    cache_columns = {row[1] for row in db.execute("PRAGMA table_info(rag_embedding_cache)").fetchall()}
-    if "vector_norm" not in cache_columns:
-        db.execute("ALTER TABLE rag_embedding_cache ADD COLUMN vector_norm REAL")
+
 
 def _ensure_job_tables(db: sqlite3.Connection) -> None:
     """Create durable update, failed-turn, and job tables and clean old rows."""
