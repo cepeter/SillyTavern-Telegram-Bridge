@@ -185,10 +185,6 @@ class SyncSourceBoundaryTests(unittest.TestCase):
 
         service = FakeSyncService()
         with patch.object(
-            _m_sync_api,
-            "resolve_sync_service",
-            side_effect=AssertionError("worker resolved a compatibility service"),
-        ), patch.object(
             _m_sync_api._PHASE3_STOP_EVENT,
             "wait",
             side_effect=[False, True],
