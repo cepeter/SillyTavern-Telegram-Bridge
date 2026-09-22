@@ -297,8 +297,33 @@ def record_failed_turn(db: sqlite3.Connection, chat_id: str, telegram_message_id
         return
 
     def write():
+        resolved_model = str(model or "")
+        if session_id:
+            row = db.execute(
+                "SELECT model_id FROM sessions WHERE chat_id=? AND session_id=?",
+                (chat_id, session_id),
+            ).fetchone()
+            if row and str(row[0] or "").strip():
+                resolved_model = str(row[0])
         now = time.time()
-        db.execute("INSERT INTO failed_turns(chat_id,telegram_message_id,text,model,session_id,attempts,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,telegram_message_id) DO UPDATE SET session_id=excluded.session_id,attempts=attempts+1,last_error=excluded.last_error,updated_at=excluded.updated_at", (chat_id, str(telegram_message_id), text[:12000], model[:200], session_id[:200], 1, error[:1000], now, now))
+        db.execute(
+            "INSERT INTO failed_turns(chat_id,telegram_message_id,text,model,session_id,attempts,last_error,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(chat_id,telegram_message_id) DO UPDATE SET "
+            "model=excluded.model,session_id=excluded.session_id,attempts=attempts+1,"
+            "last_error=excluded.last_error,updated_at=excluded.updated_at",
+            (
+                chat_id,
+                str(telegram_message_id),
+                text[:12000],
+                resolved_model[:200],
+                session_id[:200],
+                1,
+                error[:1000],
+                now,
+                now,
+            ),
+        )
         db.commit()
     run_write_txn(db, write)
 

@@ -99,5 +99,110 @@ class RetryModelTurnOnlyTests(unittest.TestCase):
         self.assertEqual(failed[1], "normal user prompt")
 
 
+    def test_failed_turn_records_resolved_session_model(self):
+        now = time.time()
+        self.db.execute(
+            "INSERT INTO sessions("
+            "chat_id,session_id,title,character_file,model_id,persona_id,"
+            "world_file,author_note,system_prompt,response_language,"
+            "created_at,updated_at"
+            ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "chat",
+                "session-model",
+                "Model session",
+                "character.png",
+                "cline-pass::cline-pass/glm-5.2",
+                "",
+                "",
+                "",
+                "",
+                "auto",
+                now,
+                now,
+            ),
+        )
+        self.db.commit()
+
+        database.record_failed_turn(
+            self.db,
+            "chat",
+            61,
+            "normal prompt",
+            "provider-one::provider-one/model-a",
+            "provider failed",
+            "session-model",
+        )
+
+        failed = database.latest_failed_turn(self.db, "chat")
+        self.assertIsNotNone(failed)
+        self.assertEqual(
+            failed[2],
+            "cline-pass::cline-pass/glm-5.2",
+        )
+
+    def test_failed_turn_upsert_refreshes_resolved_session_model(self):
+        now = time.time()
+        self.db.execute(
+            "INSERT INTO sessions("
+            "chat_id,session_id,title,character_file,model_id,persona_id,"
+            "world_file,author_note,system_prompt,response_language,"
+            "created_at,updated_at"
+            ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "chat",
+                "session-refresh",
+                "Refresh session",
+                "character.png",
+                "provider-one::provider-one/model-a",
+                "",
+                "",
+                "",
+                "",
+                "auto",
+                now,
+                now,
+            ),
+        )
+        self.db.commit()
+        database.record_failed_turn(
+            self.db,
+            "chat",
+            62,
+            "normal prompt",
+            "provider-one::provider-one/model-a",
+            "first failure",
+            "session-refresh",
+        )
+
+        self.db.execute(
+            "UPDATE sessions SET model_id=? "
+            "WHERE chat_id=? AND session_id=?",
+            (
+                "cline-pass::cline-pass/glm-5.2",
+                "chat",
+                "session-refresh",
+            ),
+        )
+        self.db.commit()
+        database.record_failed_turn(
+            self.db,
+            "chat",
+            62,
+            "normal prompt",
+            "provider-one::provider-one/model-a",
+            "retry failure",
+            "session-refresh",
+        )
+
+        failed = database.latest_failed_turn(self.db, "chat")
+        self.assertIsNotNone(failed)
+        self.assertEqual(
+            failed[2],
+            "cline-pass::cline-pass/glm-5.2",
+        )
+        self.assertEqual(failed[3], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
