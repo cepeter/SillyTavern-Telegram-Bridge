@@ -320,29 +320,6 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     return raw
 
 
-def process_telegram_image(db: sqlite3.Connection, token: str, chat_id: str, file_id: str, caption: str, default_model: str, file_size: int = 0, telegram_message_id: int | None = None, queued_session_id: str | None = None, *, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
-    if file_size > IMAGE_MAX_BYTES:
-        send_text(token, chat_id, "Image is too large. The limit is 8 MB.")
-        return
-    image_bytes = download_telegram_file(token, file_id, IMAGE_MAX_BYTES)
-    session = load_session(db, chat_id, queued_session_id, default_model) if queued_session_id else ensure_session(db, chat_id, default_model)
-    fields = card_fields_from_file(session["character_file"])
-    process_image_message(
-        db,
-        token,
-        os.environ.get("LLM_API_KEY", ""),
-        session,
-        fields,
-        chat_id,
-        caption,
-        image_bytes,
-        telegram_message_id=telegram_message_id,
-        memory_service=memory_service,
-        persona_service=persona_service,
-        group_director_service=group_director_service,
-    )
-
-
 def verify_character_card_backup(target: Path, raw: bytes) -> Path:
     CHARACTER_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     backup = CHARACTER_BACKUP_DIR / target.name
@@ -455,7 +432,20 @@ def import_world_info_document(db: sqlite3.Connection, token: str, chat_id: str,
         send_text(token, chat_id, f"World Info imported: {target.name}. Open /world to enable it.")
 
 
-def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, document: dict, default_model: str, telegram_message_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
+def import_telegram_document(
+    db: sqlite3.Connection,
+    token: str,
+    chat_id: str,
+    document: dict,
+    default_model: str,
+    telegram_message_id: int | None = None,
+    *,
+    api_key: str,
+    process_image,
+    memory_service: MemoryService,
+    persona_service: PersonaService,
+    group_director_service: GroupDirectorService,
+) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
     file_size = int(document.get("file_size") or 0)
@@ -476,10 +466,10 @@ def import_telegram_document(db: sqlite3.Connection, token: str, chat_id: str, d
         except Exception:
             session = ensure_session(db, chat_id, default_model)
             fields = card_fields_from_file(session["character_file"])
-            process_image_message(
+            process_image(
                 db,
                 token,
-                os.environ.get("LLM_API_KEY", ""),
+                api_key,
                 session,
                 fields,
                 chat_id,
@@ -579,7 +569,6 @@ from bridge.cards import (
     send_panel_message,
 )
 from bridge.catalog import install_world_info_document
-from bridge.commands import process_image_message
 from bridge.common import (
     DEFAULT_ALLOWED_USER,
     IMAGE_MAX_BYTES,

@@ -6,7 +6,8 @@ import logging
 import sqlite3
 
 from bridge.callback_dispatch import process_callback
-from bridge.commands import edit_telegram_user_message
+from bridge.card_content import card_fields_from_file
+from bridge.commands import edit_telegram_user_message, process_image_message
 from bridge.composition import BridgeServices
 from bridge.database import (
     clear_failed_turn,
@@ -21,8 +22,8 @@ from bridge.group_core import advance_group_turn, group_current_speaker
 from bridge.help import process_document_job
 from bridge.job_service import DurableJob, JobSubmission
 from bridge.media import process_voice_job, send_reply
-from bridge.telegram import ensure_session, load_session, process_telegram_image
-from bridge.common import chat_job_lock
+from bridge.telegram import ensure_session, load_session
+from bridge.common import IMAGE_MAX_BYTES, chat_job_lock
 
 def process_message_job(
     services: BridgeServices,
@@ -125,16 +126,41 @@ def process_image_job(
                 if job_id is not None:
                     jobs.complete(db, job_id)
                 return
-            process_telegram_image(
+            if file_size > IMAGE_MAX_BYTES:
+                services.telegram.send_text(
+                    token,
+                    chat_id,
+                    "Image is too large. The limit is 8 MB.",
+                )
+                if job_id is not None:
+                    jobs.complete(db, job_id)
+                return
+            image_bytes = services.telegram.download_file(
+                token,
+                file_id,
+                IMAGE_MAX_BYTES,
+            )
+            session = (
+                load_session(
+                    db,
+                    chat_id,
+                    queued_session_id,
+                    model,
+                )
+                if queued_session_id
+                else ensure_session(db, chat_id, model)
+            )
+            image_fields = card_fields_from_file(session["character_file"])
+            process_image_message(
                 db,
                 token,
+                services.config.api_key,
+                session,
+                image_fields,
                 chat_id,
-                file_id,
                 caption,
-                model,
-                file_size,
-                message_id,
-                queued_session_id=queued_session_id,
+                image_bytes,
+                telegram_message_id=message_id,
                 memory_service=services.memory,
                 persona_service=services.persona,
                 group_director_service=services.group_director,

@@ -89,7 +89,12 @@ from bridge.sync_api import (
 )
 from bridge.sync_core import sync_binding
 from bridge.sync_service import SyncService as _SyncService
-from bridge.telegram import send_text, telegram_request, update_session
+from bridge.telegram import (
+    download_telegram_file,
+    send_text,
+    telegram_request,
+    update_session,
+)
 
 _DURABLE_WORKER_GUARD = _DurableWorkerGuard(
     _database._lightweight_db_connect
@@ -204,6 +209,7 @@ def _build_startup_services(
         telegram=_TelegramRuntime(
             request=telegram_request,
             send_text=send_text,
+            download_file=download_telegram_file,
         ),
         background=background,
         group_director=group_director,

@@ -71,6 +71,7 @@ class JobWorkerServiceTests(unittest.TestCase):
                 request=lambda *_args, **_kwargs: {},
                 send_text=lambda *args, **_kwargs:
                     self.sent.append(args),
+                download_file=lambda *_args, **_kwargs: b"",
             ),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
@@ -171,7 +172,15 @@ class JobWorkerServiceTests(unittest.TestCase):
     def test_image_worker_success_and_failure_use_job_service(self):
         with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_workers, "process_telegram_image",
+        ), patch.object(
+            _m_workers,
+            "ensure_session",
+            return_value={"session_id": "session", "character_file": "mira.png"},
+        ), patch.object(
+            _m_workers,
+            "card_fields_from_file",
+            return_value={"name": "Mira"},
+        ), patch.object(_m_workers, "process_image_message",
         ):
             _m_workers.process_image_job(
                 self.services,
@@ -190,7 +199,15 @@ class JobWorkerServiceTests(unittest.TestCase):
         self.jobs.calls.clear()
         with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_workers, "process_telegram_image",
+        ), patch.object(
+            _m_workers,
+            "ensure_session",
+            return_value={"session_id": "session", "character_file": "mira.png"},
+        ), patch.object(
+            _m_workers,
+            "card_fields_from_file",
+            return_value={"name": "Mira"},
+        ), patch.object(_m_workers, "process_image_message",
             side_effect=RuntimeError("image boom"),
         ):
             _m_workers.process_image_job(
