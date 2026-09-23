@@ -2,11 +2,26 @@
 from __future__ import annotations
 
 from functools import partial as _partial
+import argparse
+import os
 
 from bridge import database as _database
-
+from bridge.application_composition import initialize_extensions as _initialize_extensions
+from bridge.card_content import (
+    card_fields,
+    card_fields_from_file,
+    read_png_chara,
+    safe_character_path,
+)
+from bridge.cards import default_persona_id
+from bridge.common import (
+    begin_background_shutdown,
+    configure_logging,
+    enforce_runtime_permissions,
+    register_durable_backlog_dispatcher,
+    submit_chat_background,
+)
 from bridge.composition import (
-    RequestContext,
     BackgroundRuntime as _BackgroundRuntime,
     BridgeConfig as _BridgeConfig,
     BridgeServices as _BridgeServices,
@@ -15,87 +30,46 @@ from bridge.composition import (
     load_bridge_config as _load_bridge_config_value,
     validate_bridge_config as _validate_bridge_config_value,
 )
-from bridge.extension_registry import (
-    get_director_customization as _get_director_customization_value,
-)
-from bridge.group_director_service import (
-    GroupDirectorService as _GroupDirectorService,
-)
-from bridge.job_service import (
-    DurableJob as _DurableJob,
-    JobService as _JobService,
-    JobSubmission as _JobSubmission,
-)
-from bridge.memory_service import (
-    MemoryService as _MemoryService,
-)
-from bridge.persona_service import (
-    PersonaService as _PersonaService,
-)
-from bridge.sync_service import (
-    SyncService as _SyncService,
-)
-from bridge.repositories import (
-    count_persona_references as _count_persona_references,
-    count_session_messages as _count_session_messages,
-)
-from bridge.scheduler_safety import (
-    DurableWorkerGuard as _DurableWorkerGuard,
-)
-from bridge.application_composition import (
-    initialize_extensions as _initialize_extensions,
-)
-
-# Explicit late imports replace transitional dependency injection.
-import argparse
-import json
-import logging
-import os
-import signal
-import sqlite3
-import threading
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-from bridge.callbacks import process_callback
-from bridge.cards import default_persona_id
-from bridge.catalog import answer_callback
-from bridge.commands import edit_telegram_user_message
 from bridge.config import (
     CARD_FILE,
     CHARACTER_DIR,
     DB_FILE,
     DEFAULT_CHARACTER_FILE,
 )
-from bridge.generation import (
-    generate_text,
-    resolve_provider_model,
+from bridge.database import (
+    db_connect,
+    enqueue_job,
+    finish_job,
+    get_generation_settings,
+    job_actor_id,
+    mark_job_running,
+    mark_job_scheduled,
+    recover_jobs,
 )
-from bridge.help import (
-    process_document_job,
-    set_bot_commands,
-)
-from bridge.help_details import (
-    handle_help_callback,
-    is_help_callback,
-    send_help_command,
-)
+from bridge.extension_registry import get_director_customization as _get_director_customization_value
+from bridge.generation import generate_text, resolve_provider_model
+from bridge.group_core import group_member_labels, group_state
+from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
+from bridge.help import set_bot_commands
 from bridge.input_flows import PERSONA_EDIT_LOCK
-from bridge.media import (
-    get_provider_spec,
-    process_voice_job,
-    send_reply,
+from bridge.job_service import JobService as _JobService
+from bridge.media import get_provider_spec
+from bridge.memory import (
+    get_session_summary,
+    purge_hindsight_session,
+    retain_session_memory,
+    session_summary_for_prompt,
 )
 from bridge.memory_backend import recall_memory_context
-from bridge.message_commands import process_message
-from bridge.persona_sync import (
-    delete_native_persona,
-    load_personas,
-    upsert_native_persona,
+from bridge.memory_service import MemoryService as _MemoryService
+from bridge.persona_service import PersonaService as _PersonaService
+from bridge.persona_sync import delete_native_persona, load_personas, upsert_native_persona
+from bridge.repositories import (
+    count_persona_references as _count_persona_references,
+    count_session_messages as _count_session_messages,
 )
-from bridge.sync_core import sync_binding
-from pathlib import Path
+from bridge.runtime_lifecycle import run_bridge_runtime
+from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
 from bridge.sync_api import (
     SillyTavernApiError,
     _phase3_disable,
@@ -105,106 +79,14 @@ from bridge.sync_api import (
     phase3_sync_poll,
     phase3_toggle_realtime,
     refresh_phase3_config,
-    start_phase3_sync_worker,
-    stop_phase3_sync_worker,
 )
-from bridge.group_core import (
-    advance_group_turn,
-    group_current_speaker,
-    group_member_labels,
-    group_state,
-    group_user_turn_allowed,
-)
-from bridge.common import (
-    begin_background_shutdown,
-    chat_job_lock,
-    configure_logging,
-    enforce_runtime_permissions,
-    register_durable_backlog_dispatcher,
-    shutdown_background_executors,
-    submit_chat_background,
-    topic_scope_from_message,
-)
-from bridge.card_content import (
-    card_fields,
-    card_fields_from_file,
-    read_png_chara,
-    safe_character_path,
-)
-from bridge.database import (
-    clear_failed_turn,
-    committed_assistant_for_message,
-    db_connect,
-    enqueue_job,
-    finish_job,
-    get_generation_settings,
-    get_meta,
-    job_actor_id,
-    mark_job_running,
-    mark_job_scheduled,
-    operation_phase,
-    operation_was_applied,
-    record_failed_turn,
-    record_operation,
-    recover_jobs,
-    run_database_maintenance,
-    run_write_txn,
-    set_meta,
-)
-from bridge.telegram import (
-    ensure_session,
-    load_session,
-    process_telegram_image,
-    send_text,
-    telegram_request,
-    update_session,
-)
-from bridge.memory import (
-    get_session_summary,
-    purge_hindsight_session,
-    retain_session_memory,
-    session_summary_for_prompt,
-)
+from bridge.sync_core import sync_binding
+from bridge.sync_service import SyncService as _SyncService
+from bridge.telegram import send_text, telegram_request, update_session
 
 _DURABLE_WORKER_GUARD = _DurableWorkerGuard(
     _database._lightweight_db_connect
 )
-
-_SHUTDOWN_EVENT = threading.Event()
-
-
-def request_bridge_shutdown(
-    on_shutdown,
-    signum=None,
-    _frame=None,
-) -> None:
-    if signum is not None:
-        logging.info("Bridge shutdown requested by signal %s", signum)
-    _SHUTDOWN_EVENT.set()
-    on_shutdown()
-
-
-def install_bridge_signal_handlers(on_shutdown) -> None:
-    def handle(signum, frame):
-        request_bridge_shutdown(on_shutdown, signum, frame)
-
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        try:
-            signal.signal(signum, handle)
-        except (ValueError, OSError):
-            logging.debug("Could not install signal handler %s", signum, exc_info=True)
-
-
-LONG_RUNNING_COMMANDS = (
-    "/retry", "/regen", "/continue", "/edit", "/summarize",
-    "/providers health", "/providers refresh",
-)
-
-
-def is_long_running_command(text: str) -> bool:
-    normalized = str(text).strip().casefold()
-    return any(normalized == name or normalized.startswith(name + " ") for name in LONG_RUNNING_COMMANDS)
-
 
 def validate_startup_credential(model: str) -> None:
     provider_id, _ = resolve_provider_model(model)
@@ -223,366 +105,14 @@ def validate_startup_credential(model: str) -> None:
         raise RuntimeError(f"required provider credential is missing; set one of: {', '.join(key_envs)}")
 
 
-def process_message_job(
-    services: _BridgeServices,
-    fields: dict,
-    chat_id: str,
-    text: str,
-    message_id: int,
-    queued_session_id: str | None = None,
-    model_override: str | None = None,
-    job_id: int | None = None,
-) -> None:
-    token = services.config.bot_token
-    api_key = services.config.api_key
-    model = model_override or services.config.default_model
-    jobs = services.jobs
-    with chat_job_lock(chat_id):
-        db = services.db_factory()
-        try:
-            if job_id is not None and not jobs.start(db, job_id):
-                return
-            actor_id = jobs.actor_id(db, job_id)
-            existing = committed_assistant_for_message(db, chat_id, message_id)
-            if existing:
-                recovery_session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
-                if group_current_speaker(db, chat_id, recovery_session, text):
-                    advance_group_turn(db, chat_id, recovery_session["session_id"], operation_id=job_id)
-                if json.loads(existing[2] or "[]"):
-                    clear_failed_turn(db, chat_id, message_id)
-                    if job_id is not None:
-                        jobs.complete(db, job_id)
-                    return
-                delivery_session_id = queued_session_id or ensure_session(db, chat_id, model)["session_id"]
-                send_reply(token, chat_id, str(existing[1]), db, delivery_session_id, int(existing[0]))
-                clear_failed_turn(db, chat_id, message_id)
-                if job_id is not None:
-                    jobs.complete(db, job_id)
-                return
-            process_message(
-                db,
-                token,
-                api_key,
-                model,
-                fields,
-                chat_id,
-                text,
-                message_id,
-                queued_session_id=queued_session_id,
-                operation_id=job_id,
-                actor_id=actor_id,
-                services=services,
-            )
-            if job_id is not None:
-                jobs.complete(db, job_id)
-        except Exception as exc:
-            logging.error("Background message processing failed: %s", exc, exc_info=True)
-            record_failed_turn(db, chat_id, message_id, text, model, str(exc), queued_session_id or "")
-            if job_id is not None:
-                jobs.fail(db, job_id, exc)
-            if str(text).lstrip().startswith("/"):
-                if "Telegram sendMessage failed" in str(exc):
-                    failure_message = "Telegram could not deliver this command. The character backend was not called; retry the command."
-                else:
-                    failure_message = "The command failed. Use /status for details, then retry the command."
-            else:
-                failure_message = "The character backend failed for this message. Use /retry or /status."
-            services.telegram.send_text(token, chat_id, failure_message)
-        finally:
-            db.close()
 
 
-def process_image_job(
-    services: _BridgeServices,
-    chat_id: str,
-    file_id: str,
-    caption: str,
-    file_size: int,
-    message_id: int,
-    queued_session_id: str | None = None,
-    model_override: str | None = None,
-    job_id: int | None = None,
-) -> None:
-    token = services.config.bot_token
-    model = model_override or services.config.default_model
-    jobs = services.jobs
-    with chat_job_lock(chat_id):
-        db = services.db_factory()
-        try:
-            if job_id is not None and not jobs.start(db, job_id):
-                return
-            existing = committed_assistant_for_message(db, chat_id, message_id)
-            if existing:
-                if json.loads(existing[2] or "[]"):
-                    clear_failed_turn(db, chat_id, message_id)
-                    if job_id is not None:
-                        jobs.complete(db, job_id)
-                    return
-                delivery_session_id = queued_session_id or ensure_session(db, chat_id, model)["session_id"]
-                send_reply(token, chat_id, str(existing[1]), db, delivery_session_id, int(existing[0]))
-                clear_failed_turn(db, chat_id, message_id)
-                if job_id is not None:
-                    jobs.complete(db, job_id)
-                return
-            process_telegram_image(
-                db,
-                token,
-                chat_id,
-                file_id,
-                caption,
-                model,
-                file_size,
-                message_id,
-                queued_session_id=queued_session_id,
-                memory_service=services.memory,
-                persona_service=services.persona,
-                group_director_service=services.group_director,
-            )
-            if job_id is not None:
-                jobs.complete(db, job_id)
-        except Exception as exc:
-            logging.error("Background image processing failed: %s", exc, exc_info=True)
-            if job_id is not None:
-                jobs.fail(db, job_id, exc)
-            services.telegram.send_text(token, chat_id, "Image processing failed. The selected model may not support vision.")
-        finally:
-            db.close()
 
 
-def process_callback_job(
-    services: _BridgeServices,
-    chat_id: str,
-    callback: dict,
-    job_id: int | None = None,
-) -> None:
-    token = services.config.bot_token
-    jobs = services.jobs
-    with chat_job_lock(chat_id):
-        db = services.db_factory()
-        try:
-            if job_id is not None and not jobs.start(db, job_id):
-                return
-            actor_id = (
-                jobs.actor_id(db, job_id)
-                if job_id is not None
-                else ""
-            )
-            if job_id is not None and operation_was_applied(db, job_id):
-                jobs.complete(db, job_id)
-                return
-            process_callback(
-                db,
-                token,
-                callback,
-                operation_id=job_id,
-                actor_id=actor_id,
-                services=services,
-            )
-            if job_id is not None:
-                def write_callback_operation():
-                    record_operation(db, job_id, "callback")
-                    db.commit()
-                run_write_txn(db, write_callback_operation)
-                jobs.complete(db, job_id)
-        except Exception as exc:
-            logging.error("Background callback processing failed: %s", exc, exc_info=True)
-            if job_id is not None:
-                jobs.fail(db, job_id, exc)
-            services.telegram.send_text(token, chat_id, "Callback processing failed; try the command again.")
-        finally:
-            db.close()
 
 
-def native_edit_committed_after_failure(db: sqlite3.Connection, job_id: int | None, exc: BaseException) -> bool:
-    if job_id is None or "Telegram sendMessage failed" in str(exc):
-        return False
-    try:
-        return operation_phase(db, job_id) == "local_committed"
-    except sqlite3.OperationalError:
-        logging.warning("Could not inspect native edit operation %s after failure", job_id, exc_info=True)
-        return False
 
 
-def process_edit_job(
-    services: _BridgeServices,
-    chat_id: str,
-    message_id: int,
-    text: str,
-    model_override: str | None = None,
-    job_id: int | None = None,
-) -> None:
-    token = services.config.bot_token
-    api_key = services.config.api_key
-    model = model_override or services.config.default_model
-    jobs = services.jobs
-    with chat_job_lock(chat_id):
-        db = services.db_factory()
-        try:
-            if job_id is not None and not jobs.start(db, job_id):
-                return
-            edit_telegram_user_message(
-                db,
-                token,
-                api_key,
-                chat_id,
-                message_id,
-                text,
-                model,
-                operation_id=job_id,
-                memory_service=services.memory,
-                persona_service=services.persona,
-            )
-            if job_id is not None:
-                jobs.complete(db, job_id)
-        except Exception as exc:
-            logging.error("Background native edit failed: %s", exc, exc_info=True)
-            if native_edit_committed_after_failure(db, job_id, exc):
-                logging.warning("Native edit %s committed locally; suppressing rollback fallback", job_id)
-                if job_id is not None:
-                    jobs.complete(db, job_id)
-                return
-            if job_id is not None:
-                jobs.fail(db, job_id, exc)
-            services.telegram.send_text(token, chat_id, "Native message edit failed; the previous branch was preserved.")
-        finally:
-            db.close()
-
-
-def complete_update(db: sqlite3.Connection, update_id: int, offset: int) -> None:
-    def write():
-        db.execute("INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)", (update_id, time.time()))
-        set_meta(db, "telegram_offset", str(offset))
-    run_write_txn(db, write)
-
-
-def restore_poll_offset(db: sqlite3.Connection, fallback: int) -> int:
-    try:
-        return int(get_meta(db, "telegram_offset", str(fallback)) or fallback)
-    except (TypeError, ValueError, sqlite3.Error):
-        return int(fallback)
-
-
-def resolve_recovered_job_submission(
-    services: _BridgeServices,
-    fields: dict,
-    job: _DurableJob,
-) -> _JobSubmission | None:
-    payload = job.payload
-    model_override = str(
-        payload.get("model") or services.config.default_model
-    )
-    session_for_job = (
-        None
-        if payload.get("resolve_active")
-        else job.session_id
-    )
-
-    if job.kind in {"generation", "command"}:
-        return _JobSubmission(
-            label=job.kind,
-            chat_id=job.chat_id,
-            worker=process_message_job,
-            args=(
-                services,
-                fields,
-                job.chat_id,
-                str(payload["text"]),
-                job.telegram_message_id,
-                session_for_job,
-                model_override,
-            ),
-        )
-    if job.kind == "callback":
-        return _JobSubmission(
-            label=job.kind,
-            chat_id=job.chat_id,
-            worker=process_callback_job,
-            args=(
-                services,
-                job.chat_id,
-                payload["callback"],
-            ),
-        )
-    if job.kind == "edit":
-        return _JobSubmission(
-            label=job.kind,
-            chat_id=job.chat_id,
-            worker=process_edit_job,
-            args=(
-                services,
-                job.chat_id,
-                job.telegram_message_id,
-                str(payload["text"]),
-                model_override,
-            ),
-        )
-    if job.kind == "voice":
-        return _JobSubmission(
-            label=job.kind,
-            chat_id=job.chat_id,
-            worker=process_voice_job,
-            args=(
-                services,
-                fields,
-                job.chat_id,
-                payload["voice"],
-                job.telegram_message_id,
-                session_for_job,
-                model_override,
-            ),
-        )
-    if job.kind == "image":
-        return _JobSubmission(
-            label=job.kind,
-            chat_id=job.chat_id,
-            worker=process_image_job,
-            args=(
-                services,
-                job.chat_id,
-                str(payload["file_id"]),
-                str(payload.get("caption") or ""),
-                int(payload.get("file_size") or 0),
-                job.telegram_message_id,
-                session_for_job,
-                model_override,
-            ),
-        )
-    if job.kind == "document":
-        return _JobSubmission(
-            label=job.kind,
-            chat_id=job.chat_id,
-            worker=process_document_job,
-            args=(
-                services,
-                job.chat_id,
-                payload["document"],
-                job.telegram_message_id,
-                model_override,
-            ),
-        )
-    return None
-
-
-def make_durable_backlog_dispatcher(
-    services: _BridgeServices,
-    fields: dict,
-):
-    def dispatch() -> None:
-        db = services.db_factory()
-        try:
-            services.jobs.recover(
-                db,
-                lambda job: resolve_recovered_job_submission(
-                    services,
-                    fields,
-                    job,
-                ),
-                recover_running=False,
-            )
-        finally:
-            db.close()
-
-    return dispatch
 
 
 def _require_runtime_configuration(model: str) -> None:
@@ -726,471 +256,7 @@ def main() -> int:
         return run_check(services)
 
     fields = card_fields(read_png_chara(config.card_file))
-    _SHUTDOWN_EVENT.clear()
-    install_bridge_signal_handlers(
-        services.background.begin_shutdown
-    )
-    db = services.db_factory()
-    start_phase3_sync_worker(sync_service=services.sync)
-    services.background.register_backlog_dispatcher(
-        make_durable_backlog_dispatcher(
-            services,
-            fields,
-        )
-    )
-    services.jobs.recover(
-        db,
-        lambda job: resolve_recovered_job_submission(
-            services,
-            fields,
-            job,
-        ),
-        recover_running=True,
-    )
-    offset = int(get_meta(db, "telegram_offset", "0"))
-    permitted = config.allowed_users
-    logging.info("Bridge started")
-    last_safe_offset = offset
-    while not _SHUTDOWN_EVENT.is_set():
-        try:
-            updates = services.telegram.request(token, "getUpdates", {"offset": offset, "timeout": 50, "allowed_updates": ["message", "edited_message", "callback_query"]})
-            for update in updates:
-                update_id = int(update["update_id"])
-                last_safe_offset = offset
-                offset = max(offset, update_id + 1)
-                if db.execute("SELECT 1 FROM processed_updates WHERE update_id=?", (update_id,)).fetchone():
-                    complete_update(db, update_id, offset)
-                    continue
-                callback = update.get("callback_query")
-                if callback:
-                    sender = str((callback.get("from") or {}).get("id", ""))
-                    callback_message = callback.get("message") or {}
-                    callback_real_chat_id = str((callback_message.get("chat") or {}).get("id", ""))
-                    callback_chat_id = topic_scope_from_message(callback_real_chat_id, callback_message)
-                    if callback_chat_id:
-                        callback_message.setdefault("chat", {})["id"] = callback_chat_id
-                    if sender in permitted and callback_chat_id:
-                        if is_help_callback(str(callback.get("data") or "")):
-                            handle_help_callback(
-                                db,
-                                token,
-                                callback,
-                                answer_callback,
-                                str(callback.get("data") or ""),
-                                callback_chat_id,
-                                callback_message,
-                                {},
-                                "",
-                                None,
-                            )
-                        else:
-                            callback["_queued"] = True
-                            callback_session = ensure_session(db, callback_chat_id, model)["session_id"]
-                            callback_message_id = int(callback_message.get("message_id") or 0)
-                            job_id = services.jobs.enqueue(
-                                db,
-                                update_id,
-                                callback_chat_id,
-                                callback_session,
-                                callback_message_id,
-                                "callback",
-                                {
-                                    "callback": callback,
-                                    "model": model,
-                                    "actor_id": sender,
-                                },
-                            )
-                            services.jobs.submit(
-                                db,
-                                job_id,
-                                _JobSubmission(
-                                    label="callback",
-                                    chat_id=callback_chat_id,
-                                    worker=process_callback_job,
-                                    args=(
-                                        services,
-                                        callback_chat_id,
-                                        callback,
-                                    ),
-                                ),
-                            )
-                            answer_callback(token, str(callback.get("id", "")), "Queued")
-                        complete_update(db, update_id, offset)
-                    else:
-                        complete_update(db, update_id, offset)
-                    continue
-
-                edited_message = update.get("edited_message")
-                if edited_message:
-                    edited_sender = str((edited_message.get("from") or {}).get("id", ""))
-                    edited_real_chat_id = str((edited_message.get("chat") or {}).get("id", ""))
-                    edited_chat_id = topic_scope_from_message(edited_real_chat_id, edited_message)
-                    edited_text = edited_message.get("text")
-                    if edited_sender in permitted and edited_chat_id and edited_text:
-                        edited_message_id = int(edited_message.get("message_id") or 0)
-                        edited_session_id = ensure_session(db, edited_chat_id, model)["session_id"]
-                        job_id = services.jobs.enqueue(
-                            db,
-                            update_id,
-                            edited_chat_id,
-                            edited_session_id,
-                            edited_message_id,
-                            "edit",
-                            {
-                                "text": str(edited_text)[:12000],
-                                "model": model,
-                                "actor_id": edited_sender,
-                            },
-                        )
-                        services.jobs.submit(
-                            db,
-                            job_id,
-                            _JobSubmission(
-                                label="edit",
-                                chat_id=edited_chat_id,
-                                worker=process_edit_job,
-                                args=(
-                                    services,
-                                    edited_chat_id,
-                                    edited_message_id,
-                                    str(edited_text)[:12000],
-                                    None,
-                                ),
-                            ),
-                        )
-                        services.telegram.send_text(token, edited_chat_id, "✏️ Edit queued; previous branch will be preserved until regeneration succeeds.")
-                    complete_update(db, update_id, offset)
-                    continue
-
-                message = update.get("message") or {}
-                sender = str((message.get("from") or {}).get("id", ""))
-                real_chat_id = str((message.get("chat") or {}).get("id", ""))
-                chat_id = topic_scope_from_message(real_chat_id, message)
-                document = message.get("document")
-                photos = message.get("photo") or []
-                voice = message.get("voice") or message.get("audio")
-                text = message.get("text")
-                caption = str(message.get("caption") or "")
-                if not chat_id:
-                    continue
-                if sender not in permitted:
-                    logging.warning("Rejected Telegram user %s", sender)
-                    services.telegram.send_text(token, chat_id, "This bot is private.")
-                    complete_update(db, update_id, offset)
-                    continue
-                if voice:
-                    message_id = int(message.get("message_id"))
-                    queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = services.jobs.enqueue(
-                        db,
-                        update_id,
-                        chat_id,
-                        queued_session_id,
-                        message_id,
-                        "voice",
-                        {
-                            "voice": voice,
-                            "model": model,
-                            "resolve_active": True,
-                            "actor_id": sender,
-                        },
-                    )
-                    queued = services.jobs.submit(
-                        db,
-                        job_id,
-                        _JobSubmission(
-                            label="voice",
-                            chat_id=chat_id,
-                            worker=process_voice_job,
-                            args=(
-                                services,
-                                fields,
-                                chat_id,
-                                voice,
-                                message_id,
-                                None,
-                                None,
-                            ),
-                        ),
-                    )
-                    if queued:
-                        services.telegram.send_text(token, chat_id, "🎙️ Voice queued for transcription.")
-                    else:
-                        services.telegram.send_text(token, chat_id, "🎙️ Voice saved for processing after restart.")
-                    complete_update(db, update_id, offset)
-                    continue
-                if photos:
-                    largest = photos[-1]
-                    message_id = int(message.get("message_id"))
-                    queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = services.jobs.enqueue(
-                        db,
-                        update_id,
-                        chat_id,
-                        queued_session_id,
-                        message_id,
-                        "image",
-                        {
-                            "file_id": str(largest.get("file_id", "")),
-                            "caption": caption,
-                            "file_size": int(largest.get("file_size") or 0),
-                            "model": model,
-                            "resolve_active": True,
-                            "actor_id": sender,
-                        },
-                    )
-                    queued = services.jobs.submit(
-                        db,
-                        job_id,
-                        _JobSubmission(
-                            label="image",
-                            chat_id=chat_id,
-                            worker=process_image_job,
-                            args=(
-                                services,
-                                chat_id,
-                                str(largest.get("file_id", "")),
-                                caption,
-                                int(largest.get("file_size") or 0),
-                                message_id,
-                                None,
-                                None,
-                            ),
-                        ),
-                    )
-                    services.telegram.send_text(token, chat_id, "🖼️ Image queued for analysis." if queued else "🖼️ Image saved for processing after restart.")
-                    complete_update(db, update_id, offset)
-                    continue
-                if document and Path(str(document.get("file_name") or "")).suffix.casefold() != ".png" and str(document.get("mime_type") or "").startswith("image/"):
-                    message_id = int(message.get("message_id"))
-                    queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = services.jobs.enqueue(
-                        db,
-                        update_id,
-                        chat_id,
-                        queued_session_id,
-                        message_id,
-                        "image",
-                        {
-                            "file_id": str(document.get("file_id", "")),
-                            "caption": caption,
-                            "file_size": int(document.get("file_size") or 0),
-                            "model": model,
-                            "resolve_active": True,
-                            "actor_id": sender,
-                        },
-                    )
-                    queued = services.jobs.submit(
-                        db,
-                        job_id,
-                        _JobSubmission(
-                            label="image",
-                            chat_id=chat_id,
-                            worker=process_image_job,
-                            args=(
-                                services,
-                                chat_id,
-                                str(document.get("file_id", "")),
-                                caption,
-                                int(document.get("file_size") or 0),
-                                message_id,
-                                None,
-                                None,
-                            ),
-                        ),
-                    )
-                    services.telegram.send_text(token, chat_id, "🖼️ Image queued for analysis." if queued else "🖼️ Image saved for processing after restart.")
-                    complete_update(db, update_id, offset)
-                    continue
-                if document:
-                    message_id = int(message.get("message_id"))
-                    queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                    job_id = services.jobs.enqueue(
-                        db,
-                        update_id,
-                        chat_id,
-                        queued_session_id,
-                        message_id,
-                        "document",
-                        {
-                            "document": document,
-                            "model": model,
-                            "resolve_active": True,
-                            "actor_id": sender,
-                        },
-                    )
-                    queued = services.jobs.submit(
-                        db,
-                        job_id,
-                        _JobSubmission(
-                            label="document",
-                            chat_id=chat_id,
-                            worker=process_document_job,
-                            args=(
-                                services,
-                                chat_id,
-                                document,
-                                message_id,
-                                None,
-                            ),
-                        ),
-                    )
-                    services.telegram.send_text(token, chat_id, "📄 Document queued for character-card processing or Data Bank indexing." if queued else "📄 Document saved for processing after restart.")
-                    complete_update(db, update_id, offset)
-                    continue
-                if not text:
-                    complete_update(db, update_id, offset)
-                    continue
-                message_id = int(message.get("message_id"))
-                queued_session_id = ensure_session(db, chat_id, model)["session_id"]
-                request_context = RequestContext(db, queued_session_id, sender)
-                if send_help_command(
-                    token,
-                    chat_id,
-                    str(text),
-                    request_context=request_context,
-                ):
-                    complete_update(db, update_id, offset)
-                    continue
-                normalized_text = str(text).strip().casefold()
-                is_plain_start = normalized_text == "start"
-                if not str(text).lstrip().startswith("/") and not is_plain_start and not group_user_turn_allowed(db, chat_id, queued_session_id, sender):
-                    services.telegram.send_text(token, chat_id, "It is not your turn in manual group mode.")
-                    complete_update(db, update_id, offset)
-                    continue
-                if is_plain_start or is_long_running_command(str(text)):
-                    job_id = services.jobs.enqueue(
-                        db,
-                        update_id,
-                        chat_id,
-                        queued_session_id,
-                        message_id,
-                        "command",
-                        {
-                            "text": str(text),
-                            "model": model,
-                            "resolve_active": True,
-                            "actor_id": sender,
-                        },
-                    )
-                    queued = services.jobs.submit(
-                        db,
-                        job_id,
-                        _JobSubmission(
-                            label="command",
-                            chat_id=chat_id,
-                            worker=process_message_job,
-                            args=(
-                                services,
-                                fields,
-                                chat_id,
-                                str(text),
-                                message_id,
-                                None,
-                                None,
-                            ),
-                        ),
-                    )
-                    services.telegram.send_text(token, chat_id, "⏳ Command queued." if queued else "⏳ Command saved for execution after restart.")
-                elif str(text).lstrip().startswith("/"):
-                    job_id = services.jobs.enqueue(
-                        db,
-                        update_id,
-                        chat_id,
-                        queued_session_id,
-                        message_id,
-                        "command",
-                        {
-                            "text": str(text),
-                            "model": model,
-                            "resolve_active": True,
-                            "actor_id": sender,
-                        },
-                    )
-                    services.jobs.submit(
-                        db,
-                        job_id,
-                        _JobSubmission(
-                            label="command",
-                            chat_id=chat_id,
-                            worker=process_message_job,
-                            args=(
-                                services,
-                                fields,
-                                chat_id,
-                                str(text),
-                                message_id,
-                                None,
-                                None,
-                            ),
-                        ),
-                    )
-                    services.telegram.send_text(token, chat_id, "⏳ Command queued.")
-                else:
-                    job_id = services.jobs.enqueue(
-                        db,
-                        update_id,
-                        chat_id,
-                        queued_session_id,
-                        message_id,
-                        "generation",
-                        {
-                            "text": str(text),
-                            "model": model,
-                            "resolve_active": True,
-                            "actor_id": sender,
-                        },
-                    )
-                    queued = services.jobs.submit(
-                        db,
-                        job_id,
-                        _JobSubmission(
-                            label="generation",
-                            chat_id=chat_id,
-                            worker=process_message_job,
-                            args=(
-                                services,
-                                fields,
-                                chat_id,
-                                str(text),
-                                message_id,
-                                None,
-                                None,
-                            ),
-                        ),
-                    )
-                    services.telegram.send_text(token, chat_id, "⏳ Message queued for generation." if queued else "⏳ Message saved for generation after restart.")
-                complete_update(db, update_id, offset)
-        except urllib.error.HTTPError as exc:
-            logging.error("Telegram HTTP error: %s", exc.code)
-            _SHUTDOWN_EVENT.wait(10)
-        except KeyboardInterrupt:
-            request_bridge_shutdown(
-                services.background.begin_shutdown
-            )
-            break
-        except Exception as exc:
-            if _SHUTDOWN_EVENT.is_set():
-                break
-            offset = restore_poll_offset(db, last_safe_offset)
-            logging.error("Polling error: %s", exc, exc_info=True)
-            _SHUTDOWN_EVENT.wait(5)
-
-    request_bridge_shutdown(
-        services.background.begin_shutdown
-    )
-    sync_stopped = stop_phase3_sync_worker(timeout=5.0)
-    drained = shutdown_background_executors(timeout=20.0)
-    db.close()
-    # Explicit maintenance on a dedicated connection after executors drained:
-    # VACUUM never competes with durable job transitions on the live handle.
-    run_database_maintenance()
-    if not sync_stopped:
-        logging.warning("Realtime sync worker did not stop before shutdown deadline")
-    if not drained:
-        logging.warning("Background jobs exceeded the graceful shutdown deadline")
-    logging.info("Bridge stopped")
-    return 0
+    return run_bridge_runtime(services, fields)
 
 
 if __name__ == "__main__":

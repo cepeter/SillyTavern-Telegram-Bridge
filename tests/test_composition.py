@@ -19,6 +19,9 @@ import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
 import bridge.help as _m_help
 import bridge.main as _m_main
+import bridge.runtime_lifecycle as _m_runtime
+import bridge.update_routing as _m_update_routing
+import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -364,18 +367,18 @@ class WorkerInjectionTests(unittest.TestCase):
 
     def test_all_worker_signatures_receive_services_not_startup_bundle(self):
         expectations = {
-            _m_main.process_message_job: (
+            _m_workers.process_message_job: (
                 "services", "fields", "chat_id", "text", "message_id",
                 "queued_session_id", "model_override", "job_id",
             ),
-            _m_main.process_image_job: (
+            _m_workers.process_image_job: (
                 "services", "chat_id", "file_id", "caption", "file_size",
                 "message_id", "queued_session_id", "model_override", "job_id",
             ),
-            _m_main.process_callback_job: (
+            _m_workers.process_callback_job: (
                 "services", "chat_id", "callback", "job_id",
             ),
-            _m_main.process_edit_job: (
+            _m_workers.process_edit_job: (
                 "services", "chat_id", "message_id", "text",
                 "model_override", "job_id",
             ),
@@ -414,10 +417,10 @@ class WorkerInjectionTests(unittest.TestCase):
                 kwargs=kwargs,
             )
 
-        with patch.object(_m_main, "committed_assistant_for_message", return_value=None
-        ), patch.object(_m_main, "process_message", side_effect=fake_process_message
+        with patch.object(_m_workers, "committed_assistant_for_message", return_value=None
+        ), patch.object(_m_workers, "process_message", side_effect=fake_process_message
         ):
-            _m_main.process_message_job(
+            _m_workers.process_message_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -535,10 +538,10 @@ class WorkerInjectionTests(unittest.TestCase):
         def fake_edit(*args, **kwargs):
             captured.update(kwargs)
 
-        with patch.object(_m_main, "edit_telegram_user_message",
+        with patch.object(_m_workers, "edit_telegram_user_message",
             side_effect=fake_edit,
         ):
-            _m_main.process_edit_job(
+            _m_workers.process_edit_job(
                 self.services,
                 "chat",
                 77,
@@ -597,12 +600,12 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_recovered_model_override_wins_over_config_default(self):
         captured = {}
 
-        with patch.object(_m_main, "committed_assistant_for_message", return_value=None
-        ), patch.object(_m_main, "process_message",
+        with patch.object(_m_workers, "committed_assistant_for_message", return_value=None
+        ), patch.object(_m_workers, "process_message",
             side_effect=lambda _db, _token, _key, model, *_args, **_kwargs:
                 captured.setdefault("model", model),
         ):
-            _m_main.process_message_job(
+            _m_workers.process_message_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -617,12 +620,12 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_image_worker_propagates_injected_memory_service(self):
         captured = {}
 
-        with patch.object(_m_main, "committed_assistant_for_message",
+        with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_main, "process_telegram_image",
+        ), patch.object(_m_workers, "process_telegram_image",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
-            _m_main.process_image_job(
+            _m_workers.process_image_job(
                 self.services,
                 "chat",
                 "file-id",
@@ -661,10 +664,10 @@ class WorkerInjectionTests(unittest.TestCase):
             "from": {"id": "100"},
             "message": {"chat": {"id": "chat"}},
         }
-        with patch.object(_m_main, "process_callback",
+        with patch.object(_m_workers, "process_callback",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
-            _m_main.process_callback_job(
+            _m_workers.process_callback_job(
                 self.services,
                 "chat",
                 callback,
@@ -673,14 +676,14 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertIs(captured["services"], self.services)
 
     def test_callback_failure_uses_injected_send_text(self):
-        with patch.object(_m_main, "process_callback",
+        with patch.object(_m_workers, "process_callback",
             side_effect=RuntimeError("boom"),
         ), patch.object(
             _m_telegram,
             "send_text",
             side_effect=lambda *args, **_kwargs: self.global_sent.append(args),
         ):
-            _m_main.process_callback_job(
+            _m_workers.process_callback_job(
                 self.services,
                 "chat",
                 {"id": "callback"},
@@ -752,7 +755,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                 "model": "stored::model",
             },
         )
-        submission = _m_main.resolve_recovered_job_submission(
+        submission = _m_workers.resolve_recovered_job_submission(
             self.services,
             {"name": "Mira"},
             generation,
@@ -761,7 +764,7 @@ class RecoveryCompositionTests(unittest.TestCase):
         self.assertEqual(submission.label, "generation")
         self.assertIs(
             inspect.unwrap(submission.worker),
-            _m_main.process_message_job,
+            _m_workers.process_message_job,
         )
         self.assertIs(submission.args[0], self.services)
         self.assertEqual(submission.args[-2], "stored-session")
@@ -780,7 +783,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                 "resolve_active": True,
             },
         )
-        active_submission = _m_main.resolve_recovered_job_submission(
+        active_submission = _m_workers.resolve_recovered_job_submission(
             self.services,
             {"name": "Mira"},
             active,
@@ -795,7 +798,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                     61, "chat", "session", 21, "callback",
                     {"callback": {"id": "cb"}},
                 ),
-                _m_main.process_callback_job,
+                _m_workers.process_callback_job,
                 {"id": "cb"},
             ),
             (
@@ -803,7 +806,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                     62, "chat", "session", 22, "edit",
                     {"text": "edited", "model": "stored::edit"},
                 ),
-                _m_main.process_edit_job,
+                _m_workers.process_edit_job,
                 "stored::edit",
             ),
             (
@@ -827,7 +830,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                         "model": "stored::image",
                     },
                 ),
-                _m_main.process_image_job,
+                _m_workers.process_image_job,
                 "stored::image",
             ),
             (
@@ -845,7 +848,7 @@ class RecoveryCompositionTests(unittest.TestCase):
 
         for job, worker, expected_tail in cases:
             with self.subTest(kind=job.kind):
-                submission = _m_main.resolve_recovered_job_submission(
+                submission = _m_workers.resolve_recovered_job_submission(
                     self.services,
                     fields,
                     job,
@@ -863,7 +866,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             66, "chat", "session", 26, "unknown", {}
         )
         self.assertIsNone(
-            _m_main.resolve_recovered_job_submission(
+            _m_workers.resolve_recovered_job_submission(
                 self.services,
                 fields,
                 unknown,
@@ -891,7 +894,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             sync=self.services.sync,
         )
 
-        dispatcher = _m_main.make_durable_backlog_dispatcher(
+        dispatcher = _m_workers.make_durable_backlog_dispatcher(
             services,
             {"name": "Mira"},
         )
@@ -1025,15 +1028,15 @@ class StartupCompositionTests(unittest.TestCase):
             installed[signum] = handler
 
         with patch.object(signal, "signal", side_effect=fake_signal):
-            _m_main.install_bridge_signal_handlers(
+            _m_runtime.install_bridge_signal_handlers(
                 lambda: calls.append("shutdown")
             )
 
         handler = installed[signal.SIGTERM]
         handler(signal.SIGTERM, None)
-        self.assertTrue(_m_main._SHUTDOWN_EVENT.is_set())
+        self.assertTrue(_m_runtime._SHUTDOWN_EVENT.is_set())
         self.assertEqual(calls, ["shutdown"])
-        _m_main._SHUTDOWN_EVENT.clear()
+        _m_runtime._SHUTDOWN_EVENT.clear()
 
     def test_startup_builds_group_director_service(self):
         services = _m_main._build_startup_services(self.config)
@@ -1116,69 +1119,37 @@ class StartupCompositionTests(unittest.TestCase):
             _m_main._DURABLE_WORKER_GUARD,
         )
 
-    def test_main_starts_sync_worker_with_injected_sync_service(self):
+    def test_runtime_starts_sync_worker_with_injected_sync_service(self):
         sync_service = object()
 
         def request(_token, method, _payload=None):
             if method == "getUpdates":
-                _m_main._SHUTDOWN_EVENT.set()
+                _m_runtime._SHUTDOWN_EVENT.set()
                 return []
             return {}
 
         services = BridgeServices(
             config=self.config,
             db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
-            telegram=TelegramRuntime(
-                request=request,
-                send_text=lambda *_args, **_kwargs: None,
-            ),
+            telegram=TelegramRuntime(request=request, send_text=lambda *_args, **_kwargs: None),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
                 register_backlog_dispatcher=lambda _callback: None,
                 begin_shutdown=lambda: None,
             ),
-            sync=sync_service,
-            jobs=Mock(),
-            group_director=object(),
-            memory=object(),
-            persona=object(),
+            sync=sync_service, jobs=Mock(), group_director=object(),
+            memory=object(), persona=object(),
         )
-        parsed = argparse.Namespace(check=False)
-
-        with patch.object(
-            argparse.ArgumentParser,
-            "parse_args",
-            return_value=parsed,
-        ), patch.object(_m_main, "refresh_phase3_config"
-        ), patch.object(_m_main, "enforce_runtime_permissions"
-        ), patch.object(_m_main, "configure_logging"
-        ), patch.object(
-            _m_main, "_load_startup_config", return_value=self.config
-        ), patch.object(
-            _m_main, "_build_startup_services", return_value=services
-        ), patch.object(
-            _m_main, "validate_startup_credential"
-        ), patch.object(_m_main, "set_bot_commands"
-        ), patch.object(_m_main, "read_png_chara", return_value={}
-        ), patch.object(_m_main, "card_fields", return_value={"name": "Mira"}
-        ), patch.object(
-            _m_main, "install_bridge_signal_handlers"
-        ), patch.object(_m_main, "start_phase3_sync_worker"
-        ) as start_sync, patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
-        ), patch.object(_m_main, "shutdown_background_executors", return_value=True
-        ), patch.object(_m_main, "run_database_maintenance"
-        ):
-            self.assertEqual(_m_main.main(), 0)
-
-        start_sync.assert_called_once_with(
-            sync_service=sync_service
-        )
+        with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
+             patch.object(_m_runtime, "start_phase3_sync_worker") as start_sync, \
+             patch.object(_m_runtime, "stop_phase3_sync_worker", return_value=True), \
+             patch.object(_m_runtime, "shutdown_background_executors", return_value=True), \
+             patch.object(_m_runtime, "run_database_maintenance"):
+            self.assertEqual(_m_runtime.run_bridge_runtime(services, {"name": "Mira"}), 0)
+        start_sync.assert_called_once_with(sync_service=sync_service)
         services.jobs.recover.assert_called_once()
-        recover_call = services.jobs.recover.call_args
-        self.assertTrue(
-            recover_call.kwargs["recover_running"]
-        )
-        _m_main._SHUTDOWN_EVENT.clear()
+        self.assertTrue(services.jobs.recover.call_args.kwargs["recover_running"])
+        _m_runtime._SHUTDOWN_EVENT.clear()
 
     def _run_one_update(self, update, *, submit_result=True):
         jobs = RecordingJobs(submit_result=submit_result)
@@ -1190,7 +1161,7 @@ class StartupCompositionTests(unittest.TestCase):
             if method == "getUpdates":
                 if not delivered:
                     delivered = True
-                    _m_main._SHUTDOWN_EVENT.set()
+                    _m_runtime._SHUTDOWN_EVENT.set()
                     return [update]
                 return []
             return {}
@@ -1198,56 +1169,29 @@ class StartupCompositionTests(unittest.TestCase):
         services = BridgeServices(
             config=self.config,
             db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
-            telegram=TelegramRuntime(
-                request=request,
-                send_text=lambda *args, **_kwargs: sent.append(args),
-            ),
+            telegram=TelegramRuntime(request=request, send_text=lambda *args, **_kwargs: sent.append(args)),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
                 register_backlog_dispatcher=lambda _callback: None,
                 begin_shutdown=lambda: None,
             ),
-            sync=object(),
-            jobs=jobs,
-            group_director=object(),
-            memory=object(),
-            persona=object(),
+            sync=object(), jobs=jobs, group_director=object(),
+            memory=object(), persona=object(),
         )
-        parsed = argparse.Namespace(check=False)
-
         try:
-            with patch.object(
-                argparse.ArgumentParser,
-                "parse_args",
-                return_value=parsed,
-            ), patch.object(_m_main, "refresh_phase3_config"
-            ), patch.object(_m_main, "enforce_runtime_permissions"
-            ), patch.object(_m_main, "configure_logging"
-            ), patch.object(
-                _m_main, "_load_startup_config", return_value=self.config
-            ), patch.object(
-                _m_main, "_build_startup_services", return_value=services
-            ), patch.object(
-                _m_main, "validate_startup_credential"
-            ), patch.object(_m_main, "set_bot_commands"
-            ), patch.object(_m_main, "read_png_chara", return_value={}
-            ), patch.object(_m_main, "card_fields", return_value={"name": "Mira"}
-            ), patch.object(
-                _m_main, "install_bridge_signal_handlers"
-            ), patch.object(_m_main, "start_phase3_sync_worker"
-            ), patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
-            ), patch.object(_m_main, "shutdown_background_executors", return_value=True
-            ), patch.object(_m_main, "run_database_maintenance"
-            ), patch.object(_m_main, "answer_callback"
-            ), patch.object(_m_main, "group_user_turn_allowed", return_value=True
-            ):
-                self.assertEqual(_m_main.main(), 0)
+            with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
+                 patch.object(_m_runtime, "start_phase3_sync_worker"), \
+                 patch.object(_m_runtime, "stop_phase3_sync_worker", return_value=True), \
+                 patch.object(_m_runtime, "shutdown_background_executors", return_value=True), \
+                 patch.object(_m_runtime, "run_database_maintenance"), \
+                 patch.object(_m_update_routing, "answer_callback"), \
+                 patch.object(_m_update_routing, "group_user_turn_allowed", return_value=True):
+                self.assertEqual(_m_runtime.run_bridge_runtime(services, {"name": "Mira"}), 0)
         finally:
-            _m_main._SHUTDOWN_EVENT.clear()
-
+            _m_runtime._SHUTDOWN_EVENT.clear()
         return jobs, sent
 
-    def test_main_durable_paths_enqueue_and_submit_through_jobs_service(self):
+    def test_runtime_durable_paths_enqueue_and_submit_through_jobs_service(self):
         cases = [
             (
                 "callback",
@@ -1570,6 +1514,9 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         root = Path(__file__).parents[1] / "bridge"
         files = {
             "main.py": (root / "main.py").read_text(encoding="utf-8"),
+            "worker_orchestration.py": (
+                root / "worker_orchestration.py"
+            ).read_text(encoding="utf-8"),
             "media.py": (root / "media.py").read_text(encoding="utf-8"),
             "help.py": (root / "help.py").read_text(encoding="utf-8"),
         }
@@ -1579,16 +1526,20 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
             "def process_image_job",
             "def process_callback_job",
             "def process_edit_job",
+            "def resolve_recovered_job_submission",
             "def make_durable_backlog_dispatcher",
-            "def run_check",
         )
         for function_marker in worker_markers:
-            start = files["main.py"].index(function_marker)
-            next_def = files["main.py"].find("\ndef ", start + 4)
-            chunk = files["main.py"][
-                start: next_def if next_def >= 0 else None
-            ]
+            source = files["worker_orchestration.py"]
+            start = source.index(function_marker)
+            next_def = source.find("\ndef ", start + 4)
+            chunk = source[start: next_def if next_def >= 0 else None]
             self.assertNotIn("os.environ", chunk, function_marker)
+
+        start = files["main.py"].index("def run_check")
+        next_def = files["main.py"].find("\ndef ", start + 4)
+        chunk = files["main.py"][start: next_def if next_def >= 0 else None]
+        self.assertNotIn("os.environ", chunk, "def run_check")
 
         for filename, function_marker in (
             ("media.py", "def process_voice_job"),

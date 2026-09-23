@@ -428,9 +428,9 @@ def function_chunk(source: str, function_name: str) -> str:
 
 
 class JobServiceSourceBoundaryTests(unittest.TestCase):
-    def test_backlog_dispatcher_uses_injected_job_service(self):
+    def test_worker_orchestration_backlog_uses_injected_job_service(self):
         source = (
-            Path(__file__).parents[1] / "bridge" / "main.py"
+            Path(__file__).parents[1] / "bridge" / "worker_orchestration.py"
         ).read_text(encoding="utf-8")
         chunk = function_chunk(
             source,
@@ -449,18 +449,18 @@ class JobServiceSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("process_message_job", source)
         self.assertNotIn("process_image_job", source)
 
-    def test_main_durable_intake_uses_job_service(self):
+    def test_update_routing_durable_intake_uses_job_service(self):
         source = (
-            Path(__file__).parents[1] / "bridge" / "main.py"
+            Path(__file__).parents[1] / "bridge" / "update_routing.py"
         ).read_text(encoding="utf-8")
-        main_chunk = source[source.index("def main()"):]
-        self.assertNotIn("enqueue_job(", main_chunk)
+        routing_chunk = source[source.index("def route_update"):]
+        self.assertNotIn("enqueue_job(", routing_chunk)
         self.assertNotIn(
             "submit_durable_chat_job(",
-            main_chunk,
+            routing_chunk,
         )
-        self.assertIn("services.jobs.enqueue(", main_chunk)
-        self.assertIn("services.jobs.submit(", main_chunk)
+        self.assertIn("services.jobs.enqueue(", routing_chunk)
+        self.assertIn("services.jobs.submit(", routing_chunk)
 
 
 if __name__ == "__main__":

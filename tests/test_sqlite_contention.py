@@ -15,6 +15,8 @@ import sqlite3
 import time
 import urllib
 import bridge.main as _m_main
+import bridge.runtime_lifecycle as _m_runtime
+import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -47,8 +49,8 @@ class SqliteContentionTests(unittest.TestCase):
 
     def test_failed_poll_update_restores_durable_offset(self):
         _m_session_naming.set_meta(self.db, "telegram_offset", "100")
-        self.assertEqual(_m_main.restore_poll_offset(self.db, 101), 100)
-        self.assertEqual(_m_main.restore_poll_offset(self.db, 100), 100)
+        self.assertEqual(_m_runtime.restore_poll_offset(self.db, 101), 100)
+        self.assertEqual(_m_runtime.restore_poll_offset(self.db, 100), 100)
 
         active = 0
         maximum = 0
@@ -204,8 +206,8 @@ class SqliteContentionTests(unittest.TestCase):
         operation_id = "edit-test"
         self.assertTrue(_m_panel_callback_routes.begin_operation(self.db, operation_id, "edit"))
         _m_message_commands.set_operation_phase(self.db, operation_id, "edit", "local_committed")
-        self.assertTrue(_m_main.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked")))
-        self.assertFalse(_m_main.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("Telegram sendMessage failed: Not Found")))
+        self.assertTrue(_m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked")))
+        self.assertFalse(_m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("Telegram sendMessage failed: Not Found")))
 
         class LockedDb:
             def __init__(self):

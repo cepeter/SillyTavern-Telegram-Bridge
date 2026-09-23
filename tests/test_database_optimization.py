@@ -11,7 +11,6 @@ from pathlib import Path
 
 import bridge.config as config
 import bridge.database as database
-import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.sync_api as _m_sync_api
@@ -103,7 +102,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.db.execute("DELETE FROM test_churn")
         self.db.commit()
 
-        reclaimed = _m_main.run_database_maintenance(vacuum_freelist_threshold=1)
+        reclaimed = database.run_database_maintenance(vacuum_freelist_threshold=1)
         self.assertTrue(reclaimed)
 
         conn = database._lightweight_db_connect(timeout=5.0)
@@ -122,7 +121,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.db.commit()
         self.assertGreater(self.db.execute("PRAGMA freelist_count").fetchone()[0], 0)
 
-        reclaimed = _m_main.run_database_maintenance(vacuum_freelist_threshold=500)
+        reclaimed = database.run_database_maintenance(vacuum_freelist_threshold=500)
 
         self.assertFalse(reclaimed)
         # A full VACUUM would have reclaimed every free page.
