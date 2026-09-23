@@ -1,5 +1,5 @@
 from application_test_setup import make_test_conversation_service
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_memory_service, make_test_persona_service, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_memory_service, make_test_persona_service, make_test_provider_port, make_test_request_context
 
 ensure_application_extensions()
 
@@ -233,16 +233,13 @@ class AuditRegressionTests(unittest.TestCase):
         sent = []
         original_card = _m_message_commands.card_fields_from_file
         original_send = _m_command_routes.send_text
-        original_generate = _m_message_commands.generate_text
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unknown provider action must not generate"))
         try:
-            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/providers unknown", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/providers unknown", services=make_test_application_services(memory=make_test_memory_service(), provider=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unknown provider action must not generate")))))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
-            _m_message_commands.generate_text = original_generate
         self.assertEqual(sent, ["Unknown /providers action. Use /providers, /providers health, or /providers refresh."])
 
     def test_stscript_reset_opens_confirmation_panel(self):
@@ -346,7 +343,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_input_flows.send_voice_input_menu = lambda *_args, **_kwargs: None
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         try:
-            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "id", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "id", services=make_test_application_services(memory=make_test_memory_service(), provider=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed command must not generate")))))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_voice_input_menu = original_menu
@@ -368,16 +365,13 @@ class AuditRegressionTests(unittest.TestCase):
         sent = []
         original_card = _m_message_commands.card_fields_from_file
         original_send = _m_command_routes.send_text
-        original_generate = _m_message_commands.generate_text
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed command must not generate"))
         try:
             make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/model provider/model", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
-            _m_message_commands.generate_text = original_generate
         self.assertEqual(sent, ["Unknown or removed command. Use /help to see available commands."])
         self.assertEqual(_m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)["model_id"], session["model_id"])
 
@@ -441,15 +435,13 @@ class AuditRegressionTests(unittest.TestCase):
         original_panel = _m_message_commands.send_reset_confirmation_menu
         original_purge = _m_memory.purge_hindsight_session
         original_reply = _m_message_commands.send_reply
-        original_generate = _m_message_commands.generate_text
         panel = []
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_message_commands.send_reset_confirmation_menu = lambda *_args, **_kwargs: panel.append(True)
         _m_memory.purge_hindsight_session = lambda _db, _chat_id, _session_id: None
         _m_message_commands.send_reply = lambda _token, _chat_id, text, *_args: sent.append(text)
-        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate"))
         try:
-            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service(), provider=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate")))))
             self.assertEqual(panel, [True])
             self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
             _m_panel_callback_routes.reset_session(self.db, "token", "chat", session, operation_id=902, memory_service=make_test_memory_service())
@@ -458,7 +450,6 @@ class AuditRegressionTests(unittest.TestCase):
             _m_message_commands.send_reset_confirmation_menu = original_panel
             _m_memory.purge_hindsight_session = original_purge
             _m_message_commands.send_reply = original_reply
-            _m_message_commands.generate_text = original_generate
 
         rows = self.db.execute(
             "SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY rowid",

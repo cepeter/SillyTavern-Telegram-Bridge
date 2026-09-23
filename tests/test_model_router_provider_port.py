@@ -147,6 +147,7 @@ def test_generation_no_longer_owns_provider_transport_or_router_helpers():
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     assert not ({
+        "generate_text",
         "resolve_provider_model",
         "anthropic_generate",
         "opencode_muse_headers",

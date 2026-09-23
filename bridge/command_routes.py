@@ -542,7 +542,6 @@ from bridge.database import (
 from bridge.expressions import send_expression_menu
 from bridge.generation import (
     continue_last,
-    generate_text,
     regenerate_last,
     send_swipe_menu,
 )

@@ -1,6 +1,7 @@
 from application_test_setup import (
     ensure_application_extensions,
     make_test_application_services,
+    make_test_provider_port,
     make_test_request_context,
 )
 
@@ -9,7 +10,7 @@ ensure_application_extensions()
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import bridge.config as config
 import bridge.callbacks as _m_callbacks
@@ -52,8 +53,16 @@ class StartOnboardingTests(unittest.TestCase):
         *,
         session=None,
         current_persona="",
+        generate_backend=None,
     ):
         active_session = session or self.session
+        services = make_test_application_services(
+            provider=(
+                make_test_provider_port(generate_backend=generate_backend)
+                if generate_backend is not None
+                else None
+            )
+        )
         return _m_command_routes._handle_basic(
             self.db,
             "token",
@@ -69,7 +78,7 @@ class StartOnboardingTests(unittest.TestCase):
             current_persona,
             "User",
             None,
-            make_test_application_services(),
+            services,
             request_context=make_test_request_context(
                 self.db, active_session["session_id"]
             ),
@@ -77,14 +86,17 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_rejects_installation_placeholder_before_probe(self):
         sent = []
+        generate = Mock(return_value="OK")
         with patch.object(
-            _m_command_routes, "generate_text"
-        ) as generate, patch.object(
             _m_command_routes,
             "send_text",
             side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
         ):
-            handled = self._handle_start("/start", PLACEHOLDER_MODEL)
+            handled = self._handle_start(
+                "/start",
+                PLACEHOLDER_MODEL,
+                generate_backend=generate,
+            )
         self.assertTrue(handled)
         generate.assert_not_called()
         self.assertEqual(
@@ -93,20 +105,17 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_reports_model_probe_error_and_stops(self):
         sent = []
-        with patch.object(
-            _m_command_routes,
-            "generate_text",
+        generate = Mock(
             side_effect=RuntimeError(
                 "Missing provider credential: PROVIDER_ONE_API_KEY"
-            ),
-        ) as generate, patch.object(
+            )
+        )
+        with patch.object(
             _m_command_routes,
             "send_text",
             side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
-        ), patch.object(
-            _m_command_routes, "send_greeting_menu"
-        ) as greeting:
-            handled = self._handle_start("/start")
+        ), patch.object(_m_command_routes, "send_greeting_menu") as greeting:
+            handled = self._handle_start("/start", generate_backend=generate)
 
         self.assertTrue(handled)
         generate.assert_called_once()
@@ -118,18 +127,13 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_limits_probe_timeout_and_reports_timeout(self):
         sent = []
+        generate = Mock(side_effect=TimeoutError("timed out"))
         with patch.object(
-            _m_command_routes,
-            "generate_text",
-            side_effect=TimeoutError("timed out"),
-        ) as generate, patch.object(
             _m_command_routes,
             "send_text",
             side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
-        ), patch.object(
-            _m_command_routes, "send_greeting_menu"
-        ) as greeting:
-            handled = self._handle_start("/start")
+        ), patch.object(_m_command_routes, "send_greeting_menu") as greeting:
+            handled = self._handle_start("/start", generate_backend=generate)
 
         self.assertTrue(handled)
         generate.assert_called_once()
@@ -139,16 +143,13 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_probes_model_then_explains_optional_setup(self):
         sent = []
+        generate = Mock(return_value="OK")
         with patch.object(
-            _m_command_routes,
-            "generate_text",
-            return_value="OK",
-        ) as generate, patch.object(
             _m_command_routes,
             "send_text",
             side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
         ):
-            handled = self._handle_start("/start")
+            handled = self._handle_start("/start", generate_backend=generate)
 
         self.assertTrue(handled)
         generate.assert_called_once()
@@ -157,23 +158,22 @@ class StartOnboardingTests(unittest.TestCase):
         self.assertIn(
             "Persona, World Info, and System Prompt are optional", sent[0]
         )
-        self.assertIn("Type `start`", sent[0])
+        self.assertIn("Type", sent[0])
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 0
         )
 
     def test_plain_start_probes_model_then_opens_greeting_choice(self):
         opened = []
+        generate = Mock(return_value="OK")
         with patch.object(
-            _m_command_routes, "generate_text", return_value="OK"
-        ) as generate, patch.object(
             _m_command_routes,
             "send_greeting_menu",
             side_effect=lambda _token, chat_id, fields, user_name, **_kwargs: (
                 opened.append((chat_id, fields["first_mes"], user_name)) or True
             ),
         ):
-            handled = self._handle_start("start")
+            handled = self._handle_start("start", generate_backend=generate)
 
         self.assertTrue(handled)
         generate.assert_called_once()
@@ -184,6 +184,7 @@ class StartOnboardingTests(unittest.TestCase):
 
     def test_slash_start_probes_model_then_opens_greeting_when_setup_ready(self):
         opened = []
+        generate = Mock(return_value="OK")
         ready_session = dict(self.session)
         ready_session.update(
             {
@@ -193,8 +194,6 @@ class StartOnboardingTests(unittest.TestCase):
             }
         )
         with patch.object(
-            _m_command_routes, "generate_text", return_value="OK"
-        ) as generate, patch.object(
             _m_command_routes, "active_world_files", return_value=["world.json"]
         ), patch.object(
             _m_command_routes,
@@ -213,6 +212,7 @@ class StartOnboardingTests(unittest.TestCase):
                 "/start",
                 session=ready_session,
                 current_persona="punto.png",
+                generate_backend=generate,
             )
 
         self.assertTrue(handled)

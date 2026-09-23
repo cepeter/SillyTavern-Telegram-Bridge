@@ -1,5 +1,5 @@
 from application_test_setup import make_test_conversation_service
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_provider_port, make_test_request_context
 
 ensure_application_extensions()
 
@@ -200,16 +200,13 @@ class NotePanelTests(unittest.TestCase):
         sent = []
         original_card = _m_message_commands.card_fields_from_file
         original_send = _m_command_routes.send_text
-        original_generate = _m_message_commands.generate_text
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed alias must not generate"))
         try:
-            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/authornote old text", services=make_test_application_services())
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/authornote old text", services=make_test_application_services(provider=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed alias must not generate")))))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
-            _m_message_commands.generate_text = original_generate
         self.assertEqual(sent, ["Unknown or removed command. Use /help to see available commands."])
         self.assertEqual(_m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)["author_note"], "")
 

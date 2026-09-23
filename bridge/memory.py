@@ -189,7 +189,7 @@ def generate_session_summary(db: sqlite3.Connection, chat_id: str, session: dict
     settings.update({"temperature": 0.2, "max_tokens": SUMMARY_MAX_OUTPUT_TOKENS, "reasoning_budget": 0})
     try:
         summary_model = task_model_for_session(db, chat_id, session, "summary")
-        summary = generate_text(provider_port, "", summary_model, summary_messages, session_id=f"summary:{chat_id}:{session['session_id']}", settings=settings).strip()[:SUMMARY_MAX_CHARS]
+        summary = provider_port.generate("", summary_model, summary_messages, session_id=f"summary:{chat_id}:{session['session_id']}", settings=settings).strip()[:SUMMARY_MAX_CHARS]
     except Exception:
         logging.warning("Session summary generation failed for %s/%s", chat_id, session["session_id"], exc_info=True)
         return existing
@@ -211,6 +211,5 @@ def session_summary_for_prompt(db: sqlite3.Connection, chat_id: str, session: di
 
 # Explicit late imports replace transitional dependency injection.
 from bridge.common import submit_background
-from bridge.generation import generate_text
 from bridge.provider_port import ProviderPort
 from bridge.telegram import send_text

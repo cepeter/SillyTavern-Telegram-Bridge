@@ -74,32 +74,6 @@ _GENERATION_OPERATION_RECOVERY = _OperationRecovery(
 
 
 
-def generate_text(
-    provider_port: ProviderPort,
-    api_key: str,
-    model: str,
-    messages: list[dict],
-    session_id: str = "telegram",
-    settings: dict[str, object] | None = None,
-    stream_callback=None,
-    cancel_event=None,
-    force_non_stream: bool = False,
-    request_timeout: float | None = None,
-) -> str:
-    """Delegate application generation to the injected provider port."""
-    return provider_port.generate(
-        api_key,
-        model,
-        messages,
-        session_id=session_id,
-        settings=settings,
-        stream_callback=stream_callback,
-        cancel_event=cancel_event,
-        force_non_stream=force_non_stream,
-        request_timeout=request_timeout,
-    )
-
-
 def render_response_language(api_key: str, model: str, text: str, language: str, session_id: str, settings: dict[str, object] | None = None, *, provider_port: ProviderPort) -> str:
     """Render one completed visible response in a fixed target language."""
     normalized = normalize_response_language(language or "auto")
@@ -121,7 +95,7 @@ def render_response_language(api_key: str, model: str, text: str, language: str,
         },
         {"role": "user", "content": "<source_text>\n" + text + "\n</source_text>"},
     ]
-    return generate_text(provider_port, api_key, model, messages, session_id=f"{session_id}:language-render", settings=render_settings)
+    return provider_port.generate(api_key, model, messages, session_id=f"{session_id}:language-render", settings=render_settings)
 
 
 def render_session_response(api_key: str, session: dict[str, str], text: str, chat_id: str, settings: dict[str, object], *, provider_port: ProviderPort) -> str:
@@ -254,8 +228,7 @@ def _generation_generate_rendered_reply(
         chat_id,
         session_id,
     )
-    reply = generate_text(
-        provider_port,
+    reply = provider_port.generate(
         api_key,
         session["model_id"],
         messages,

@@ -148,10 +148,16 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
                 )
 
     def test_network_security_is_canonical_owner(self):
-        source = (REPO_ROOT / "bridge" / "generation.py").read_text(encoding="utf-8")
-        self.assertNotIn("def validate_provider_endpoint(", source)
-        self.assertNotIn("def strict_urlopen(", source)
-        self.assertIn("from bridge.network_security import", source)
+        transport = (REPO_ROOT / "bridge" / "provider_transport.py").read_text(
+            encoding="utf-8"
+        )
+        generation = (REPO_ROOT / "bridge" / "generation.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("def validate_provider_endpoint(", transport)
+        self.assertNotIn("def strict_urlopen(", transport)
+        self.assertIn("from bridge.network_security import", transport)
+        self.assertNotIn("from bridge.network_security import", generation)
 
     def test_memory_backend_has_no_ui_or_generation_dependency(self):
         source = (REPO_ROOT / "bridge" / "memory_backend.py").read_text(encoding="utf-8")

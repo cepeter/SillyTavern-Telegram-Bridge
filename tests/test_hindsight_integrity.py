@@ -21,6 +21,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
         self.hooks = []
         self.purge_calls = []
         self.local_purge_writes = []
+        self.provider = object()
         self.connection = sqlite3.connect(":memory:")
 
         def submit_background(name, fn, *args, **kwargs):
@@ -60,12 +61,13 @@ class HindsightStaleGuardTests(unittest.TestCase):
                 )
             ),
             run_post_retain_hooks=(
-                lambda _db, chat_id, session, fields:
+                lambda _db, chat_id, session, fields, provider_port:
                 self.hooks.append(
                     (
                         chat_id,
                         session["session_id"],
                         fields["name"],
+                        provider_port,
                     )
                 )
             ),
@@ -88,6 +90,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
             "chat",
             self.session,
             self.fields,
+            provider_port=self.provider,
         )
 
         self._run_queued_retain()
@@ -105,7 +108,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
         )
         self.assertEqual(
             self.hooks,
-            [("chat", "session", "Mira")],
+            [("chat", "session", "Mira", self.provider)],
         )
 
     def test_transcript_mismatch_skips_retain_backend(self):
@@ -114,6 +117,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
             "chat",
             self.session,
             self.fields,
+            provider_port=self.provider,
         )
         self.current_snapshot = (
             '[{"role":"user","content":"edited"}]',
@@ -130,6 +134,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
             "chat",
             self.session,
             self.fields,
+            provider_port=self.provider,
         )
         self.epoch += 1
 
@@ -143,6 +148,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
             "chat",
             self.session,
             self.fields,
+            provider_port=self.provider,
         )
         self.exists = False
 
@@ -156,6 +162,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
             "chat",
             self.session,
             self.fields,
+            provider_port=self.provider,
         )
         self.current_snapshot = ("", "")
 
@@ -171,12 +178,13 @@ class HindsightStaleGuardTests(unittest.TestCase):
             "chat",
             self.session,
             self.fields,
+            provider_port=self.provider,
         )
 
         self.assertEqual(self.queued, [])
         self.assertEqual(
             self.hooks,
-            [("chat", "session", "Mira")],
+            [("chat", "session", "Mira", self.provider)],
         )
 
     def test_successful_purge_writes_local_state_after_backend(self):

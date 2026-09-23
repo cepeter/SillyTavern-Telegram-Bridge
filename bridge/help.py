@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import partial
+
 from bridge.composition import BridgeServices as _BridgeServices
 
 HELP_CATEGORIES = {
@@ -495,7 +497,10 @@ def process_document_job(
                 model,
                 telegram_message_id=message_id,
                 api_key=services.config.api_key,
-                process_image=process_image_message,
+                process_image=partial(
+                    process_image_message,
+                    provider_port=services.provider,
+                ),
                 memory_service=services.memory,
                 persona_service=services.persona,
                 group_director_service=services.group_director,

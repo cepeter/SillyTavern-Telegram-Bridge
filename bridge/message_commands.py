@@ -99,7 +99,7 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
 
     generation_settings = get_generation_settings(db, chat_id, session_id)
     generation_session_id = f"telegram:{chat_id}:{session_id}"
-    reply = timed_call("provider_generation", generate_text, provider_port, api_key, current_model, messages, session_id=generation_session_id, settings=generation_settings, stream_callback=stream_update if stream_message_id else None)
+    reply = timed_call("provider_generation", provider_port.generate, api_key, current_model, messages, session_id=generation_session_id, settings=generation_settings, stream_callback=stream_update if stream_message_id else None)
     reply += rag_citation_footer(db, chat_id, text, rag_bundle)
     reply = render_response_language(api_key, current_model, reply, language, generation_session_id, generation_settings, provider_port=provider_port)
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
@@ -331,7 +331,6 @@ from bridge.database import (
 from bridge.generation import (
     build_chat_messages,
     continue_last,
-    generate_text,
     regenerate_last,
     render_response_language,
     save_response_variant,

@@ -79,7 +79,7 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
     session_summary = memory_prompt.summary
     messages = build_chat_messages(session, fields, caption, history_rows, image_data_uri=image_data_uri, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context_for_prompt(db, chat_id, caption, rag_bundle), group_context=group_context, persona_service=persona_service)
     send_typing(token, chat_id)
-    reply = generate_text(provider_port, api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session['session_id']}", settings=get_generation_settings(db, chat_id, session["session_id"]))
+    reply = provider_port.generate(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session['session_id']}", settings=get_generation_settings(db, chat_id, session["session_id"]))
     reply += rag_citation_footer(db, chat_id, caption, rag_bundle)
     reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session["session_id"]), provider_port=provider_port)
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
@@ -221,8 +221,7 @@ def regenerate_edited_turn(
         chat_id,
         session_id,
     )
-    reply = generate_text(
-        provider_port,
+    reply = provider_port.generate(
         api_key,
         session["model_id"],
         messages,
@@ -457,7 +456,6 @@ from bridge.database import (
 )
 from bridge.generation import (
     build_chat_messages,
-    generate_text,
     render_session_response,
     save_response_variant,
 )

@@ -40,6 +40,7 @@ class ExtensionRegistryTests(unittest.TestCase):
                     "chat",
                     {"session_id": "session"},
                     {"name": "Character"},
+                    object(),
                 )
         self.assertEqual(calls, ["first", "second"])
 
