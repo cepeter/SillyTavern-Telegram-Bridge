@@ -255,7 +255,8 @@ def main() -> int:
     if args.check:
         return run_check(services)
 
-    return run_bridge_runtime(services)
+    fields = card_fields(read_png_chara(config.card_file))
+    return run_bridge_runtime(services, fields)
 
 
 if __name__ == "__main__":
