@@ -21,24 +21,20 @@ class BackgroundLifecycleTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls._preexisting_future.set_result(None)
+        if not cls._preexisting_future.done():
+            cls._preexisting_future.set_result(None)
         with _m_common._BACKGROUND_STATE_LOCK:
             _m_common._BACKGROUND_FUTURES.discard(cls._preexisting_future)
 
     def setUp(self):
         with _m_common._BACKGROUND_STATE_LOCK:
-            self._background_futures_before = set(_m_common._BACKGROUND_FUTURES)
-            _m_common._BACKGROUND_FUTURES.clear()
+            self._background_futures_before = _m_common._BACKGROUND_FUTURES
+            _m_common._BACKGROUND_FUTURES = set()
         self.addCleanup(self._restore_background_futures)
 
     def _restore_background_futures(self):
         with _m_common._BACKGROUND_STATE_LOCK:
-            _m_common._BACKGROUND_FUTURES.clear()
-            _m_common._BACKGROUND_FUTURES.update(
-                future
-                for future in self._background_futures_before
-                if not future.done()
-            )
+            _m_common._BACKGROUND_FUTURES = self._background_futures_before
 
     def test_drain_background_jobs_observes_tracked_futures(self):
         future = concurrent.futures.Future()
