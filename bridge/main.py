@@ -77,6 +77,9 @@ from bridge.memory import (
 )
 from bridge.memory_backend import recall_memory_context
 from bridge.memory_service import MemoryService as _MemoryService
+from bridge.model_router import ModelRouter as _ModelRouter
+from bridge.provider_catalog import load_provider_catalog
+from bridge.provider_port import ProviderPort as _ProviderPort
 from bridge.persona_service import PersonaService as _PersonaService
 from bridge.persona_sync import (
     PERSONA_EDIT_LOCK,
@@ -165,6 +168,8 @@ def _load_startup_config(environ) -> _BridgeConfig:
 def _build_startup_services(
     config: _BridgeConfig,
 ) -> _BridgeServices:
+    model_router = _ModelRouter(load_catalog=load_provider_catalog)
+    provider = _ProviderPort(generate_backend=generate_text)
     group = _GroupService(
         load_state=group_state,
         save_state=save_group_state,
@@ -240,6 +245,8 @@ def _build_startup_services(
         background=background,
         group=group,
         group_director=group_director,
+        model_router=model_router,
+        provider=provider,
         memory=memory,
         persona=persona,
         sync=sync,

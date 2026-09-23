@@ -11,6 +11,8 @@ from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
 from bridge.job_service import JobService
 from bridge.memory_service import MemoryService
+from bridge.model_router import ModelRouter
+from bridge.provider_port import ProviderPort
 from bridge.persona_service import PersonaService
 from bridge.sync_service import SyncService
 
@@ -57,6 +59,8 @@ class BridgeServices:
     conversation: ConversationService
     group: GroupService
     group_director: GroupDirectorService
+    model_router: ModelRouter
+    provider: ProviderPort
     memory: MemoryService
     persona: PersonaService
     sync: SyncService
@@ -135,6 +139,8 @@ def build_bridge_services(
     conversation: ConversationService,
     group: GroupService,
     group_director: GroupDirectorService,
+    model_router: ModelRouter,
+    provider: ProviderPort,
     memory: MemoryService,
     persona: PersonaService,
     sync: SyncService,
@@ -146,6 +152,8 @@ def build_bridge_services(
         background=background,
         group=group,
         group_director=group_director,
+        model_router=model_router,
+        provider=provider,
         memory=memory,
         persona=persona,
         sync=sync,
