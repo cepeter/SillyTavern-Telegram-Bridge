@@ -95,6 +95,27 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertNotIn("Write a complete answer", logs)
         self.assertNotIn("test-only", logs)
 
+    def test_generate_text_honors_explicit_request_timeout(self):
+        seen = []
+
+        def fake_urlopen(_request, timeout):
+            seen.append(timeout)
+            return _FakeResponse(
+                {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
+            )
+
+        _m_generation.strict_urlopen = fake_urlopen
+        result = _m_generation.generate_text(
+            "",
+            "test",
+            [{"role": "user", "content": "Reply OK."}],
+            settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+            request_timeout=30,
+        )
+
+        self.assertEqual(result, "OK")
+        self.assertEqual(seen, [30])
+
     def test_empty_stream_length_retries_with_larger_non_stream_budget(self):
         self.original_spec = _m_generation.get_provider_spec
         _m_generation.get_provider_spec = lambda _provider: {
