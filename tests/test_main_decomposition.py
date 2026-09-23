@@ -36,6 +36,21 @@ class MainDecompositionTests(unittest.TestCase):
         self.assertTrue(expected <= worker_functions)
         self.assertTrue(expected.isdisjoint(main_functions))
 
+    def test_update_routing_has_focused_owner(self):
+        routing_path = BRIDGE_DIR / "update_routing.py"
+        self.assertTrue(routing_path.is_file(), "update routing module must exist")
+
+        expected = {
+            "route_update",
+            "complete_update",
+            "is_long_running_command",
+        }
+        routing_functions = _top_level_functions(routing_path)
+        main_functions = _top_level_functions(BRIDGE_DIR / "main.py")
+
+        self.assertTrue(expected <= routing_functions)
+        self.assertTrue(expected.isdisjoint(main_functions))
+
 
 if __name__ == "__main__":
     unittest.main()

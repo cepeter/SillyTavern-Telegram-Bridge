@@ -19,6 +19,7 @@ import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
 import bridge.help as _m_help
 import bridge.main as _m_main
+import bridge.update_routing as _m_update_routing
 import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
@@ -1239,8 +1240,8 @@ class StartupCompositionTests(unittest.TestCase):
             ), patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
             ), patch.object(_m_main, "shutdown_background_executors", return_value=True
             ), patch.object(_m_main, "run_database_maintenance"
-            ), patch.object(_m_main, "answer_callback"
-            ), patch.object(_m_main, "group_user_turn_allowed", return_value=True
+            ), patch.object(_m_update_routing, "answer_callback"
+            ), patch.object(_m_update_routing, "group_user_turn_allowed", return_value=True
             ):
                 self.assertEqual(_m_main.main(), 0)
         finally:
