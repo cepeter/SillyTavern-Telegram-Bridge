@@ -1,6 +1,6 @@
 # Application Back-Edge Retirement Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Retire the coordinated `persona_sync -> input_flows`, `telegram -> session_naming`, and `telegram -> commands` back edges while preserving behavior and splitting the merged-main 27-module SCC.
 
@@ -41,7 +41,7 @@
 - Produces: `bridge.persona_sync.PERSONA_EDIT_LOCK: threading.RLock`
 - Preserves: `_PERSONA_STORE` and `PersonaService` receive the same lock object.
 
-- [ ] **Step 1: Write failing architecture and identity tests**
+- [x] **Step 1: Write failing architecture and identity tests**
 
 Add tests that parse imports and assert:
 
@@ -53,25 +53,25 @@ assert persona_sync._PERSONA_STORE.edit_lock() is persona_sync.PERSONA_EDIT_LOCK
 
 Also patch/inspect startup or native test composition so the injected PersonaService lock is the same object.
 
-- [ ] **Step 2: Run the focused RED tests**
+- [x] **Step 2: Run the focused RED tests**
 
 Run:
 `python -m pytest -q tests/test_application_backedge_retirement.py -k persona`
 
 Expected: failure because `persona_sync` imports the lock from `input_flows` and `input_flows` owns it.
 
-- [ ] **Step 3: Move the lock**
+- [x] **Step 3: Move the lock**
 
 Create `PERSONA_EDIT_LOCK = threading.RLock()` in `persona_sync.py`, remove the UI-owned lock, and update `main.py` / test composition to import from `persona_sync`.
 
-- [ ] **Step 4: Run GREEN tests**
+- [x] **Step 4: Run GREEN tests**
 
 Run:
 `python -m pytest -q tests/test_application_backedge_retirement.py -k persona tests/test_persona_service.py tests/test_persona_integrity_adapter.py`
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit message: `refactor: move persona serialization lock to native store`
 
@@ -91,7 +91,7 @@ Commit message: `refactor: move persona serialization lock to native store`
 - Produces: `normalize_session_title(value: str) -> str`
 - `session_naming.py` must not re-export either symbol.
 
-- [ ] **Step 1: Write failing ownership tests**
+- [x] **Step 1: Write failing ownership tests**
 
 Assert the pure module exists, `telegram` no longer imports `session_naming`, and the old owner does not define/re-export normalization.
 
@@ -105,25 +105,25 @@ with pytest.raises(ValueError):
     normalize_session_title("/bad")
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 `python -m pytest -q tests/test_application_backedge_retirement.py -k session_title tests/test_session_naming.py`
 
 Expected: ownership tests fail before the pure module exists.
 
-- [ ] **Step 3: Move implementation without behavior changes**
+- [x] **Step 3: Move implementation without behavior changes**
 
 Move the constant/function verbatim to `bridge/session_titles.py`. Import it from both consumers. Update tests to canonical ownership; do not add aliases.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 `python -m pytest -q tests/test_application_backedge_retirement.py -k session_title tests/test_session_naming.py tests/test_character_session_chain.py`
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit message: `refactor: extract pure session title validation`
 
@@ -149,7 +149,7 @@ Commit message: `refactor: extract pure session title validation`
 - `telegram.process_telegram_image` is deleted.
 - `telegram.import_telegram_document(..., api_key: str, process_image: Callable[..., None], ...)` receives the PNG fallback collaborator explicitly.
 
-- [ ] **Step 1: Write failing architecture tests**
+- [x] **Step 1: Write failing architecture tests**
 
 Assert:
 
@@ -160,7 +160,7 @@ assert inspect.signature(build_bridge_services).parameters["telegram"].default i
 assert "download_file" in TelegramRuntime.__dataclass_fields__
 ```
 
-- [ ] **Step 2: Write failing image-worker behavior tests**
+- [x] **Step 2: Write failing image-worker behavior tests**
 
 Use a fake `TelegramRuntime.download_file` and patch canonical `worker_orchestration.process_image_message`.
 
@@ -171,14 +171,14 @@ Cover:
 - configured API key/model and injected memory/persona/director services are forwarded;
 - committed response recovery returns before download/provider work.
 
-- [ ] **Step 3: Run image-worker RED**
+- [x] **Step 3: Run image-worker RED**
 
 Run:
 `python -m pytest -q tests/test_application_backedge_retirement.py -k "telegram or image" tests/test_job_service_workers.py`
 
 Expected: failures because the runtime lacks download and the worker delegates to `telegram.process_telegram_image`.
 
-- [ ] **Step 4: Implement image orchestration move**
+- [x] **Step 4: Implement image orchestration move**
 
 Add `download_file` to `TelegramRuntime`, compose it from `download_telegram_file`, and update all explicit test constructors.
 
@@ -192,7 +192,7 @@ Update `process_image_job()` to:
 
 Delete `telegram.process_telegram_image` and the `telegram -> commands` import.
 
-- [ ] **Step 5: Write/verify document PNG fallback RED**
+- [x] **Step 5: Write/verify document PNG fallback RED**
 
 Before changing the document call, add tests that pass a sentinel `api_key` and fake image collaborator to `import_telegram_document`; assert a non-character PNG forwards both, while character-card PNG and non-PNG Data Bank branches do not call the collaborator.
 
@@ -201,18 +201,18 @@ Run:
 
 Expected: failure because the current function imports/calls the global command and reads ambient API key.
 
-- [ ] **Step 6: Implement explicit document collaborator**
+- [x] **Step 6: Implement explicit document collaborator**
 
 Add required `api_key` and `process_image` keyword parameters to `import_telegram_document`. Have `help.process_document_job()` pass `services.config.api_key` and canonical `process_image_message`. Remove the ambient environment lookup for this branch.
 
-- [ ] **Step 7: Run focused GREEN suite**
+- [x] **Step 7: Run focused GREEN suite**
 
 Run:
 `python -m pytest -q tests/test_application_backedge_retirement.py tests/test_job_service_workers.py tests/test_memory_service.py tests/test_composition.py tests/test_session_naming.py`
 
 Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 Commit message: `refactor: move image orchestration above telegram transport`
 
@@ -227,7 +227,7 @@ Commit message: `refactor: move image orchestration above telegram transport`
 **Interfaces:**
 - No new production API beyond the interfaces from Tasks 1–3.
 
-- [ ] **Step 1: Run graph measurement**
+- [x] **Step 1: Run graph measurement**
 
 Run the current AST graph scanner against the branch and merged-main base.
 
@@ -237,13 +237,13 @@ Expected:
 - no newly cyclic module;
 - `session_titles` remains acyclic.
 
-- [ ] **Step 2: Run fresh-process import checks**
+- [x] **Step 2: Run fresh-process import checks**
 
 Import `persona_sync`, `input_flows`, `session_titles`, `session_naming`, `telegram`, `commands`, `help`, `worker_orchestration`, `composition`, and `main` in separate Python processes.
 
 Expected: all imports succeed.
 
-- [ ] **Step 3: Run compile/whitespace checks**
+- [x] **Step 3: Run compile/whitespace checks**
 
 Run:
 `python -m compileall -q bridge tests`
@@ -252,18 +252,18 @@ and
 
 Expected: exit 0.
 
-- [ ] **Step 4: Run the full suite on the exact branch tree**
+- [x] **Step 4: Run the full suite on the exact branch tree**
 
 Run:
 `python -m pytest -q -n 2 --dist=loadfile`
 
 Expected: zero failures. Record test/subtest counts and exit status.
 
-- [ ] **Step 5: Self-review the full diff**
+- [x] **Step 5: Self-review the full diff**
 
 Review against the spec with emphasis on the five Review Focus conditions. Any Critical/Important finding gets one TDD fix pass before publication. Record deferred minors.
 
-- [ ] **Step 6: Commit verification documentation**
+- [x] **Step 6: Commit verification documentation**
 
 Update this plan's local verification record and commit any documentation-only verification changes.
 
@@ -274,3 +274,24 @@ Push the branch to the fork, open a PR to upstream `main`, and verify both GitHu
 - [ ] **Step 8: Merge and re-scan**
 
 Because the user authorized completion through merge, merge only after exact-head CI is green. Fetch merged `main`, rerun the graph scanner, and select the next architecture slice from the new graph rather than this plan.
+
+
+## Local Verification Record
+
+- Base commit: 461d1525ecff673024987bc3be533c442aff1c23.
+- TDD Persona ownership RED: 2 failed / 1 passed; GREEN: 39 passed + 6 subtests.
+- TDD session-title ownership RED: 2 failed; GREEN focused: 15 passed.
+- TDD image boundary RED: 4 failed / 2 passed; GREEN focused image checks: 4 passed.
+- TDD document collaborator RED: 4 failed; GREEN: 4 passed.
+- Review typing fix: document image callable contract RED to GREEN.
+- Combined focused migration suite: 91 passed + 45 subtests.
+- Full post-review suite: 777 passed + 476 subtests, exit 0.
+- compileall: passed.
+- git diff --check: passed.
+- Fresh-process imports passed for Persona, input, session-title, Telegram,
+  command, document, worker, composition, and main modules.
+- Import graph: 71 to 72 modules, 420 to 419 edges, largest SCC 27 to 12,
+  cyclic modules 27 to 23, reciprocal pairs 18 to 16.
+- No previously acyclic module became cyclic; session_titles remains acyclic.
+- Review: self-review using the Superpowers code-reviewer rubric; no remaining
+  Critical, Important, or Minor findings after one TDD fix pass.
