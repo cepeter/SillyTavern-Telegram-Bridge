@@ -69,10 +69,10 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         send_help_menu( token, chat_id, request_context=request_context)
         return True
     if command == "/new":
-        start_session_name_input(db, token, chat_id, session)
+        start_session_name_input(db, token, chat_id, session, group_service=services.group)
         return True
     if command == "/status":
-        send_text(token, chat_id, status_text(db, chat_id, session, fields, current_model, current_persona))
+        send_text(token, chat_id, status_text(db, chat_id, session, fields, current_model, current_persona, group_service=services.group))
         return True
     if command == "/retry":
         failed = latest_failed_turn(db, chat_id)
@@ -117,7 +117,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
             db,
             session,
             fields,
-            memory_service=memory_service, request_context=request_context
+            group_service=services.group, memory_service=memory_service, request_context=request_context
         )
         return True
     if command == "/prompt text":
@@ -129,6 +129,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
                 chat_id,
                 session,
                 fields,
+                group_service=services.group,
                 memory_service=memory_service,
             ),
         )
@@ -254,13 +255,13 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
         if parse_topic_scope(chat_id)[1] is None:
             send_text(token, chat_id, "Group sessions are available only inside a Telegram Forum Topic.")
         else:
-            send_group_menu( db, token, chat_id, session, request_context=request_context)
+            send_group_menu( db, token, chat_id, session, group_service=services.group, request_context=request_context)
         return True
     if command.startswith("/group "):
         if parse_topic_scope(chat_id)[1] is None:
             send_text(token, chat_id, "Group sessions are available only inside a Telegram Forum Topic.")
         else:
-            handle_group_command(db, token, chat_id, session, stripped, operation_id)
+            handle_group_command(db, token, chat_id, session, stripped, operation_id, group_service=services.group)
         return True
 
     return False

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 
-def status_text(db, chat_id, session, fields, current_model, current_persona):
+def status_text(db, chat_id, session, fields, current_model, current_persona, *, group_service: GroupService):
     count = db.execute(
         "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?",
         (chat_id, session["session_id"]),
@@ -17,8 +17,8 @@ def status_text(db, chat_id, session, fields, current_model, current_persona):
     summary, covered_until = get_session_summary(db, chat_id, session["session_id"])
     summary_state = f"on (through message {covered_until})" if summary else "off"
     rag_docs = data_bank_documents(db, chat_id)
-    group = group_state(db, chat_id, session["session_id"])
-    group_labels = group_member_labels(group["members"])
+    group = group_service.state(db, chat_id, session["session_id"])
+    group_labels = group_service.member_labels(group["members"])
     group_state_text = f"{'on' if group['enabled'] else 'off'} ({', '.join(group_labels) if group_labels else 'none'})"
     expression_mode = get_meta(db, expression_mode_key(chat_id, session["session_id"]), "off")
     utility_model = task_model_for_session(db, chat_id, session, "utility")
@@ -145,7 +145,7 @@ def send_sync_menu(
     )
 
 
-def prompt_panel_text(db, chat_id, session, fields, section="overview", *, memory_service):
+def prompt_panel_text(db, chat_id, session, fields, section="overview", *, group_service: GroupService, memory_service):
     if section == "budget":
         return (
             f"Prompt budget\nContext input budget: ~{context_input_budget_tokens()} tokens\n"
@@ -159,12 +159,12 @@ def prompt_panel_text(db, chat_id, session, fields, section="overview", *, memor
             f"Data Bank: {rag_mode(db, chat_id)} / {len(docs)} documents"
         )
     if section == "group":
-        group = group_state(db, chat_id, session["session_id"])
+        group = group_service.state(db, chat_id, session["session_id"])
         return f"Prompt group context\nEnabled: {'on' if group['enabled'] else 'off'}\nMode: {group['mode']}\nMembers: {len(group['members'])}"
-    return prompt_diagnostics(db, chat_id, session, fields, memory_service=memory_service)
+    return prompt_diagnostics(db, chat_id, session, fields, group_service=group_service, memory_service=memory_service)
 
 
-def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, section="overview", *, memory_service, request_context):
+def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, section="overview", *, group_service: GroupService, memory_service, request_context):
     labels = {
         "overview": "Prompt inspector",
         "budget": "Prompt budget",
@@ -178,10 +178,10 @@ def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, secti
             [{"text": "⬅️ Status", "callback_data": "prompt:status"}, {"text": "❌ Close", "callback_data": "prompt:close"}],
         ]
     }
-    send_panel_message(token, chat_id, labels.get(section, labels["overview"]) + "\n\n" + prompt_panel_text(db, chat_id, session, fields, section, memory_service=memory_service), markup, message_id, request_context=request_context)
+    send_panel_message(token, chat_id, labels.get(section, labels["overview"]) + "\n\n" + prompt_panel_text(db, chat_id, session, fields, section, group_service=group_service, memory_service=memory_service), markup, message_id, request_context=request_context)
 
 
-def handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context, memory_service):
+def handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context, memory_service):
     """Handle legacy prompt and feature callbacks; status itself is text-only."""
     message_id = message.get("message_id")
     if data == "prompt:close":
@@ -189,16 +189,16 @@ def handle_prompt_and_feature_callback(db, token, callback, answer_callback, dat
         close_panel_message(db, token, chat_id, callback)
         return True
     if data == "prompt:menu":
-        send_prompt_menu( token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, memory_service=memory_service, request_context=request_context)
+        send_prompt_menu( token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, group_service=group_service, memory_service=memory_service, request_context=request_context)
         return True
     if data.startswith("prompt:"):
         if data == "prompt:status":
-            send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or ""))
+            send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or "", group_service=group_service))
         elif data.rsplit(":", 1)[1] in {"budget", "memory", "group"}:
-            send_prompt_menu( token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, data.rsplit(":", 1)[1], memory_service=memory_service, request_context=request_context)
+            send_prompt_menu( token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, data.rsplit(":", 1)[1], group_service=group_service, memory_service=memory_service, request_context=request_context)
         return True
     if data.startswith(("scene:", "goal:", "curated:", "summary:")):
-        return handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id)
+        return handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, request_context=request_context)
     return False
 
 
@@ -216,7 +216,7 @@ def send_director_goal_menu(token, chat_id, db, session, message_id=None, *, req
     send_panel_message(token, chat_id, text, markup, message_id, request_context=request_context)
 
 
-def handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context):
     message_id = message.get("message_id")
     if data.startswith("summary:"):
         action = data.split(":", 1)[1]
@@ -233,7 +233,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
             answer_callback(token, str(callback.get("id", "")), "Closed")
             close_panel_message(db, token, chat_id, callback)
         elif action == "status":
-            send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or ""))
+            send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or "", group_service=group_service))
         elif action == "refresh":
             send_typing(token, chat_id)
             refresh_scene_state_now(db, "", chat_id, session, str(card_fields_from_file(session["character_file"]).get("name") or "unknown"))
@@ -317,10 +317,7 @@ from bridge.director_goals import (
     set_director_goal,
 )
 from bridge.expressions import expression_mode_key
-from bridge.group_core import (
-    group_member_labels,
-    group_state,
-)
+from bridge.group_service import GroupService
 from bridge.groups import handle_summary_command
 from bridge.help import send_memory_menu
 from bridge.input_flows import start_text_action_input

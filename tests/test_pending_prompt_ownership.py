@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from application_test_setup import make_test_group_service
+
 import ast
 import json
 from pathlib import Path
@@ -146,6 +148,7 @@ class PendingPromptOwnershipTests(unittest.TestCase):
                     "token",
                     "chat",
                     {"session_id": "default", "model_id": "model"},
+                    group_service=make_test_group_service(),
                 )
             self.assertEqual(seen, [("token", "chat", state)])
             self.assertEqual(

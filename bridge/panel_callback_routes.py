@@ -366,7 +366,7 @@ def handle_greeting_callback(
     return True
 
 
-def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, persona_service, sync_service: SyncService, request_context):
+def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, memory_service, persona_service, sync_service: SyncService, request_context):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(db, token, callback, data, chat_id)
@@ -406,6 +406,7 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         session,
         session_id,
         operation_id,
+        group_service=group_service,
         memory_service=memory_service,
         request_context=request_context,
     ):
@@ -430,7 +431,7 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
     return handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context)
 
 
-def handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context):
     """Handle character selection, info, upload, and deletion callbacks."""
     message_id = message.get("message_id")
     if data == "character:protected":
@@ -512,7 +513,7 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
-            if group_setup_state(db, chat_id, session_id):
+            if group_service.setup_state(db, chat_id, session_id):
                 set_meta(db, f"group_setup:{chat_id}", "")
             if get_meta(db, f"character_session_input:{chat_id}", ""):
                 set_meta(db, f"character_session_input:{chat_id}", "")
@@ -520,9 +521,9 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
             close_panel_message(db, token, chat_id, callback)
         elif safe_character_path(value):
             character_name = card_fields_from_file(value)["name"]
-            setup = group_setup_state(db, chat_id, session_id)
+            setup = group_service.setup_state(db, chat_id, session_id)
             if setup and setup.get("stage") == "character":
-                return apply_group_setup_character(db, token, callback, answer_callback, chat_id, message, session_id, operation_id, value, character_name, request_context=request_context)
+                return apply_group_setup_character(db, token, callback, answer_callback, chat_id, message, session_id, operation_id, value, character_name, group_service=group_service, request_context=request_context)
             set_meta(db, f"character_session_input:{chat_id}", json.dumps({"character_file": Path(value).name, "character_name": character_name, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}))
             answer_callback(token, str(callback.get("id", "")), "Choose session")
             discard_panel_binding(db, chat_id, message.get("message_id"))
@@ -534,7 +535,7 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
     return False
 
 
-def handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, request_context):
+def handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, memory_service, request_context):
     """Handle session selection, creation, and deletion callbacks."""
     if data == "session:protected":
         answer_callback(token, str(callback.get("id", "")), "Active session is protected")
@@ -588,7 +589,7 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
             remove_inline_keyboard(db, token, callback)
         elif value == "new":
             answer_callback(token, str(callback.get("id", "")), "Enter session name")
-            start_session_name_input(db, token, chat_id, session, message=message)
+            start_session_name_input(db, token, chat_id, session, message=message, group_service=group_service)
         else:
             available = {item["session_id"] for item in list_sessions(db, chat_id)}
             if value in available:
@@ -610,7 +611,7 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
     return False
 
 
-def handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context):
     """Handle World Info selection, upload, deletion, and pagination callbacks."""
     message_id = message.get("message_id")
     if data.startswith("worlddeleteconfirm:"):
@@ -633,7 +634,7 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
         send_panel_message( token, chat_id, f"Delete World Info '{Path(value).name}'? This cannot be undone.", {"inline_keyboard": [[{"text": "🗑️ Delete", "callback_data": "worlddeleteconfirm:" + dynamic_callback_token("world", value, chat_id, db=db)}, {"text": "Cancel", "callback_data": "world:cancel"}]]}, message_id, request_context=request_context)
         return True
     if data.startswith("world:"):
-        setup = group_setup_state(db, chat_id, session_id)
+        setup = group_service.setup_state(db, chat_id, session_id)
         value = data.split(":", 1)[1]
         if not value.startswith("page:") and value not in {"cancel", "done", "off", "upload"}:
             value = resolve_dynamic_callback_token(value, "world", chat_id, db=db) or ""
@@ -658,7 +659,7 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
                 set_meta(db, f"group_setup:{chat_id}", "")
             remove_inline_keyboard(db, token, callback)
             if setup:
-                send_group_menu( db, token, chat_id, session, request_context=request_context)
+                send_group_menu( db, token, chat_id, session, group_service=group_service, request_context=request_context)
         elif value == "off":
             update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="world_clear", world_file="")
             session["world_file"] = ""
@@ -683,11 +684,11 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
     return False
 
 
-def handle_entity_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service, persona_service, request_context):
+def handle_entity_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, memory_service, persona_service, request_context):
     """Dispatch character, session, persona, and World Info callbacks."""
-    if handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context):
+    if handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, request_context=request_context):
         return True
-    if handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, memory_service=memory_service, request_context=request_context):
+    if handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, memory_service=memory_service, request_context=request_context):
         return True
     if handle_persona_callback(
         db,
@@ -704,7 +705,7 @@ def handle_entity_panel_callback(db, token, callback, answer_callback, data, cha
         request_context=request_context,
     ):
         return True
-    return handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context)
+    return handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, request_context=request_context)
 
 
 def handle_provider_model_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
@@ -863,7 +864,7 @@ from bridge.greetings import (
     send_character_greeting,
     send_greeting_menu,
 )
-from bridge.group_core import group_setup_state
+from bridge.group_service import GroupService
 from bridge.groups import (
     apply_group_setup_character,
     send_group_menu,

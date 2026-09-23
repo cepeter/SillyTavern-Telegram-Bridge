@@ -96,6 +96,7 @@ def process_callback(
         session,
         session_id,
         operation_id,
+        group_service=services.group,
         memory_service=memory_service,
         persona_service=persona_service,
         sync_service=sync_service,
@@ -113,6 +114,7 @@ def process_callback(
         session,
         session_id,
         operation_id,
+        group_service=services.group,
         memory_service=memory_service,
         persona_service=persona_service,
         request_context=request_context,
@@ -154,6 +156,7 @@ def process_callback(
             message,
             operation_id,
             sender_id=sender,
+            group_service=services.group,
             request_context=request_context,
         )
         return

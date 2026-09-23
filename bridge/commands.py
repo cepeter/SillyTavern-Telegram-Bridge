@@ -409,11 +409,11 @@ def apply_preset_action(db: sqlite3.Connection, token: str, chat_id: str, sessio
     send_text(token, chat_id, f"Preset deleted: {name}" if delete_generation_preset(db, chat_id, name) else f"Preset not found: {name}")
 
 
-def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], *, memory_service: MemoryService) -> str:
+def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], *, group_service: GroupService, memory_service: MemoryService) -> str:
     message_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0]
     summary, covered_until = memory_service.summary_status(db, chat_id, session["session_id"])
     docs = data_bank_documents(db, chat_id)
-    group = group_state(db, chat_id, session["session_id"])
+    group = group_service.state(db, chat_id, session["session_id"])
     return (f"Prompt inspector\nCharacter: {fields['name']}\nMessages: {message_count}\n"
             f"Context input budget: ~{context_input_budget_tokens()} tokens\nHistory candidates: {context_history_candidate_limit()} messages\nSession summary: {len(summary)} chars (through row {covered_until})\n"
             f"Hindsight: {memory_mode(db, chat_id)} / {memory_scope(db, chat_id)}\n"
@@ -460,7 +460,6 @@ from bridge.generation import (
 )
 from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
-from bridge.group_core import group_state
 from bridge.media import (
     delete_outgoing_message_row,
     send_reply,

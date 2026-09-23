@@ -7,6 +7,7 @@ import time
 
 
 from bridge import session_titles as _session_titles
+from bridge.group_service import GroupService
 
 _SESSION_PENDING_PREFIXES = (
     "settings_input", "preset_save_input", "stt_language_input", "persona_input", "note_input",
@@ -35,7 +36,7 @@ def _clear_conflicting_inputs(db, token: str, chat_id: str) -> None:
         set_meta(db, key, "")
 
 
-def start_session_name_input(db, token: str, chat_id: str, session: dict[str, str], kind: str = "standard", message: dict | None = None) -> None:
+def start_session_name_input(db, token: str, chat_id: str, session: dict[str, str], kind: str = "standard", message: dict | None = None, *, group_service: GroupService) -> None:
     """Close the old panel and request a scoped name without creating a session."""
     meta_key = f"session_name_input:{chat_id}"
     old_raw = get_meta(db, meta_key, "")
@@ -65,7 +66,7 @@ def _cancel_session_name_input(db, token: str, chat_id: str, state: dict) -> Non
     set_meta(db, f"character_session_input:{chat_id}", "")
 
 
-def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, str], stripped: str, state: dict, operation_id: int | None, *, request_context) -> bool:
+def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, str], stripped: str, state: dict, operation_id: int | None, *, group_service: GroupService, request_context) -> bool:
     """Validate the title, then atomically create and activate the requested session."""
     meta_key = f"session_name_input:{chat_id}"
     if _is_cancel_input(stripped):
@@ -81,7 +82,7 @@ def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, s
     kind = str(state.get("kind") or "standard")
     if kind == "group":
         new_id = f"group-{operation_id}" if operation_id is not None else f"group-{time.time_ns()}"
-        new_session = start_group_session(db, chat_id, model_id, title=title, session_id=new_id)
+        new_session = start_group_session(db, chat_id, model_id, title=title, session_id=new_id, group_service=group_service)
         _cancel_pending(db, token, chat_id, meta_key, state)
         new_request_context = RequestContext(
             db,

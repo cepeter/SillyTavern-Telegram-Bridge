@@ -244,6 +244,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         api_key=api_key,
         fields=fields,
         operation_id=operation_id,
+        group_service=services.group,
         memory_service=memory_service,
         persona_service=persona_service,
         request_context=request_context,

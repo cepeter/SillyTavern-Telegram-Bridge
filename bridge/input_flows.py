@@ -337,7 +337,7 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
     return True
 
 
-def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
+def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, group_service: GroupService, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
     world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
@@ -354,7 +354,7 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
         return _handle_text_action_input(db, token, api_key, chat_id, session, action_fields, stripped, text_action, operation_id, memory_service=memory_service, persona_service=persona_service, request_context=request_context)
     session_name = _pending_state(db, f"session_name_input:{chat_id}", session_id, token, chat_id)
     if session_name:
-        return handle_session_name_input(db, token, chat_id, session, stripped, session_name, operation_id, request_context=request_context)
+        return handle_session_name_input(db, token, chat_id, session, stripped, session_name, operation_id, group_service=group_service, request_context=request_context)
     settings = _pending_state(db, f"settings_input:{chat_id}", session_id, token, chat_id)
     if settings.get("key"):
         return _handle_settings_input(db, token, chat_id, session_id, stripped, settings, request_context=request_context)
@@ -605,6 +605,7 @@ from bridge.language import (
 )
 from bridge.media import remove_inline_keyboard
 from bridge.memory import handle_memory_command
+from bridge.group_service import GroupService
 from bridge.memory_service import MemoryService
 from bridge.memory_backend import remember_fact
 from bridge.message_commands import send_pending_input_message

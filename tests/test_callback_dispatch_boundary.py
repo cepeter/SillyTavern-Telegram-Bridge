@@ -60,6 +60,7 @@ class CallbackDispatchBoundaryTests(unittest.TestCase):
         external_answer = Mock()
         routed = Mock(return_value=True)
         services = SimpleNamespace(
+            group=object(),
             memory=object(),
             persona=object(),
             sync=object(),

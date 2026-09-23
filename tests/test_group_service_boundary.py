@@ -224,3 +224,75 @@ def test_committed_recovery_uses_group_service_for_advance(monkeypatch):
     )
 
     assert [item[0] for item in calls] == ["speaker", "advance"]
+
+
+def test_only_composition_and_sync_backend_import_group_core():
+    importers = set()
+    for path in sorted(BRIDGE.glob("*.py")):
+        if "bridge.group_core" in imported_modules(path.name):
+            importers.add(path.name)
+    assert importers == {"main.py", "sync_api.py"}
+
+
+def test_group_ui_session_and_status_contracts_require_group_service():
+    import bridge.groups as groups
+    import bridge.session_naming as session_naming
+    import bridge.status_panels as status_panels
+
+    for function in (
+        groups.send_group_menu,
+        groups.handle_group_command,
+        groups.start_group_session,
+        session_naming.handle_session_name_input,
+        status_panels.status_text,
+        status_panels.prompt_panel_text,
+    ):
+        param = inspect.signature(function).parameters.get("group_service")
+        assert param is not None, function.__name__
+        assert param.default is inspect.Parameter.empty, function.__name__
+
+
+def test_group_command_uses_injected_group_service(monkeypatch):
+    import bridge.groups as groups
+
+    state = {
+        "title": "Group chat",
+        "enabled": True,
+        "turn_index": 0,
+        "mode": "round_robin",
+        "forced_speaker": "",
+        "members": ["mira.png", "nova.png"],
+        "turn_user_id": "",
+        "turn_users": [],
+    }
+    calls = []
+
+    class Group:
+        def state(self, db, chat_id, session_id):
+            calls.append(("state", chat_id, session_id))
+            return dict(state)
+
+        def save(self, db, chat_id, session_id, new_state, operation_id=None):
+            calls.append(("save", chat_id, session_id, dict(new_state), operation_id))
+            return True
+
+        def member_labels(self, members):
+            return [Path(item).stem.title() for item in members]
+
+    sent = []
+    monkeypatch.setattr(groups, "send_text", lambda *args: sent.append(args))
+    groups.handle_group_command(
+        object(),
+        "token",
+        "chat",
+        {"session_id": "session", "character_file": "mira.png"},
+        "/group off",
+        17,
+        group_service=Group(),
+    )
+
+    assert calls[0] == ("state", "chat", "session")
+    assert calls[1][0:3] == ("save", "chat", "session")
+    assert calls[1][3]["enabled"] is False
+    assert calls[1][4] == 17
+    assert sent[-1][2].startswith("Group chat disabled")
