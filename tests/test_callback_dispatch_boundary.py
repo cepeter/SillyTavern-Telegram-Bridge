@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 BRIDGE_DIR = Path(__file__).parents[1] / "bridge"
 
@@ -44,6 +46,44 @@ class CallbackDispatchBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(callbacks, name))
+
+    def test_queued_callback_routes_without_duplicate_ack(self):
+        import bridge.callback_dispatch as callback_dispatch
+
+        callback = {
+            "id": "cb-1",
+            "from": {"id": "user-1"},
+            "data": "status:refresh",
+            "_queued": True,
+            "message": {"chat": {"id": "chat"}},
+        }
+        external_answer = Mock()
+        routed = Mock(return_value=True)
+        services = SimpleNamespace(
+            memory=object(),
+            persona=object(),
+            sync=object(),
+        )
+        with patch.object(callback_dispatch, "answer_callback", external_answer), \
+             patch.object(
+                 callback_dispatch,
+                 "ensure_session",
+                 return_value={"session_id": "session"},
+             ), \
+             patch.object(
+                 callback_dispatch,
+                 "handle_primary_panel_callback",
+                 routed,
+             ):
+            callback_dispatch.process_callback(
+                object(),
+                "token",
+                callback,
+                services=services,
+            )
+
+        routed.assert_called_once()
+        external_answer.assert_not_called()
 
     def test_callbacks_import_does_not_load_route_module(self):
         code = (
