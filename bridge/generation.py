@@ -207,6 +207,81 @@ def opencode_muse_headers(session_id: str) -> dict[str, str]:
     return {"Authorization": "", "x-opencode-session": session_key, "x-opencode-request": request_id, "x-opencode-client": "cli", "User-Agent": f"opencode/{version}", "Origin": "https://opencode.ai", "Referer": "https://opencode.ai/", "HTTP-Referer": "https://opencode.ai/", "X-Title": "opencode", "Content-Type": "application/json", "Accept": "application/json"}
 
 
+OPENCODE_FINGERPRINT_TOOLS = ("bash", "glob", "grep", "read")
+
+
+def _opencode_tool_name(tool: object) -> str:
+    if not isinstance(tool, dict):
+        return ""
+    function = tool.get("function")
+    if isinstance(function, dict) and isinstance(function.get("name"), str):
+        return function["name"].strip()
+    name = tool.get("name")
+    return name.strip() if isinstance(name, str) else ""
+
+
+def _merge_opencode_responses_tools(body: dict) -> None:
+    """Add the OpenCode Free fingerprint without discarding caller tools."""
+    tools = body.get("tools")
+    if not isinstance(tools, list):
+        tools = []
+        body["tools"] = tools
+    present = {_opencode_tool_name(tool) for tool in tools}
+    for name in OPENCODE_FINGERPRINT_TOOLS:
+        if name in present:
+            continue
+        tools.append({
+            "type": "function",
+            "name": name,
+            "description": "This tool is currently unavailable and must not be used.",
+            "parameters": {"type": "object", "properties": {}},
+        })
+        present.add(name)
+    body["tool_choice"] = "auto"
+
+
+def _opencode_json_text(payload: dict) -> str:
+    output_text = payload.get("output_text")
+    if output_text:
+        return str(output_text).strip()
+    chunks = []
+    for item in payload.get("output") or []:
+        for content in item.get("content") or []:
+            if content.get("type") in {"output_text", "text"} and content.get("text"):
+                chunks.append(str(content["text"]))
+    return "".join(chunks).strip()
+
+
+def _opencode_responses_text(raw: str) -> str:
+    """Read both JSON and the SSE stream required by OpenCode Free."""
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        return _opencode_json_text(payload)
+
+    chunks = []
+    completed_text = ""
+    for line in raw.splitlines():
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].lstrip()
+        if data == "[DONE]":
+            continue
+        try:
+            event = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        delta = event.get("delta")
+        if isinstance(delta, str):
+            chunks.append(delta)
+        response = event.get("response")
+        if isinstance(response, dict):
+            completed_text = completed_text or _opencode_json_text(response)
+    return "".join(chunks).strip() or completed_text
+
+
 def opencode_muse_generate(actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str) -> str:
     endpoint = str(spec.get("api_endpoint") or spec.get("api") or "https://opencode.ai/zen/v1").rstrip("/")
     validate_provider_endpoint(endpoint)
@@ -217,21 +292,31 @@ def opencode_muse_generate(actual_model: str, messages: list[dict], settings: di
             content = "\\n".join(str(item.get("text") or "") for item in content if isinstance(item, dict))
         inputs.append({"role": str(message.get("role") or "user"), "content": [{"type": "input_text", "text": str(content or "")}]})
     requested = int(settings.get("max_tokens") or 0)
-    body = {"model": actual_model, "input": inputs, "stream": False, "store": False, "max_output_tokens": max(3000, requested), "reasoning": {"effort": "low"}}
-    request = urllib.request.Request(endpoint + "/responses", data=json.dumps(body).encode("utf-8"), headers=opencode_muse_headers(session_id), method="POST")
-    with strict_urlopen(request, timeout=180) as response:
-        result = json.loads(response.read().decode("utf-8"))
-    output_text = result.get("output_text")
-    if output_text:
-        return str(output_text).strip()
-    chunks = []
-    for item in result.get("output") or []:
-        for content in item.get("content") or []:
-            if content.get("type") in {"output_text", "text"} and content.get("text"):
-                chunks.append(str(content["text"]))
-    if not chunks:
+    body = {
+        "model": actual_model,
+        "input": inputs,
+        "tools": [],
+        "stream": True,
+        "store": False,
+        "max_output_tokens": max(3000, requested),
+        "reasoning": {"effort": "low"},
+    }
+    # OpenCode Free verifies the official client fingerprint on both Responses
+    # and Chat Completions. The latest 9router fixes (#4132/#4188/#4215)
+    # require the quartet even when the caller supplied no tools.
+    _merge_opencode_responses_tools(body)
+    request = urllib.request.Request(
+        endpoint + "/responses",
+        data=json.dumps(body).encode("utf-8"),
+        headers={**opencode_muse_headers(session_id), "Accept": "text/event-stream"},
+        method="POST",
+    )
+    with strict_urlopen(request, timeout=240) as response:
+        raw = response.read().decode("utf-8", "replace")
+    output_text = _opencode_responses_text(raw)
+    if not output_text:
         raise RuntimeError("OpenCode Muse returned no assistant content")
-    return "".join(chunks).strip()
+    return output_text
 
 
 def generate_text(api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None, force_non_stream: bool = False, _recovery_attempt: int = 0) -> str:

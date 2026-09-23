@@ -82,16 +82,46 @@ class OpenCodeMuseTests(unittest.TestCase):
         body = json.loads(request.data.decode())
         self.assertEqual(result, "OPENCODE_BRIDGE_OK")
         self.assertTrue(request.full_url.endswith("/responses"))
-        self.assertEqual(body["stream"], False)
+        self.assertEqual(body["stream"], True)
         self.assertEqual(body["store"], False)
+        self.assertEqual(body["tool_choice"], "auto")
+        self.assertEqual({tool["name"] for tool in body["tools"]}, {"bash", "glob", "grep", "read"})
         self.assertEqual(body["max_output_tokens"], 3000)
         self.assertEqual(body["reasoning"], {"effort": "low"})
         self.assertNotIn("Authorization", {key: value for key, value in request.header_items() if key.lower() == "authorization" and value})
+        self.assertEqual(request.headers["Accept"], "text/event-stream")
         self.assertRegex(request.headers["X-opencode-session"], r"^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$")
         self.assertRegex(request.headers["X-opencode-request"], r"^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$")
         self.assertEqual(request.headers["X-opencode-client"], "cli")
         self.assertRegex(request.headers["User-agent"], r"^opencode/1\.\d+\.\d+$")
-        self.assertEqual(timeout, 180)
+        self.assertEqual(timeout, 240)
+
+    def test_muse_reads_required_responses_sse(self):
+        captured = []
+
+        def fake_urlopen(request, timeout):
+            captured.append((request, timeout))
+            response = _Response({})
+            response.read = lambda: chr(10).join(
+                "data: " + item
+                for item in [
+                    '{"type":"response.output_text.delta","delta":"streamed"}',
+                    '{"type":"response.output_text.delta","delta":" ok"}',
+                    '[DONE]',
+                ]
+            ).encode()
+            return response
+
+        _m_generation.strict_urlopen = fake_urlopen
+        result = _m_generation.opencode_muse_generate(
+            "muse-spark-1.3-contributor-free",
+            [{"role": "user", "content": "hello"}],
+            {"max_tokens": 128},
+            {"api_endpoint": "https://opencode.ai/zen/v1"},
+            "telegram:chat:session",
+        )
+        self.assertEqual(result, "streamed ok")
+        self.assertEqual(captured[0][1], 240)
 
 
 if __name__ == "__main__":
