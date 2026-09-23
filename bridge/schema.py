@@ -1,13 +1,12 @@
 import sqlite3
 import time
 
-from bridge.runtime_defaults import (
-    PROCESSED_UPDATE_RETENTION_SECONDS as _PROCESSED_UPDATE_RETENTION_SECONDS,
-)
 from bridge.migrations import (
     Migration as _Migration,
     run_migrations as _run_migrations,
 )
+
+PROCESSED_UPDATE_RETENTION_SECONDS = 30 * 86400
 
 def _create_core_tables(db: sqlite3.Connection) -> None:
     """Create metadata, messages, sessions, and response variant tables."""
@@ -252,7 +251,7 @@ def _run_startup_database_cleanup(db: sqlite3.Connection) -> None:
     now = time.time()
     db.execute(
         "DELETE FROM processed_updates WHERE processed_at < ?",
-        (now - _PROCESSED_UPDATE_RETENTION_SECONDS,),
+        (now - PROCESSED_UPDATE_RETENTION_SECONDS,),
     )
     db.execute(
         "DELETE FROM rag_embedding_cache WHERE created_at < ?",
