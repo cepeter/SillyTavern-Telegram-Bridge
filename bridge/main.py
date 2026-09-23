@@ -2,11 +2,26 @@
 from __future__ import annotations
 
 from functools import partial as _partial
+import argparse
+import os
 
 from bridge import database as _database
-
+from bridge.application_composition import initialize_extensions as _initialize_extensions
+from bridge.card_content import (
+    card_fields,
+    card_fields_from_file,
+    read_png_chara,
+    safe_character_path,
+)
+from bridge.cards import default_persona_id
+from bridge.common import (
+    begin_background_shutdown,
+    configure_logging,
+    enforce_runtime_permissions,
+    register_durable_backlog_dispatcher,
+    submit_chat_background,
+)
 from bridge.composition import (
-    RequestContext,
     BackgroundRuntime as _BackgroundRuntime,
     BridgeConfig as _BridgeConfig,
     BridgeServices as _BridgeServices,
@@ -15,96 +30,46 @@ from bridge.composition import (
     load_bridge_config as _load_bridge_config_value,
     validate_bridge_config as _validate_bridge_config_value,
 )
-from bridge.extension_registry import (
-    get_director_customization as _get_director_customization_value,
-)
-from bridge.group_director_service import (
-    GroupDirectorService as _GroupDirectorService,
-)
-from bridge.job_service import (
-    DurableJob as _DurableJob,
-    JobService as _JobService,
-    JobSubmission as _JobSubmission,
-)
-from bridge.memory_service import (
-    MemoryService as _MemoryService,
-)
-from bridge.persona_service import (
-    PersonaService as _PersonaService,
-)
-from bridge.sync_service import (
-    SyncService as _SyncService,
-)
-from bridge.repositories import (
-    count_persona_references as _count_persona_references,
-    count_session_messages as _count_session_messages,
-)
-from bridge.scheduler_safety import (
-    DurableWorkerGuard as _DurableWorkerGuard,
-)
-from bridge.application_composition import (
-    initialize_extensions as _initialize_extensions,
-)
-from bridge.worker_orchestration import (
-    make_durable_backlog_dispatcher,
-    process_callback_job,
-    process_edit_job,
-    process_image_job,
-    process_message_job,
-    resolve_recovered_job_submission,
-)
-from bridge.update_routing import route_update
-
-# Explicit late imports replace transitional dependency injection.
-import argparse
-import json
-import logging
-import os
-import signal
-import sqlite3
-import threading
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-from bridge.callbacks import process_callback
-from bridge.cards import default_persona_id
-from bridge.catalog import answer_callback
-from bridge.commands import edit_telegram_user_message
 from bridge.config import (
     CARD_FILE,
     CHARACTER_DIR,
     DB_FILE,
     DEFAULT_CHARACTER_FILE,
 )
-from bridge.generation import (
-    generate_text,
-    resolve_provider_model,
+from bridge.database import (
+    db_connect,
+    enqueue_job,
+    finish_job,
+    get_generation_settings,
+    job_actor_id,
+    mark_job_running,
+    mark_job_scheduled,
+    recover_jobs,
 )
-from bridge.help import (
-    process_document_job,
-    set_bot_commands,
-)
-from bridge.help_details import (
-    handle_help_callback,
-    is_help_callback,
-    send_help_command,
-)
+from bridge.extension_registry import get_director_customization as _get_director_customization_value
+from bridge.generation import generate_text, resolve_provider_model
+from bridge.group_core import group_member_labels, group_state
+from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
+from bridge.help import set_bot_commands
 from bridge.input_flows import PERSONA_EDIT_LOCK
-from bridge.media import (
-    get_provider_spec,
-    process_voice_job,
-    send_reply,
+from bridge.job_service import JobService as _JobService
+from bridge.media import get_provider_spec
+from bridge.memory import (
+    get_session_summary,
+    purge_hindsight_session,
+    retain_session_memory,
+    session_summary_for_prompt,
 )
 from bridge.memory_backend import recall_memory_context
-from bridge.message_commands import process_message
-from bridge.persona_sync import (
-    delete_native_persona,
-    load_personas,
-    upsert_native_persona,
+from bridge.memory_service import MemoryService as _MemoryService
+from bridge.persona_service import PersonaService as _PersonaService
+from bridge.persona_sync import delete_native_persona, load_personas, upsert_native_persona
+from bridge.repositories import (
+    count_persona_references as _count_persona_references,
+    count_session_messages as _count_session_messages,
 )
-from bridge.sync_core import sync_binding
-from pathlib import Path
+from bridge.runtime_lifecycle import run_bridge_runtime
+from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
 from bridge.sync_api import (
     SillyTavernApiError,
     _phase3_disable,
@@ -114,95 +79,14 @@ from bridge.sync_api import (
     phase3_sync_poll,
     phase3_toggle_realtime,
     refresh_phase3_config,
-    start_phase3_sync_worker,
-    stop_phase3_sync_worker,
 )
-from bridge.group_core import (
-    advance_group_turn,
-    group_current_speaker,
-    group_member_labels,
-    group_state,
-    group_user_turn_allowed,
-)
-from bridge.common import (
-    begin_background_shutdown,
-    chat_job_lock,
-    configure_logging,
-    enforce_runtime_permissions,
-    register_durable_backlog_dispatcher,
-    shutdown_background_executors,
-    submit_chat_background,
-    topic_scope_from_message,
-)
-from bridge.card_content import (
-    card_fields,
-    card_fields_from_file,
-    read_png_chara,
-    safe_character_path,
-)
-from bridge.database import (
-    clear_failed_turn,
-    committed_assistant_for_message,
-    db_connect,
-    enqueue_job,
-    finish_job,
-    get_generation_settings,
-    get_meta,
-    job_actor_id,
-    mark_job_running,
-    mark_job_scheduled,
-    operation_phase,
-    operation_was_applied,
-    record_failed_turn,
-    record_operation,
-    recover_jobs,
-    run_database_maintenance,
-    run_write_txn,
-    set_meta,
-)
-from bridge.telegram import (
-    ensure_session,
-    load_session,
-    process_telegram_image,
-    send_text,
-    telegram_request,
-    update_session,
-)
-from bridge.memory import (
-    get_session_summary,
-    purge_hindsight_session,
-    retain_session_memory,
-    session_summary_for_prompt,
-)
+from bridge.sync_core import sync_binding
+from bridge.sync_service import SyncService as _SyncService
+from bridge.telegram import send_text, telegram_request, update_session
 
 _DURABLE_WORKER_GUARD = _DurableWorkerGuard(
     _database._lightweight_db_connect
 )
-
-_SHUTDOWN_EVENT = threading.Event()
-
-
-def request_bridge_shutdown(
-    on_shutdown,
-    signum=None,
-    _frame=None,
-) -> None:
-    if signum is not None:
-        logging.info("Bridge shutdown requested by signal %s", signum)
-    _SHUTDOWN_EVENT.set()
-    on_shutdown()
-
-
-def install_bridge_signal_handlers(on_shutdown) -> None:
-    def handle(signum, frame):
-        request_bridge_shutdown(on_shutdown, signum, frame)
-
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        try:
-            signal.signal(signum, handle)
-        except (ValueError, OSError):
-            logging.debug("Could not install signal handler %s", signum, exc_info=True)
-
 
 def validate_startup_credential(model: str) -> None:
     provider_id, _ = resolve_provider_model(model)
@@ -225,17 +109,6 @@ def validate_startup_credential(model: str) -> None:
 
 
 
-
-
-
-
-
-
-def restore_poll_offset(db: sqlite3.Connection, fallback: int) -> int:
-    try:
-        return int(get_meta(db, "telegram_offset", str(fallback)) or fallback)
-    except (TypeError, ValueError, sqlite3.Error):
-        return int(fallback)
 
 
 
@@ -382,68 +255,7 @@ def main() -> int:
     if args.check:
         return run_check(services)
 
-    fields = card_fields(read_png_chara(config.card_file))
-    _SHUTDOWN_EVENT.clear()
-    install_bridge_signal_handlers(
-        services.background.begin_shutdown
-    )
-    db = services.db_factory()
-    start_phase3_sync_worker(sync_service=services.sync)
-    services.background.register_backlog_dispatcher(
-        make_durable_backlog_dispatcher(
-            services,
-            fields,
-        )
-    )
-    services.jobs.recover(
-        db,
-        lambda job: resolve_recovered_job_submission(
-            services,
-            fields,
-            job,
-        ),
-        recover_running=True,
-    )
-    offset = int(get_meta(db, "telegram_offset", "0"))
-    permitted = config.allowed_users
-    logging.info("Bridge started")
-    last_safe_offset = offset
-    while not _SHUTDOWN_EVENT.is_set():
-        try:
-            updates = services.telegram.request(token, "getUpdates", {"offset": offset, "timeout": 50, "allowed_updates": ["message", "edited_message", "callback_query"]})
-            for update in updates:
-                last_safe_offset = offset
-                offset = route_update(services, db, fields, update, offset, permitted)
-        except urllib.error.HTTPError as exc:
-            logging.error("Telegram HTTP error: %s", exc.code)
-            _SHUTDOWN_EVENT.wait(10)
-        except KeyboardInterrupt:
-            request_bridge_shutdown(
-                services.background.begin_shutdown
-            )
-            break
-        except Exception as exc:
-            if _SHUTDOWN_EVENT.is_set():
-                break
-            offset = restore_poll_offset(db, last_safe_offset)
-            logging.error("Polling error: %s", exc, exc_info=True)
-            _SHUTDOWN_EVENT.wait(5)
-
-    request_bridge_shutdown(
-        services.background.begin_shutdown
-    )
-    sync_stopped = stop_phase3_sync_worker(timeout=5.0)
-    drained = shutdown_background_executors(timeout=20.0)
-    db.close()
-    # Explicit maintenance on a dedicated connection after executors drained:
-    # VACUUM never competes with durable job transitions on the live handle.
-    run_database_maintenance()
-    if not sync_stopped:
-        logging.warning("Realtime sync worker did not stop before shutdown deadline")
-    if not drained:
-        logging.warning("Background jobs exceeded the graceful shutdown deadline")
-    logging.info("Bridge stopped")
-    return 0
+    return run_bridge_runtime(services)
 
 
 if __name__ == "__main__":

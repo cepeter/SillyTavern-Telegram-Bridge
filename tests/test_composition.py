@@ -19,6 +19,7 @@ import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
 import bridge.help as _m_help
 import bridge.main as _m_main
+import bridge.runtime_lifecycle as _m_runtime
 import bridge.update_routing as _m_update_routing
 import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
@@ -1027,15 +1028,15 @@ class StartupCompositionTests(unittest.TestCase):
             installed[signum] = handler
 
         with patch.object(signal, "signal", side_effect=fake_signal):
-            _m_main.install_bridge_signal_handlers(
+            _m_runtime.install_bridge_signal_handlers(
                 lambda: calls.append("shutdown")
             )
 
         handler = installed[signal.SIGTERM]
         handler(signal.SIGTERM, None)
-        self.assertTrue(_m_main._SHUTDOWN_EVENT.is_set())
+        self.assertTrue(_m_runtime._SHUTDOWN_EVENT.is_set())
         self.assertEqual(calls, ["shutdown"])
-        _m_main._SHUTDOWN_EVENT.clear()
+        _m_runtime._SHUTDOWN_EVENT.clear()
 
     def test_startup_builds_group_director_service(self):
         services = _m_main._build_startup_services(self.config)
@@ -1118,69 +1119,37 @@ class StartupCompositionTests(unittest.TestCase):
             _m_main._DURABLE_WORKER_GUARD,
         )
 
-    def test_main_starts_sync_worker_with_injected_sync_service(self):
+    def test_runtime_starts_sync_worker_with_injected_sync_service(self):
         sync_service = object()
 
         def request(_token, method, _payload=None):
             if method == "getUpdates":
-                _m_main._SHUTDOWN_EVENT.set()
+                _m_runtime._SHUTDOWN_EVENT.set()
                 return []
             return {}
 
         services = BridgeServices(
             config=self.config,
             db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
-            telegram=TelegramRuntime(
-                request=request,
-                send_text=lambda *_args, **_kwargs: None,
-            ),
+            telegram=TelegramRuntime(request=request, send_text=lambda *_args, **_kwargs: None),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
                 register_backlog_dispatcher=lambda _callback: None,
                 begin_shutdown=lambda: None,
             ),
-            sync=sync_service,
-            jobs=Mock(),
-            group_director=object(),
-            memory=object(),
-            persona=object(),
+            sync=sync_service, jobs=Mock(), group_director=object(),
+            memory=object(), persona=object(),
         )
-        parsed = argparse.Namespace(check=False)
-
-        with patch.object(
-            argparse.ArgumentParser,
-            "parse_args",
-            return_value=parsed,
-        ), patch.object(_m_main, "refresh_phase3_config"
-        ), patch.object(_m_main, "enforce_runtime_permissions"
-        ), patch.object(_m_main, "configure_logging"
-        ), patch.object(
-            _m_main, "_load_startup_config", return_value=self.config
-        ), patch.object(
-            _m_main, "_build_startup_services", return_value=services
-        ), patch.object(
-            _m_main, "validate_startup_credential"
-        ), patch.object(_m_main, "set_bot_commands"
-        ), patch.object(_m_main, "read_png_chara", return_value={}
-        ), patch.object(_m_main, "card_fields", return_value={"name": "Mira"}
-        ), patch.object(
-            _m_main, "install_bridge_signal_handlers"
-        ), patch.object(_m_main, "start_phase3_sync_worker"
-        ) as start_sync, patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
-        ), patch.object(_m_main, "shutdown_background_executors", return_value=True
-        ), patch.object(_m_main, "run_database_maintenance"
-        ):
-            self.assertEqual(_m_main.main(), 0)
-
-        start_sync.assert_called_once_with(
-            sync_service=sync_service
-        )
+        with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
+             patch.object(_m_runtime, "start_phase3_sync_worker") as start_sync, \
+             patch.object(_m_runtime, "stop_phase3_sync_worker", return_value=True), \
+             patch.object(_m_runtime, "shutdown_background_executors", return_value=True), \
+             patch.object(_m_runtime, "run_database_maintenance"):
+            self.assertEqual(_m_runtime.run_bridge_runtime(services, {"name": "Mira"}), 0)
+        start_sync.assert_called_once_with(sync_service=sync_service)
         services.jobs.recover.assert_called_once()
-        recover_call = services.jobs.recover.call_args
-        self.assertTrue(
-            recover_call.kwargs["recover_running"]
-        )
-        _m_main._SHUTDOWN_EVENT.clear()
+        self.assertTrue(services.jobs.recover.call_args.kwargs["recover_running"])
+        _m_runtime._SHUTDOWN_EVENT.clear()
 
     def _run_one_update(self, update, *, submit_result=True):
         jobs = RecordingJobs(submit_result=submit_result)
@@ -1192,7 +1161,7 @@ class StartupCompositionTests(unittest.TestCase):
             if method == "getUpdates":
                 if not delivered:
                     delivered = True
-                    _m_main._SHUTDOWN_EVENT.set()
+                    _m_runtime._SHUTDOWN_EVENT.set()
                     return [update]
                 return []
             return {}
@@ -1200,56 +1169,29 @@ class StartupCompositionTests(unittest.TestCase):
         services = BridgeServices(
             config=self.config,
             db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
-            telegram=TelegramRuntime(
-                request=request,
-                send_text=lambda *args, **_kwargs: sent.append(args),
-            ),
+            telegram=TelegramRuntime(request=request, send_text=lambda *args, **_kwargs: sent.append(args)),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
                 register_backlog_dispatcher=lambda _callback: None,
                 begin_shutdown=lambda: None,
             ),
-            sync=object(),
-            jobs=jobs,
-            group_director=object(),
-            memory=object(),
-            persona=object(),
+            sync=object(), jobs=jobs, group_director=object(),
+            memory=object(), persona=object(),
         )
-        parsed = argparse.Namespace(check=False)
-
         try:
-            with patch.object(
-                argparse.ArgumentParser,
-                "parse_args",
-                return_value=parsed,
-            ), patch.object(_m_main, "refresh_phase3_config"
-            ), patch.object(_m_main, "enforce_runtime_permissions"
-            ), patch.object(_m_main, "configure_logging"
-            ), patch.object(
-                _m_main, "_load_startup_config", return_value=self.config
-            ), patch.object(
-                _m_main, "_build_startup_services", return_value=services
-            ), patch.object(
-                _m_main, "validate_startup_credential"
-            ), patch.object(_m_main, "set_bot_commands"
-            ), patch.object(_m_main, "read_png_chara", return_value={}
-            ), patch.object(_m_main, "card_fields", return_value={"name": "Mira"}
-            ), patch.object(
-                _m_main, "install_bridge_signal_handlers"
-            ), patch.object(_m_main, "start_phase3_sync_worker"
-            ), patch.object(_m_main, "stop_phase3_sync_worker", return_value=True
-            ), patch.object(_m_main, "shutdown_background_executors", return_value=True
-            ), patch.object(_m_main, "run_database_maintenance"
-            ), patch.object(_m_update_routing, "answer_callback"
-            ), patch.object(_m_update_routing, "group_user_turn_allowed", return_value=True
-            ):
-                self.assertEqual(_m_main.main(), 0)
+            with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
+                 patch.object(_m_runtime, "start_phase3_sync_worker"), \
+                 patch.object(_m_runtime, "stop_phase3_sync_worker", return_value=True), \
+                 patch.object(_m_runtime, "shutdown_background_executors", return_value=True), \
+                 patch.object(_m_runtime, "run_database_maintenance"), \
+                 patch.object(_m_update_routing, "answer_callback"), \
+                 patch.object(_m_update_routing, "group_user_turn_allowed", return_value=True):
+                self.assertEqual(_m_runtime.run_bridge_runtime(services, {"name": "Mira"}), 0)
         finally:
-            _m_main._SHUTDOWN_EVENT.clear()
-
+            _m_runtime._SHUTDOWN_EVENT.clear()
         return jobs, sent
 
-    def test_main_durable_paths_enqueue_and_submit_through_jobs_service(self):
+    def test_runtime_durable_paths_enqueue_and_submit_through_jobs_service(self):
         cases = [
             (
                 "callback",

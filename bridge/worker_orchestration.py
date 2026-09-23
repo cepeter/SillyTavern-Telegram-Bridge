@@ -371,4 +371,3 @@ def make_durable_backlog_dispatcher(
             db.close()
 
     return dispatch
-

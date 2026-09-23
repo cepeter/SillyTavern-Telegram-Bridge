@@ -51,6 +51,30 @@ class MainDecompositionTests(unittest.TestCase):
         self.assertTrue(expected <= routing_functions)
         self.assertTrue(expected.isdisjoint(main_functions))
 
+    def test_runtime_lifecycle_has_focused_owner(self):
+        lifecycle_path = BRIDGE_DIR / "runtime_lifecycle.py"
+        self.assertTrue(lifecycle_path.is_file(), "runtime lifecycle module must exist")
+
+        expected = {
+            "run_bridge_runtime",
+            "request_bridge_shutdown",
+            "install_bridge_signal_handlers",
+            "restore_poll_offset",
+        }
+        lifecycle_functions = _top_level_functions(lifecycle_path)
+        main_functions = _top_level_functions(BRIDGE_DIR / "main.py")
+
+        self.assertTrue(expected <= lifecycle_functions)
+        self.assertTrue(expected.isdisjoint(main_functions))
+
+        main_source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
+        main_chunk = main_source[main_source.index("def main()"):]
+        self.assertIn("run_bridge_runtime(", main_chunk)
+        self.assertNotIn("getUpdates", main_chunk)
+        self.assertNotIn("services.jobs.recover(", main_chunk)
+        self.assertNotIn("start_phase3_sync_worker(", main_chunk)
+        self.assertNotIn("shutdown_background_executors(", main_chunk)
+
 
 if __name__ == "__main__":
     unittest.main()

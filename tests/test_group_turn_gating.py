@@ -15,7 +15,7 @@ import bridge.cards as _m_cards
 import bridge.command_routes as _m_command_routes
 import bridge.character_identity as _m_character_identity
 import bridge.groups as _m_groups
-import bridge.main as _m_main
+import bridge.group_core as _m_group_core
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
@@ -47,27 +47,27 @@ class GroupTurnGatingTests(unittest.TestCase):
         return {"id": "callback", "from": {"id": "user"}, "data": data, "message": {"message_id": message_id, "chat": {"id": "chat"}}}
 
     def test_manual_mode_allows_owner_and_rejects_other_user(self):
-        self.assertTrue(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
-        self.assertFalse(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
-        self.assertTrue(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
+        self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
+        self.assertFalse(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
+        self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
         state = _m_sync_api.group_state(self.db, "chat", "session")
         self.assertEqual(state["turn_user_id"], "user-a")
         self.assertEqual(state["turn_users"], ["user-a", "user-b"])
 
     def test_owner_can_pass_turn_to_next_known_user(self):
-        self.assertTrue(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
-        self.assertFalse(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
+        self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
+        self.assertFalse(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
         self.assertTrue(_m_groups.claim_group_user_turn(self.db, "chat", "session", "user-a"))
         self.assertTrue(_m_groups.pass_group_user_turn(self.db, "chat", "session", "user-a"))
-        self.assertFalse(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
-        self.assertTrue(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
+        self.assertFalse(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
+        self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
 
     def test_non_manual_mode_does_not_gate_user_messages(self):
         state = _m_sync_api.group_state(self.db, "chat", "session")
         state["mode"] = "round_robin"
         _m_groups.save_group_state(self.db, "chat", "session", state)
-        self.assertTrue(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
-        self.assertTrue(_m_main.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
+        self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
+        self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
 
     def test_turn_controls_are_visible_only_in_manual_mode(self):
         calls = []

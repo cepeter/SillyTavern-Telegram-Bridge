@@ -13,7 +13,6 @@ import bridge.config as config
 import time
 import bridge.commands as _m_commands
 import bridge.help as _m_help
-import bridge.main as _m_main
 import bridge.memory as _m_memory
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -590,7 +589,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         ), patch.object(_m_telegram, "process_image_message",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
-            _m_main.process_telegram_image(
+            _m_telegram.process_telegram_image(
                 self.db,
                 "token",
                 "chat",
