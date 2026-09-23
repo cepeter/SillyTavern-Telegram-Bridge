@@ -9,7 +9,37 @@ from unittest.mock import Mock, patch
 import bridge.common as _m_common
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
+
+
 class BackgroundLifecycleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Simulate unrelated work already tracked on the same pytest-xdist worker.
+        cls._preexisting_future = concurrent.futures.Future()
+        with _m_common._BACKGROUND_STATE_LOCK:
+            _m_common._BACKGROUND_FUTURES.add(cls._preexisting_future)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._preexisting_future.set_result(None)
+        with _m_common._BACKGROUND_STATE_LOCK:
+            _m_common._BACKGROUND_FUTURES.discard(cls._preexisting_future)
+
+    def setUp(self):
+        with _m_common._BACKGROUND_STATE_LOCK:
+            self._background_futures_before = set(_m_common._BACKGROUND_FUTURES)
+            _m_common._BACKGROUND_FUTURES.clear()
+        self.addCleanup(self._restore_background_futures)
+
+    def _restore_background_futures(self):
+        with _m_common._BACKGROUND_STATE_LOCK:
+            _m_common._BACKGROUND_FUTURES.clear()
+            _m_common._BACKGROUND_FUTURES.update(
+                future
+                for future in self._background_futures_before
+                if not future.done()
+            )
+
     def test_drain_background_jobs_observes_tracked_futures(self):
         future = concurrent.futures.Future()
         with _m_common._BACKGROUND_STATE_LOCK:
