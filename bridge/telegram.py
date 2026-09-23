@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from bridge.callback_tokens import (
     dynamic_callback_token,
 )
@@ -441,7 +443,7 @@ def import_telegram_document(
     telegram_message_id: int | None = None,
     *,
     api_key: str,
-    process_image,
+    process_image: Callable[..., None],
     memory_service: MemoryService,
     persona_service: PersonaService,
     group_director_service: GroupDirectorService,

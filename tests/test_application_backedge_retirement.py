@@ -381,3 +381,13 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
 
     assert captured["api_key"] == "configured-key"
     assert captured["process_image"] is help_module.process_image_message
+
+
+def test_document_image_collaborator_has_explicit_callable_contract():
+    import inspect
+    import bridge.telegram as telegram
+
+    annotation = inspect.signature(
+        telegram.import_telegram_document
+    ).parameters["process_image"].annotation
+    assert str(annotation) == "Callable[..., None]"
