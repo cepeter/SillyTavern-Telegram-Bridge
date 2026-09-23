@@ -37,6 +37,7 @@ MIGRATED_RUNTIME_FILES = (
     "command_routes.py",
     "message_commands.py",
     "callbacks.py",
+    "callback_dispatch.py",
     "panel_callback_routes.py",
     "sync_core.py",
     "sync_api.py",
@@ -194,6 +195,7 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
 
     def test_application_owners_are_directly_importable(self):
         import bridge.callbacks as callbacks
+        import bridge.callback_dispatch as callback_dispatch
         import bridge.cards as cards
         import bridge.command_routes as command_routes
         import bridge.generation as generation
@@ -205,7 +207,7 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
             (generation, ("generate_text", "build_chat_messages", "regenerate_last", "continue_last")),
             (command_routes, ("handle_command_route",)),
             (message_commands, ("process_message", "generate_and_store_reply")),
-            (callbacks, ("process_callback",)),
+            (callback_dispatch, ("process_callback",)),
             (panel_callback_routes, ("handle_primary_panel_callback",)),
         )
         for module, names in expectations:

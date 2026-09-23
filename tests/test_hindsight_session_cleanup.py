@@ -11,6 +11,7 @@ import bridge.config as config
 import bridge.memory_backend as memory_backend
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.telegram as _m_telegram
 import bridge.input_flows as _m_input_flows
 import bridge.main as _m_main
 import bridge.memory as _m_memory
@@ -111,7 +112,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         self.assertTrue(all(document_id.startswith(_m_memory_curator.hindsight_session_prefix("memory-session")) for document_id, _kind in rows))
 
     def test_delete_removes_mapped_tagged_prefixed_and_legacy_documents_only(self):
-        active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         target = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="delete-me")
         other = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="keep-me")
         prefix = _m_memory_curator.hindsight_session_prefix(target["session_id"])

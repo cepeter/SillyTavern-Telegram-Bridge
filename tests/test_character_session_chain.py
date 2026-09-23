@@ -10,6 +10,7 @@ import unittest
 import bridge.config as config
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.telegram as _m_telegram
 import bridge.character_identity as _m_character_identity
 import bridge.memory_curator as _m_memory_curator
 import bridge.input_flows as _m_input_flows
@@ -30,7 +31,7 @@ class CharacterSessionChainTests(unittest.TestCase):
         return {"id": "callback", "from": {"id": "user"}, "data": data, "message": {"message_id": message_id, "chat": {"id": "chat"}}}
 
     def test_character_selection_opens_session_panel(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         opened = []
         original_resolve = _m_panel_callback_routes.resolve_dynamic_callback_token
         original_safe = _m_panel_callback_routes.safe_character_path
@@ -59,7 +60,7 @@ class CharacterSessionChainTests(unittest.TestCase):
         self.assertEqual(pending["character_name"], "Chosen")
 
     def test_session_selection_applies_pending_character(self):
-        current = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        current = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         target = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="target")
         _m_session_naming.set_meta(self.db, "active_session:chat", current["session_id"])
         _m_session_naming.set_meta(self.db, "character_session_input:chat", json.dumps({"character_file": "chosen.png", "character_name": "Chosen", "expires_at": time.time() + 600}))

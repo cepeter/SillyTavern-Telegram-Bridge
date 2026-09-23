@@ -14,6 +14,7 @@ import json
 import os
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.telegram as _m_telegram
 import bridge.cards as _m_cards
 import bridge.input_flows as _m_input_flows
 import bridge.command_routes as _m_command_routes
@@ -164,7 +165,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(state, "queued")
 
     def test_selection_commands_open_panels(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = {
             "name": "Test",
             "first_mes": "",
@@ -224,7 +225,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(sent, ["Unknown /providers action. Use /providers, /providers health, or /providers refresh."])
 
     def test_stscript_reset_opens_confirmation_panel(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", session["session_id"], "user", "keep this", time.time()),
@@ -266,7 +267,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertIn("enum:stt:language_input", callbacks)
 
     def test_text_commands_open_scoped_input_and_cancel_clears_it(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         original_send = _m_input_flows.send_text
         sent = []
         _m_input_flows.send_text = lambda _token, _chat, text: sent.append(text) or [101]
@@ -305,7 +306,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertNotIn("enum:stscript:note", callbacks)
 
     def test_stt_language_user_input_is_session_scoped(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         _m_session_naming.set_meta(self.db, "stt_language_input:chat", json.dumps({"session_id": session["session_id"], "expires_at": time.time() + 600}))
         fields = {
             "name": "Test",
@@ -332,7 +333,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language:chat", ""), "id")
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language_input:chat", ""), "")
 
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = {
             "name": "Test",
             "first_mes": "",
@@ -371,7 +372,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertIn("enum:preset:save", callbacks)
 
     def test_preset_save_two_step_input(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = {
             "name": "Test",
             "first_mes": "",
@@ -398,7 +399,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertIsNotNone(_m_commands.load_generation_preset(self.db, "chat", "creative"))
         self.assertEqual(_m_session_naming.get_meta(self.db, "preset_save_input:chat", ""), "")
 
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", session["session_id"], "user", "old conversation", time.time()),
@@ -462,7 +463,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(callbacks, {"reset:confirm", "reset:cancel"})
 
     def test_reset_uses_session_scoped_purge_not_whole_bank(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = {"name": "Test", "first_mes": ""}
         calls = []
         original_purge = _m_memory.purge_hindsight_session
@@ -486,7 +487,7 @@ class AuditRegressionTests(unittest.TestCase):
 
 
     def test_response_language_is_added_to_prompt(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         _m_session_naming.update_session(self.db, "chat", session["session_id"], response_language="en")
         session = _m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)
         fields = {
@@ -514,7 +515,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(messages[-1]["role"], "user")
 
     def test_hindsight_recall_is_hard_session_scoped(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         _m_session_naming.set_meta(self.db, "memory_scope:chat", "user")
         calls = []
 
@@ -546,7 +547,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertNotIn("enum:memory:scope", callbacks)
         self.assertIn("active session only (fixed)", payload["text"])
 
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         sent = []
         original_send = _m_memory.send_text
         original_recall = _m_memory.recall_memory_results

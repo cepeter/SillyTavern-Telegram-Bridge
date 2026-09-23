@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import bridge.config as config
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.telegram as _m_telegram
 import bridge.character_identity as _m_character_identity
 import bridge.input_flows as _m_input_flows
 import bridge.command_routes as _m_command_routes
@@ -25,7 +26,7 @@ class SessionNamingTests(unittest.TestCase):
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
-        self.session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         self.sent = []
         self.old_session_send = _m_session_naming.send_text
         self.old_pending_send = _m_message_commands.send_text
@@ -102,7 +103,7 @@ class SessionNamingTests(unittest.TestCase):
 
     def test_group_session_waits_for_name_then_opens_character_stage(self):
         chat_id = "chat|topic:7"
-        session = _m_callbacks.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
         old_menu = _m_session_naming.send_character_menu
         opened = []
         _m_session_naming.send_character_menu = lambda _token, _chat, character, **kwargs: opened.append((character, kwargs["request_context"].session_id))

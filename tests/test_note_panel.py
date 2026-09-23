@@ -7,9 +7,11 @@ import tempfile
 import unittest
 
 import bridge.config as config
+import bridge.database as _m_database
 import json
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.commands as _m_commands
 import bridge.command_routes as _m_command_routes
 import bridge.input_flows as _m_input_flows
@@ -54,7 +56,7 @@ class NotePanelTests(unittest.TestCase):
         self.assertIn("Author's Note — on", calls[0][1]["text"])
 
     def test_note_text_command_opens_panel_without_mutating(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = self._fields()
         opened = []
         original_card = _m_message_commands.card_fields_from_file
@@ -70,7 +72,7 @@ class NotePanelTests(unittest.TestCase):
         self.assertEqual(_m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)["author_note"], "")
 
     def test_note_user_input_updates_session_and_expires_state(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = self._fields()
         _m_session_naming.set_meta(self.db, "note_input:chat", json.dumps({"session_id": session["session_id"], "expires_at": time.time() + 600, "prompt_message_ids": [90]}))
         original_card = _m_message_commands.card_fields_from_file
@@ -96,7 +98,7 @@ class NotePanelTests(unittest.TestCase):
         self.assertEqual(deleted, [("deleteMessage", {"chat_id": "chat", "message_id": 90})])
 
     def test_note_cancel_deletes_text_prompt(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = self._fields()
         _m_session_naming.set_meta(self.db, "note_input:chat", json.dumps({"session_id": session["session_id"], "expires_at": time.time() + 600, "prompt_message_ids": [90]}))
         original_card = _m_message_commands.card_fields_from_file
@@ -119,13 +121,13 @@ class NotePanelTests(unittest.TestCase):
         self.assertEqual(_m_session_naming.get_meta(self.db, "note_input:chat", ""), "")
 
     def test_note_user_input_closes_original_panel(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         _m_telegram.bind_panel_session(self.db, "chat", 78, session["session_id"])
         calls = []
-        original_answer = _m_callbacks.answer_callback
+        original_answer = _m_callback_dispatch.answer_callback
         original_request = _m_callbacks.telegram_request
         original_send = _m_panel_callback_routes.send_text
-        _m_callbacks.answer_callback = lambda *_args, **_kwargs: None
+        _m_callback_dispatch.answer_callback = lambda *_args, **_kwargs: None
         _m_callbacks.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         _m_panel_callback_routes.send_text = lambda _token, _chat_id, text: calls.append(("sendText", {"text": text})) or [90]
         callback = {
@@ -135,9 +137,9 @@ class NotePanelTests(unittest.TestCase):
             "message": {"message_id": 78, "chat": {"id": "chat"}},
         }
         try:
-            _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
-            _m_callbacks.answer_callback = original_answer
+            _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
             _m_panel_callback_routes.send_text = original_send
         self.assertEqual(calls[0][0], "deleteMessage")
@@ -145,15 +147,15 @@ class NotePanelTests(unittest.TestCase):
         self.assertEqual(calls[1][0], "sendText")
         pending = json.loads(_m_session_naming.get_meta(self.db, "note_input:chat", "{}"))
         self.assertEqual(pending["prompt_message_ids"], [90])
-        self.assertIsNone(_m_callbacks.panel_session_for_message(self.db, "chat", 78))
+        self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 78))
 
     def test_note_cancel_closes_previous_panel(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         _m_telegram.bind_panel_session(self.db, "chat", 77, session["session_id"])
         calls = []
-        original_answer = _m_callbacks.answer_callback
+        original_answer = _m_callback_dispatch.answer_callback
         original_request = _m_callbacks.telegram_request
-        _m_callbacks.answer_callback = lambda *_args, **_kwargs: None
+        _m_callback_dispatch.answer_callback = lambda *_args, **_kwargs: None
         _m_callbacks.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         callback = {
             "id": "callback-1",
@@ -162,16 +164,16 @@ class NotePanelTests(unittest.TestCase):
             "message": {"message_id": 77, "chat": {"id": "chat"}},
         }
         try:
-            _m_callbacks.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
-            _m_callbacks.answer_callback = original_answer
+            _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
         self.assertEqual([method for method, _payload in calls], ["deleteMessage"])
         self.assertEqual(calls[0][1]["message_id"], 77)
-        self.assertIsNone(_m_callbacks.panel_session_for_message(self.db, "chat", 77))
+        self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 77))
 
     def test_note_close_uses_valid_marker_when_delete_is_rejected(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         _m_telegram.bind_panel_session(self.db, "chat", 79, session["session_id"])
         calls = []
         original_request = _m_callbacks.telegram_request
@@ -189,10 +191,10 @@ class NotePanelTests(unittest.TestCase):
         self.assertEqual(calls[0][1]["message_id"], 79)
         self.assertEqual(calls[1][1]["message_id"], 79)
         self.assertEqual(calls[1][1]["text"], "Panel closed.")
-        self.assertIsNone(_m_callbacks.panel_session_for_message(self.db, "chat", 79))
+        self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 79))
 
     def test_removed_authornote_alias_does_not_generate(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         fields = self._fields()
         sent = []
         original_card = _m_message_commands.card_fields_from_file

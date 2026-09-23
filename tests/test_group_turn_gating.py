@@ -123,7 +123,7 @@ class GroupTurnGatingTests(unittest.TestCase):
 
     def test_new_group_session_starts_character_wizard_in_topic(self):
         chat_id = "chat|topic:7"
-        session = _m_callbacks.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
         opened = []
         original_close = _m_session_naming.close_panel_message
         original_menu = _m_session_naming.send_character_menu
@@ -133,7 +133,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_session_naming.send_text = lambda *_args, **_kwargs: []
         callback = {"id": "callback", "from": {"id": "user"}, "data": "group:new_session", "message": {"message_id": 10, "chat": {"id": chat_id}}}
         try:
-            _m_callbacks.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user", request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            _m_groups.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user", request_context=make_test_request_context(self.db, session["session_id"], "user"))
             pending = _m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "")
             self.assertTrue(pending)
             _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"], "user"))
@@ -150,7 +150,7 @@ class GroupTurnGatingTests(unittest.TestCase):
 
     def test_group_wizard_chains_character_to_world_then_group(self):
         chat_id = "chat|topic:8"
-        session = _m_callbacks.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
         _m_session_naming.set_meta(self.db, f"group_setup:{chat_id}", json.dumps({"session_id": session["session_id"], "stage": "character", "expires_at": time.time() + 600}))
         original_resolve = _m_panel_callback_routes.resolve_dynamic_callback_token
         original_char_path = _m_panel_callback_routes.safe_character_path
@@ -205,7 +205,7 @@ class GroupTurnGatingTests(unittest.TestCase):
 
     def test_character_cancel_clears_new_group_wizard_state(self):
         chat_id = "chat|topic:9"
-        session = _m_callbacks.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
         _m_session_naming.set_meta(self.db, f"group_setup:{chat_id}", json.dumps({"session_id": session["session_id"], "stage": "character", "expires_at": time.time() + 600}))
         original_close = _m_session_naming.close_panel_message
         _m_session_naming.close_panel_message = lambda *_args, **_kwargs: None
