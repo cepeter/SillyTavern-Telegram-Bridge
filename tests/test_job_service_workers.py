@@ -1,4 +1,5 @@
 from application_test_setup import make_test_conversation_service
+from application_test_setup import make_test_group_service
 from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
@@ -84,6 +85,7 @@ class JobWorkerServiceTests(unittest.TestCase):
             persona=object(),
             sync=object(),
             conversation=make_test_conversation_service(),
+            group=make_test_group_service(),
         )
 
     def tearDown(self):

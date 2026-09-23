@@ -1,4 +1,5 @@
 from application_test_setup import make_test_conversation_service
+from application_test_setup import make_test_group_service
 from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
@@ -138,6 +139,7 @@ class CompositionConfigTests(unittest.TestCase):
             db_factory=lambda: sqlite3.connect(":memory:"),
             telegram=telegram,
             background=background,
+            group=make_test_group_service(),
             group_director=group_director,
             memory=memory,
             persona=persona,
@@ -362,6 +364,7 @@ class WorkerInjectionTests(unittest.TestCase):
             persona=self.persona_service,
             sync=self.sync_service,
             conversation=make_test_conversation_service(),
+            group=make_test_group_service(),
         )
 
     def tearDown(self):
@@ -749,6 +752,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             persona=object(),
             sync=object(),
             conversation=make_test_conversation_service(),
+            group=make_test_group_service(),
         )
 
     def tearDown(self):
@@ -909,6 +913,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             persona=self.services.persona,
             sync=self.services.sync,
             conversation=make_test_conversation_service(),
+            group=make_test_group_service(),
         )
 
         dispatcher = _m_workers.make_durable_backlog_dispatcher(
@@ -1015,6 +1020,7 @@ class StartupCompositionTests(unittest.TestCase):
             persona=object(),
             sync=object(),
             conversation=make_test_conversation_service(),
+            group=make_test_group_service(),
         )
 
     def tearDown(self):
@@ -1163,6 +1169,7 @@ class StartupCompositionTests(unittest.TestCase):
             sync=sync_service, jobs=Mock(), group_director=object(),
             memory=object(), persona=object(),
             conversation=make_test_conversation_service(),
+            group=make_test_group_service(),
         )
         with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
              patch.object(_m_runtime, "start_phase3_sync_worker") as start_sync, \
@@ -1206,6 +1213,7 @@ class StartupCompositionTests(unittest.TestCase):
             sync=object(), jobs=jobs, group_director=object(),
             memory=object(), persona=object(),
             conversation=make_test_conversation_service(),
+            group=make_test_group_service(),
         )
         try:
             with patch.object(_m_runtime, "install_bridge_signal_handlers"), \

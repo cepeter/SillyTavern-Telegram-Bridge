@@ -8,6 +8,7 @@ import sqlite3
 
 from bridge.conversation_service import ConversationService
 from bridge.group_director_service import GroupDirectorService
+from bridge.group_service import GroupService
 from bridge.job_service import JobService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
@@ -54,6 +55,7 @@ class BridgeServices:
     background: BackgroundRuntime
     jobs: JobService
     conversation: ConversationService
+    group: GroupService
     group_director: GroupDirectorService
     memory: MemoryService
     persona: PersonaService
@@ -131,6 +133,7 @@ def build_bridge_services(
     background: BackgroundRuntime,
     jobs: JobService,
     conversation: ConversationService,
+    group: GroupService,
     group_director: GroupDirectorService,
     memory: MemoryService,
     persona: PersonaService,
@@ -141,6 +144,7 @@ def build_bridge_services(
         db_factory=db_factory,
         telegram=telegram,
         background=background,
+        group=group,
         group_director=group_director,
         memory=memory,
         persona=persona,
