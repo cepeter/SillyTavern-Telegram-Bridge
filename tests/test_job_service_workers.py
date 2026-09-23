@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import bridge.help as _m_help
-import bridge.main as _m_main
+import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.callbacks as _m_callbacks
@@ -102,7 +102,7 @@ class JobWorkerServiceTests(unittest.TestCase):
                 "business workflow must not run"
             ),
         ):
-            _m_main.process_message_job(
+            _m_workers.process_message_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -120,11 +120,11 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
     def test_message_worker_success_uses_job_service(self):
-        with patch.object(_m_main, "committed_assistant_for_message",
+        with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_main, "process_message",
+        ), patch.object(_m_workers, "process_message",
         ):
-            _m_main.process_message_job(
+            _m_workers.process_message_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -148,7 +148,7 @@ class JobWorkerServiceTests(unittest.TestCase):
             "process_message",
             side_effect=RuntimeError("message boom"),
         ):
-            _m_main.process_message_job(
+            _m_workers.process_message_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -167,11 +167,11 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
     def test_image_worker_success_and_failure_use_job_service(self):
-        with patch.object(_m_main, "committed_assistant_for_message",
+        with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_main, "process_telegram_image",
+        ), patch.object(_m_workers, "process_telegram_image",
         ):
-            _m_main.process_image_job(
+            _m_workers.process_image_job(
                 self.services,
                 "chat",
                 "file",
@@ -186,12 +186,12 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
         self.jobs.calls.clear()
-        with patch.object(_m_main, "committed_assistant_for_message",
+        with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_main, "process_telegram_image",
+        ), patch.object(_m_workers, "process_telegram_image",
             side_effect=RuntimeError("image boom"),
         ):
-            _m_main.process_image_job(
+            _m_workers.process_image_job(
                 self.services,
                 "chat",
                 "file",
@@ -215,11 +215,11 @@ class JobWorkerServiceTests(unittest.TestCase):
             "from": {"id": "100"},
             "message": {"chat": {"id": "chat"}},
         }
-        with patch.object(_m_main, "operation_was_applied",
+        with patch.object(_m_workers, "operation_was_applied",
             return_value=False,
-        ), patch.object(_m_main, "process_callback",
+        ), patch.object(_m_workers, "process_callback",
         ):
-            _m_main.process_callback_job(
+            _m_workers.process_callback_job(
                 self.services,
                 "chat",
                 callback,
@@ -231,12 +231,12 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
         self.jobs.calls.clear()
-        with patch.object(_m_main, "operation_was_applied",
+        with patch.object(_m_workers, "operation_was_applied",
             return_value=False,
-        ), patch.object(_m_main, "process_callback",
+        ), patch.object(_m_workers, "process_callback",
             side_effect=RuntimeError("callback boom"),
         ):
-            _m_main.process_callback_job(
+            _m_workers.process_callback_job(
                 self.services,
                 "chat",
                 callback,
@@ -268,7 +268,7 @@ class JobWorkerServiceTests(unittest.TestCase):
                 "callback must not be applied twice"
             ),
         ):
-            _m_main.process_callback_job(
+            _m_workers.process_callback_job(
                 self.services,
                 "chat",
                 callback,
@@ -281,9 +281,9 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
     def test_edit_worker_success_and_failure_use_job_service(self):
-        with patch.object(_m_main, "edit_telegram_user_message",
+        with patch.object(_m_workers, "edit_telegram_user_message",
         ):
-            _m_main.process_edit_job(
+            _m_workers.process_edit_job(
                 self.services,
                 "chat",
                 77,
@@ -296,14 +296,14 @@ class JobWorkerServiceTests(unittest.TestCase):
         )
 
         self.jobs.calls.clear()
-        with patch.object(_m_main, "edit_telegram_user_message",
+        with patch.object(_m_workers, "edit_telegram_user_message",
             side_effect=RuntimeError("edit boom"),
         ), patch.object(
-            _m_main,
+            _m_workers,
             "native_edit_committed_after_failure",
             return_value=False,
         ):
-            _m_main.process_edit_job(
+            _m_workers.process_edit_job(
                 self.services,
                 "chat",
                 77,
@@ -325,11 +325,11 @@ class JobWorkerServiceTests(unittest.TestCase):
             "edit_telegram_user_message",
             side_effect=RuntimeError("provider delivery failed"),
         ), patch.object(
-            _m_main,
+            _m_workers,
             "native_edit_committed_after_failure",
             return_value=True,
         ):
-            _m_main.process_edit_job(
+            _m_workers.process_edit_job(
                 self.services,
                 "chat",
                 77,
@@ -437,14 +437,14 @@ class JobWorkerServiceTests(unittest.TestCase):
         self.jobs.actor = "777"
 
         with patch.object(
-            _m_main,
+            _m_workers,
             "committed_assistant_for_message",
             return_value=None,
         ), patch.object(
-            _m_main,
+            _m_workers,
             "process_message",
         ) as process_message:
-            _m_main.process_message_job(
+            _m_workers.process_message_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -464,14 +464,14 @@ class JobWorkerServiceTests(unittest.TestCase):
             "message": {"chat": {"id": "chat"}},
         }
         with patch.object(
-            _m_main,
+            _m_workers,
             "operation_was_applied",
             return_value=False,
         ), patch.object(
-            _m_main,
+            _m_workers,
             "process_callback",
         ) as process_callback:
-            _m_main.process_callback_job(
+            _m_workers.process_callback_job(
                 self.services,
                 "chat",
                 callback,

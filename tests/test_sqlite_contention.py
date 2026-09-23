@@ -15,6 +15,7 @@ import sqlite3
 import time
 import urllib
 import bridge.main as _m_main
+import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -204,8 +205,8 @@ class SqliteContentionTests(unittest.TestCase):
         operation_id = "edit-test"
         self.assertTrue(_m_panel_callback_routes.begin_operation(self.db, operation_id, "edit"))
         _m_message_commands.set_operation_phase(self.db, operation_id, "edit", "local_committed")
-        self.assertTrue(_m_main.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked")))
-        self.assertFalse(_m_main.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("Telegram sendMessage failed: Not Found")))
+        self.assertTrue(_m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked")))
+        self.assertFalse(_m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("Telegram sendMessage failed: Not Found")))
 
         class LockedDb:
             def __init__(self):

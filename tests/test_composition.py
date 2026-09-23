@@ -19,6 +19,7 @@ import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
 import bridge.help as _m_help
 import bridge.main as _m_main
+import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -364,18 +365,18 @@ class WorkerInjectionTests(unittest.TestCase):
 
     def test_all_worker_signatures_receive_services_not_startup_bundle(self):
         expectations = {
-            _m_main.process_message_job: (
+            _m_workers.process_message_job: (
                 "services", "fields", "chat_id", "text", "message_id",
                 "queued_session_id", "model_override", "job_id",
             ),
-            _m_main.process_image_job: (
+            _m_workers.process_image_job: (
                 "services", "chat_id", "file_id", "caption", "file_size",
                 "message_id", "queued_session_id", "model_override", "job_id",
             ),
-            _m_main.process_callback_job: (
+            _m_workers.process_callback_job: (
                 "services", "chat_id", "callback", "job_id",
             ),
-            _m_main.process_edit_job: (
+            _m_workers.process_edit_job: (
                 "services", "chat_id", "message_id", "text",
                 "model_override", "job_id",
             ),
@@ -414,10 +415,10 @@ class WorkerInjectionTests(unittest.TestCase):
                 kwargs=kwargs,
             )
 
-        with patch.object(_m_main, "committed_assistant_for_message", return_value=None
-        ), patch.object(_m_main, "process_message", side_effect=fake_process_message
+        with patch.object(_m_workers, "committed_assistant_for_message", return_value=None
+        ), patch.object(_m_workers, "process_message", side_effect=fake_process_message
         ):
-            _m_main.process_message_job(
+            _m_workers.process_message_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -535,10 +536,10 @@ class WorkerInjectionTests(unittest.TestCase):
         def fake_edit(*args, **kwargs):
             captured.update(kwargs)
 
-        with patch.object(_m_main, "edit_telegram_user_message",
+        with patch.object(_m_workers, "edit_telegram_user_message",
             side_effect=fake_edit,
         ):
-            _m_main.process_edit_job(
+            _m_workers.process_edit_job(
                 self.services,
                 "chat",
                 77,
@@ -597,12 +598,12 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_recovered_model_override_wins_over_config_default(self):
         captured = {}
 
-        with patch.object(_m_main, "committed_assistant_for_message", return_value=None
-        ), patch.object(_m_main, "process_message",
+        with patch.object(_m_workers, "committed_assistant_for_message", return_value=None
+        ), patch.object(_m_workers, "process_message",
             side_effect=lambda _db, _token, _key, model, *_args, **_kwargs:
                 captured.setdefault("model", model),
         ):
-            _m_main.process_message_job(
+            _m_workers.process_message_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -617,12 +618,12 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_image_worker_propagates_injected_memory_service(self):
         captured = {}
 
-        with patch.object(_m_main, "committed_assistant_for_message",
+        with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_main, "process_telegram_image",
+        ), patch.object(_m_workers, "process_telegram_image",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
-            _m_main.process_image_job(
+            _m_workers.process_image_job(
                 self.services,
                 "chat",
                 "file-id",
@@ -661,10 +662,10 @@ class WorkerInjectionTests(unittest.TestCase):
             "from": {"id": "100"},
             "message": {"chat": {"id": "chat"}},
         }
-        with patch.object(_m_main, "process_callback",
+        with patch.object(_m_workers, "process_callback",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
-            _m_main.process_callback_job(
+            _m_workers.process_callback_job(
                 self.services,
                 "chat",
                 callback,
@@ -673,14 +674,14 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertIs(captured["services"], self.services)
 
     def test_callback_failure_uses_injected_send_text(self):
-        with patch.object(_m_main, "process_callback",
+        with patch.object(_m_workers, "process_callback",
             side_effect=RuntimeError("boom"),
         ), patch.object(
             _m_telegram,
             "send_text",
             side_effect=lambda *args, **_kwargs: self.global_sent.append(args),
         ):
-            _m_main.process_callback_job(
+            _m_workers.process_callback_job(
                 self.services,
                 "chat",
                 {"id": "callback"},
@@ -752,7 +753,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                 "model": "stored::model",
             },
         )
-        submission = _m_main.resolve_recovered_job_submission(
+        submission = _m_workers.resolve_recovered_job_submission(
             self.services,
             {"name": "Mira"},
             generation,
@@ -761,7 +762,7 @@ class RecoveryCompositionTests(unittest.TestCase):
         self.assertEqual(submission.label, "generation")
         self.assertIs(
             inspect.unwrap(submission.worker),
-            _m_main.process_message_job,
+            _m_workers.process_message_job,
         )
         self.assertIs(submission.args[0], self.services)
         self.assertEqual(submission.args[-2], "stored-session")
@@ -780,7 +781,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                 "resolve_active": True,
             },
         )
-        active_submission = _m_main.resolve_recovered_job_submission(
+        active_submission = _m_workers.resolve_recovered_job_submission(
             self.services,
             {"name": "Mira"},
             active,
@@ -795,7 +796,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                     61, "chat", "session", 21, "callback",
                     {"callback": {"id": "cb"}},
                 ),
-                _m_main.process_callback_job,
+                _m_workers.process_callback_job,
                 {"id": "cb"},
             ),
             (
@@ -803,7 +804,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                     62, "chat", "session", 22, "edit",
                     {"text": "edited", "model": "stored::edit"},
                 ),
-                _m_main.process_edit_job,
+                _m_workers.process_edit_job,
                 "stored::edit",
             ),
             (
@@ -827,7 +828,7 @@ class RecoveryCompositionTests(unittest.TestCase):
                         "model": "stored::image",
                     },
                 ),
-                _m_main.process_image_job,
+                _m_workers.process_image_job,
                 "stored::image",
             ),
             (
@@ -845,7 +846,7 @@ class RecoveryCompositionTests(unittest.TestCase):
 
         for job, worker, expected_tail in cases:
             with self.subTest(kind=job.kind):
-                submission = _m_main.resolve_recovered_job_submission(
+                submission = _m_workers.resolve_recovered_job_submission(
                     self.services,
                     fields,
                     job,
@@ -863,7 +864,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             66, "chat", "session", 26, "unknown", {}
         )
         self.assertIsNone(
-            _m_main.resolve_recovered_job_submission(
+            _m_workers.resolve_recovered_job_submission(
                 self.services,
                 fields,
                 unknown,
@@ -891,7 +892,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             sync=self.services.sync,
         )
 
-        dispatcher = _m_main.make_durable_backlog_dispatcher(
+        dispatcher = _m_workers.make_durable_backlog_dispatcher(
             services,
             {"name": "Mira"},
         )
@@ -1570,6 +1571,9 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
         root = Path(__file__).parents[1] / "bridge"
         files = {
             "main.py": (root / "main.py").read_text(encoding="utf-8"),
+            "worker_orchestration.py": (
+                root / "worker_orchestration.py"
+            ).read_text(encoding="utf-8"),
             "media.py": (root / "media.py").read_text(encoding="utf-8"),
             "help.py": (root / "help.py").read_text(encoding="utf-8"),
         }
@@ -1579,16 +1583,20 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
             "def process_image_job",
             "def process_callback_job",
             "def process_edit_job",
+            "def resolve_recovered_job_submission",
             "def make_durable_backlog_dispatcher",
-            "def run_check",
         )
         for function_marker in worker_markers:
-            start = files["main.py"].index(function_marker)
-            next_def = files["main.py"].find("\ndef ", start + 4)
-            chunk = files["main.py"][
-                start: next_def if next_def >= 0 else None
-            ]
+            source = files["worker_orchestration.py"]
+            start = source.index(function_marker)
+            next_def = source.find("\ndef ", start + 4)
+            chunk = source[start: next_def if next_def >= 0 else None]
             self.assertNotIn("os.environ", chunk, function_marker)
+
+        start = files["main.py"].index("def run_check")
+        next_def = files["main.py"].find("\ndef ", start + 4)
+        chunk = files["main.py"][start: next_def if next_def >= 0 else None]
+        self.assertNotIn("os.environ", chunk, "def run_check")
 
         for filename, function_marker in (
             ("media.py", "def process_voice_job"),
