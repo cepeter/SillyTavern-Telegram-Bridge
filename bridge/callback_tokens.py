@@ -108,28 +108,15 @@ def resolve_dynamic_callback_token(
         expires_at,
     ) = item
 
-    if (
-        expires_at < time.time()
-        or stored_kind != str(kind)
-        or (
-            stored_chat_id
-            and stored_chat_id != str(chat_id)
-        )
-    ):
+    # Lookup does not own persistence or the caller's transaction. Startup
+    # database maintenance prunes expired rows independently of resolution.
+    if expires_at < time.time():
         _CALLBACK_TOKEN_VALUES.pop(str(token), None)
+        return None
 
-        def forget(conn):
-            conn.execute(
-                "DELETE FROM callback_tokens WHERE token=?",
-                (str(token),),
-            )
-            conn.commit()
-
-        _run_db_action(
-            db,
-            forget,
-            "Could not remove expired callback token",
-        )
+    if stored_kind != str(kind) or (
+        stored_chat_id and stored_chat_id != str(chat_id)
+    ):
         return None
 
     return value
