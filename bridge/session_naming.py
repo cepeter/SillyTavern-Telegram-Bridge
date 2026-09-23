@@ -116,7 +116,6 @@ from bridge.callbacks import (
     discard_panel_binding,
 )
 from bridge.cards import send_character_menu
-from bridge.common import delete_pending_input_prompts
 from bridge.config import (
     DEFAULT_MODEL,
     PENDING_SETTINGS_TTL_SECONDS,
@@ -134,6 +133,7 @@ from bridge.message_commands import send_pending_input_message
 from bridge.composition import RequestContext
 from bridge.telegram import (
     create_session,
+    delete_pending_input_prompts,
     send_text,
     update_session,
 )
