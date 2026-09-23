@@ -103,6 +103,25 @@ class PendingPromptOwnershipTests(unittest.TestCase):
             [("deleteMessage", {"chat_id": "chat", "message_id": 92})],
         )
 
+    def test_delete_pending_input_prompts_continues_after_request_failure(self):
+        seen = []
+
+        def fake_request(_token, _method, payload):
+            message_id = payload["message_id"]
+            seen.append(message_id)
+            if message_id == 90:
+                raise RuntimeError("message already unavailable")
+            return {}
+
+        with patch.object(telegram, "telegram_request", side_effect=fake_request):
+            telegram.delete_pending_input_prompts(
+                "token",
+                "chat",
+                {"prompt_message_ids": [90, 91]},
+            )
+
+        self.assertEqual(seen, [90, 91])
+
     def test_start_session_name_input_clears_conflicting_prompt_messages(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = database.db_connect(Path(tmp) / "prompt.sqlite3")
