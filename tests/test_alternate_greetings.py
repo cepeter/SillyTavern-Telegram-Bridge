@@ -10,6 +10,7 @@ import unittest
 import bridge.config as config
 import random
 import bridge.callbacks as _m_callbacks
+import bridge.telegram as _m_telegram
 import bridge.command_routes as _m_command_routes
 import bridge.greetings as _m_greetings
 import bridge.main as _m_main
@@ -20,7 +21,7 @@ class AlternateGreetingTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
-        self.session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
 
     def tearDown(self):
         self.db.close()

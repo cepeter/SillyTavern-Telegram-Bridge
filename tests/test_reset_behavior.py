@@ -28,7 +28,7 @@ class ResetBehaviorTests(unittest.TestCase):
         self.old_remove = getattr(_m_media, "remove_inline_keyboard")
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
-        self.session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
 
     def tearDown(self):
         _m_panel_callback_routes.reset_session = self.old_reset

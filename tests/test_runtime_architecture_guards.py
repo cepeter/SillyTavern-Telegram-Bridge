@@ -140,7 +140,7 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
                 self.assertNotIn(forbidden, source)
 
     def test_application_routes_require_service_graph(self):
-        from bridge.callbacks import process_callback
+        from bridge.callback_dispatch import process_callback
         from bridge.command_routes import handle_command_route
         from bridge.message_commands import process_message
 
@@ -158,7 +158,7 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
     def test_required_service_routes_do_not_use_optional_service_lookup(self):
         for filename in (
             "message_commands.py",
-            "callbacks.py",
+            "callback_dispatch.py",
             "command_routes.py",
         ):
             source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")

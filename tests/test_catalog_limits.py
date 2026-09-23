@@ -59,7 +59,7 @@ class CatalogLimitTests(unittest.TestCase):
         for directory in (_m_main.CHARACTER_DIR, _m_catalog.WORLD_DIR, _m_common.SYSTEM_PROMPTS_DIR):
             directory.mkdir()
         self.db = _m_memory_curator.db_connect()
-        self.session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
 
     def tearDown(self):
         self.db.close()

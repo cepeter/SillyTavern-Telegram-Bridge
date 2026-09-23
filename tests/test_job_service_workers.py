@@ -258,11 +258,11 @@ class JobWorkerServiceTests(unittest.TestCase):
             "message": {"chat": {"id": "chat"}},
         }
         with patch.object(
-            _m_database,
+            _m_workers,
             "operation_was_applied",
             return_value=True,
         ), patch.object(
-            _m_callbacks,
+            _m_workers,
             "process_callback",
             side_effect=AssertionError(
                 "callback must not be applied twice"

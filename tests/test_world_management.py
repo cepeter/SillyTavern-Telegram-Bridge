@@ -10,6 +10,7 @@ from pathlib import Path
 
 import bridge.config as config
 import bridge.callbacks as _m_callbacks
+import bridge.telegram as _m_telegram
 import bridge.catalog as _m_catalog
 import bridge.cards as _m_cards
 import bridge.memory_curator as _m_memory_curator
@@ -28,7 +29,7 @@ class WorldManagementTests(unittest.TestCase):
         world_dir.mkdir()
         config.DB_FILE = root / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
-        self.session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
 
     def tearDown(self):
         self.db.close()

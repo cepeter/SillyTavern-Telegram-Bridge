@@ -16,6 +16,8 @@ from application_test_setup import (
 ensure_application_extensions()
 
 import bridge.callbacks as callbacks
+import bridge.callback_dispatch as callback_dispatch
+import bridge.config as config
 import bridge.composition as composition
 import bridge.database as database
 import bridge.telegram as telegram
@@ -65,10 +67,10 @@ class PanelContextOwnershipTests(unittest.TestCase):
         self.assertIsNone(row)
 
     def test_update_cancel_through_callback_uses_caller_database(self):
-        session = callbacks.ensure_session(
+        session = telegram.ensure_session(
             self.db,
             "chat",
-            callbacks.DEFAULT_MODEL,
+            config.DEFAULT_MODEL,
         )
         telegram.bind_panel_session(
             self.db,
@@ -96,7 +98,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
             "telegram_request",
             return_value={},
         ):
-            callbacks.process_callback(
+            callback_dispatch.process_callback(
                 self.db,
                 "token",
                 callback,

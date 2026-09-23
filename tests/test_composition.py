@@ -16,6 +16,7 @@ import signal
 import sqlite3
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.command_routes as _m_command_routes
 import bridge.help as _m_help
 import bridge.main as _m_main
@@ -469,7 +470,7 @@ class WorkerInjectionTests(unittest.TestCase):
         captured = {}
         db = self._db_factory()
         try:
-            session = _m_callbacks.ensure_session(
+            session = _m_telegram.ensure_session(
                 db,
                 "chat",
                 "injected::model",
@@ -514,11 +515,11 @@ class WorkerInjectionTests(unittest.TestCase):
             "message": {"chat": {"id": "chat"}},
         }
         try:
-            with patch.object(_m_callbacks, "handle_primary_panel_callback",
+            with patch.object(_m_callback_dispatch, "handle_primary_panel_callback",
                 side_effect=lambda *_args, **kwargs:
                     captured.update(kwargs) or True,
             ):
-                _m_callbacks.process_callback(
+                _m_callback_dispatch.process_callback(
                     db,
                     "injected-token",
                     callback,

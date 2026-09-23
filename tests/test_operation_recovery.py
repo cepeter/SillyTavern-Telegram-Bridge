@@ -30,7 +30,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "recovery.sqlite3"
         self.db = _m_memory_curator.db_connect(self.path)
-        self.session = _m_callbacks.ensure_session(
+        self.session = _m_telegram.ensure_session(
             self.db,
             "chat",
             "provider::model",

@@ -5,7 +5,7 @@ import json
 import logging
 import sqlite3
 
-from bridge.callbacks import process_callback
+from bridge.callback_dispatch import process_callback
 from bridge.commands import edit_telegram_user_message
 from bridge.composition import BridgeServices
 from bridge.database import (

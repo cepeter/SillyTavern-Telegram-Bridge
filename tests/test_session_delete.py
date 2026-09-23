@@ -10,6 +10,7 @@ import unittest
 import bridge.config as config
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.telegram as _m_telegram
 import bridge.main as _m_main
 import bridge.memory as _m_memory
 import bridge.cards as _m_cards
@@ -32,7 +33,7 @@ class SessionDeletionTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_inactive_session_deletes_all_local_data(self):
-        active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         inactive = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive")
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
@@ -58,7 +59,7 @@ class SessionDeletionTests(unittest.TestCase):
         self.assertEqual(self.purged, [("chat", "inactive")])
 
     def test_hindsight_cleanup_failure_preserves_local_session(self):
-        active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         inactive = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="preserved")
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
@@ -76,7 +77,7 @@ class SessionDeletionTests(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages WHERE chat_id='chat' AND session_id='preserved'").fetchone()[0], 1)
 
     def test_active_session_and_busy_session_are_protected(self):
-        active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         denied, reason = _m_panel_callback_routes.delete_session_data(self.db, "chat", active["session_id"], active["session_id"], memory_service=make_test_memory_service())
         self.assertFalse(denied)
         self.assertEqual(reason, "active session")
@@ -91,7 +92,7 @@ class SessionDeletionTests(unittest.TestCase):
         self.assertEqual(reason, "session has active jobs")
 
     def test_session_panel_has_inline_delete_actions_and_protects_active_selection(self):
-        active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         inactive = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive")
         calls = []
         original_request = _m_cards.send_panel_request

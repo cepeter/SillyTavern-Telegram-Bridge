@@ -11,6 +11,7 @@ import unittest
 import bridge.config as config
 import time
 import bridge.callbacks as _m_callbacks
+import bridge.telegram as _m_telegram
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
@@ -228,7 +229,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
 
     def test_session_delete_cascades_sync_binding_cleanup(self):
-        active = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         inactive = _m_session_naming.create_session(
             self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive"
         )

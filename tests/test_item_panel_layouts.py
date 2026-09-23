@@ -98,7 +98,7 @@ class ItemPanelLayoutTests(unittest.TestCase):
         self.assertIn("Previous version retained as Test_Character.png", sent[2])
 
     def test_group_rows_remove_members_without_card_delete_callback(self):
-        session = _m_callbacks.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         old_fields = _m_groups.card_fields_from_file
         _m_groups.card_fields_from_file = lambda _filename: {"name": "Member"}
         _m_groups.save_group_state(self.db, "chat", session["session_id"], {

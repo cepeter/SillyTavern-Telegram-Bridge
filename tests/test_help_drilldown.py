@@ -71,12 +71,12 @@ class HelpDrilldownTests(unittest.TestCase):
 
     def test_command_detail_callback_rejects_stale_index(self):
         answers = []
-        original_answer = _m_callbacks.answer_callback
-        _m_callbacks.answer_callback = lambda _token, _callback_id, text: answers.append(text)
+        original_answer = _m_catalog.answer_callback
+        _m_catalog.answer_callback = lambda _token, _callback_id, text: answers.append(text)
         try:
-            handled = _m_panel_callback_routes.handle_help_callback(self.db, "token", {"id": "cb"}, _m_callbacks.answer_callback, "help:cmd:basic:99", "chat", {"message_id": 77}, {}, "default", None, request_context=make_test_request_context(self.db, "panel-session"))
+            handled = _m_panel_callback_routes.handle_help_callback(self.db, "token", {"id": "cb"}, _m_catalog.answer_callback, "help:cmd:basic:99", "chat", {"message_id": 77}, {}, "default", None, request_context=make_test_request_context(self.db, "panel-session"))
         finally:
-            _m_callbacks.answer_callback = original_answer
+            _m_catalog.answer_callback = original_answer
         self.assertTrue(handled)
         self.assertEqual(answers, ["Help choice expired"])
 
