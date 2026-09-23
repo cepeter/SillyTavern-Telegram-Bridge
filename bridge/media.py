@@ -233,7 +233,7 @@ def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, mode
     language = get_meta(db, f"stt_language:{chat_id}", "auto")
     stt_model = get_meta(db, f"stt_model:{chat_id}", STT_DEFAULT_MODEL)
     transcript = transcribe_audio_bytes(raw, suffix, stt_model, language)
-    process_message(
+    services.conversation.process_message(
         db,
         token,
         api_key,
@@ -354,7 +354,6 @@ from bridge.database import (
     run_write_txn,
 )
 from bridge.expressions import deliver_expression
-from bridge.message_commands import process_message
 from bridge.telegram import (
     download_telegram_file,
     ensure_session,

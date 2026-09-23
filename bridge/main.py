@@ -6,6 +6,9 @@ import argparse
 import os
 
 from bridge import database as _database
+from bridge.conversation_service import ConversationService as _ConversationService
+from bridge.command_routes import handle_command_route
+from bridge.message_commands import prepare_message, generate_and_store_reply
 from bridge.application_composition import initialize_extensions as _initialize_extensions
 from bridge.card_content import (
     card_fields,
@@ -204,6 +207,11 @@ def _build_startup_services(
         persona=persona,
         sync=sync,
         jobs=jobs,
+        conversation=_ConversationService(
+            prepare_message=prepare_message,
+            dispatch_command=handle_command_route,
+            generate_reply=generate_and_store_reply,
+        ),
     )
 
 

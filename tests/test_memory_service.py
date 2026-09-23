@@ -1,3 +1,4 @@
+from application_test_setup import make_test_conversation_service
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
@@ -437,7 +438,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         ), patch.object(_m_command_routes, "regenerate_last",
             side_effect=fake_regen,
         ):
-            handled = _m_message_commands.handle_command_route(
+            handled = _m_command_routes.handle_command_route(
                 self.db,
                 "token",
                 "key",
@@ -469,7 +470,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         with patch.object(_m_message_commands, "handle_pending_input",
             side_effect=fake_pending,
         ):
-            _m_message_commands.process_message(
+            make_test_conversation_service().process_message(
                 self.db,
                 "token",
                 "key",

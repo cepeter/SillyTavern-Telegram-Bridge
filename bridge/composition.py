@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import sqlite3
 
+from bridge.conversation_service import ConversationService
 from bridge.group_director_service import GroupDirectorService
 from bridge.job_service import JobService
 from bridge.memory_service import MemoryService
@@ -51,6 +52,7 @@ class BridgeServices:
     telegram: TelegramRuntime
     background: BackgroundRuntime
     jobs: JobService
+    conversation: ConversationService
     group_director: GroupDirectorService
     memory: MemoryService
     persona: PersonaService
@@ -127,6 +129,7 @@ def build_bridge_services(
     telegram: TelegramRuntime,
     background: BackgroundRuntime,
     jobs: JobService,
+    conversation: ConversationService,
     group_director: GroupDirectorService,
     memory: MemoryService,
     persona: PersonaService,
@@ -142,4 +145,5 @@ def build_bridge_services(
         persona=persona,
         sync=sync,
         jobs=jobs,
+        conversation=conversation,
     )

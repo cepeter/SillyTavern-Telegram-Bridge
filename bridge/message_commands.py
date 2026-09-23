@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from bridge.conversation_service import PreparedMessage
+
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices
 
@@ -153,7 +155,7 @@ def _operation_command(text):
     return command
 
 
-def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None, *, actor_id: str = "", services: BridgeServices) -> None:
+def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, text: str, telegram_message_id: int | None = None, queued_session_id: str | None = None, operation_id: int | None = None, *, actor_id: str = "", services: BridgeServices) -> PreparedMessage | None:
     stripped = text.strip()
     command = stripped.lower()
     command_parts = command.split(None, 1)
@@ -175,7 +177,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
             session["character_file"]
         )
         if recovery_command == "/regen":
-            return regenerate_last(
+            regenerate_last(
                 db,
                 token,
                 api_key,
@@ -186,8 +188,9 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 memory_service=memory_service,
                 persona_service=persona_service,
             )
+            return None
         if recovery_command == "/continue":
-            return continue_last(
+            continue_last(
                 db,
                 token,
                 api_key,
@@ -198,6 +201,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 memory_service=memory_service,
                 persona_service=persona_service,
             )
+            return None
         if recovery_command == "/edit":
             edited = str(text or "").strip().split(None, 1)
             edited_text = (
@@ -205,7 +209,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 if len(edited) > 1
                 else ""
             )
-            return edit_last_user(
+            edit_last_user(
                 db,
                 token,
                 api_key,
@@ -217,6 +221,7 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 memory_service=memory_service,
                 persona_service=persona_service,
             )
+            return None
 
         # Generic committed-response recovery remains the fallback for
         # non-special operations.
@@ -278,43 +283,18 @@ def process_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     current_model = session["model_id"] or model
     current_persona = session["persona_id"]
     user_name = persona_service.name(current_persona) if current_persona else DEFAULT_USER_NAME
-    if handle_command_route(
-        db,
-        token,
-        api_key,
-        model,
-        fields,
-        chat_id,
-        stripped,
-        command,
-        session,
-        session_id,
-        current_model,
-        current_persona,
-        user_name,
-        operation_id=operation_id,
+    return PreparedMessage(
+        stripped=stripped,
+        command=command,
+        fields=fields,
+        session=session,
+        session_id=session_id,
+        current_model=current_model,
+        current_persona=current_persona,
+        user_name=user_name,
+        group_turn=group_turn,
+        group_context=group_context,
         request_context=request_context,
-        services=services,
-    ):
-        return
-
-
-    generate_and_store_reply(
-        db,
-        token,
-        api_key,
-        fields,
-        chat_id,
-        text,
-        session,
-        session_id,
-        current_model,
-        group_turn,
-        group_context,
-        telegram_message_id,
-        operation_id,
-        memory_service=memory_service,
-        persona_service=persona_service,
     )
 
 
@@ -326,7 +306,6 @@ import time
 from bridge.card_content import card_fields_from_file
 from bridge.cards import send_session_menu
 from bridge.character_identity import reconcile_session_character
-from bridge.command_routes import handle_command_route
 from bridge.commands import edit_last_user
 from bridge.config import DEFAULT_USER_NAME
 from bridge.context_compaction import context_history_candidate_limit

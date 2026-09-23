@@ -206,7 +206,7 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
             (cards, ("get_persona", "default_persona_id", "persona_name", "send_panel_message", "send_persona_menu", "send_character_menu", "send_character_info_menu", "send_character_delete_menu", "send_character_delete_confirm", "send_session_menu")),
             (generation, ("generate_text", "build_chat_messages", "regenerate_last", "continue_last")),
             (command_routes, ("handle_command_route",)),
-            (message_commands, ("process_message", "generate_and_store_reply")),
+            (message_commands, ("prepare_message", "generate_and_store_reply")),
             (callback_dispatch, ("process_callback",)),
             (panel_callback_routes, ("handle_primary_panel_callback",)),
         )

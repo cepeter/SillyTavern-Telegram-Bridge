@@ -115,7 +115,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_command_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
         session = {"session_id": "session", "persona_id": "", "model_id": _m_memory_curator.DEFAULT_MODEL, "author_note": "", "world_file": "", "system_prompt": "", "response_language": "auto"}
         try:
-            handled = _m_message_commands.handle_command_route(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", _m_memory_curator.DEFAULT_MODEL, "", "Test User", request_context=make_test_request_context(self.db, "session", "user"), services=make_test_application_services())
+            handled = _m_command_routes.handle_command_route(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/group", "/group", session, "session", _m_memory_curator.DEFAULT_MODEL, "", "Test User", request_context=make_test_request_context(self.db, "session", "user"), services=make_test_application_services())
         finally:
             _m_command_routes.send_text = original_send
         self.assertTrue(handled)

@@ -1,3 +1,4 @@
+from application_test_setup import make_test_conversation_service
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_request_context
 
 ensure_application_extensions()
@@ -64,7 +65,7 @@ class PanelLifecycleTests(unittest.TestCase):
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_settings_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/settings temperature 0.7", services=make_test_application_services())
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/settings temperature 0.7", services=make_test_application_services())
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_settings_menu = original_menu
@@ -127,10 +128,10 @@ class PanelLifecycleTests(unittest.TestCase):
         _m_message_commands.send_text = lambda *_args, **_kwargs: [91]
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "99", services=make_test_application_services())
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "99", services=make_test_application_services())
             pending = json.loads(_m_session_naming.get_meta(self.db, "settings_input:chat", "{}"))
             self.assertEqual(pending["prompt_message_ids"], [90, 91])
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/cancel", services=make_test_application_services())
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/cancel", services=make_test_application_services())
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_settings_menu = original_menu

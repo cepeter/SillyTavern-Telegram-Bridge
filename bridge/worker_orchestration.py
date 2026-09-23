@@ -21,7 +21,6 @@ from bridge.group_core import advance_group_turn, group_current_speaker
 from bridge.help import process_document_job
 from bridge.job_service import DurableJob, JobSubmission
 from bridge.media import process_voice_job, send_reply
-from bridge.message_commands import process_message
 from bridge.telegram import ensure_session, load_session, process_telegram_image
 from bridge.common import chat_job_lock
 
@@ -61,7 +60,7 @@ def process_message_job(
                 if job_id is not None:
                     jobs.complete(db, job_id)
                 return
-            process_message(
+            services.conversation.process_message(
                 db,
                 token,
                 api_key,
