@@ -181,7 +181,7 @@ def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, secti
     send_panel_message(token, chat_id, labels.get(section, labels["overview"]) + "\n\n" + prompt_panel_text(db, chat_id, session, fields, section, group_service=group_service, memory_service=memory_service), markup, message_id, request_context=request_context)
 
 
-def handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context, memory_service):
+def handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, provider_port: ProviderPort, request_context, memory_service):
     """Handle legacy prompt and feature callbacks; status itself is text-only."""
     message_id = message.get("message_id")
     if data == "prompt:close":
@@ -198,7 +198,7 @@ def handle_prompt_and_feature_callback(db, token, callback, answer_callback, dat
             send_prompt_menu( token, chat_id, db, session, card_fields_from_file(session["character_file"]), message_id, data.rsplit(":", 1)[1], group_service=group_service, memory_service=memory_service, request_context=request_context)
         return True
     if data.startswith(("scene:", "goal:", "curated:", "summary:")):
-        return handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, request_context=request_context)
+        return handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, provider_port=provider_port, request_context=request_context)
     return False
 
 
@@ -216,7 +216,7 @@ def send_director_goal_menu(token, chat_id, db, session, message_id=None, *, req
     send_panel_message(token, chat_id, text, markup, message_id, request_context=request_context)
 
 
-def handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context):
+def handle_feature_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, provider_port: ProviderPort, request_context):
     message_id = message.get("message_id")
     if data.startswith("summary:"):
         action = data.split(":", 1)[1]
@@ -225,7 +225,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
             close_panel_message(db, token, chat_id, callback)
         elif action == "confirm":
             answer_callback(token, str(callback.get("id", "")), "Summarizing")
-            handle_summary_command(db, token, chat_id, session)
+            handle_summary_command(db, token, chat_id, session, provider_port=provider_port)
         return True
     if data.startswith("scene:"):
         action = data.split(":", 1)[1]
@@ -236,7 +236,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
             send_text(token, chat_id, status_text(db, chat_id, session, card_fields_from_file(session["character_file"]), session.get("model_id") or DEFAULT_MODEL, session.get("persona_id") or "", group_service=group_service))
         elif action == "refresh":
             send_typing(token, chat_id)
-            refresh_scene_state_now(db, "", chat_id, session, str(card_fields_from_file(session["character_file"]).get("name") or "unknown"))
+            refresh_scene_state_now(db, "", chat_id, session, str(card_fields_from_file(session["character_file"]).get("name") or "unknown"), provider_port=provider_port)
             send_scene_menu( token, chat_id, db, session, message_id, request_context=request_context)
         elif action == "clear":
             send_panel_message(token, chat_id, "Clear the stored structured scene state?", {"inline_keyboard": [[{"text": "✅ Confirm clear", "callback_data": "scene:clear_confirm"}], [{"text": "⬅️ Back", "callback_data": "scene:status"}, {"text": "❌ Close", "callback_data": "scene:close"}]]}, message_id, request_context=request_context)
@@ -267,7 +267,7 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
                 send_text(token, chat_id, "Hindsight memory is off. Enable /memory first.")
             else:
                 send_typing(token, chat_id)
-                curate_memory_now(db, "", chat_id, session, str(card_fields_from_file(session["character_file"]).get("name") or "unknown"))
+                curate_memory_now(db, "", chat_id, session, str(card_fields_from_file(session["character_file"]).get("name") or "unknown"), provider_port=provider_port)
                 send_curated_memory_menu( token, chat_id, db, session, message_id, request_context=request_context)
         elif action == "back":
             send_memory_menu( token, chat_id, db, message_id, request_context=request_context)
@@ -318,6 +318,7 @@ from bridge.director_goals import (
 )
 from bridge.expressions import expression_mode_key
 from bridge.group_service import GroupService
+from bridge.provider_port import ProviderPort
 from bridge.groups import handle_summary_command
 from bridge.help import send_memory_menu
 from bridge.input_flows import start_text_action_input

@@ -50,7 +50,6 @@ from bridge.database import (
     recover_jobs,
 )
 from bridge.extension_registry import get_director_customization as _get_director_customization_value
-from bridge.generation import generate_text, resolve_provider_model
 from bridge.group_core import (
     advance_group_turn,
     claim_group_user_turn,
@@ -68,7 +67,6 @@ from bridge.group_director_service import GroupDirectorService as _GroupDirector
 from bridge.group_service import GroupService as _GroupService
 from bridge.help import set_bot_commands
 from bridge.job_service import JobService as _JobService
-from bridge.media import get_provider_spec
 from bridge.memory import (
     get_session_summary,
     purge_hindsight_session,
@@ -80,6 +78,7 @@ from bridge.memory_service import MemoryService as _MemoryService
 from bridge.model_router import ModelRouter as _ModelRouter
 from bridge.provider_catalog import load_provider_catalog
 from bridge.provider_port import ProviderPort as _ProviderPort
+from bridge.provider_transport import generate_provider_text
 from bridge.persona_service import PersonaService as _PersonaService
 from bridge.persona_sync import (
     PERSONA_EDIT_LOCK,
@@ -116,9 +115,9 @@ _DURABLE_WORKER_GUARD = _DurableWorkerGuard(
     _database._lightweight_db_connect
 )
 
-def validate_startup_credential(model: str) -> None:
-    provider_id, _ = resolve_provider_model(model)
-    spec = get_provider_spec(provider_id)
+def validate_startup_credential(model: str, model_router: _ModelRouter) -> None:
+    route = model_router.route(model)
+    spec = dict(route.spec)
     transport = str(spec.get("transport") or "")
     if transport == "opencode_muse":
         return
@@ -167,9 +166,12 @@ def _load_startup_config(environ) -> _BridgeConfig:
 
 def _build_startup_services(
     config: _BridgeConfig,
+    *,
+    model_router: _ModelRouter,
 ) -> _BridgeServices:
-    model_router = _ModelRouter(load_catalog=load_provider_catalog)
-    provider = _ProviderPort(generate_backend=generate_text)
+    provider = _ProviderPort(
+        generate_backend=_partial(generate_provider_text, model_router)
+    )
     group = _GroupService(
         load_state=group_state,
         save_state=save_group_state,
@@ -189,15 +191,32 @@ def _build_startup_services(
         member_labels=group.member_labels,
         card_fields=card_fields_from_file,
         generation_settings=get_generation_settings,
-        generate_text=generate_text,
+        generate_text=provider.generate,
         director_customization=_get_director_customization_value,
         default_model=config.default_model,
     )
     memory = _MemoryService(
         recall_context=recall_memory_context,
-        summary_for_prompt=session_summary_for_prompt,
+        summary_for_prompt=(
+            lambda db, chat_id, session:
+            session_summary_for_prompt(
+                db,
+                chat_id,
+                session,
+                provider_port=provider,
+            )
+        ),
         summary_state=get_session_summary,
-        retain_session=retain_session_memory,
+        retain_session=(
+            lambda db, chat_id, session, fields:
+            retain_session_memory(
+                db,
+                chat_id,
+                session,
+                fields,
+                provider_port=provider,
+            )
+        ),
         purge_session_memory=purge_hindsight_session,
     )
     persona = _PersonaService(
@@ -291,15 +310,22 @@ def main() -> int:
     refresh_phase3_config()
 
     config = _load_startup_config(os.environ)
+    model_router = _ModelRouter(load_catalog=load_provider_catalog)
     try:
-        validate_startup_credential(config.default_model)
+        validate_startup_credential(
+            config.default_model,
+            model_router,
+        )
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
 
     enforce_runtime_permissions()
     configure_logging()
 
-    services = _build_startup_services(config)
+    services = _build_startup_services(
+        config,
+        model_router=model_router,
+    )
     token = config.bot_token
     model = config.default_model
     set_bot_commands(token)

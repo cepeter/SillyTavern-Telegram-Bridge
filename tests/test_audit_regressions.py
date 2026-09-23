@@ -21,6 +21,8 @@ import bridge.input_flows as _m_input_flows
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
 import bridge.generation as _m_generation
+import bridge.provider_transport as _m_provider_transport
+from bridge.model_router import ModelRouter
 import bridge.language as _m_language
 import bridge.main as _m_main
 import bridge.memory as _m_memory
@@ -54,35 +56,53 @@ class AuditRegressionTests(unittest.TestCase):
             def read(self):
                 return json.dumps({"choices": [{"message": {"content": "visible"}}]}).encode()
 
-        original_resolve = _m_generation.resolve_provider_model
-        original_spec = _m_generation.get_provider_spec
-        original_urlopen = _m_generation.strict_urlopen
+        original_urlopen = _m_provider_transport.strict_urlopen
         old_key = os.environ.get("TEST_OPENROUTER_KEY")
         old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
-        _m_generation.resolve_provider_model = lambda _model: ("openrouter", "test/model")
-        _m_generation.get_provider_spec = lambda _provider: {
-            "transport": "openai_compatible",
-            "api_endpoint": "https://openrouter.ai/api/v1",
-            "api_key_env": "TEST_OPENROUTER_KEY",
-        }
+        router = ModelRouter(
+            load_catalog=lambda: {
+                "openrouter": {
+                    "transport": "openai_compatible",
+                    "api_endpoint": "https://openrouter.ai/api/v1",
+                    "api_key_env": "TEST_OPENROUTER_KEY",
+                    "models": ["test"],
+                }
+            }
+        )
 
         def fake_urlopen(request, timeout):
             captured.append(json.loads(request.data.decode()))
             return FakeResponse()
 
-        _m_generation.strict_urlopen = fake_urlopen
+        _m_provider_transport.strict_urlopen = fake_urlopen
         os.environ["TEST_OPENROUTER_KEY"] = "test-only"
         os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "openrouter.ai"
         try:
             settings = dict(_m_sync_core.GENERATION_DEFAULTS)
             settings["reasoning_budget"] = 0
-            self.assertEqual(_m_memory_curator.generate_text("", "test", [{"role": "user", "content": "hello"}], settings=settings), "visible")
+            self.assertEqual(
+                _m_provider_transport.generate_provider_text(
+                    router,
+                    "",
+                    "test",
+                    [{"role": "user", "content": "hello"}],
+                    settings=settings,
+                ),
+                "visible",
+            )
             settings["reasoning_budget"] = 1024
-            self.assertEqual(_m_memory_curator.generate_text("", "test", [{"role": "user", "content": "hello"}], settings=settings), "visible")
+            self.assertEqual(
+                _m_provider_transport.generate_provider_text(
+                    router,
+                    "",
+                    "test",
+                    [{"role": "user", "content": "hello"}],
+                    settings=settings,
+                ),
+                "visible",
+            )
         finally:
-            _m_generation.resolve_provider_model = original_resolve
-            _m_generation.get_provider_spec = original_spec
-            _m_generation.strict_urlopen = original_urlopen
+            _m_provider_transport.strict_urlopen = original_urlopen
             if old_key is None:
                 os.environ.pop("TEST_OPENROUTER_KEY", None)
             else:
@@ -275,7 +295,7 @@ class AuditRegressionTests(unittest.TestCase):
         try:
             _m_command_routes.start_text_action_input(self.db, "token", "chat", session["session_id"], "edit", "Send replacement")
             self.assertIn("edit", _m_session_naming.get_meta(self.db, "text_action_input:chat", ""))
-            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, group_service=make_test_group_service(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"])))
+            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, group_service=make_test_group_service(), provider_port=make_test_application_services().provider, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"])))
         finally:
             _m_input_flows.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "text_action_input:chat", ""), "")

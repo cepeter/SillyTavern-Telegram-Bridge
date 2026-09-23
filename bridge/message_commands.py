@@ -60,7 +60,7 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
     set_meta(db, meta_key, json.dumps(state))
 
 
-def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, group_service: GroupService, memory_service: MemoryService, persona_service: PersonaService) -> None:
+def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, group_service: GroupService, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
     history_rows = timed_call("history_load", db.execute,
         "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
@@ -99,9 +99,9 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
 
     generation_settings = get_generation_settings(db, chat_id, session_id)
     generation_session_id = f"telegram:{chat_id}:{session_id}"
-    reply = timed_call("provider_generation", generate_text, api_key, current_model, messages, session_id=generation_session_id, settings=generation_settings, stream_callback=stream_update if stream_message_id else None)
+    reply = timed_call("provider_generation", generate_text, provider_port, api_key, current_model, messages, session_id=generation_session_id, settings=generation_settings, stream_callback=stream_update if stream_message_id else None)
     reply += rag_citation_footer(db, chat_id, text, rag_bundle)
-    reply = render_response_language(api_key, current_model, reply, language, generation_session_id, generation_settings)
+    reply = render_response_language(api_key, current_model, reply, language, generation_session_id, generation_settings, provider_port=provider_port)
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
     def persist_turn():
         with write_transaction(db):
@@ -185,6 +185,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 recovery_fields,
                 chat_id,
                 operation_id=operation_id,
+                provider_port=services.provider,
                 memory_service=memory_service,
                 persona_service=persona_service,
             )
@@ -198,6 +199,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 recovery_fields,
                 chat_id,
                 operation_id=operation_id,
+                provider_port=services.provider,
                 memory_service=memory_service,
                 persona_service=persona_service,
             )
@@ -218,6 +220,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 chat_id,
                 edited_text,
                 operation_id=operation_id,
+                provider_port=services.provider,
                 memory_service=memory_service,
                 persona_service=persona_service,
             )
@@ -245,6 +248,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         fields=fields,
         operation_id=operation_id,
         group_service=services.group,
+        provider_port=services.provider,
         memory_service=memory_service,
         persona_service=persona_service,
         request_context=request_context,
@@ -344,6 +348,7 @@ from bridge.memory import clear_session_summary
 from bridge.group_service import GroupService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
+from bridge.provider_port import ProviderPort
 from bridge.performance import timed_call
 from bridge.rag_core import (
     rag_citation_footer,

@@ -1,4 +1,4 @@
-from application_test_setup import make_test_conversation_service, make_test_group_service
+from application_test_setup import make_test_conversation_service, make_test_group_service, make_test_provider_port
 
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service, make_test_request_context
 
@@ -288,7 +288,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         ), patch.object(_m_message_commands, "generate_text",
             return_value="reply",
         ), patch.object(_m_message_commands, "render_response_language",
-            side_effect=lambda _key, _model, reply, *_args: reply,
+            side_effect=lambda _key, _model, reply, *_args, **_kwargs: reply,
         ), patch.object(_m_message_commands, "save_response_variant",
             return_value=1,
         ), patch.object(_m_message_commands, "queue_user_quote_tts",
@@ -308,7 +308,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "",
                 None,
                 None,
-                group_service=make_test_group_service(),
+                provider_port=make_test_provider_port(), group_service=make_test_group_service(),
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
             )
@@ -398,7 +398,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         ), patch.object(_m_commands, "rag_citation_footer",
             return_value="",
         ), patch.object(_m_commands, "render_session_response",
-            side_effect=lambda _api_key, _session, reply, _chat_id, _settings: reply,
+            side_effect=lambda _api_key, _session, reply, _chat_id, _settings, **_kwargs: reply,
         ), patch.object(_m_commands, "save_response_variant",
         ), patch.object(_m_commands, "send_reply",
         ):
@@ -411,7 +411,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "chat",
                 user_rowid,
                 "new text",
-                memory_service=FakeMemory(),
+                provider_port=make_test_provider_port(), memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
             )
 
@@ -552,7 +552,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         ), patch.object(_m_commands, "rag_citation_footer",
             return_value="",
         ), patch.object(_m_commands, "render_session_response",
-            side_effect=lambda _key, _session, reply, *_args: reply,
+            side_effect=lambda _key, _session, reply, *_args, **_kwargs: reply,
         ), patch.object(_m_commands, "save_response_variant",
             return_value=1,
         ), patch.object(_m_commands, "send_reply",
@@ -566,7 +566,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "chat",
                 "describe this",
                 b"image-bytes",
-                group_service=group_service,
+                provider_port=make_test_provider_port(), group_service=group_service,
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
                 group_director_service=make_test_application_services().group_director,

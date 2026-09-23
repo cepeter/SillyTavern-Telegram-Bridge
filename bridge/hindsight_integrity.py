@@ -46,6 +46,8 @@ class HindsightStaleGuard:
         chat_id: str,
         session: dict[str, str],
         fields: dict[str, str],
+        *,
+        provider_port,
     ) -> None:
         if self.memory_enabled(db, chat_id):
             conversation, snapshot_hash = self.snapshot(
@@ -74,6 +76,7 @@ class HindsightStaleGuard:
             chat_id,
             session,
             fields,
+            provider_port,
         )
 
     def _retain_if_current(

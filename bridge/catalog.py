@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
-    import yaml
-    config = yaml.safe_load(PROVIDER_CONFIG_FILE.read_text(encoding="utf-8")) or {}
-    providers = config.get("providers") or {}
+    providers = {
+        str(provider_id): dict(spec)
+        for provider_id, spec in load_provider_catalog().items()
+        if isinstance(spec, dict)
+    }
+    config = {"providers": providers}
     try:
         cache = json.loads(MODEL_CACHE_FILE.read_text(encoding="utf-8")) if MODEL_CACHE_FILE.exists() else {}
     except (OSError, json.JSONDecodeError):
@@ -68,9 +71,7 @@ def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
 
 
 def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, str, str]]:
-    import yaml
-    config = yaml.safe_load(PROVIDER_CONFIG_FILE.read_text(encoding="utf-8")) or {}
-    providers = config.get("providers") or {}
+    providers = load_provider_catalog()
     results = []
     for current_id, spec in providers.items():
         if provider_id and current_id != provider_id:
@@ -333,10 +334,10 @@ from bridge.common import (
 )
 from bridge.config import (
     MODEL_CACHE_FILE,
-    PROVIDER_CONFIG_FILE,
     WORLD_DIR,
 )
-from bridge.generation import opencode_muse_headers
+from bridge.provider_catalog import load_provider_catalog
+from bridge.provider_transport import opencode_muse_headers
 from bridge.network_security import (
     strict_urlopen,
     validate_provider_endpoint,

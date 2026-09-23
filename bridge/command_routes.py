@@ -15,12 +15,12 @@ _START_MODEL_PLACEHOLDERS = frozenset({
 })
 
 
-def _start_model_readiness_error(api_key, current_model, session_id):
+def _start_model_readiness_error(provider_port, api_key, current_model, session_id):
     selected_model = str(current_model or "").strip()
     if not selected_model or selected_model in _START_MODEL_PLACEHOLDERS:
         return "please set your model first in /providers command"
     try:
-        generate_text(
+        provider_port.generate(
             api_key,
             selected_model,
             [{"role": "user", "content": "Reply OK."}],
@@ -41,7 +41,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         return True
     if command in {"/start", "start"}:
         readiness_error = _start_model_readiness_error(
-            api_key, current_model, session_id
+            services.provider, api_key, current_model, session_id
         )
         if readiness_error:
             send_text(token, chat_id, readiness_error)
@@ -137,7 +137,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
     return False
 
 
-def _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id, *, memory_service, persona_service, request_context):
+def _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id, *, provider_port, memory_service, persona_service, request_context):
     """Handle generation, preset, settings, and response-language panels."""
     if command == "/update":
         send_update_menu( token, chat_id, request_context=request_context)
@@ -171,6 +171,7 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
             "macro",
             stripped.split(None, 1)[1],
             operation_id,
+            provider_port=provider_port,
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
@@ -223,6 +224,7 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
             "remember",
             stripped.split(None, 1)[1],
             operation_id,
+            provider_port=services.provider,
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
@@ -243,7 +245,7 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
         send_databank_menu( token, chat_id, db, request_context=request_context)
         return True
     if command == "/sync":
-        send_sync_menu( 
+        send_sync_menu(
             token,
             chat_id,
             db,
@@ -301,6 +303,7 @@ def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command
         session,
         session_id,
         operation_id,
+        provider_port=services.provider,
         memory_service=memory_service,
         request_context=request_context,
         persona_service=persona_service,
@@ -341,7 +344,7 @@ def _handle_entities(db, token, model, fields, chat_id, command, session, sessio
         send_session_menu( token, chat_id, list_sessions(db, chat_id), session_id, request_context=request_context)
         return True
     if command == "/persona" or command.startswith("/persona "):
-        send_persona_menu( 
+        send_persona_menu(
             token,
             chat_id,
             current_persona,
@@ -378,6 +381,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
             "edit",
             stripped.split(None, 1)[1],
             operation_id,
+            provider_port=services.provider,
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
@@ -391,6 +395,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
             fields,
             chat_id,
             operation_id=operation_id,
+            provider_port=services.provider,
             memory_service=memory_service,
             persona_service=persona_service,
         )
@@ -407,6 +412,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
             fields,
             chat_id,
             operation_id=operation_id,
+            provider_port=services.provider,
             memory_service=memory_service,
             persona_service=persona_service,
         )
@@ -432,6 +438,7 @@ def handle_command_route(db, token, api_key, model, fields, chat_id, stripped, c
         user_name,
         operation_id=operation_id,
         request_context=request_context,
+        services=services,
     ):
         return True
     if _handle_basic(

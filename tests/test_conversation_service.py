@@ -66,7 +66,7 @@ def test_service_has_no_concrete_bridge_imports():
 def make_service(*, handled=False, prepare_handled=False, route_error=False):
     module = service_module()
     events = []
-    services = SimpleNamespace(memory=object(), persona=object(), group=object())
+    services = SimpleNamespace(memory=object(), persona=object(), group=object(), provider=object())
     context = SimpleNamespace(db=object(), session_id="queued-session", actor_id="actor")
     prepared = module.PreparedMessage(
         stripped="hello", command="hello", fields={"name": "character"},
@@ -129,7 +129,7 @@ def test_unhandled_message_generates_with_resolved_model_and_original_identity()
         "db", "token", "key", prepared.fields, "chat", "hello", prepared.session,
         "queued-session", "resolved-model", None, "group-context", 123, 456,
     )
-    assert kwargs == dict(group_service=services.group, memory_service=services.memory, persona_service=services.persona)
+    assert kwargs == dict(group_service=services.group, provider_port=services.provider, memory_service=services.memory, persona_service=services.persona)
 
 
 def test_command_exception_propagates_without_generation():

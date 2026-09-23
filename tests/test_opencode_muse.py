@@ -7,9 +7,9 @@ import re
 import unittest
 
 import os
-import bridge.generation as _m_generation
+import bridge.provider_transport as _m_provider_transport
+from bridge.model_router import ModelRouter
 import bridge.main as _m_main
-import bridge.memory_curator as _m_memory_curator
 class _Response:
     def __init__(self, payload):
         self.payload = payload
@@ -26,24 +26,19 @@ class _Response:
 
 class OpenCodeMuseTests(unittest.TestCase):
     def setUp(self):
-        self.old_resolve = _m_generation.resolve_provider_model
-        self.old_spec = _m_generation.get_provider_spec
-        self.old_urlopen = _m_generation.strict_urlopen
+        self.old_urlopen = _m_provider_transport.strict_urlopen
         self.old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
-        _m_generation.resolve_provider_model = lambda _model: ("opencode-free", "muse-spark-1.3-contributor-free")
-        _m_generation.get_provider_spec = lambda _provider: {"transport": "opencode_muse", "api_endpoint": "https://opencode.ai/zen/v1"}
-        self.old_main_resolve = _m_main.resolve_provider_model
-        self.old_main_spec = _m_main.get_provider_spec
-        _m_main.resolve_provider_model = _m_generation.resolve_provider_model
-        _m_main.get_provider_spec = _m_generation.get_provider_spec
+        self.spec = {
+            "transport": "opencode_muse",
+            "api_endpoint": "https://opencode.ai/zen/v1",
+        }
+        self.router = ModelRouter(
+            load_catalog=lambda: {"opencode-free": self.spec}
+        )
         os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "opencode.ai"
 
     def tearDown(self):
-        _m_generation.resolve_provider_model = self.old_resolve
-        _m_generation.get_provider_spec = self.old_spec
-        _m_generation.strict_urlopen = self.old_urlopen
-        _m_main.resolve_provider_model = self.old_main_resolve
-        _m_main.get_provider_spec = self.old_main_spec
+        _m_provider_transport.strict_urlopen = self.old_urlopen
         if self.old_hosts is None:
             os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
         else:
@@ -52,20 +47,22 @@ class OpenCodeMuseTests(unittest.TestCase):
     def test_startup_allows_keyless_muse_transport(self):
         old_key = os.environ.pop("LLM_API_KEY", None)
         try:
-            _m_main.validate_startup_credential("opencode-free::muse-spark-1.3-contributor-free")
+            _m_main.validate_startup_credential("opencode-free::muse-spark-1.3-contributor-free", self.router)
         finally:
             if old_key is not None:
                 os.environ["LLM_API_KEY"] = old_key
 
     def test_startup_still_requires_credentials_for_keyed_transport(self):
         old_key = os.environ.pop("LLM_API_KEY", None)
-        old_spec = _m_main.get_provider_spec
-        _m_main.get_provider_spec = lambda _provider: {"transport": "openai_chat"}
+        router = ModelRouter(
+            load_catalog=lambda: {
+                "provider": {"transport": "openai_compatible"}
+            }
+        )
         try:
             with self.assertRaisesRegex(RuntimeError, "required provider credential"):
-                _m_main.validate_startup_credential("provider::model")
+                _m_main.validate_startup_credential("provider::model", router)
         finally:
-            _m_main.get_provider_spec = old_spec
             if old_key is not None:
                 os.environ["LLM_API_KEY"] = old_key
 
@@ -76,8 +73,8 @@ class OpenCodeMuseTests(unittest.TestCase):
             captured.append((request, timeout))
             return _Response({"output_text": "OPENCODE_BRIDGE_OK"})
 
-        _m_generation.strict_urlopen = fake_urlopen
-        result = _m_memory_curator.generate_text("", "opencode-free::muse-spark-1.3-contributor-free", [{"role": "user", "content": "hello"}], session_id="telegram:chat:session", settings={"max_tokens": 128})
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(self.router, "", "opencode-free::muse-spark-1.3-contributor-free", [{"role": "user", "content": "hello"}], session_id="telegram:chat:session", settings={"max_tokens": 128})
         request, timeout = captured[0]
         body = json.loads(request.data.decode())
         self.assertEqual(result, "OPENCODE_BRIDGE_OK")
@@ -112,8 +109,8 @@ class OpenCodeMuseTests(unittest.TestCase):
             ).encode()
             return response
 
-        _m_generation.strict_urlopen = fake_urlopen
-        result = _m_generation.opencode_muse_generate(
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.opencode_muse_generate(
             "muse-spark-1.3-contributor-free",
             [{"role": "user", "content": "hello"}],
             {"max_tokens": 128},

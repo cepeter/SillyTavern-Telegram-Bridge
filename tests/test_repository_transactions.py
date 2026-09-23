@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_group_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_group_service, make_test_provider_port
 
 
 ensure_application_extensions()
@@ -586,6 +586,7 @@ class GroupTransactionTests(unittest.TestCase):
                 None,
                 None,
              group_service=make_test_group_service(),
+             provider_port=make_test_provider_port(),
              memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self._assert_group_reply_transaction_committed()
@@ -631,6 +632,7 @@ class GroupTransactionTests(unittest.TestCase):
                 "caption",
                 b"image",
              group_service=make_test_group_service(),
+             provider_port=make_test_provider_port(),
              memory_service=make_test_memory_service(),
              persona_service=make_test_persona_service(),
              group_director_service=make_test_application_services().group_director)

@@ -7,6 +7,9 @@ import unittest
 
 import os
 import bridge.generation as _m_generation
+import bridge.provider_transport as _m_provider_transport
+from bridge.model_router import ModelRoute
+from bridge.provider_port import ProviderPort
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.sync_core as _m_sync_core
@@ -36,24 +39,30 @@ class _FakeStreamResponse(_FakeResponse):
 
 class GenerationContinuationTests(unittest.TestCase):
     def setUp(self):
-        self.original_resolve = _m_generation.resolve_provider_model
-        self.original_spec = _m_generation.get_provider_spec
-        self.original_urlopen = _m_generation.strict_urlopen
+        self.original_urlopen = _m_provider_transport.strict_urlopen
         self.old_key = os.environ.get("TEST_OPENROUTER_KEY")
         self.old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
-        _m_generation.resolve_provider_model = lambda _model: ("openrouter", "test/model")
-        _m_generation.get_provider_spec = lambda _provider: {
+        self.spec = {
             "transport": "openai_compatible",
             "api_endpoint": "https://openrouter.ai/api/v1",
             "api_key_env": "TEST_OPENROUTER_KEY",
         }
+        self.router = type(
+            "_Router",
+            (),
+            {
+                "route": lambda _self, _model: ModelRoute(
+                    "openrouter",
+                    "test/model",
+                    self.spec,
+                )
+            },
+        )()
         os.environ["TEST_OPENROUTER_KEY"] = "test-only"
         os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "openrouter.ai"
 
     def tearDown(self):
-        _m_generation.resolve_provider_model = self.original_resolve
-        _m_generation.get_provider_spec = self.original_spec
-        _m_generation.strict_urlopen = self.original_urlopen
+        _m_provider_transport.strict_urlopen = self.original_urlopen
         if self.old_key is None:
             os.environ.pop("TEST_OPENROUTER_KEY", None)
         else:
@@ -64,7 +73,7 @@ class GenerationContinuationTests(unittest.TestCase):
             os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = self.old_hosts
 
     def test_missing_assistant_content_logs_redacted_response_diagnostics(self):
-        _m_generation.strict_urlopen = lambda _request, **_kwargs: _FakeResponse(
+        _m_provider_transport.strict_urlopen = lambda _request, **_kwargs: _FakeResponse(
             {
                 "id": "response-id",
                 "object": "chat.completion",
@@ -76,9 +85,9 @@ class GenerationContinuationTests(unittest.TestCase):
             },
             status=502,
         )
-        with self.assertLogs("bridge.generation", level="WARNING") as captured:
+        with self.assertLogs("bridge.provider_transport", level="WARNING") as captured:
             with self.assertRaisesRegex(RuntimeError, "backend returned no assistant content"):
-                _m_generation.generate_text(
+                _m_provider_transport.generate_provider_text(self.router,
                     "",
                     "test",
                     [{"role": "user", "content": "Write a complete answer."}],
@@ -104,8 +113,8 @@ class GenerationContinuationTests(unittest.TestCase):
                 {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
             )
 
-        _m_generation.strict_urlopen = fake_urlopen
-        result = _m_generation.generate_text(
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(self.router,
             "",
             "test",
             [{"role": "user", "content": "Reply OK."}],
@@ -117,13 +126,7 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertEqual(seen, [30])
 
     def test_empty_stream_length_retries_with_larger_non_stream_budget(self):
-        self.original_spec = _m_generation.get_provider_spec
-        _m_generation.get_provider_spec = lambda _provider: {
-            "transport": "openai_compatible",
-            "api_endpoint": "https://openrouter.ai/api/v1",
-            "api_key_env": "TEST_OPENROUTER_KEY",
-            "streaming": True,
-        }
+        self.spec["streaming"] = True
         responses = [
             _FakeStreamResponse([
                 'data: {"choices":[{"delta":{"reasoning":"thinking"},"finish_reason":null}]}\n',
@@ -141,8 +144,8 @@ class GenerationContinuationTests(unittest.TestCase):
             requests.append(json.loads(request.data.decode()))
             return responses.pop(0)
 
-        _m_generation.strict_urlopen = fake_urlopen
-        result = _m_memory_curator.generate_text(
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(self.router,
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
@@ -156,13 +159,7 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertEqual(requests[1]["max_tokens"], 4096)
 
     def test_streaming_length_continuation_stays_streaming(self):
-        self.original_spec = _m_generation.get_provider_spec
-        _m_generation.get_provider_spec = lambda _provider: {
-            "transport": "openai_compatible",
-            "api_endpoint": "https://openrouter.ai/api/v1",
-            "api_key_env": "TEST_OPENROUTER_KEY",
-            "streaming": True,
-        }
+        self.spec["streaming"] = True
         responses = [
             _FakeStreamResponse([
                 'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
@@ -180,8 +177,8 @@ class GenerationContinuationTests(unittest.TestCase):
             requests.append(json.loads(request.data.decode()))
             return responses.pop(0)
 
-        _m_generation.strict_urlopen = fake_urlopen
-        result = _m_memory_curator.generate_text(
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(self.router,
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
@@ -204,8 +201,8 @@ class GenerationContinuationTests(unittest.TestCase):
             requests.append(json.loads(request.data.decode()))
             return _FakeResponse(payloads.pop(0))
 
-        _m_generation.strict_urlopen = fake_urlopen
-        result = _m_memory_curator.generate_text(
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(self.router,
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
@@ -230,8 +227,8 @@ class GenerationContinuationTests(unittest.TestCase):
                 )
             raise RuntimeError("temporary provider failure")
 
-        _m_generation.strict_urlopen = fake_urlopen
-        result = _m_memory_curator.generate_text(
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(self.router,
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
@@ -242,29 +239,30 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertEqual(calls, 2)
 
     def test_auto_language_render_returns_original_without_backend_call(self):
-        original_generate = _m_generation.generate_text
-        _m_generation.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("auto must not render"))
-        try:
-            result = _m_message_commands.render_response_language("", "model", "original", "auto", "session", {})
-        finally:
-            _m_generation.generate_text = original_generate
+        provider = ProviderPort(
+            generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("auto must not render")
+            )
+        )
+        result = _m_generation.render_response_language(
+            "", "model", "original", "auto", "session", {},
+            provider_port=provider,
+        )
         self.assertEqual(result, "original")
 
     def test_fixed_language_render_uses_minimal_indonesian_rewrite(self):
         captured = {}
-        original_generate = _m_memory_curator.generate_text
 
         def fake_generate(api_key, model, messages, session_id="telegram", settings=None, **_kwargs):
             captured.update({"messages": messages, "session_id": session_id, "settings": settings})
             return "hasil Indonesia"
 
-        _m_generation.generate_text = fake_generate
-        try:
-            result = _m_message_commands.render_response_language(
-                "", "model", "English source", "id", "telegram:chat:session", dict(_m_sync_core.GENERATION_DEFAULTS)
-            )
-        finally:
-            _m_generation.generate_text = original_generate
+        provider = ProviderPort(generate_backend=fake_generate)
+        result = _m_generation.render_response_language(
+            "", "model", "English source", "id", "telegram:chat:session",
+            dict(_m_sync_core.GENERATION_DEFAULTS),
+            provider_port=provider,
+        )
         self.assertEqual(result, "hasil Indonesia")
         self.assertEqual(captured["session_id"], "telegram:chat:session:language-render")
         self.assertIn("Bahasa Indonesia (id)", captured["messages"][0]["content"])

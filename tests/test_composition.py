@@ -1074,7 +1074,10 @@ class StartupCompositionTests(unittest.TestCase):
         _m_runtime._SHUTDOWN_EVENT.clear()
 
     def test_startup_builds_group_director_service(self):
-        services = _m_main._build_startup_services(self.config)
+        services = _m_main._build_startup_services(
+            self.config,
+            model_router=make_test_model_router(),
+        )
 
         self.assertIsInstance(
             services.group_director,
@@ -1082,7 +1085,10 @@ class StartupCompositionTests(unittest.TestCase):
         )
 
     def test_startup_builds_memory_service(self):
-        services = _m_main._build_startup_services(self.config)
+        services = _m_main._build_startup_services(
+            self.config,
+            model_router=make_test_model_router(),
+        )
 
         self.assertIsInstance(
             services.memory,
@@ -1096,7 +1102,10 @@ class StartupCompositionTests(unittest.TestCase):
         ) as upsert_persona, patch.object(_m_main, "delete_native_persona",
         ) as delete_persona, patch.object(_m_main, "update_session",
         ) as update_session:
-            services = _m_main._build_startup_services(self.config)
+            services = _m_main._build_startup_services(
+            self.config,
+            model_router=make_test_model_router(),
+        )
 
         self.assertIsInstance(services.persona, PersonaService)
         self.assertIs(services.persona.load_personas, load_personas)
@@ -1119,7 +1128,10 @@ class StartupCompositionTests(unittest.TestCase):
         ) as poll, patch.object(_m_main, "_phase3_disable",
         ) as disable, patch.object(_m_main, "phase3_api_configured",
         ) as configured:
-            services = _m_main._build_startup_services(self.config)
+            services = _m_main._build_startup_services(
+            self.config,
+            model_router=make_test_model_router(),
+        )
 
         self.assertIsInstance(services.sync, SyncService)
         self.assertIs(services.sync.load_binding, binding)
@@ -1138,7 +1150,10 @@ class StartupCompositionTests(unittest.TestCase):
         ) as finish, patch.object(_m_main, "recover_jobs",
         ) as recover, patch.object(_m_main, "submit_chat_background",
         ) as submit_chat:
-            services = _m_main._build_startup_services(self.config)
+            services = _m_main._build_startup_services(
+            self.config,
+            model_router=make_test_model_router(),
+        )
 
         self.assertIsInstance(services.jobs, JobService)
         self.assertIs(services.jobs.enqueue_backend, enqueue)
@@ -1463,8 +1478,11 @@ class StartupCompositionTests(unittest.TestCase):
             calls.append("load_config")
             return self.config
 
-        def validate_credential(_model):
+        seen_router = []
+
+        def validate_credential(_model, model_router):
             calls.append("validate_credential")
+            seen_router.append(model_router)
 
         def enforce_permissions():
             calls.append("enforce_permissions")
@@ -1472,9 +1490,10 @@ class StartupCompositionTests(unittest.TestCase):
         def configure_logging():
             calls.append("configure_logging")
 
-        def build_services(config):
+        def build_services(config, *, model_router):
             calls.append("build_services")
             self.assertIs(config, self.config)
+            self.assertIs(model_router, seen_router[0])
             return self.services
 
         with patch.object(
@@ -1545,7 +1564,7 @@ class StartupCompositionTests(unittest.TestCase):
         ) as build_services, patch.object(
             _m_main,
             "validate_startup_credential",
-        ), patch.object(_m_main, "set_bot_commands",
+        ) as validate_credential, patch.object(_m_main, "set_bot_commands",
         ), patch.object(
             _m_main,
             "run_check",
@@ -1555,7 +1574,14 @@ class StartupCompositionTests(unittest.TestCase):
 
         configure_logging.assert_called_once_with()
         load_config.assert_called_once()
-        build_services.assert_called_once_with(self.config)
+        build_services.assert_called_once()
+        args, kwargs = build_services.call_args
+        self.assertEqual(args, (self.config,))
+        model_router = kwargs["model_router"]
+        validate_credential.assert_called_once_with(
+            self.config.default_model,
+            model_router,
+        )
         run_check.assert_called_once_with(self.services)
 
 

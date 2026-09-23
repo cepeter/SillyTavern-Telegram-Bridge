@@ -128,3 +128,37 @@ def test_startup_composes_model_router_and_provider_port():
     assert "_ModelRouter(" in source
     assert "_ProviderPort(" in source
     assert "load_catalog=load_provider_catalog" in source
+
+
+def test_provider_transport_is_infrastructure_only():
+    path = BRIDGE / "provider_transport.py"
+    assert path.is_file(), "provider transport adapter is missing"
+    imports = imported_modules("provider_transport.py")
+    assert "bridge.generation" not in imports
+    assert "bridge.media" not in imports
+    assert "bridge.telegram" not in imports
+
+
+def test_generation_no_longer_owns_provider_transport_or_router_helpers():
+    tree = ast.parse((BRIDGE / "generation.py").read_text(encoding="utf-8"))
+    owned = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert not ({
+        "resolve_provider_model",
+        "anthropic_generate",
+        "opencode_muse_headers",
+        "opencode_muse_generate",
+    } & owned)
+
+
+def test_media_no_longer_owns_provider_spec_lookup():
+    tree = ast.parse((BRIDGE / "media.py").read_text(encoding="utf-8"))
+    owned = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert "get_provider_spec" not in owned

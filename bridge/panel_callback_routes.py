@@ -204,7 +204,7 @@ def handle_sync_callback(
             str(callback.get("id", "")),
             "Sync status",
         )
-        send_sync_menu( 
+        send_sync_menu(
             token,
             chat_id,
             db,
@@ -223,7 +223,7 @@ def handle_sync_callback(
             str(callback.get("id", "")),
             result[:200],
         )
-        send_sync_menu( 
+        send_sync_menu(
             token,
             chat_id,
             db,
@@ -242,7 +242,7 @@ def handle_sync_callback(
             str(callback.get("id", "")),
             result[:200],
         )
-        send_sync_menu( 
+        send_sync_menu(
             token,
             chat_id,
             db,
@@ -309,7 +309,7 @@ def handle_greeting_callback(
         if selected_index < 0 or selected_index >= len(options):
             selected_index = 0
         answer_callback(token, str(callback.get("id", "")), "Page")
-        send_greeting_menu( 
+        send_greeting_menu(
             token,
             chat_id,
             fields,
@@ -332,7 +332,7 @@ def handle_greeting_callback(
         label = greeting_choice_label(selected_index)
         if action == "preview":
             answer_callback(token, str(callback.get("id", "")), label)
-            send_greeting_menu( 
+            send_greeting_menu(
                 token,
                 chat_id,
                 fields,
@@ -366,7 +366,7 @@ def handle_greeting_callback(
     return True
 
 
-def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, memory_service, persona_service, sync_service: SyncService, request_context):
+def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, provider_port: ProviderPort, memory_service, persona_service, sync_service: SyncService, request_context):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(db, token, callback, data, chat_id)
@@ -407,6 +407,7 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         session_id,
         operation_id,
         group_service=group_service,
+        provider_port=provider_port,
         memory_service=memory_service,
         request_context=request_context,
     ):
@@ -865,6 +866,7 @@ from bridge.greetings import (
     send_greeting_menu,
 )
 from bridge.group_service import GroupService
+from bridge.provider_port import ProviderPort
 from bridge.groups import (
     apply_group_setup_character,
     send_group_menu,

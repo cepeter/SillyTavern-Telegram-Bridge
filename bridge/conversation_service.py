@@ -82,6 +82,7 @@ class ConversationService:
             prepared.group_turn, prepared.group_context,
             telegram_message_id, operation_id,
             group_service=services.group,
+            provider_port=services.provider,
             memory_service=services.memory,
             persona_service=services.persona,
         )

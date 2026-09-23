@@ -312,16 +312,6 @@ def send_typing(token: str, chat_id: str) -> None:
         logging.debug("typing indicator failed", exc_info=True)
 
 
-def get_provider_spec(provider_id: str) -> dict:
-    try:
-        import yaml
-        config = yaml.safe_load(PROVIDER_CONFIG_FILE.read_text(encoding="utf-8")) or {}
-        return (config.get("providers") or {}).get(provider_id) or {}
-    except Exception:
-        logging.warning("Could not read provider spec for %s", provider_id, exc_info=True)
-        return {}
-
-
 # Explicit late imports replace transitional dependency injection.
 import hashlib
 import json

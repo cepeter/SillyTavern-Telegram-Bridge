@@ -166,6 +166,7 @@ def process_image_job(
                 image_bytes,
                 telegram_message_id=message_id,
                 group_service=services.group,
+                provider_port=services.provider,
                 memory_service=services.memory,
                 persona_service=services.persona,
                 group_director_service=services.group_director,
@@ -261,6 +262,7 @@ def process_edit_job(
                 text,
                 model,
                 operation_id=job_id,
+                provider_port=services.provider,
                 memory_service=services.memory,
                 persona_service=services.persona,
             )

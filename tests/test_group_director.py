@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_provider_port
 
 ensure_application_extensions()
 
@@ -23,6 +23,7 @@ class GroupDirectorTests(unittest.TestCase):
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
+        self._generate_text = make_test_provider_port().generate
         self.session = _m_session_naming.create_session(
             self.db,
             "chat|topic:1",
@@ -54,7 +55,7 @@ class GroupDirectorTests(unittest.TestCase):
             member_labels=_m_group_core.group_member_labels,
             card_fields=_m_groups.card_fields_from_file,
             generation_settings=_m_groups.get_generation_settings,
-            generate_text=_m_groups.generate_text,
+            generate_text=self._generate_text,
             director_customization=extension_registry.get_director_customization,
             default_model=config.DEFAULT_MODEL,
         )
@@ -80,7 +81,7 @@ class GroupDirectorTests(unittest.TestCase):
     def test_director_chooses_known_speaker_without_writing_transcript(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
         calls = []
@@ -89,7 +90,7 @@ class GroupDirectorTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Bob","direction":"Let Bob notice the hidden door and raise the tension."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             before = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
             plan = self._service().plan(
@@ -103,7 +104,7 @@ class GroupDirectorTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "bob.png")
         self.assertIn("hidden door", plan[2])
@@ -114,10 +115,10 @@ class GroupDirectorTests(unittest.TestCase):
     def test_director_falls_back_to_round_robin_on_invalid_output(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
-        _m_groups.generate_text = lambda *_args, **_kwargs: "not json"
+        self._generate_text = lambda *_args, **_kwargs: "not json"
         try:
             plan = self._service().plan(
                 self.db,
@@ -129,7 +130,7 @@ class GroupDirectorTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(plan[2], "")
@@ -137,14 +138,14 @@ class GroupDirectorTests(unittest.TestCase):
     def test_director_falls_back_to_round_robin_on_generation_error(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
         def fail_generate(*_args, **_kwargs):
             raise RuntimeError("model unavailable")
 
-        _m_groups.generate_text = fail_generate
+        self._generate_text = fail_generate
         try:
             plan = self._service().plan(
                 self.db,
@@ -156,7 +157,7 @@ class GroupDirectorTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(plan[2], "")
@@ -164,7 +165,7 @@ class GroupDirectorTests(unittest.TestCase):
     def test_director_without_policy_uses_main_model_and_base_token_budget(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
 
         _m_groups.safe_character_path = lambda filename: Path(filename)
@@ -174,7 +175,7 @@ class GroupDirectorTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Hold the beat."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             with patch.object(
                 extension_registry,
@@ -191,7 +192,7 @@ class GroupDirectorTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(calls[0][0], "provider::main")
@@ -202,7 +203,7 @@ class GroupDirectorTests(unittest.TestCase):
     def test_director_applies_bounded_customization(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
 
         _m_groups.safe_character_path = lambda filename: Path(filename)
@@ -219,7 +220,7 @@ class GroupDirectorTests(unittest.TestCase):
             speaker_context="Hidden scene objective: reveal the door slowly.",
         )
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             with patch.object(
                 extension_registry,
@@ -236,7 +237,7 @@ class GroupDirectorTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "bob.png")
         self.assertEqual(calls[0][0], "utility::director")
@@ -247,7 +248,7 @@ class GroupDirectorTests(unittest.TestCase):
     def test_invalid_director_customization_fields_fall_back_to_core_defaults(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
 
         _m_groups.safe_character_path = lambda filename: Path(filename)
@@ -262,7 +263,7 @@ class GroupDirectorTests(unittest.TestCase):
             max_tokens="large",
         )
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             with patch.object(
                 extension_registry,
@@ -279,7 +280,7 @@ class GroupDirectorTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(calls[0][0], "provider::main")
@@ -288,7 +289,7 @@ class GroupDirectorTests(unittest.TestCase):
     def test_director_customization_token_budget_clamps_to_generation_limits(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
 
         _m_groups.safe_character_path = lambda filename: Path(filename)
@@ -298,7 +299,7 @@ class GroupDirectorTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             for supplied, expected in ((0, 1), (-50, 1), (99999, 16000), ("220", 220)):
                 calls.clear()
@@ -325,12 +326,12 @@ class GroupDirectorTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
     def test_director_policy_failure_uses_ordinary_director_behavior(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
 
         _m_groups.safe_character_path = lambda filename: Path(filename)
@@ -343,7 +344,7 @@ class GroupDirectorTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue normally."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             with patch.object(
                 extension_registry,
@@ -360,7 +361,7 @@ class GroupDirectorTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "alice.png")
         self.assertEqual(calls[0][0], "provider::main")
@@ -377,7 +378,7 @@ class GroupDirectorTests(unittest.TestCase):
         )
 
         old_safe = _m_groups.safe_character_path
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         policy_calls = []
         generation_calls = []
         _m_groups.safe_character_path = lambda filename: Path(filename)
@@ -390,7 +391,7 @@ class GroupDirectorTests(unittest.TestCase):
             generation_calls.append(True)
             raise AssertionError("generation should not run")
 
-        _m_groups.generate_text = generate
+        self._generate_text = generate
         try:
             with patch.object(
                 extension_registry,
@@ -406,7 +407,7 @@ class GroupDirectorTests(unittest.TestCase):
                 )
         finally:
             _m_groups.safe_character_path = old_safe
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "bob.png")
         self.assertEqual(policy_calls, [])
