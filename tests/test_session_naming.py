@@ -20,6 +20,7 @@ import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
+import bridge.session_titles as _m_session_titles
 import bridge.sync_api as _m_sync_api
 class SessionNamingTests(unittest.TestCase):
     def setUp(self):
@@ -122,9 +123,9 @@ class SessionNamingTests(unittest.TestCase):
         self.assertEqual(opened, [(created["character_file"], "group-46")])
 
     def test_title_length_is_bounded(self):
-        self.assertEqual(_m_session_naming.normalize_session_title(" A   name "), "A name")
+        self.assertEqual(_m_session_titles.normalize_session_title(" A   name "), "A name")
         with self.assertRaises(ValueError):
-            _m_session_naming.normalize_session_title("x" * 81)
+            _m_session_titles.normalize_session_title("x" * 81)
 
 
 if __name__ == "__main__":

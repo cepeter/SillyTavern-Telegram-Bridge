@@ -594,4 +594,4 @@ from bridge.group_director_service import GroupDirectorService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.persona_sync import NATIVE_PERSONA_SETTINGS_FILE
-from bridge.session_naming import normalize_session_title
+from bridge.session_titles import normalize_session_title

@@ -36,3 +36,30 @@ def test_native_persona_store_and_service_share_canonical_lock():
     service = make_native_test_persona_service()
     assert persona_sync._PERSONA_STORE.edit_lock() is persona_sync.PERSONA_EDIT_LOCK
     assert service.persona_edit_lock() is persona_sync.PERSONA_EDIT_LOCK
+
+
+def test_session_title_contract_has_pure_owner():
+    import importlib
+    import bridge.session_naming as session_naming
+
+    owner = BRIDGE / "session_titles.py"
+    assert owner.is_file()
+    session_titles = importlib.import_module("bridge.session_titles")
+    assert session_titles.SESSION_TITLE_MAX_CHARS == 80
+    assert not hasattr(session_naming, "SESSION_TITLE_MAX_CHARS")
+    assert not hasattr(session_naming, "normalize_session_title")
+    assert "bridge.session_naming" not in imported_modules("telegram.py")
+
+
+def test_session_title_contract_behavior_is_unchanged():
+    import importlib
+    import pytest
+
+    owner = BRIDGE / "session_titles.py"
+    assert owner.is_file()
+    normalize = importlib.import_module("bridge.session_titles").normalize_session_title
+    assert normalize(" A   name ") == "A name"
+    with pytest.raises(ValueError, match="Session name must contain 1–80"):
+        normalize("x" * 81)
+    with pytest.raises(ValueError, match="cannot start with /"):
+        normalize("/bad")
