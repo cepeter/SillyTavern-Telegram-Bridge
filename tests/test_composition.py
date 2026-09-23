@@ -1221,8 +1221,7 @@ class StartupCompositionTests(unittest.TestCase):
                  patch.object(_m_runtime, "stop_phase3_sync_worker", return_value=True), \
                  patch.object(_m_runtime, "shutdown_background_executors", return_value=True), \
                  patch.object(_m_runtime, "run_database_maintenance"), \
-                 patch.object(_m_update_routing, "answer_callback"), \
-                 patch.object(_m_update_routing, "group_user_turn_allowed", return_value=True):
+                 patch.object(_m_update_routing, "answer_callback"):
                 self.assertEqual(_m_runtime.run_bridge_runtime(services, {"name": "Mira"}), 0)
         finally:
             _m_runtime._SHUTDOWN_EVENT.clear()

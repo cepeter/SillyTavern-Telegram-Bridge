@@ -98,6 +98,7 @@ def _image_services(download_file, sent):
             download_file=download_file,
             send_text=lambda *args, **_kwargs: sent.append(args),
         ),
+        group=object(),
         memory=object(),
         persona=object(),
         group_director=object(),

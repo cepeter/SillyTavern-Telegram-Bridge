@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_request_context, make_test_group_service
 
 ensure_application_extensions()
 
@@ -124,7 +124,7 @@ class CharacterRenameTests(unittest.TestCase):
                 _m_memory_curator.load_session(self.db, "chat", "active", "provider/model"),
                 "active",
                 None,
-                request_context=make_test_request_context(self.db, "active"),
+                group_service=make_test_group_service(), request_context=make_test_request_context(self.db, "active"),
             )
         finally:
             _m_cards.send_panel_request = original

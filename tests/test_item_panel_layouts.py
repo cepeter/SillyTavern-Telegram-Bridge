@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_persona_service, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -12,6 +12,7 @@ import bridge.cards as _m_cards
 import bridge.character_identity as _m_character_identity
 import bridge.command_routes as _m_command_routes
 import bridge.groups as _m_groups
+import bridge.group_core as _m_group_core
 import bridge.help as _m_help
 import bridge.input_flows as _m_input_flows
 import bridge.main as _m_main
@@ -101,13 +102,13 @@ class ItemPanelLayoutTests(unittest.TestCase):
         session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         old_fields = _m_groups.card_fields_from_file
         _m_groups.card_fields_from_file = lambda _filename: {"name": "Member"}
-        _m_groups.save_group_state(self.db, "chat", session["session_id"], {
+        _m_group_core.save_group_state(self.db, "chat", session["session_id"], {
             "title": "Group", "enabled": True, "turn_index": 0,
             "mode": "round_robin", "forced_speaker": "",
             "members": ["member.png"], "turn_user_id": "", "turn_users": [],
         })
         try:
-            _m_panel_callback_routes.send_group_menu(self.db, "bot", "chat", session, request_context=make_test_request_context(self.db, session["session_id"]))
+            _m_panel_callback_routes.send_group_menu(self.db, "bot", "chat", session, group_service=make_test_group_service(), request_context=make_test_request_context(self.db, session["session_id"]))
         finally:
             _m_groups.card_fields_from_file = old_fields
         callbacks = self._callbacks(self.calls[-1][1])

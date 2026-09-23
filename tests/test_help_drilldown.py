@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_native_test_sync_service, make_test_memory_service, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_native_test_sync_service, make_test_memory_service, make_test_request_context, make_test_group_service
 
 ensure_application_extensions()
 
@@ -185,6 +185,7 @@ class HelpDrilldownTests(unittest.TestCase):
                 self.db,
                 session,
                 {"name": "Test"},
+                group_service=make_test_group_service(),
                 memory_service=make_test_memory_service(),
                 request_context=make_test_request_context(self.db, session["session_id"]),
             )

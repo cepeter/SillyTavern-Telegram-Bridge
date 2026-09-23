@@ -421,7 +421,7 @@ class GroupTransactionTests(unittest.TestCase):
             "turn_user_id": "",
             "turn_users": [],
         }
-        _m_groups.save_group_state(
+        _m_group_core.save_group_state(
             self.db,
             self.chat_id,
             self.session_id,
@@ -448,7 +448,7 @@ class GroupTransactionTests(unittest.TestCase):
         changed["title"] = "Pending"
 
         self.db.execute("BEGIN")
-        _m_groups.save_group_state(
+        _m_group_core.save_group_state(
             self.db,
             self.chat_id,
             self.session_id,
@@ -476,7 +476,7 @@ class GroupTransactionTests(unittest.TestCase):
             side_effect=RuntimeError("marker failed"),
         ):
             with self.assertRaisesRegex(RuntimeError, "marker failed"):
-                _m_groups.save_group_state(
+                _m_group_core.save_group_state(
                     self.db,
                     self.chat_id,
                     self.session_id,
@@ -642,7 +642,7 @@ class GroupTransactionTests(unittest.TestCase):
         changed["title"] = "Committed"
 
         self.assertTrue(
-            _m_groups.save_group_state(
+            _m_group_core.save_group_state(
                 self.db,
                 self.chat_id,
                 self.session_id,
