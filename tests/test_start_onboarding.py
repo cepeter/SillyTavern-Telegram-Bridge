@@ -77,7 +77,7 @@ class StartOnboardingTests(unittest.TestCase):
     def test_slash_start_rejects_installation_placeholder_before_probe(self):
         sent = []
         with patch.object(
-            _m_command_routes, "generate_text", create=True
+            _m_command_routes, "generate_text"
         ) as generate, patch.object(
             _m_command_routes,
             "send_text",
@@ -95,7 +95,6 @@ class StartOnboardingTests(unittest.TestCase):
         with patch.object(
             _m_command_routes,
             "generate_text",
-            create=True,
             side_effect=RuntimeError(
                 "Missing provider credential: PROVIDER_ONE_API_KEY"
             ),
@@ -115,12 +114,12 @@ class StartOnboardingTests(unittest.TestCase):
             sent,
             ["Model check failed: Missing provider credential: PROVIDER_ONE_API_KEY"],
         )
+
     def test_slash_start_probes_model_then_explains_optional_setup(self):
         sent = []
         with patch.object(
             _m_command_routes,
             "generate_text",
-            create=True,
             return_value="OK",
         ) as generate, patch.object(
             _m_command_routes,
@@ -144,7 +143,7 @@ class StartOnboardingTests(unittest.TestCase):
     def test_plain_start_probes_model_then_opens_greeting_choice(self):
         opened = []
         with patch.object(
-            _m_command_routes, "generate_text", create=True, return_value="OK"
+            _m_command_routes, "generate_text", return_value="OK"
         ) as generate, patch.object(
             _m_command_routes,
             "send_greeting_menu",
@@ -172,7 +171,7 @@ class StartOnboardingTests(unittest.TestCase):
             }
         )
         with patch.object(
-            _m_command_routes, "generate_text", create=True, return_value="OK"
+            _m_command_routes, "generate_text", return_value="OK"
         ) as generate, patch.object(
             _m_command_routes, "active_world_files", return_value=["world.json"]
         ), patch.object(

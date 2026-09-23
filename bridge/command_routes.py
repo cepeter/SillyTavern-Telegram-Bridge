@@ -8,10 +8,42 @@ from bridge.extension_registry import dispatch_command_routes as _dispatch_exten
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices
 
+
+_START_MODEL_PLACEHOLDERS = frozenset({
+    "provider-one::provider-one/model-a",
+    "example-provider::example-model",
+})
+
+
+def _start_model_readiness_error(api_key, current_model, session_id):
+    selected_model = str(current_model or "").strip()
+    if not selected_model or selected_model in _START_MODEL_PLACEHOLDERS:
+        return "please set your model first in /providers command"
+    try:
+        generate_text(
+            api_key,
+            selected_model,
+            [{"role": "user", "content": "Reply OK."}],
+            session_id=f"start-check:{session_id}",
+            settings={"max_tokens": 8, "temperature": 0},
+        )
+    except Exception as exc:
+        detail = " ".join(str(exc).split()).strip() or type(exc).__name__
+        return f"Model check failed: {detail[:800]}"
+    return ""
+
+
 def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id, services, *, request_context):
     if command.startswith("/help "):
         send_help_command(request_context, token, chat_id, stripped)
         return True
+    if command in {"/start", "start"}:
+        readiness_error = _start_model_readiness_error(
+            api_key, current_model, session_id
+        )
+        if readiness_error:
+            send_text(token, chat_id, readiness_error)
+            return True
     if command == "/start":
         persona_ready = bool(current_persona)
         world_ready = bool(active_world_files(session.get("world_file") or ""))
@@ -500,6 +532,7 @@ from bridge.database import (
 from bridge.expressions import send_expression_menu
 from bridge.generation import (
     continue_last,
+    generate_text,
     regenerate_last,
     send_swipe_menu,
 )
