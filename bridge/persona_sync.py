@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import time
+import threading
 from pathlib import Path
 
 from bridge.config import BRIDGE_HOME, SILLYTAVERN_DIR
@@ -30,6 +31,7 @@ _NATIVE_PERSONA_CACHE_LAST_REFRESH = 0.0
 _NATIVE_PERSONA_CACHE_SECONDS = 15.0
 _NATIVE_PERSONA_CACHE: dict[str, dict[str, object]] = {}
 _NATIVE_AVATAR_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+PERSONA_EDIT_LOCK = threading.RLock()
 
 
 def load_personas() -> dict[str, dict[str, object]]:
@@ -323,7 +325,6 @@ def delete_native_persona(identifier: str, client=None) -> bool:
 from bridge.cards import default_persona_id
 from bridge.common import IMAGE_MAX_BYTES
 from bridge.config import CATALOG_MAX_ITEMS
-from bridge.input_flows import PERSONA_EDIT_LOCK
 from bridge.sync_api import (
     phase3_api_configured,
     phase3_client,

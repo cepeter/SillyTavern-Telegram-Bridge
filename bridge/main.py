@@ -54,7 +54,6 @@ from bridge.generation import generate_text, resolve_provider_model
 from bridge.group_core import group_member_labels, group_state
 from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
 from bridge.help import set_bot_commands
-from bridge.input_flows import PERSONA_EDIT_LOCK
 from bridge.job_service import JobService as _JobService
 from bridge.media import get_provider_spec
 from bridge.memory import (
@@ -66,7 +65,12 @@ from bridge.memory import (
 from bridge.memory_backend import recall_memory_context
 from bridge.memory_service import MemoryService as _MemoryService
 from bridge.persona_service import PersonaService as _PersonaService
-from bridge.persona_sync import delete_native_persona, load_personas, upsert_native_persona
+from bridge.persona_sync import (
+    PERSONA_EDIT_LOCK,
+    delete_native_persona,
+    load_personas,
+    upsert_native_persona,
+)
 from bridge.repositories import (
     count_persona_references as _count_persona_references,
     count_session_messages as _count_session_messages,
