@@ -109,3 +109,118 @@ def test_startup_composes_group_before_director_and_director_uses_service():
     assert "_GroupService(" in source
     assert "load_group_state=group.state" in source
     assert "member_labels=group.member_labels" in source
+
+
+def test_conversation_forwards_group_service_to_generation():
+    from types import SimpleNamespace
+    from bridge.conversation_service import ConversationService, PreparedMessage
+
+    group = object()
+    memory = object()
+    persona = object()
+    request_context = object()
+    prepared = PreparedMessage(
+        stripped="hello",
+        command="hello",
+        fields={"name": "Mira"},
+        session={"session_id": "session"},
+        session_id="session",
+        current_model="model",
+        current_persona="",
+        user_name="User",
+        group_turn=None,
+        group_context="",
+        request_context=request_context,
+    )
+    generated = {}
+
+    service = ConversationService(
+        prepare_message=lambda *_args, **_kwargs: prepared,
+        dispatch_command=lambda *_args, **_kwargs: False,
+        generate_reply=lambda *_args, **kwargs: generated.update(kwargs),
+    )
+    services = SimpleNamespace(group=group, memory=memory, persona=persona)
+
+    service.process_message(
+        object(), "token", "key", "queue-model", {}, "chat", "hello", 11,
+        services=services,
+    )
+
+    assert generated["group_service"] is group
+    assert generated["memory_service"] is memory
+    assert generated["persona_service"] is persona
+
+
+def test_image_processing_requires_group_service_parameter():
+    from bridge.commands import process_image_message
+
+    param = inspect.signature(process_image_message).parameters.get("group_service")
+    assert param is not None
+    assert param.default is inspect.Parameter.empty
+
+
+def test_application_paths_do_not_import_group_core_after_service_migration():
+    for filename in (
+        "message_commands.py",
+        "commands.py",
+        "worker_orchestration.py",
+        "update_routing.py",
+    ):
+        assert "bridge.group_core" not in imported_modules(filename), filename
+
+
+def test_committed_recovery_uses_group_service_for_advance(monkeypatch):
+    import sqlite3
+    from types import SimpleNamespace
+    import bridge.worker_orchestration as workers
+
+    calls = []
+
+    class Group:
+        def current_speaker(self, *args):
+            calls.append(("speaker", args[1:]))
+            return ("mira.png", {"enabled": True})
+
+        def advance_turn(self, *args, **kwargs):
+            calls.append(("advance", args[1:], kwargs))
+
+    jobs = SimpleNamespace(
+        actor_id=lambda *_args: "actor",
+        complete=lambda *_args: True,
+        fail=lambda *_args: True,
+    )
+    services = SimpleNamespace(
+        config=SimpleNamespace(
+            bot_token="token",
+            api_key="key",
+            default_model="model",
+        ),
+        db_factory=lambda: sqlite3.connect(":memory:"),
+        jobs=jobs,
+        group=Group(),
+        conversation=object(),
+        telegram=SimpleNamespace(send_text=lambda *_args, **_kwargs: None),
+    )
+    monkeypatch.setattr(
+        workers,
+        "committed_assistant_for_message",
+        lambda *_args: (7, "stored reply", "[]"),
+    )
+    monkeypatch.setattr(
+        workers,
+        "load_session",
+        lambda *_args: {"session_id": "session"},
+    )
+    monkeypatch.setattr(workers, "send_reply", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(workers, "clear_failed_turn", lambda *_args: None)
+
+    workers.process_message_job(
+        services,
+        {"name": "Mira"},
+        "chat",
+        "hello",
+        11,
+        queued_session_id="session",
+    )
+
+    assert [item[0] for item in calls] == ["speaker", "advance"]

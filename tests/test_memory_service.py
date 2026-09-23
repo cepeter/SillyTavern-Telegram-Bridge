@@ -1,4 +1,5 @@
-from application_test_setup import make_test_conversation_service
+from application_test_setup import make_test_conversation_service, make_test_group_service
+
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
@@ -307,6 +308,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "",
                 None,
                 None,
+                group_service=make_test_group_service(),
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
             )
@@ -519,9 +521,12 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             captured.update(kwargs)
             return [{"role": "user", "content": text}]
 
-        with patch.object(_m_commands, "group_current_speaker",
-            return_value=None,
-        ), patch.object(
+        group_service = SimpleNamespace(
+            current_speaker=lambda *_args, **_kwargs: None,
+            advance_turn=lambda *_args, **_kwargs: None,
+        )
+
+        with patch.object(
             _m_memory_backend,
             "recall_memory_context",
             side_effect=legacy_called,
@@ -561,6 +566,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "chat",
                 "describe this",
                 b"image-bytes",
+                group_service=group_service,
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
                 group_director_service=make_test_application_services().group_director,

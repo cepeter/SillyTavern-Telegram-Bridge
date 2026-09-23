@@ -1,4 +1,5 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_group_service
+
 
 ensure_application_extensions()
 
@@ -435,11 +436,11 @@ class GroupTransactionTests(unittest.TestCase):
     def test_group_persistence_helpers_no_longer_expose_commit_flag(self):
         self.assertNotIn(
             "commit",
-            inspect.signature(_m_groups.save_group_state).parameters,
+            inspect.signature(group_core.save_group_state).parameters,
         )
         self.assertNotIn(
             "commit",
-            inspect.signature(_m_message_commands.advance_group_turn).parameters,
+            inspect.signature(make_test_group_service().advance_turn).parameters,
         )
 
     def test_save_group_state_joins_outer_transaction(self):
@@ -584,6 +585,7 @@ class GroupTransactionTests(unittest.TestCase):
                 "",
                 None,
                 None,
+             group_service=make_test_group_service(),
              memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self._assert_group_reply_transaction_committed()
@@ -599,7 +601,7 @@ class GroupTransactionTests(unittest.TestCase):
         }
 
         with patch.object(
-            _m_commands, "group_current_speaker", return_value=group_turn
+            _m_group_core, "group_current_speaker", return_value=group_turn
         ), patch.object(
             _m_commands, "card_fields_from_file", return_value={"name": "One"}
         ), patch.object(
@@ -628,6 +630,7 @@ class GroupTransactionTests(unittest.TestCase):
                 self.chat_id,
                 "caption",
                 b"image",
+             group_service=make_test_group_service(),
              memory_service=make_test_memory_service(),
              persona_service=make_test_persona_service(),
              group_director_service=make_test_application_services().group_director)

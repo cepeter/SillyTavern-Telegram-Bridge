@@ -52,9 +52,9 @@ _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
 
 
 
-def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
+def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, group_service: GroupService, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
-    group_turn = group_current_speaker(db, chat_id, session, caption)
+    group_turn = group_service.current_speaker(db, chat_id, session, caption)
     group_context = ""
     if group_turn:
         fields = card_fields_from_file(group_turn[0])
@@ -97,7 +97,7 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
             commit=False,
         )
         if group_turn:
-            advance_group_turn(db, chat_id, session["session_id"])
+            group_service.advance_turn(db, chat_id, session["session_id"])
     memory_service.retain(db, chat_id, session, fields)
     send_reply(token, chat_id, stored_reply, db, session["session_id"], assistant_rowid)
 
@@ -459,11 +459,8 @@ from bridge.generation import (
     save_response_variant,
 )
 from bridge.group_director_service import GroupDirectorService
-from bridge.group_core import (
-    advance_group_turn,
-    group_current_speaker,
-    group_state,
-)
+from bridge.group_service import GroupService
+from bridge.group_core import group_state
 from bridge.media import (
     delete_outgoing_message_row,
     send_reply,

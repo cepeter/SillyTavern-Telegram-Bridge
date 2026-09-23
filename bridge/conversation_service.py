@@ -81,6 +81,7 @@ class ConversationService:
             prepared.session, prepared.session_id, prepared.current_model,
             prepared.group_turn, prepared.group_context,
             telegram_message_id, operation_id,
+            group_service=services.group,
             memory_service=services.memory,
             persona_service=services.persona,
         )
