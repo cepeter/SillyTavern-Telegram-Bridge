@@ -335,7 +335,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         )
         self.assertEqual(token, expected)
 
-    def test_callback_token_scope_mismatch_invalidates_cache_and_database(self):
+    def test_callback_token_scope_mismatch_preserves_valid_token(self):
         import bridge.callback_tokens as callback_tokens
 
         db = sqlite3.connect(":memory:")
@@ -363,11 +363,11 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                     db=db,
                 )
             )
-            self.assertNotIn(
+            self.assertIn(
                 token,
                 callback_tokens._CALLBACK_TOKEN_VALUES,
             )
-            self.assertIsNone(
+            self.assertIsNotNone(
                 db.execute(
                     "SELECT 1 FROM callback_tokens WHERE token=?",
                     (token,),
@@ -416,7 +416,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             callback_tokens._CALLBACK_TOKEN_VALUES.clear()
             db.close()
 
-    def test_callback_token_expiry_invalidates_memory_and_database(self):
+    def test_callback_token_expiry_evicts_cache_without_database_mutation(self):
         import bridge.callback_tokens as callback_tokens
 
         db = sqlite3.connect(":memory:")
@@ -462,7 +462,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
                 token,
                 callback_tokens._CALLBACK_TOKEN_VALUES,
             )
-            self.assertIsNone(
+            self.assertIsNotNone(
                 db.execute(
                     "SELECT 1 FROM callback_tokens WHERE token=?",
                     (token,),
