@@ -573,37 +573,6 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             ("retain", self.session["session_id"]),
         ])
 
-    def test_telegram_image_adapter_propagates_memory_service(self):
-        memory = object()
-        captured = {}
-
-        with patch.object(
-            _m_telegram,
-            "download_telegram_file",
-            return_value=b"image",
-        ), patch.object(
-            _m_telegram,
-            "ensure_session",
-            return_value=self.session,
-        ), patch.object(_m_telegram, "card_fields_from_file",
-            return_value=self.fields,
-        ), patch.object(_m_telegram, "process_image_message",
-            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
-        ):
-            _m_telegram.process_telegram_image(
-                self.db,
-                "token",
-                "chat",
-                "file-id",
-                "caption",
-                "provider::model",
-                memory_service=memory,
-                persona_service=make_test_persona_service(),
-                group_director_service=make_test_application_services().group_director,
-            )
-
-        self.assertIs(captured["memory_service"], memory)
-
     def test_png_document_adapter_propagates_memory_service(self):
         memory = object()
         captured = {}
@@ -630,8 +599,6 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             return_value=self.session,
         ), patch.object(_m_telegram, "card_fields_from_file",
             return_value=self.fields,
-        ), patch.object(_m_telegram, "process_image_message",
-            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
             _m_help.import_telegram_document(
                 self.db,
@@ -639,6 +606,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "chat",
                 document,
                 "provider::model",
+                api_key="key",
+                process_image=lambda *_args, **kwargs: captured.update(kwargs),
                 memory_service=memory,
                 persona_service=make_test_persona_service(),
                 group_director_service=make_test_application_services().group_director,

@@ -6,18 +6,11 @@ from pathlib import Path
 import time
 
 
-SESSION_TITLE_MAX_CHARS = 80
+from bridge import session_titles as _session_titles
+
 _SESSION_PENDING_PREFIXES = (
     "settings_input", "preset_save_input", "stt_language_input", "persona_input", "note_input",
 )
-
-
-def normalize_session_title(value: str) -> str:
-    """Normalize and validate a user-visible session title."""
-    title = " ".join(str(value or "").split())
-    if not title or len(title) > SESSION_TITLE_MAX_CHARS or title.startswith("/"):
-        raise ValueError(f"Session name must contain 1–{SESSION_TITLE_MAX_CHARS} characters and cannot start with /.")
-    return title
 
 
 def _is_cancel_input(value: str) -> bool:
@@ -63,7 +56,7 @@ def start_session_name_input(db, token: str, chat_id: str, session: dict[str, st
         "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS,
     }
     prompt = "Send a name for the new group session" if state["kind"] == "group" else "Send a name for the new session"
-    state["prompt_message_ids"] = send_text(token, chat_id, f"{prompt} (1–{SESSION_TITLE_MAX_CHARS} characters). Send /cancel to cancel.")
+    state["prompt_message_ids"] = send_text(token, chat_id, f"{prompt} (1–{_session_titles.SESSION_TITLE_MAX_CHARS} characters). Send /cancel to cancel.")
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
@@ -80,7 +73,7 @@ def handle_session_name_input(db, token: str, chat_id: str, session: dict[str, s
         send_text(token, chat_id, "New session cancelled.")
         return True
     try:
-        title = normalize_session_title(stripped)
+        title = _session_titles.normalize_session_title(stripped)
     except ValueError as exc:
         send_pending_input_message(db, token, chat_id, meta_key, state, f"{exc} Try again or send /cancel.")
         return True

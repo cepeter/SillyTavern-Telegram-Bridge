@@ -1,8 +1,6 @@
 """Open one scoped free-form input action and close its originating panel."""
 from __future__ import annotations
 
-import threading
-
 def _decode_pending_state(raw: str, meta_key: str) -> dict:
     try:
         return json.loads(raw) if raw else {}
@@ -163,9 +161,6 @@ def _handle_note_input(db, token: str, chat_id: str, session: dict, stripped: st
     send_text(token, chat_id, "Author's Note updated for this session.")
     send_note_menu( token, chat_id, note, request_context=request_context)
     return True
-
-
-PERSONA_EDIT_LOCK = threading.RLock()
 
 
 def _persona_input_prompt(mode: str, current_name: str = "", persona_id: str = "", *, persona_service: PersonaService) -> str:

@@ -29,6 +29,7 @@ class BridgeConfig:
 class TelegramRuntime:
     request: Callable[..., object]
     send_text: Callable[..., object]
+    download_file: Callable[..., bytes]
 
 
 @dataclass(frozen=True)

@@ -115,6 +115,7 @@ class CompositionConfigTests(unittest.TestCase):
         telegram = TelegramRuntime(
             request=lambda *_args, **_kwargs: {},
             send_text=lambda *_args, **_kwargs: None,
+            download_file=lambda *_args, **_kwargs: b"",
         )
         background = BackgroundRuntime(
             submit_chat=lambda *_args, **_kwargs: True,
@@ -348,6 +349,7 @@ class WorkerInjectionTests(unittest.TestCase):
             telegram=TelegramRuntime(
                 request=lambda *_args, **_kwargs: {},
                 send_text=lambda *args, **_kwargs: self.sent.append(args),
+                download_file=lambda *_args, **_kwargs: b"",
             ),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
@@ -626,7 +628,15 @@ class WorkerInjectionTests(unittest.TestCase):
 
         with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_workers, "process_telegram_image",
+        ), patch.object(
+            _m_workers,
+            "ensure_session",
+            return_value={"session_id": "session", "character_file": "mira.png"},
+        ), patch.object(
+            _m_workers,
+            "card_fields_from_file",
+            return_value={"name": "Mira"},
+        ), patch.object(_m_workers, "process_image_message",
             side_effect=lambda *_args, **kwargs: captured.update(kwargs),
         ):
             _m_workers.process_image_job(
@@ -730,6 +740,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             telegram=TelegramRuntime(
                 request=lambda *_args, **_kwargs: {},
                 send_text=lambda *_args, **_kwargs: None,
+                download_file=lambda *_args, **_kwargs: b"",
             ),
             background=self.background,
             jobs=Mock(),
@@ -991,6 +1002,7 @@ class StartupCompositionTests(unittest.TestCase):
             telegram=TelegramRuntime(
                 request=self._request,
                 send_text=lambda *_args, **_kwargs: None,
+                download_file=lambda *_args, **_kwargs: b"",
             ),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
@@ -1138,7 +1150,11 @@ class StartupCompositionTests(unittest.TestCase):
         services = BridgeServices(
             config=self.config,
             db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
-            telegram=TelegramRuntime(request=request, send_text=lambda *_args, **_kwargs: None),
+            telegram=TelegramRuntime(
+                request=request,
+                send_text=lambda *_args, **_kwargs: None,
+                download_file=lambda *_args, **_kwargs: b"",
+            ),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
                 register_backlog_dispatcher=lambda _callback: None,
@@ -1177,7 +1193,11 @@ class StartupCompositionTests(unittest.TestCase):
         services = BridgeServices(
             config=self.config,
             db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
-            telegram=TelegramRuntime(request=request, send_text=lambda *args, **_kwargs: sent.append(args)),
+            telegram=TelegramRuntime(
+                request=request,
+                send_text=lambda *args, **_kwargs: sent.append(args),
+                download_file=lambda *_args, **_kwargs: b"",
+            ),
             background=BackgroundRuntime(
                 submit_chat=lambda *_args, **_kwargs: True,
                 register_backlog_dispatcher=lambda _callback: None,

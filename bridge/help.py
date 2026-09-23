@@ -494,6 +494,8 @@ def process_document_job(
                 document,
                 model,
                 telegram_message_id=message_id,
+                api_key=services.config.api_key,
+                process_image=process_image_message,
                 memory_service=services.memory,
                 persona_service=services.persona,
                 group_director_service=services.group_director,
@@ -576,7 +578,7 @@ from bridge.card_content import (
     system_prompt_choices,
 )
 from bridge.cards import send_panel_message
-from bridge.commands import apply_preset_action
+from bridge.commands import apply_preset_action, process_image_message
 from bridge.common import (
     chat_job_lock,
     STT_DEFAULT_MODEL,

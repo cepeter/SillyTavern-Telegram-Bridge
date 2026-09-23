@@ -54,7 +54,6 @@ from bridge.generation import generate_text, resolve_provider_model
 from bridge.group_core import group_member_labels, group_state
 from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
 from bridge.help import set_bot_commands
-from bridge.input_flows import PERSONA_EDIT_LOCK
 from bridge.job_service import JobService as _JobService
 from bridge.media import get_provider_spec
 from bridge.memory import (
@@ -66,7 +65,12 @@ from bridge.memory import (
 from bridge.memory_backend import recall_memory_context
 from bridge.memory_service import MemoryService as _MemoryService
 from bridge.persona_service import PersonaService as _PersonaService
-from bridge.persona_sync import delete_native_persona, load_personas, upsert_native_persona
+from bridge.persona_sync import (
+    PERSONA_EDIT_LOCK,
+    delete_native_persona,
+    load_personas,
+    upsert_native_persona,
+)
 from bridge.repositories import (
     count_persona_references as _count_persona_references,
     count_session_messages as _count_session_messages,
@@ -85,7 +89,12 @@ from bridge.sync_api import (
 )
 from bridge.sync_core import sync_binding
 from bridge.sync_service import SyncService as _SyncService
-from bridge.telegram import send_text, telegram_request, update_session
+from bridge.telegram import (
+    download_telegram_file,
+    send_text,
+    telegram_request,
+    update_session,
+)
 
 _DURABLE_WORKER_GUARD = _DurableWorkerGuard(
     _database._lightweight_db_connect
@@ -200,6 +209,7 @@ def _build_startup_services(
         telegram=_TelegramRuntime(
             request=telegram_request,
             send_text=send_text,
+            download_file=download_telegram_file,
         ),
         background=background,
         group_director=group_director,
