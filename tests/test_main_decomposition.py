@@ -75,6 +75,22 @@ class MainDecompositionTests(unittest.TestCase):
         self.assertNotIn("start_phase3_sync_worker(", main_chunk)
         self.assertNotIn("shutdown_background_executors(", main_chunk)
 
+    def test_main_passes_loaded_card_fields_to_runtime(self):
+        main_path = BRIDGE_DIR / "main.py"
+        tree = ast.parse(main_path.read_text(encoding="utf-8"))
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "run_bridge_runtime"
+        ]
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls[0].args), 2)
+        self.assertIsInstance(calls[0].args[1], ast.Name)
+        self.assertEqual(calls[0].args[1].id, "fields")
+
 
 if __name__ == "__main__":
     unittest.main()
