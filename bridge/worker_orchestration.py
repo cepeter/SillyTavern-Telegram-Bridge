@@ -18,7 +18,6 @@ from bridge.database import (
     record_operation,
     run_write_txn,
 )
-from bridge.group_core import advance_group_turn, group_current_speaker
 from bridge.help import process_document_job
 from bridge.job_service import DurableJob, JobSubmission
 from bridge.media import process_voice_job, send_reply
@@ -48,8 +47,13 @@ def process_message_job(
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 recovery_session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
-                if group_current_speaker(db, chat_id, recovery_session, text):
-                    advance_group_turn(db, chat_id, recovery_session["session_id"], operation_id=job_id)
+                if services.group.current_speaker(db, chat_id, recovery_session, text):
+                    services.group.advance_turn(
+                        db,
+                        chat_id,
+                        recovery_session["session_id"],
+                        job_id,
+                    )
                 if json.loads(existing[2] or "[]"):
                     clear_failed_turn(db, chat_id, message_id)
                     if job_id is not None:
@@ -161,6 +165,7 @@ def process_image_job(
                 caption,
                 image_bytes,
                 telegram_message_id=message_id,
+                group_service=services.group,
                 memory_service=services.memory,
                 persona_service=services.persona,
                 group_director_service=services.group_director,

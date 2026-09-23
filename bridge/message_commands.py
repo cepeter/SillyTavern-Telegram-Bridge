@@ -60,7 +60,7 @@ def send_pending_input_message(db: sqlite3.Connection, token: str, chat_id: str,
     set_meta(db, meta_key, json.dumps(state))
 
 
-def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
+def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, fields: dict, chat_id: str, text: str, session: dict, session_id: str, current_model: str, group_turn, group_context: str, telegram_message_id: int | None, operation_id: int | None, *, group_service: GroupService, memory_service: MemoryService, persona_service: PersonaService) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
     history_rows = timed_call("history_load", db.execute,
         "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
@@ -118,11 +118,11 @@ def generate_and_store_reply(db: sqlite3.Connection, token: str, api_key: str, f
                 commit=False,
             )
             if group_turn:
-                advance_group_turn(
+                group_service.advance_turn(
                     db,
                     chat_id,
                     session_id,
-                    operation_id=operation_id,
+                    operation_id,
                 )
             return assistant_rowid
 
@@ -244,6 +244,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         api_key=api_key,
         fields=fields,
         operation_id=operation_id,
+        group_service=services.group,
         memory_service=memory_service,
         persona_service=persona_service,
         request_context=request_context,
@@ -269,7 +270,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
         group_turn = (director_plan[0], director_plan[1])
         director_instruction = director_plan[2]
     else:
-        group_turn = group_current_speaker(db, chat_id, session, text)
+        group_turn = services.group.current_speaker(db, chat_id, session, text)
     group_context = ""
     if group_turn:
         fields = card_fields_from_file(group_turn[0])
@@ -332,10 +333,6 @@ from bridge.generation import (
     save_response_variant,
     swipe_state_key,
 )
-from bridge.group_core import (
-    advance_group_turn,
-    group_current_speaker,
-)
 from bridge.input_flows import handle_pending_input
 from bridge.language import normalize_response_language
 from bridge.media import (
@@ -344,6 +341,7 @@ from bridge.media import (
     send_typing,
 )
 from bridge.memory import clear_session_summary
+from bridge.group_service import GroupService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.performance import timed_call

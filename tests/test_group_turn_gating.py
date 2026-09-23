@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_memory_service, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -28,7 +28,8 @@ class GroupTurnGatingTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
-        _m_groups.save_group_state(self.db, "chat", "session", {
+        self.group = make_test_group_service()
+        self.group.save(self.db, "chat", "session", {
             "title": "Group chat",
             "enabled": True,
             "turn_index": 0,
@@ -57,15 +58,15 @@ class GroupTurnGatingTests(unittest.TestCase):
     def test_owner_can_pass_turn_to_next_known_user(self):
         self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
         self.assertFalse(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
-        self.assertTrue(_m_groups.claim_group_user_turn(self.db, "chat", "session", "user-a"))
-        self.assertTrue(_m_groups.pass_group_user_turn(self.db, "chat", "session", "user-a"))
+        self.assertTrue(self.group.claim_user_turn(self.db, "chat", "session", "user-a"))
+        self.assertTrue(self.group.pass_user_turn(self.db, "chat", "session", "user-a"))
         self.assertFalse(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
         self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
 
     def test_non_manual_mode_does_not_gate_user_messages(self):
         state = _m_sync_api.group_state(self.db, "chat", "session")
         state["mode"] = "round_robin"
-        _m_groups.save_group_state(self.db, "chat", "session", state)
+        self.group.save(self.db, "chat", "session", state)
         self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-a"))
         self.assertTrue(_m_group_core.group_user_turn_allowed(self.db, "chat", "session", "user-b"))
 
@@ -76,13 +77,13 @@ class GroupTurnGatingTests(unittest.TestCase):
         try:
             state = _m_sync_api.group_state(self.db, "chat", "session")
             state["mode"] = "manual"
-            _m_groups.save_group_state(self.db, "chat", "session", state)
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, request_context=make_test_request_context(self.db, "session", "user"))
+            self.group.save(self.db, "chat", "session", state)
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, group_service=self.group, request_context=make_test_request_context(self.db, "session", "user"))
             manual_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertEqual(manual_callbacks & {"group:claim", "group:pass"}, {"group:claim", "group:pass"})
             state["mode"] = "round_robin"
-            _m_groups.save_group_state(self.db, "chat", "session", state)
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, request_context=make_test_request_context(self.db, "session", "user"))
+            self.group.save(self.db, "chat", "session", state)
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, group_service=self.group, request_context=make_test_request_context(self.db, "session", "user"))
             other_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertEqual(other_callbacks & {"group:claim", "group:pass"}, set())
         finally:
@@ -92,7 +93,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
         try:
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, message_id=10, request_context=make_test_request_context(self.db, "session", "user"))
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, message_id=10, group_service=self.group, request_context=make_test_request_context(self.db, "session", "user"))
         finally:
             _m_cards.send_panel_request = original_request
 
@@ -101,10 +102,10 @@ class GroupTurnGatingTests(unittest.TestCase):
         calls = []
         _m_cards.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat|topic:7", {"session_id": "session"}, request_context=make_test_request_context(self.db, "session", "user"))
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat|topic:7", {"session_id": "session"}, group_service=self.group, request_context=make_test_request_context(self.db, "session", "user"))
             topic_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertIn("group:new_session", topic_callbacks)
-            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, request_context=make_test_request_context(self.db, "session", "user"))
+            _m_panel_callback_routes.send_group_menu(self.db, "token", "chat", {"session_id": "session"}, group_service=self.group, request_context=make_test_request_context(self.db, "session", "user"))
             dm_callbacks = {button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row}
             self.assertNotIn("group:new_session", dm_callbacks)
         finally:
@@ -133,16 +134,16 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_session_naming.send_text = lambda *_args, **_kwargs: []
         callback = {"id": "callback", "from": {"id": "user"}, "data": "group:new_session", "message": {"message_id": 10, "chat": {"id": chat_id}}}
         try:
-            _m_groups.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user", request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            _m_groups.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user", group_service=self.group, request_context=make_test_request_context(self.db, session["session_id"], "user"))
             pending = _m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "")
             self.assertTrue(pending)
-            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, group_service=self.group, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"], "user"))
         finally:
             _m_session_naming.close_panel_message = original_close
             _m_session_naming.send_character_menu = original_menu
             _m_session_naming.send_text = original_send
         active_id = _m_session_naming.get_meta(self.db, f"active_session:{chat_id}", "")
-        setup = _m_panel_callback_routes.group_setup_state(self.db, chat_id, active_id)
+        setup = self.group.setup_state(self.db, chat_id, active_id)
         self.assertEqual(active_id, "group-77")
         self.assertIsNotNone(setup)
         self.assertEqual(setup["stage"], "character")
@@ -178,15 +179,15 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_panel_callback_routes.send_group_menu = lambda *_args, **_kwargs: opened_group.append(True)
         try:
             character_callback = self._callback("character:character-token")
-            _m_panel_callback_routes.handle_character_callback(self.db, "token", character_callback, lambda *_args: None, character_callback["data"], chat_id, character_callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"], "user"))
-            setup = _m_panel_callback_routes.group_setup_state(self.db, chat_id, session["session_id"])
+            _m_panel_callback_routes.handle_character_callback(self.db, "token", character_callback, lambda *_args: None, character_callback["data"], chat_id, character_callback["message"], session, session["session_id"], None, group_service=self.group, request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            setup = self.group.setup_state(self.db, chat_id, session["session_id"])
             self.assertEqual(setup["stage"], "world")
             self.assertEqual(_m_memory_curator.load_session(self.db, chat_id, session["session_id"], _m_memory_curator.DEFAULT_MODEL)["character_file"], "chosen.png")
             world_callback = self._callback("world:world-token")
-            _m_panel_callback_routes.handle_world_callback(self.db, "token", world_callback, lambda *_args: None, world_callback["data"], chat_id, world_callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            _m_panel_callback_routes.handle_world_callback(self.db, "token", world_callback, lambda *_args: None, world_callback["data"], chat_id, world_callback["message"], session, session["session_id"], None, group_service=self.group, request_context=make_test_request_context(self.db, session["session_id"], "user"))
             self.assertEqual(_m_sync_core.active_world_files(_m_memory_curator.load_session(self.db, chat_id, session["session_id"], _m_memory_curator.DEFAULT_MODEL)["world_file"]), ["lore.json"])
             done_callback = self._callback("world:done")
-            _m_panel_callback_routes.handle_world_callback(self.db, "token", done_callback, lambda *_args: None, done_callback["data"], chat_id, done_callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            _m_panel_callback_routes.handle_world_callback(self.db, "token", done_callback, lambda *_args: None, done_callback["data"], chat_id, done_callback["message"], session, session["session_id"], None, group_service=self.group, request_context=make_test_request_context(self.db, session["session_id"], "user"))
         finally:
             _m_panel_callback_routes.resolve_dynamic_callback_token = original_resolve
             _m_panel_callback_routes.safe_character_path = original_char_path
@@ -211,7 +212,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_session_naming.close_panel_message = lambda *_args, **_kwargs: None
         try:
             callback = self._callback("character:cancel")
-            handled = _m_panel_callback_routes.handle_character_callback(self.db, "token", callback, lambda *_args: None, callback["data"], chat_id, callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            handled = _m_panel_callback_routes.handle_character_callback(self.db, "token", callback, lambda *_args: None, callback["data"], chat_id, callback["message"], session, session["session_id"], None, group_service=self.group, request_context=make_test_request_context(self.db, session["session_id"], "user"))
         finally:
             _m_session_naming.close_panel_message = original_close
         self.assertTrue(handled)

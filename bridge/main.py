@@ -51,8 +51,21 @@ from bridge.database import (
 )
 from bridge.extension_registry import get_director_customization as _get_director_customization_value
 from bridge.generation import generate_text, resolve_provider_model
-from bridge.group_core import group_member_labels, group_state
+from bridge.group_core import (
+    advance_group_turn,
+    claim_group_user_turn,
+    group_character_option_label,
+    group_current_speaker,
+    group_member_labels,
+    group_setup_state,
+    group_state,
+    group_user_turn_allowed,
+    pass_group_user_turn,
+    resolve_character_file,
+    save_group_state,
+)
 from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
+from bridge.group_service import GroupService as _GroupService
 from bridge.help import set_bot_commands
 from bridge.job_service import JobService as _JobService
 from bridge.media import get_provider_spec
@@ -152,10 +165,23 @@ def _load_startup_config(environ) -> _BridgeConfig:
 def _build_startup_services(
     config: _BridgeConfig,
 ) -> _BridgeServices:
+    group = _GroupService(
+        load_state=group_state,
+        save_state=save_group_state,
+        user_turn_allowed_backend=group_user_turn_allowed,
+        claim_user_turn_backend=claim_group_user_turn,
+        pass_user_turn_backend=pass_group_user_turn,
+        setup_state_backend=group_setup_state,
+        character_option_label_backend=group_character_option_label,
+        resolve_character_backend=resolve_character_file,
+        member_labels_backend=group_member_labels,
+        current_speaker_backend=group_current_speaker,
+        advance_turn_backend=advance_group_turn,
+    )
     group_director = _GroupDirectorService(
-        load_group_state=group_state,
+        load_group_state=group.state,
         safe_character=safe_character_path,
-        member_labels=group_member_labels,
+        member_labels=group.member_labels,
         card_fields=card_fields_from_file,
         generation_settings=get_generation_settings,
         generate_text=generate_text,
@@ -212,6 +238,7 @@ def _build_startup_services(
             download_file=download_telegram_file,
         ),
         background=background,
+        group=group,
         group_director=group_director,
         memory=memory,
         persona=persona,

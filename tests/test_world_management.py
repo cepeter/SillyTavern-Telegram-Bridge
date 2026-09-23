@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_request_context, make_test_group_service
 
 ensure_application_extensions()
 
@@ -86,7 +86,7 @@ class WorldManagementTests(unittest.TestCase):
         _m_panel_callback_routes.send_text = lambda *_args, **_kwargs: sent.append(True) or []
         _m_panel_callback_routes.discard_panel_binding = lambda *_args, **_kwargs: None
         try:
-            _m_panel_callback_routes.handle_world_callback(self.db, "token", callback, lambda *_args: answers.append(True), callback["data"], "chat", callback["message"], self.session, self.session["session_id"], None, request_context=make_test_request_context(self.db, self.session["session_id"]))
+            _m_panel_callback_routes.handle_world_callback(self.db, "token", callback, lambda *_args: answers.append(True), callback["data"], "chat", callback["message"], self.session, self.session["session_id"], None, group_service=make_test_group_service(), request_context=make_test_request_context(self.db, self.session["session_id"]))
         finally:
             _m_panel_callback_routes.send_text = original_send
             _m_panel_callback_routes.discard_panel_binding = original_discard

@@ -122,6 +122,38 @@ def make_test_sync_service() -> SyncService:
     )
 
 
+def make_test_group_service():
+    """Compose GroupService from the canonical group-core implementation."""
+    from bridge.group_core import (
+        advance_group_turn,
+        claim_group_user_turn,
+        group_character_option_label,
+        group_current_speaker,
+        group_member_labels,
+        group_setup_state,
+        group_state,
+        group_user_turn_allowed,
+        pass_group_user_turn,
+        resolve_character_file,
+        save_group_state,
+    )
+    from bridge.group_service import GroupService
+
+    return GroupService(
+        load_state=group_state,
+        save_state=save_group_state,
+        user_turn_allowed_backend=group_user_turn_allowed,
+        claim_user_turn_backend=claim_group_user_turn,
+        pass_user_turn_backend=pass_group_user_turn,
+        setup_state_backend=group_setup_state,
+        character_option_label_backend=group_character_option_label,
+        resolve_character_backend=resolve_character_file,
+        member_labels_backend=group_member_labels,
+        current_speaker_backend=group_current_speaker,
+        advance_turn_backend=advance_group_turn,
+    )
+
+
 class _TestGroupDirector:
     def plan(self, *_args, **_kwargs):
         return None
@@ -148,6 +180,7 @@ def make_test_application_services(
     memory=None,
     persona=None,
     sync=None,
+    group=None,
     group_director=None,
     conversation=None,
 ):
@@ -156,6 +189,7 @@ def make_test_application_services(
         memory=memory or make_test_memory_service(),
         persona=persona or make_test_persona_service(),
         sync=sync or make_test_sync_service(),
+        group=group or make_test_group_service(),
         group_director=group_director or _TestGroupDirector(),
         conversation=conversation or make_test_conversation_service(),
     )

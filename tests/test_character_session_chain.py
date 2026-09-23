@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_memory_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -22,6 +22,7 @@ class CharacterSessionChainTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
+        self.group = make_test_group_service()
 
     def tearDown(self):
         self.db.close()
@@ -45,7 +46,7 @@ class CharacterSessionChainTests(unittest.TestCase):
         _m_panel_callback_routes.send_session_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
             callback = self._callback("character:token")
-            handled = _m_panel_callback_routes.handle_character_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], session, session["session_id"], None, request_context=make_test_request_context(self.db, session["session_id"]))
+            handled = _m_panel_callback_routes.handle_character_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], session, session["session_id"], None, group_service=self.group, request_context=make_test_request_context(self.db, session["session_id"]))
         finally:
             _m_panel_callback_routes.resolve_dynamic_callback_token = original_resolve
             _m_panel_callback_routes.safe_character_path = original_safe
@@ -73,7 +74,7 @@ class CharacterSessionChainTests(unittest.TestCase):
         _m_panel_callback_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             callback = self._callback("session:target")
-            handled = _m_panel_callback_routes.handle_session_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], current, current["session_id"], None, memory_service=make_test_memory_service(), request_context=make_test_request_context(self.db, current["session_id"]))
+            handled = _m_panel_callback_routes.handle_session_callback(self.db, "token", callback, lambda *_args: None, callback["data"], "chat", callback["message"], current, current["session_id"], None, group_service=self.group, memory_service=make_test_memory_service(), request_context=make_test_request_context(self.db, current["session_id"]))
         finally:
             _m_input_flows.safe_character_path = original_safe
             _m_panel_callback_routes.remove_inline_keyboard = original_remove

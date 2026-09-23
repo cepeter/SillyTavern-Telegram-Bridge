@@ -8,7 +8,6 @@ from bridge.catalog import answer_callback
 from bridge.common import topic_scope_from_message
 from bridge.composition import BridgeServices, RequestContext
 from bridge.database import run_write_txn, set_meta
-from bridge.group_core import group_user_turn_allowed
 from bridge.help import process_document_job
 from bridge.help_details import handle_help_callback, is_help_callback, send_help_command
 from bridge.job_service import JobSubmission
@@ -328,7 +327,7 @@ def route_update(services: BridgeServices, db: sqlite3.Connection, fields: dict,
         return offset
     normalized_text = str(text).strip().casefold()
     is_plain_start = normalized_text == "start"
-    if not str(text).lstrip().startswith("/") and not is_plain_start and not group_user_turn_allowed(db, chat_id, queued_session_id, sender):
+    if not str(text).lstrip().startswith("/") and not is_plain_start and not services.group.user_turn_allowed(db, chat_id, queued_session_id, sender):
         services.telegram.send_text(token, chat_id, "It is not your turn in manual group mode.")
         complete_update(db, update_id, offset)
         return offset

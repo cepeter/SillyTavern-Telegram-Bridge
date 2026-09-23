@@ -11,6 +11,7 @@ import bridge.extension_registry as extension_registry
 import bridge.config as config
 import bridge.character_identity as _m_character_identity
 import bridge.groups as _m_groups
+import bridge.group_core as _m_group_core
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
@@ -29,7 +30,7 @@ class GroupDirectorTests(unittest.TestCase):
             session_id="director-session",
             title="Director",
         )
-        _m_groups.save_group_state(
+        _m_group_core.save_group_state(
             self.db,
             "chat|topic:1",
             self.session["session_id"],
@@ -48,9 +49,9 @@ class GroupDirectorTests(unittest.TestCase):
 
     def _service(self):
         return GroupDirectorService(
-            load_group_state=_m_groups.group_state,
+            load_group_state=_m_group_core.group_state,
             safe_character=_m_groups.safe_character_path,
-            member_labels=_m_groups.group_member_labels,
+            member_labels=_m_group_core.group_member_labels,
             card_fields=_m_groups.card_fields_from_file,
             generation_settings=_m_groups.get_generation_settings,
             generate_text=_m_groups.generate_text,
@@ -368,7 +369,7 @@ class GroupDirectorTests(unittest.TestCase):
     def test_forced_speaker_bypasses_policy_and_generation(self):
         state = _m_sync_api.group_state(self.db, "chat|topic:1", self.session["session_id"])
         state["forced_speaker"] = "bob.png"
-        _m_groups.save_group_state(
+        _m_group_core.save_group_state(
             self.db,
             "chat|topic:1",
             self.session["session_id"],

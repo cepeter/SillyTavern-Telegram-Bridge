@@ -11,6 +11,7 @@ import bridge.extension_registry as extension_registry
 import bridge.character_identity as _m_character_identity
 import bridge.director_goals as _m_director_goals
 import bridge.groups as _m_groups
+import bridge.group_core as _m_group_core
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
@@ -32,7 +33,7 @@ class DirectorGoalsTests(unittest.TestCase):
             title="Director goal",
         )
         _m_panel_callback_routes.set_task_model(self.db, self.chat_id, self.session["session_id"], "utility::director")
-        _m_groups.save_group_state(
+        _m_group_core.save_group_state(
             self.db,
             self.chat_id,
             self.session["session_id"],
@@ -51,9 +52,9 @@ class DirectorGoalsTests(unittest.TestCase):
 
     def _service(self):
         return GroupDirectorService(
-            load_group_state=_m_groups.group_state,
+            load_group_state=_m_group_core.group_state,
             safe_character=_m_groups.safe_character_path,
-            member_labels=_m_groups.group_member_labels,
+            member_labels=_m_group_core.group_member_labels,
             card_fields=_m_groups.card_fields_from_file,
             generation_settings=_m_groups.get_generation_settings,
             generate_text=_m_groups.generate_text,

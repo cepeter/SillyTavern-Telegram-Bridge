@@ -1,5 +1,5 @@
 from application_test_setup import make_test_conversation_service
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_memory_service, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -28,6 +28,7 @@ class SessionNamingTests(unittest.TestCase):
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
+        self.group = make_test_group_service()
         self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         self.sent = []
         self.old_session_send = _m_session_naming.send_text
@@ -50,9 +51,9 @@ class SessionNamingTests(unittest.TestCase):
         return json.loads(_m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "{}"))
 
     def test_standard_session_is_created_only_after_valid_name(self):
-        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session)
+        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session, group_service=self.group)
         self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "  Project   Alpha  ", operation_id=42, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "  Project   Alpha  ", operation_id=42, group_service=self.group, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
         created = _m_memory_curator.load_session(self.db, "chat", "job-42", _m_memory_curator.DEFAULT_MODEL)
         self.assertEqual(created["title"], "Project Alpha")
         self.assertEqual(_m_session_naming.get_meta(self.db, "active_session:chat", ""), "job-42")
@@ -71,32 +72,32 @@ class SessionNamingTests(unittest.TestCase):
         self.assertIn("• System Prompt: off", self.sent[-1])
 
     def test_invalid_name_reprompts_without_creating_session(self):
-        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session)
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/bad", operation_id=43, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
+        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session, group_service=self.group)
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/bad", operation_id=43, group_service=self.group, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
         self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
         self.assertTrue(self._state())
         self.assertIn("cannot start with /", self.sent[-1])
 
     def test_cancel_leaves_no_empty_session_or_pending_character(self):
         _m_session_naming.set_meta(self.db, "character_session_input:chat", json.dumps({"character_file": "Chosen.png", "character_name": "Chosen", "expires_at": time.time() + 600}))
-        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session)
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/cancel", operation_id=44, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
+        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session, group_service=self.group)
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "/cancel", operation_id=44, group_service=self.group, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
         self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
         self.assertEqual(_m_session_naming.get_meta(self.db, "character_session_input:chat", ""), "")
 
     def test_cancel_with_bot_mention_leaves_no_empty_session(self):
-        _m_session_naming.start_session_name_input(self.db, "token", "chat|topic:7", self.session, kind="group")
-        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat|topic:7", self.session, "/cancel@SillyTavernPunzmeBot", operation_id=47, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
+        _m_session_naming.start_session_name_input(self.db, "token", "chat|topic:7", self.session, kind="group", group_service=self.group)
+        self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat|topic:7", self.session, "/cancel@SillyTavernPunzmeBot", operation_id=47, group_service=self.group, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
         self.assertEqual(_m_session_naming.get_meta(self.db, "session_name_input:chat|topic:7", ""), "")
         self.assertIn("New session cancelled.", self.sent[-1])
 
     def test_character_chain_applies_character_after_name(self):
         _m_session_naming.set_meta(self.db, "character_session_input:chat", json.dumps({"character_file": "Chosen.png", "character_name": "Chosen", "expires_at": time.time() + 600}))
-        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session)
+        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session, group_service=self.group)
         original_safe = _m_input_flows.safe_character_path
         _m_input_flows.safe_character_path = lambda name: Path("/tmp/Chosen.png") if name == "Chosen.png" else None
         try:
-            _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Chosen Story", operation_id=45, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"]))
+            _m_message_commands.handle_pending_input(self.db, "token", "chat", self.session, "Chosen Story", operation_id=45, group_service=self.group, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"]))
         finally:
             _m_input_flows.safe_character_path = original_safe
         created = _m_memory_curator.load_session(self.db, "chat", "job-45", _m_memory_curator.DEFAULT_MODEL)
@@ -110,14 +111,14 @@ class SessionNamingTests(unittest.TestCase):
         opened = []
         _m_session_naming.send_character_menu = lambda _token, _chat, character, **kwargs: opened.append((character, kwargs["request_context"].session_id))
         try:
-            _m_session_naming.start_session_name_input(self.db, "token", chat_id, session, kind="group")
+            _m_session_naming.start_session_name_input(self.db, "token", chat_id, session, kind="group", group_service=self.group)
             self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, chat_id)), 1)
-            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Mystery Team", operation_id=46, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"]))
+            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Mystery Team", operation_id=46, group_service=self.group, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"]))
         finally:
             _m_session_naming.send_character_menu = old_menu
         created = _m_memory_curator.load_session(self.db, chat_id, "group-46", _m_memory_curator.DEFAULT_MODEL)
         self.assertEqual(created["title"], "Mystery Team")
-        setup = _m_panel_callback_routes.group_setup_state(self.db, chat_id, "group-46")
+        setup = self.group.setup_state(self.db, chat_id, "group-46")
         self.assertEqual(setup["stage"], "character")
         self.assertEqual(_m_sync_api.group_state(self.db, chat_id, "group-46")["title"], "Mystery Team")
         self.assertEqual(opened, [(created["character_file"], "group-46")])
