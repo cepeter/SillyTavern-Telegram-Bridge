@@ -123,7 +123,7 @@ def _resolve_provider_credential(spec: dict, api_key: str, default_env: str, lab
     return resolved
 
 
-def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str) -> str:
+def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str, request_timeout: float | None = None) -> str:
     system_parts = [str(message.get("content") or "") for message in messages if message.get("role") == "system"]
     conversation = []
     for message in messages:
@@ -160,7 +160,7 @@ def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], se
     headers = {"x-api-key": api_key, "anthropic-version": str(spec.get("anthropic_version") or "2023-06-01"), "Content-Type": "application/json", "Accept": "text/event-stream", "User-Agent": "SillyTavernTelegramBridge/1.0"}
     headers.update(spec.get("extra_headers") or {})
     request = urllib.request.Request(endpoint, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
-    with strict_urlopen(request, timeout=240) as response:
+    with strict_urlopen(request, timeout=240 if request_timeout is None else request_timeout) as response:
         parts = []
         for raw_line in response:
             line = raw_line.decode("utf-8", "replace").strip()
@@ -282,7 +282,7 @@ def _opencode_responses_text(raw: str) -> str:
     return "".join(chunks).strip() or completed_text
 
 
-def opencode_muse_generate(actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str) -> str:
+def opencode_muse_generate(actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str, request_timeout: float | None = None) -> str:
     endpoint = str(spec.get("api_endpoint") or spec.get("api") or "https://opencode.ai/zen/v1").rstrip("/")
     validate_provider_endpoint(endpoint)
     inputs = []
@@ -311,7 +311,7 @@ def opencode_muse_generate(actual_model: str, messages: list[dict], settings: di
         headers={**opencode_muse_headers(session_id), "Accept": "text/event-stream"},
         method="POST",
     )
-    with strict_urlopen(request, timeout=240) as response:
+    with strict_urlopen(request, timeout=240 if request_timeout is None else request_timeout) as response:
         raw = response.read().decode("utf-8", "replace")
     output_text = _opencode_responses_text(raw)
     if not output_text:
@@ -319,7 +319,7 @@ def opencode_muse_generate(actual_model: str, messages: list[dict], settings: di
     return output_text
 
 
-def generate_text(api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None, force_non_stream: bool = False, _recovery_attempt: int = 0) -> str:
+def generate_text(api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None, force_non_stream: bool = False, request_timeout: float | None = None, _recovery_attempt: int = 0) -> str:
     """Generate through the selected bridge provider adapter."""
     provider_id, actual_model = resolve_provider_model(model)
     spec = get_provider_spec(provider_id)
@@ -327,10 +327,10 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
     generation = dict(GENERATION_DEFAULTS)
     generation.update(settings or {})
     if transport == "opencode_muse":
-        return opencode_muse_generate(actual_model, messages, generation, spec, session_id)
+        return opencode_muse_generate(actual_model, messages, generation, spec, session_id, request_timeout=request_timeout)
     if transport == "anthropic_messages":
         anthropic_key = _resolve_provider_credential(spec, api_key, "ANTHROPIC_API_KEY", "Anthropic")
-        return anthropic_generate(anthropic_key, actual_model, messages, generation, spec, session_id)
+        return anthropic_generate(anthropic_key, actual_model, messages, generation, spec, session_id, request_timeout=request_timeout)
     if transport not in {"chat_completions", "openai", "openai_compatible"}:
         raise RuntimeError(f"Provider transport '{transport}' is not supported")
     endpoint_base = str(spec.get("api_endpoint") or spec.get("api") or DEFAULT_PROVIDER_URL.rsplit("/chat/completions", 1)[0]).rstrip("/")
@@ -370,7 +370,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
         headers=headers,
         method="POST",
     )
-    with strict_urlopen(request, timeout=240 if is_streaming else 180) as response:
+    with strict_urlopen(request, timeout=(240 if is_streaming else 180) if request_timeout is None else request_timeout) as response:
         if not is_streaming:
             result = json.loads(response.read().decode("utf-8"))
             choices = result.get("choices") or []
@@ -380,7 +380,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
                 if finish_reason == "length" and _recovery_attempt < 2:
                     recovered = _recovery_settings(generation)
                     if recovered:
-                        return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=True, _recovery_attempt=_recovery_attempt + 1)
+                        return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=True, request_timeout=request_timeout, _recovery_attempt=_recovery_attempt + 1)
                 http_status = getattr(response, "status", None)
                 if http_status is None:
                     getcode = getattr(response, "getcode", None)
@@ -420,7 +420,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
                     method="POST",
                 )
                 try:
-                    with strict_urlopen(continuation_request, timeout=180) as continuation_response:
+                    with strict_urlopen(continuation_request, timeout=180 if request_timeout is None else request_timeout) as continuation_response:
                         continuation_result = json.loads(continuation_response.read().decode("utf-8"))
                     continuation_choices = continuation_result.get("choices") or []
                     continuation = continuation_choices[0].get("message", {}).get("content") if continuation_choices else None
@@ -469,7 +469,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
             if finish_reason == "length" and _recovery_attempt < 2:
                 recovered = _recovery_settings(generation)
                 if recovered:
-                    return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=False, _recovery_attempt=_recovery_attempt + 1)
+                    return generate_text(api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=False, request_timeout=request_timeout, _recovery_attempt=_recovery_attempt + 1)
             raise RuntimeError(f"{provider_id} returned no visible content (finish_reason={finish_reason})")
         if finish_reason == "length" and not force_non_stream:
             continuation_messages = list(messages) + [
@@ -477,7 +477,7 @@ def generate_text(api_key: str, model: str, messages: list[dict], session_id: st
                 {"role": "user", "content": _CONTINUATION_INSTRUCTION},
             ]
             try:
-                continuation = generate_text(api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=False, _recovery_attempt=_recovery_attempt + 1)
+                continuation = generate_text(api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=False, request_timeout=request_timeout, _recovery_attempt=_recovery_attempt + 1)
                 return " ".join(part for part in (content, continuation) if part)
             except Exception:
                 logging.warning("Automatic continuation failed after streaming length stop", exc_info=True)

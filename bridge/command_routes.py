@@ -26,6 +26,8 @@ def _start_model_readiness_error(api_key, current_model, session_id):
             [{"role": "user", "content": "Reply OK."}],
             session_id=f"start-check:{session_id}",
             settings={"max_tokens": 8, "temperature": 0},
+            force_non_stream=True,
+            request_timeout=30,
         )
     except Exception as exc:
         detail = " ".join(str(exc).split()).strip() or type(exc).__name__

@@ -115,6 +115,27 @@ class StartOnboardingTests(unittest.TestCase):
             ["Model check failed: Missing provider credential: PROVIDER_ONE_API_KEY"],
         )
 
+    def test_slash_start_limits_probe_timeout_and_reports_timeout(self):
+        sent = []
+        with patch.object(
+            _m_command_routes,
+            "generate_text",
+            side_effect=TimeoutError("timed out"),
+        ) as generate, patch.object(
+            _m_command_routes,
+            "send_text",
+            side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
+        ), patch.object(
+            _m_command_routes, "send_greeting_menu"
+        ) as greeting:
+            handled = self._handle_start("/start")
+
+        self.assertTrue(handled)
+        generate.assert_called_once()
+        self.assertEqual(generate.call_args.kwargs["request_timeout"], 30)
+        greeting.assert_not_called()
+        self.assertEqual(sent, ["Model check failed: timed out"])
+
     def test_slash_start_probes_model_then_explains_optional_setup(self):
         sent = []
         with patch.object(
