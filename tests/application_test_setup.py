@@ -130,12 +130,26 @@ class _TestGroupDirector:
         return ""
 
 
+def make_test_conversation_service():
+    """Compose the canonical conversation collaborators explicitly for tests."""
+    from bridge.command_routes import handle_command_route
+    from bridge.conversation_service import ConversationService
+    from bridge.message_commands import prepare_message, generate_and_store_reply
+
+    return ConversationService(
+        prepare_message=prepare_message,
+        dispatch_command=handle_command_route,
+        generate_reply=generate_and_store_reply,
+    )
+
+
 def make_test_application_services(
     *,
     memory=None,
     persona=None,
     sync=None,
     group_director=None,
+    conversation=None,
 ):
     """Return an explicit test-only application service graph for routers."""
     return SimpleNamespace(
@@ -143,6 +157,7 @@ def make_test_application_services(
         persona=persona or make_test_persona_service(),
         sync=sync or make_test_sync_service(),
         group_director=group_director or _TestGroupDirector(),
+        conversation=conversation or make_test_conversation_service(),
     )
 
 

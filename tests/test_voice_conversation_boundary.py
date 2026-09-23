@@ -1,0 +1,28 @@
+"""Transcribed voice enters the explicitly injected conversation owner."""
+from types import SimpleNamespace
+
+from bridge import media
+
+
+def test_transcript_uses_injected_service_and_preserves_request_identity(monkeypatch):
+    delivered = []
+
+    class ConversationRecorder:
+        def process_message(self, *args, **kwargs):
+            delivered.append((args, kwargs))
+
+    services = SimpleNamespace(conversation=ConversationRecorder())
+    db = object()
+    fields = {"name": "character"}
+    monkeypatch.setattr(media, "get_meta", lambda _db, _key, default: default)
+    monkeypatch.setattr(media, "download_telegram_file", lambda *_args: b"audio")
+    monkeypatch.setattr(media, "transcribe_audio_bytes", lambda *_args: "spoken message")
+    media.process_voice_message(
+        db, "token", "key", "model", fields, "chat",
+        {"file_id": "voice-file", "file_size": 5, "file_name": "voice.ogg"},
+        42, queued_session_id="queued-session", actor_id="actor", services=services,
+    )
+    assert delivered == [(
+        (db, "token", "key", "model", fields, "chat", "spoken message", 42),
+        {"queued_session_id": "queued-session", "actor_id": "actor", "services": services},
+    )]

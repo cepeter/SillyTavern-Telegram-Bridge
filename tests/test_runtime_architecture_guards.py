@@ -88,6 +88,7 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
         for name in (
             "jobs",
             "group_director",
+            "conversation",
             "memory",
             "persona",
             "sync",
@@ -142,10 +143,10 @@ class NativeRuntimeRetirementTests(unittest.TestCase):
     def test_application_routes_require_service_graph(self):
         from bridge.callback_dispatch import process_callback
         from bridge.command_routes import handle_command_route
-        from bridge.message_commands import process_message
+        from bridge.conversation_service import ConversationService
 
         for function in (
-            process_message,
+            ConversationService.process_message,
             process_callback,
             handle_command_route,
         ):

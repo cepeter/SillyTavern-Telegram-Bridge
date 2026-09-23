@@ -1,3 +1,4 @@
+from application_test_setup import make_test_conversation_service
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
@@ -61,7 +62,7 @@ class SessionNamingTests(unittest.TestCase):
         original_card = _m_message_commands.card_fields_from_file
         _m_message_commands.card_fields_from_file = lambda _filename: {"name": "Test", "post_history_instructions": ""}
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/status", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/status", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = original_card
         self.assertIn("📊 Session status", self.sent[-1])

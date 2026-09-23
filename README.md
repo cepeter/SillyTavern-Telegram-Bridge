@@ -803,6 +803,12 @@ provided through the required `JobService` on `BridgeServices`. Production
 dependencies are ordinary module imports or explicitly injected services; no
 compatibility runtime/dependency layer participates in startup.
 
+Command-versus-generation orchestration belongs to the required
+`ConversationService` on `BridgeServices`. The composition root injects message
+preparation, command routing, and reply generation; workers, `/retry`, and voice
+transcription enter through that service rather than importing a dispatcher back
+into lower-level message or media modules.
+
 Scene State, Director Goals, and Memory Curator register command routes and
 memory/summary hooks deterministically during startup. Here are the main
 boundaries (not exhaustive):

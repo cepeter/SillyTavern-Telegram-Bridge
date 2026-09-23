@@ -1,3 +1,4 @@
+from application_test_setup import make_test_conversation_service
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service
 
 ensure_application_extensions()
@@ -377,7 +378,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         ) as regen, patch.object(_m_message_commands, "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
-            _m_message_commands.process_message(
+            make_test_conversation_service().process_message(
                 self.db,
                 "token",
                 "key",
@@ -408,7 +409,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         ) as continuation, patch.object(_m_message_commands, "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
-            _m_message_commands.process_message(
+            make_test_conversation_service().process_message(
                 self.db,
                 "token",
                 "key",
@@ -439,7 +440,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         ) as edit, patch.object(_m_message_commands, "send_reply",
             side_effect=AssertionError("generic recovery ran first"),
         ):
-            _m_message_commands.process_message(
+            make_test_conversation_service().process_message(
                 self.db,
                 "token",
                 "key",

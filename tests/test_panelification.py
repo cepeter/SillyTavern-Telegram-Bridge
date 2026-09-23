@@ -59,7 +59,7 @@ class PanelificationTests(unittest.TestCase):
 
     def _route(self, text, chat_id="chat", session=None):
         session = session or self.session
-        return _m_message_commands.handle_command_route(
+        return _m_command_routes.handle_command_route(
             self.db,
             "token",
             "",

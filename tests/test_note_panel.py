@@ -1,3 +1,4 @@
+from application_test_setup import make_test_conversation_service
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_request_context
 
 ensure_application_extensions()
@@ -64,7 +65,7 @@ class NotePanelTests(unittest.TestCase):
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_note_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/note new text", services=make_test_application_services())
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/note new text", services=make_test_application_services())
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_note_menu = original_menu
@@ -85,7 +86,7 @@ class NotePanelTests(unittest.TestCase):
         deleted = []
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "remember this", operation_id=701, services=make_test_application_services())
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "remember this", operation_id=701, services=make_test_application_services())
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_note_menu = original_menu
@@ -111,7 +112,7 @@ class NotePanelTests(unittest.TestCase):
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/cancel", services=make_test_application_services())
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/cancel", services=make_test_application_services())
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_note_menu = original_menu
@@ -204,7 +205,7 @@ class NotePanelTests(unittest.TestCase):
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed alias must not generate"))
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/authornote old text", services=make_test_application_services())
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/authornote old text", services=make_test_application_services())
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send

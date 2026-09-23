@@ -1,3 +1,4 @@
+from application_test_setup import make_test_conversation_service
 from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
@@ -141,6 +142,7 @@ class CompositionConfigTests(unittest.TestCase):
             persona=persona,
             sync=sync,
             jobs=jobs,
+            conversation=make_test_conversation_service(),
         )
 
         self.assertIs(services.config, config)
@@ -357,6 +359,7 @@ class WorkerInjectionTests(unittest.TestCase):
             memory=self.memory_service,
             persona=self.persona_service,
             sync=self.sync_service,
+            conversation=make_test_conversation_service(),
         )
 
     def tearDown(self):
@@ -419,7 +422,7 @@ class WorkerInjectionTests(unittest.TestCase):
             )
 
         with patch.object(_m_workers, "committed_assistant_for_message", return_value=None
-        ), patch.object(_m_workers, "process_message", side_effect=fake_process_message
+        ), patch.object(self.services.conversation, "process_message", side_effect=fake_process_message
         ):
             _m_workers.process_message_job(
                 self.services,
@@ -443,7 +446,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 side_effect=lambda *_args, **kwargs:
                     captured.update(kwargs) or True,
             ):
-                _m_message_commands.process_message(
+                make_test_conversation_service().process_message(
                     db,
                     "injected-token",
                     "injected-key",
@@ -479,7 +482,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 side_effect=lambda *_args, **kwargs:
                     captured.update(kwargs),
             ):
-                handled = _m_message_commands.handle_command_route(
+                handled = _m_command_routes.handle_command_route(
                     db,
                     "injected-token",
                     "injected-key",
@@ -570,7 +573,7 @@ class WorkerInjectionTests(unittest.TestCase):
                 return_value=failed,
             ), patch.object(_m_command_routes, "committed_assistant_for_message",
                 return_value=None,
-            ), patch.object(_m_command_routes, "process_message",
+            ), patch.object(self.services.conversation, "process_message",
                 side_effect=lambda *_args, **kwargs: captured.update(kwargs),
             ), patch.object(_m_command_routes, "clear_failed_turn",
             ):
@@ -602,7 +605,7 @@ class WorkerInjectionTests(unittest.TestCase):
         captured = {}
 
         with patch.object(_m_workers, "committed_assistant_for_message", return_value=None
-        ), patch.object(_m_workers, "process_message",
+        ), patch.object(self.services.conversation, "process_message",
             side_effect=lambda _db, _token, _key, model, *_args, **_kwargs:
                 captured.setdefault("model", model),
         ):
@@ -734,6 +737,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             memory=object(),
             persona=object(),
             sync=object(),
+            conversation=make_test_conversation_service(),
         )
 
     def tearDown(self):
@@ -893,6 +897,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             memory=self.services.memory,
             persona=self.services.persona,
             sync=self.services.sync,
+            conversation=make_test_conversation_service(),
         )
 
         dispatcher = _m_workers.make_durable_backlog_dispatcher(
@@ -997,6 +1002,7 @@ class StartupCompositionTests(unittest.TestCase):
             memory=object(),
             persona=object(),
             sync=object(),
+            conversation=make_test_conversation_service(),
         )
 
     def tearDown(self):
@@ -1140,6 +1146,7 @@ class StartupCompositionTests(unittest.TestCase):
             ),
             sync=sync_service, jobs=Mock(), group_director=object(),
             memory=object(), persona=object(),
+            conversation=make_test_conversation_service(),
         )
         with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
              patch.object(_m_runtime, "start_phase3_sync_worker") as start_sync, \
@@ -1178,6 +1185,7 @@ class StartupCompositionTests(unittest.TestCase):
             ),
             sync=object(), jobs=jobs, group_director=object(),
             memory=object(), persona=object(),
+            conversation=make_test_conversation_service(),
         )
         try:
             with patch.object(_m_runtime, "install_bridge_signal_handlers"), \

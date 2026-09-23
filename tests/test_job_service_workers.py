@@ -1,3 +1,4 @@
+from application_test_setup import make_test_conversation_service
 from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
@@ -81,6 +82,7 @@ class JobWorkerServiceTests(unittest.TestCase):
             memory=object(),
             persona=object(),
             sync=object(),
+            conversation=make_test_conversation_service(),
         )
 
     def tearDown(self):
@@ -96,7 +98,7 @@ class JobWorkerServiceTests(unittest.TestCase):
     def test_message_worker_stops_when_job_start_is_rejected(self):
         self.jobs.start_result = False
         with patch.object(
-            _m_message_commands,
+            self.services.conversation,
             "process_message",
             side_effect=AssertionError(
                 "business workflow must not run"
@@ -122,7 +124,7 @@ class JobWorkerServiceTests(unittest.TestCase):
     def test_message_worker_success_uses_job_service(self):
         with patch.object(_m_workers, "committed_assistant_for_message",
             return_value=None,
-        ), patch.object(_m_workers, "process_message",
+        ), patch.object(self.services.conversation, "process_message",
         ):
             _m_workers.process_message_job(
                 self.services,
@@ -144,7 +146,7 @@ class JobWorkerServiceTests(unittest.TestCase):
             "committed_assistant_for_message",
             return_value=None,
         ), patch.object(
-            _m_message_commands,
+            self.services.conversation,
             "process_message",
             side_effect=RuntimeError("message boom"),
         ):
@@ -441,7 +443,7 @@ class JobWorkerServiceTests(unittest.TestCase):
             "committed_assistant_for_message",
             return_value=None,
         ), patch.object(
-            _m_workers,
+            self.services.conversation,
             "process_message",
         ) as process_message:
             _m_workers.process_message_job(

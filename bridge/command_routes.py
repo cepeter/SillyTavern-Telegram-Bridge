@@ -91,7 +91,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
             return True
         failed_session_id = str(failed[5] or "") or session_id
         try:
-            process_message(
+            services.conversation.process_message(
                 db,
                 token,
                 api_key,
@@ -567,7 +567,6 @@ from bridge.language import (
 )
 from bridge.media import send_reply
 from bridge.memory import handle_memory_command
-from bridge.message_commands import process_message
 from bridge.rag import handle_data_bank_command
 from bridge.session_naming import start_session_name_input
 from bridge.status_panels import (

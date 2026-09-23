@@ -1,3 +1,4 @@
+from application_test_setup import make_test_conversation_service
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_request_context
 
 ensure_application_extensions()
@@ -189,7 +190,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_command_routes.send_swipe_menu = lambda *_args, **_kwargs: opened.append("branch")
         try:
             for command in ("/persona user", "/preset use creative", "/branch 2"):
-                _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", command, services=make_test_application_services(memory=make_test_memory_service()))
+                make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", command, services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = originals["card"]
             _m_command_routes.send_persona_menu = originals["persona"]
@@ -217,7 +218,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unknown provider action must not generate"))
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/providers unknown", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/providers unknown", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
@@ -247,7 +248,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_stscript_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/stscript", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/stscript", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_stscript_menu = original_panel
@@ -325,7 +326,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_input_flows.send_voice_input_menu = lambda *_args, **_kwargs: None
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "id", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "id", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_voice_input_menu = original_menu
@@ -352,7 +353,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed command must not generate"))
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/model provider/model", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/model provider/model", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
@@ -391,7 +392,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_input_flows.send_preset_menu = lambda *_args, **_kwargs: None
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "creative", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "creative", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_preset_menu = original_menu
@@ -428,7 +429,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_message_commands.send_reply = lambda _token, _chat_id, text, *_args: sent.append(text)
         _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate"))
         try:
-            _m_message_commands.process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service()))
             self.assertEqual(panel, [True])
             self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
             _m_panel_callback_routes.reset_session(self.db, "token", "chat", session, operation_id=902, memory_service=make_test_memory_service())
