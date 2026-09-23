@@ -585,7 +585,6 @@ from bridge.commands import (
     handle_macro_command,
     send_note_menu,
 )
-from bridge.common import delete_pending_input_prompts
 from bridge.config import PENDING_SETTINGS_TTL_SECONDS
 from bridge.database import (
     get_generation_settings,
@@ -620,6 +619,7 @@ from bridge.rag import handle_data_bank_command
 from bridge.session_naming import handle_session_name_input
 from bridge.status_panels import send_director_goal_menu
 from bridge.telegram import (
+    delete_pending_input_prompts,
     send_panel_request,
     send_text,
     telegram_request,

@@ -271,6 +271,25 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
     return result["result"]
 
 
+def delete_pending_input_prompts(token: str, chat_id: str, state: dict) -> None:
+    """Remove prompt messages created for a pending text-input transition."""
+    message_ids = state.get("prompt_message_ids") or []
+    if isinstance(message_ids, (int, str)):
+        message_ids = [message_ids]
+    for message_id in message_ids:
+        try:
+            telegram_request(
+                token,
+                "deleteMessage",
+                {"chat_id": chat_id, "message_id": int(message_id)},
+            )
+        except Exception:
+            logging.info(
+                "Pending input prompt already unavailable",
+                exc_info=True,
+            )
+
+
 def send_panel_request(token: str, method: str, payload: dict, *, request_context: RequestContext) -> dict:
     scoped_chat_id = str(payload.get("chat_id", "")) if payload.get("chat_id") is not None else ""
     result = telegram_request(token, method, payload)

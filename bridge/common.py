@@ -392,19 +392,3 @@ def enforce_runtime_permissions() -> None:
                 path.chmod(0o600)
         except OSError:
             logging.warning("Could not protect runtime file %s", path, exc_info=True)
-
-
-def delete_pending_input_prompts(token: str, chat_id: str, state: dict) -> None:
-    """Remove prompt messages created for a pending text-input transition."""
-    # Local import avoids making the foundational runtime-support module depend
-    # on the Telegram adapter during ordinary module import.
-    from bridge.telegram import telegram_request
-
-    message_ids = state.get("prompt_message_ids") or []
-    if isinstance(message_ids, (int, str)):
-        message_ids = [message_ids]
-    for message_id in message_ids:
-        try:
-            telegram_request(token, "deleteMessage", {"chat_id": chat_id, "message_id": int(message_id)})
-        except Exception:
-            logging.info("Pending input prompt already unavailable", exc_info=True)
