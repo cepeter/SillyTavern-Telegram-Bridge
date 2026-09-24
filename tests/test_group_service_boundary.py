@@ -139,7 +139,7 @@ def test_conversation_forwards_group_service_to_generation():
         dispatch_command=lambda *_args, **_kwargs: False,
         generate_reply=lambda *_args, **kwargs: generated.update(kwargs),
     )
-    services = SimpleNamespace(group=group, memory=memory, persona=persona)
+    services = SimpleNamespace(group=group, provider=object(), memory=memory, persona=persona)
 
     service.process_message(
         object(), "token", "key", "queue-model", {}, "chat", "hello", 11,
@@ -147,6 +147,7 @@ def test_conversation_forwards_group_service_to_generation():
     )
 
     assert generated["group_service"] is group
+    assert generated["provider_port"] is services.provider
     assert generated["memory_service"] is memory
     assert generated["persona_service"] is persona
 

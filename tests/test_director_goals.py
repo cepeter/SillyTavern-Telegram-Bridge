@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_provider_port
 
 ensure_application_extensions()
 
@@ -24,6 +24,7 @@ class DirectorGoalsTests(unittest.TestCase):
         self.old_db = config.DB_FILE
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
+        self._generate_text = make_test_provider_port().generate
         self.chat_id = "chat|topic:1"
         self.session = _m_session_naming.create_session(
             self.db,
@@ -57,7 +58,7 @@ class DirectorGoalsTests(unittest.TestCase):
             member_labels=_m_group_core.group_member_labels,
             card_fields=_m_groups.card_fields_from_file,
             generation_settings=_m_groups.get_generation_settings,
-            generate_text=_m_groups.generate_text,
+            generate_text=self._generate_text,
             director_customization=extension_registry.get_director_customization,
             default_model=config.DEFAULT_MODEL,
         )
@@ -97,7 +98,7 @@ class DirectorGoalsTests(unittest.TestCase):
         )
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
         calls = []
@@ -106,7 +107,7 @@ class DirectorGoalsTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Bob","direction":"Bob notices a seam in the wall."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             before = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
             plan = self._service().plan(
@@ -120,7 +121,7 @@ class DirectorGoalsTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(plan[0], "bob.png")
         self.assertEqual(calls[0][0], "utility::director")
@@ -148,7 +149,7 @@ class DirectorGoalsTests(unittest.TestCase):
 
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
@@ -157,7 +158,7 @@ class DirectorGoalsTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             self._service().plan(
                 self.db,
@@ -169,7 +170,7 @@ class DirectorGoalsTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(calls[0][0], "director::special")
 
@@ -191,7 +192,7 @@ class DirectorGoalsTests(unittest.TestCase):
 
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
@@ -200,7 +201,7 @@ class DirectorGoalsTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             self._service().plan(
                 self.db,
@@ -212,7 +213,7 @@ class DirectorGoalsTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(calls[0][0], "utility::fallback")
 
@@ -234,7 +235,7 @@ class DirectorGoalsTests(unittest.TestCase):
 
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
@@ -243,7 +244,7 @@ class DirectorGoalsTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             self._service().plan(
                 self.db,
@@ -255,14 +256,14 @@ class DirectorGoalsTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         self.assertEqual(calls[0][0], "primary::main")
 
     def test_director_policy_applies_model_and_token_budget_without_goal(self):
         old_safe = _m_groups.safe_character_path
         old_fields = _m_groups.card_fields_from_file
-        old_generate = _m_groups.generate_text
+        old_generate = self._generate_text
         calls = []
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
@@ -271,7 +272,7 @@ class DirectorGoalsTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue."}'
 
-        _m_groups.generate_text = fake_generate
+        self._generate_text = fake_generate
         try:
             self._service().plan(
                 self.db,
@@ -283,7 +284,7 @@ class DirectorGoalsTests(unittest.TestCase):
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
-            _m_groups.generate_text = old_generate
+            self._generate_text = old_generate
 
         joined = "\n".join(str(message["content"]) for message in calls[0][1])
         self.assertEqual(calls[0][0], "utility::director")

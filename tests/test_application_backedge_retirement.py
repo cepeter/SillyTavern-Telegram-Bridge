@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from application_test_setup import make_native_test_persona_service
+from application_test_setup import make_native_test_persona_service, make_test_provider_port
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -99,6 +99,7 @@ def _image_services(download_file, sent):
             send_text=lambda *args, **_kwargs: sent.append(args),
         ),
         group=object(),
+        provider=make_test_provider_port(),
         memory=object(),
         persona=object(),
         group_director=object(),
@@ -363,6 +364,7 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
             fail=lambda *_args: True,
         ),
         telegram=SimpleNamespace(send_text=lambda *_args, **_kwargs: None),
+        provider=make_test_provider_port(),
         memory="memory",
         persona="persona",
         group_director="director",
@@ -381,7 +383,9 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
     )
 
     assert captured["api_key"] == "configured-key"
-    assert captured["process_image"] is help_module.process_image_message
+    process_image = captured["process_image"]
+    assert process_image.func is help_module.process_image_message
+    assert process_image.keywords["provider_port"] is services.provider
 
 
 def test_document_image_collaborator_has_explicit_callable_contract():

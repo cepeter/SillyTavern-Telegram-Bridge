@@ -149,6 +149,8 @@ def curate_memory_now(
     session: dict[str, str],
     character_name: str,
     through_rowid: int | None = None,
+    *,
+    provider_port: ProviderPort,
 ) -> list[dict[str, object]] | None:
     session_id = str(session["session_id"])
     rows = _curator_source_rows(db, chat_id, session_id, through_rowid)
@@ -196,7 +198,7 @@ def curate_memory_now(
     })
     try:
         model = task_model_for_session(db, chat_id, session, "memory_curator")
-        raw = generate_text(
+        raw = provider_port.generate(
             api_key,
             model,
             curator_messages,
@@ -256,6 +258,7 @@ def _memory_curator_worker(
     session_id: str,
     character_name: str,
     through_rowid: int,
+    provider_port: ProviderPort,
 ) -> None:
     worker_db = db_connect()
     try:
@@ -273,6 +276,7 @@ def _memory_curator_worker(
             session,
             character_name,
             through_rowid=int(through_rowid),
+            provider_port=provider_port,
         )
     finally:
         worker_db.close()
@@ -283,6 +287,8 @@ def queue_memory_curator(
     chat_id: str,
     session: dict[str, str],
     character_name: str,
+    *,
+    provider_port: ProviderPort,
 ) -> bool:
     if memory_mode(db, chat_id) != "on":
         return False
@@ -312,6 +318,7 @@ def queue_memory_curator(
         session_id,
         str(character_name),
         target_rowid,
+        provider_port,
     )
     return True
 
@@ -321,9 +328,10 @@ def _memory_curator_post_retain(
     chat_id: str,
     session: dict[str, str],
     fields: dict[str, str],
+    provider_port: ProviderPort,
 ) -> None:
     try:
-        queue_memory_curator(db, chat_id, session, str(fields.get("name") or "unknown"))
+        queue_memory_curator(db, chat_id, session, str(fields.get("name") or "unknown"), provider_port=provider_port)
     except Exception:
         logging.warning("Could not queue memory curator for %s/%s", chat_id, session.get("session_id"), exc_info=True)
 
@@ -337,6 +345,7 @@ def handle_curated_memory_command(
     fields: dict[str, str],
     command: str,
     *,
+    provider_port: ProviderPort,
     request_context,
 ) -> None:
     suffix = command[len("/memory curated"):].strip().casefold()
@@ -354,6 +363,7 @@ def handle_curated_memory_command(
             chat_id,
             session,
             str(fields.get("name") or "unknown"),
+            provider_port=provider_port,
         )
         send_text(
             token,
@@ -382,9 +392,10 @@ def _memory_curator_command_route(
     operation_id=None,
     *,
     request_context,
+    services,
 ):
     if command == "/memory curated" or command.startswith("/memory curated "):
-        handle_curated_memory_command(db, token, api_key, chat_id, session, fields, command, request_context=request_context)
+        handle_curated_memory_command(db, token, api_key, chat_id, session, fields, command, provider_port=services.provider, request_context=request_context)
         return True
     return False
 
@@ -414,8 +425,8 @@ from bridge.database import (
     task_model_for_session,
     write_transaction,
 )
-from bridge.generation import generate_text
 from bridge.media import send_typing
+from bridge.provider_port import ProviderPort
 from bridge.memory_backend import (
     _retain_with_client,
     hindsight_session_prefix,

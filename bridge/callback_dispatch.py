@@ -97,6 +97,7 @@ def process_callback(
         session_id,
         operation_id,
         group_service=services.group,
+        provider_port=services.provider,
         memory_service=memory_service,
         persona_service=persona_service,
         sync_service=sync_service,

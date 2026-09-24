@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_provider_port
 
 ensure_application_extensions()
 
@@ -52,19 +52,28 @@ class SceneStateEngineTests(unittest.TestCase):
     def test_refresh_uses_utility_model_and_injects_state_into_continuity(self):
         self._add_turn()
         seen = []
-        original_generate = _m_scene_state.generate_text
-        _m_scene_state.generate_text = lambda _key, model, _messages, **_kwargs: seen.append(model) or (
-            '{"location":"Central station","weather":"heavy rain",'
-            '"participants":{"Mira":{"clothing":"blue coat","holding":"red umbrella"}},'
-            '"facts":["The group just arrived."]}'
-        )
-        try:
-            state = _m_scene_state.refresh_scene_state_now(
-                self.db, "", "chat", self.session, "Mira"
+        provider = make_test_provider_port(
+            generate_backend=lambda _key, model, _messages, **_kwargs:
+            seen.append(model) or (
+                '{"location":"Central station","weather":"heavy rain",'
+                '"participants":{"Mira":{"clothing":"blue coat","holding":"red umbrella"}},'
+                '"facts":["The group just arrived."]}'
             )
-            prompt_state = _m_main.session_summary_for_prompt(self.db, "chat", self.session)
-        finally:
-            _m_scene_state.generate_text = original_generate
+        )
+        state = _m_scene_state.refresh_scene_state_now(
+            self.db,
+            "",
+            "chat",
+            self.session,
+            "Mira",
+            provider_port=provider,
+        )
+        prompt_state = _m_main.session_summary_for_prompt(
+            self.db,
+            "chat",
+            self.session,
+            provider_port=provider,
+        )
 
         self.assertEqual(seen, ["utility::model"])
         self.assertEqual(state["location"], "Central station")
@@ -85,7 +94,7 @@ class SceneStateEngineTests(unittest.TestCase):
         original_submit = _m_scene_state.submit_background
         _m_scene_state.submit_background = lambda name, fn, *args, **kwargs: queued.append((name, fn, args))
         try:
-            _m_sync_core.retain_session_memory(self.db, "chat", self.session, {"name": "Mira"})
+            _m_sync_core.retain_session_memory(self.db, "chat", self.session, {"name": "Mira"}, provider_port=make_test_provider_port())
         finally:
             _m_scene_state.submit_background = original_submit
 
@@ -148,6 +157,7 @@ class SceneStateEngineTests(unittest.TestCase):
             calls.append("upsert")
             return False
 
+        provider = make_test_provider_port(generate_backend=fake_generate)
         with patch.object(
             _m_scene_state,
             "_repo_load_scene_state_row",
@@ -159,10 +169,6 @@ class SceneStateEngineTests(unittest.TestCase):
             _m_scene_state,
             "_repo_upsert_scene_state_if_fresh",
             side_effect=reject_stale,
-        ), patch.object(
-            _m_scene_state,
-            "generate_text",
-            side_effect=fake_generate,
         ):
             state = _m_scene_state.refresh_scene_state_now(
                 self.db,
@@ -170,6 +176,7 @@ class SceneStateEngineTests(unittest.TestCase):
                 "chat",
                 self.session,
                 "Mira",
+                provider_port=provider,
             )
 
         self.assertEqual(calls, ["generate", "upsert"])

@@ -14,7 +14,7 @@ import bridge.generation as _m_generation
 import bridge.panel_callback_routes as _m_panel_callback_routes
 class CatalogPanelTests(unittest.TestCase):
     def test_hive_health_uses_streaming_chat_completion_not_models(self):
-        old_config = _m_catalog.PROVIDER_CONFIG_FILE
+        old_catalog = _m_catalog.load_provider_catalog
         old_request = _m_catalog.strict_urlopen
         old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
         calls = []
@@ -35,28 +35,30 @@ class CatalogPanelTests(unittest.TestCase):
             calls.append((request, timeout))
             return Response()
 
-        with tempfile.TemporaryDirectory() as directory:
-            config = Path(directory) / "providers.yaml"
-            config.write_text(
-                "providers:\n  hive:\n    name: Hive\n    api_endpoint: https://api-cdn.thehive.ai/api/v3\n"
-                "    api_key_env: TEST_HIVE_KEY\n    model: zai-org/glm-5.3-flash\n"
-                "    transport: chat_completions\n    health_check: chat_completion\n    models:\n      - zai-org/glm-5.3-flash\n",
-                encoding="utf-8",
-            )
-            _m_catalog.PROVIDER_CONFIG_FILE = config
-            _m_catalog.strict_urlopen = fake_urlopen
-            os.environ["TEST_HIVE_KEY"] = "test-only"
-            os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "api-cdn.thehive.ai"
-            try:
-                result = _m_catalog.provider_health_checks("hive")
-            finally:
-                _m_catalog.PROVIDER_CONFIG_FILE = old_config
-                _m_catalog.strict_urlopen = old_request
-                os.environ.pop("TEST_HIVE_KEY", None)
-                if old_hosts is None:
-                    os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
-                else:
-                    os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = old_hosts
+        _m_catalog.load_provider_catalog = lambda: {
+            "hive": {
+                "name": "Hive",
+                "api_endpoint": "https://api-cdn.thehive.ai/api/v3",
+                "api_key_env": "TEST_HIVE_KEY",
+                "model": "zai-org/glm-5.3-flash",
+                "transport": "chat_completions",
+                "health_check": "chat_completion",
+                "models": ["zai-org/glm-5.3-flash"],
+            }
+        }
+        _m_catalog.strict_urlopen = fake_urlopen
+        os.environ["TEST_HIVE_KEY"] = "test-only"
+        os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "api-cdn.thehive.ai"
+        try:
+            result = _m_catalog.provider_health_checks("hive")
+        finally:
+            _m_catalog.load_provider_catalog = old_catalog
+            _m_catalog.strict_urlopen = old_request
+            os.environ.pop("TEST_HIVE_KEY", None)
+            if old_hosts is None:
+                os.environ.pop("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", None)
+            else:
+                os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = old_hosts
 
         self.assertEqual(result[0][2], "healthy (chat completion)")
         self.assertEqual(len(calls), 1)

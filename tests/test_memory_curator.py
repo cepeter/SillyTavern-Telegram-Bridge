@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_provider_port
 
 ensure_application_extensions()
 
@@ -11,6 +11,7 @@ import bridge.config as config
 import json
 import time
 import bridge.memory_curator as _m_memory_curator
+import bridge.memory as _m_memory
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.sync_core as _m_sync_core
@@ -68,7 +69,6 @@ class MemoryCuratorTests(unittest.TestCase):
         self._add_turn()
         seen_models = []
         retained = []
-        old_generate = _m_memory_curator.generate_text
         old_retain = _m_memory_curator._retain_with_client
         def fake_generate(_key, model, _messages, **_kwargs):
             self.assertFalse(self.db.in_transaction)
@@ -83,14 +83,18 @@ class MemoryCuratorTests(unittest.TestCase):
             retained.append((args, kwargs))
             return True
 
-        _m_memory_curator.generate_text = fake_generate
+        provider = make_test_provider_port(generate_backend=fake_generate)
         _m_memory_curator._retain_with_client = fake_retain
         try:
             items = _m_memory_curator.curate_memory_now(
-                self.db, "", "chat", self.session, "Mira"
+                self.db,
+                "",
+                "chat",
+                self.session,
+                "Mira",
+                provider_port=provider,
             )
         finally:
-            _m_memory_curator.generate_text = old_generate
             _m_memory_curator._retain_with_client = old_retain
 
         self.assertEqual(seen_models, ["utility::model"])
@@ -102,16 +106,32 @@ class MemoryCuratorTests(unittest.TestCase):
         self._add_turn()
         queued = []
         old_submit = _m_memory_curator.submit_background
+        old_memory_submit = _m_memory.submit_background
         _m_memory_curator.submit_background = lambda name, fn, *args, **kwargs: queued.append(name)
+        _m_memory.submit_background = lambda *_args, **_kwargs: True
+        provider = make_test_provider_port()
         try:
             _m_session_naming.set_meta(self.db, "memory_mode:chat", "off")
-            _m_sync_core.retain_session_memory(self.db, "chat", self.session, {"name": "Mira"})
+            _m_sync_core.retain_session_memory(
+                self.db,
+                "chat",
+                self.session,
+                {"name": "Mira"},
+                provider_port=provider,
+            )
             self.assertNotIn("memory_curator", queued)
 
             _m_session_naming.set_meta(self.db, "memory_mode:chat", "on")
-            _m_sync_core.retain_session_memory(self.db, "chat", self.session, {"name": "Mira"})
+            _m_sync_core.retain_session_memory(
+                self.db,
+                "chat",
+                self.session,
+                {"name": "Mira"},
+                provider_port=provider,
+            )
         finally:
             _m_memory_curator.submit_background = old_submit
+            _m_memory.submit_background = old_memory_submit
 
         self.assertIn("memory_curator", queued)
 
@@ -141,6 +161,7 @@ class MemoryCuratorTests(unittest.TestCase):
                 '"text":"Older fact","confidence":1.0}]}'
             )
 
+        provider = make_test_provider_port(generate_backend=fake_generate)
         with patch.object(
             _m_memory_curator,
             "_repo_load_meta_value",
@@ -151,17 +172,14 @@ class MemoryCuratorTests(unittest.TestCase):
         ) as store_meta, patch.object(
             _m_memory_curator,
             "_retain_with_client",
-        ) as retain, patch.object(
-            _m_memory_curator,
-            "generate_text",
-            side_effect=fake_generate,
-        ):
+        ) as retain:
             items = _m_memory_curator.curate_memory_now(
                 self.db,
                 "",
                 "chat",
                 self.session,
                 "Mira",
+                provider_port=provider,
             )
 
         self.assertEqual(items, newer_items)
@@ -181,19 +199,19 @@ class MemoryCuratorTests(unittest.TestCase):
             json.dumps(payload),
         )
         calls = []
-        old_generate = _m_memory_curator.generate_text
-        _m_memory_curator.generate_text = lambda *_args, **_kwargs: calls.append(True) or '{"memories":[]}'
-        try:
-            items = _m_memory_curator.curate_memory_now(
-                self.db,
-                "",
-                "chat",
-                self.session,
-                "Mira",
-                through_rowid=2,
-            )
-        finally:
-            _m_memory_curator.generate_text = old_generate
+        provider = make_test_provider_port(
+            generate_backend=lambda *_args, **_kwargs:
+            calls.append(True) or '{"memories":[]}'
+        )
+        items = _m_memory_curator.curate_memory_now(
+            self.db,
+            "",
+            "chat",
+            self.session,
+            "Mira",
+            through_rowid=2,
+            provider_port=provider,
+        )
 
         self.assertEqual(calls, [])
         self.assertEqual(items[0]["key"], "existing")

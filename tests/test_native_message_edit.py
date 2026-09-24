@@ -10,6 +10,7 @@ from application_test_setup import (
     ensure_application_extensions,
     make_test_memory_service,
     make_test_persona_service,
+    make_test_provider_port,
 )
 
 ensure_application_extensions()
@@ -95,11 +96,13 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
                     "fields": fields,
                     "rowid": rowid,
                     "new_text": new_text,
+                    "provider_port": kwargs["provider_port"],
                     "memory_service": kwargs["memory_service"],
                     "persona_service": kwargs["persona_service"],
                 }
             )
 
+        provider = make_test_provider_port()
         memory = make_test_memory_service()
         persona = make_test_persona_service()
         with patch.object(
@@ -123,6 +126,7 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
                 77,
                 "replacement",
                 self.model,
+                provider_port=provider,
                 memory_service=memory,
                 persona_service=persona,
             )
@@ -131,6 +135,7 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
         self.assertEqual(captured["character_file"], "a.png")
         self.assertEqual(captured["rowid"], user_rowid)
         self.assertEqual(captured["new_text"], "replacement")
+        self.assertIs(captured["provider_port"], provider)
         self.assertIs(captured["memory_service"], memory)
         self.assertIs(captured["persona_service"], persona)
         self.assertEqual(sent, [])

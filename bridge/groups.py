@@ -280,9 +280,9 @@ def handle_group_command(db: sqlite3.Connection, token: str, chat_id: str, sessi
     send_text(token, chat_id, "Use /group status, /group add <character>, /group remove <character>, /group speak <character>, /group mode <round_robin|contextual|director|manual|autonomous>, /group on, /group off, or /group next.")
 
 
-def handle_summary_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str]) -> None:
+def handle_summary_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], *, provider_port: ProviderPort) -> None:
     send_typing(token, chat_id)
-    summary = generate_session_summary(db, chat_id, session, force=True)
+    summary = generate_session_summary(db, chat_id, session, force=True, provider_port=provider_port)
     if summary:
         send_text(token, chat_id, "Session summary updated:\n\n" + summary)
     else:
@@ -297,12 +297,12 @@ from bridge.callbacks import (
 from bridge.cards import send_panel_message
 from bridge.catalog import send_world_menu
 from bridge.common import parse_topic_scope
-from bridge.generation import generate_text
 from bridge.media import (
     remove_inline_keyboard,
     send_typing,
 )
 from bridge.memory import generate_session_summary
+from bridge.provider_port import ProviderPort
 from bridge.session_naming import start_session_name_input
 from bridge.telegram import (
     create_session,

@@ -131,6 +131,8 @@ def refresh_scene_state_now(
     session: dict[str, str],
     character_name: str,
     through_rowid: int | None = None,
+    *,
+    provider_port: ProviderPort,
 ) -> dict[str, object] | None:
     session_id = str(session["session_id"])
     rows = _scene_state_source_rows(db, chat_id, session_id, through_rowid)
@@ -177,7 +179,7 @@ def refresh_scene_state_now(
     })
     try:
         model = task_model_for_session(db, chat_id, session, "scene_state")
-        raw = generate_text(
+        raw = provider_port.generate(
             api_key,
             model,
             scene_messages,
@@ -218,6 +220,7 @@ def _scene_state_refresh_worker(
     session_id: str,
     character_name: str,
     through_rowid: int,
+    provider_port: ProviderPort,
 ) -> None:
     worker_db = db_connect()
     try:
@@ -235,6 +238,7 @@ def _scene_state_refresh_worker(
             session,
             character_name,
             through_rowid=int(through_rowid),
+            provider_port=provider_port,
         )
     finally:
         worker_db.close()
@@ -245,6 +249,8 @@ def queue_scene_state_refresh(
     chat_id: str,
     session: dict[str, str],
     character_name: str,
+    *,
+    provider_port: ProviderPort,
 ) -> bool:
     session_id = str(session["session_id"])
     row = db.execute(
@@ -265,6 +271,7 @@ def queue_scene_state_refresh(
         session_id,
         str(character_name),
         target_rowid,
+        provider_port,
     )
     return True
 
@@ -274,9 +281,10 @@ def _scene_state_post_retain(
     chat_id: str,
     session: dict[str, str],
     fields: dict[str, str],
+    provider_port: ProviderPort,
 ) -> None:
     try:
-        queue_scene_state_refresh(db, chat_id, session, str(fields.get("name") or "unknown"))
+        queue_scene_state_refresh(db, chat_id, session, str(fields.get("name") or "unknown"), provider_port=provider_port)
     except Exception:
         logging.warning("Could not queue scene-state refresh for %s/%s", chat_id, session.get("session_id"), exc_info=True)
 
@@ -310,6 +318,7 @@ def handle_scene_command(
     fields: dict[str, str],
     command: str,
     *,
+    provider_port: ProviderPort,
     request_context,
 ) -> None:
     action = command.split(None, 1)[1].strip().casefold() if " " in command else "status"
@@ -328,6 +337,7 @@ def handle_scene_command(
             chat_id,
             session,
             str(fields.get("name") or "unknown"),
+            provider_port=provider_port,
         )
         send_text(
             token,
@@ -356,9 +366,10 @@ def _scene_state_command_route(
     operation_id=None,
     *,
     request_context,
+    services,
 ):
     if command == "/scene" or command.startswith("/scene "):
-        handle_scene_command(db, token, api_key, chat_id, session, fields, command, request_context=request_context)
+        handle_scene_command(db, token, api_key, chat_id, session, fields, command, provider_port=services.provider, request_context=request_context)
         return True
     return False
 
@@ -386,8 +397,8 @@ from bridge.database import (
     task_model_for_session,
     write_transaction,
 )
-from bridge.generation import generate_text
 from bridge.media import send_typing
+from bridge.provider_port import ProviderPort
 from bridge.status_panels import send_scene_menu
 from bridge.telegram import (
     load_session,

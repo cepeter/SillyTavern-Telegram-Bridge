@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_group_service
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_group_service, make_test_provider_port
 
 
 ensure_application_extensions()
@@ -559,8 +559,6 @@ class GroupTransactionTests(unittest.TestCase):
         ), patch.object(
             _m_message_commands, "send_typing", return_value=None
         ), patch.object(
-            _m_message_commands, "generate_text", return_value="Reply"
-        ), patch.object(
             _m_message_commands, "rag_citation_footer", return_value=""
         ), patch.object(
             _m_message_commands, "render_response_language", return_value="Reply"
@@ -586,6 +584,7 @@ class GroupTransactionTests(unittest.TestCase):
                 None,
                 None,
              group_service=make_test_group_service(),
+             provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: 'Reply'),
              memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self._assert_group_reply_transaction_committed()
@@ -613,8 +612,6 @@ class GroupTransactionTests(unittest.TestCase):
         ), patch.object(
             _m_commands, "send_typing", return_value=None
         ), patch.object(
-            _m_commands, "generate_text", return_value="Reply"
-        ), patch.object(
             _m_commands, "rag_citation_footer", return_value=""
         ), patch.object(
             _m_commands, "render_session_response", return_value="Reply"
@@ -631,6 +628,7 @@ class GroupTransactionTests(unittest.TestCase):
                 "caption",
                 b"image",
              group_service=make_test_group_service(),
+             provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: 'Reply'),
              memory_service=make_test_memory_service(),
              persona_service=make_test_persona_service(),
              group_director_service=make_test_application_services().group_director)

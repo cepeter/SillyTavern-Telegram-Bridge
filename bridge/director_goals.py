@@ -136,6 +136,7 @@ def _director_goal_command_route(
     operation_id=None,
     *,
     request_context,
+    services,
 ):
     if command == "/group goal" or command.startswith("/group goal "):
         handle_director_goal_command(db, token, chat_id, session, stripped, request_context=request_context)

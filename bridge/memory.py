@@ -90,12 +90,15 @@ def retain_session_memory(
     chat_id: str,
     session: dict[str, str],
     fields: dict[str, str],
+    *,
+    provider_port: ProviderPort,
 ) -> None:
     _HINDSIGHT_STALE_GUARD.retain(
         db,
         chat_id,
         session,
         fields,
+        provider_port=provider_port,
     )
 
 
@@ -158,7 +161,7 @@ def transcript_for_summary(rows: list[tuple[int, str, str, float]]) -> str:
     )
 
 
-def generate_session_summary(db: sqlite3.Connection, chat_id: str, session: dict[str, str], force: bool = False) -> str:
+def generate_session_summary(db: sqlite3.Connection, chat_id: str, session: dict[str, str], force: bool = False, *, provider_port: ProviderPort) -> str:
     rows = db.execute("SELECT rowid,role,content,created_at FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session["session_id"])).fetchall()
     if not rows:
         return ""
@@ -186,7 +189,7 @@ def generate_session_summary(db: sqlite3.Connection, chat_id: str, session: dict
     settings.update({"temperature": 0.2, "max_tokens": SUMMARY_MAX_OUTPUT_TOKENS, "reasoning_budget": 0})
     try:
         summary_model = task_model_for_session(db, chat_id, session, "summary")
-        summary = generate_text("", summary_model, summary_messages, session_id=f"summary:{chat_id}:{session['session_id']}", settings=settings).strip()[:SUMMARY_MAX_CHARS]
+        summary = provider_port.generate("", summary_model, summary_messages, session_id=f"summary:{chat_id}:{session['session_id']}", settings=settings).strip()[:SUMMARY_MAX_CHARS]
     except Exception:
         logging.warning("Session summary generation failed for %s/%s", chat_id, session["session_id"], exc_info=True)
         return existing
@@ -197,16 +200,16 @@ def generate_session_summary(db: sqlite3.Connection, chat_id: str, session: dict
     return summary
 
 
-def session_summary_for_prompt(db: sqlite3.Connection, chat_id: str, session: dict[str, str]) -> str:
+def session_summary_for_prompt(db: sqlite3.Connection, chat_id: str, session: dict[str, str], *, provider_port: ProviderPort) -> str:
     summary, _covered_until = get_session_summary(db, chat_id, session["session_id"])
     count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0]
     if count >= SUMMARY_TRIGGER_MESSAGES:
-        summary = generate_session_summary(db, chat_id, session)
+        summary = generate_session_summary(db, chat_id, session, provider_port=provider_port)
     return _apply_summary_context_hooks(summary, db, chat_id, session)
 
 
 
 # Explicit late imports replace transitional dependency injection.
 from bridge.common import submit_background
-from bridge.generation import generate_text
+from bridge.provider_port import ProviderPort
 from bridge.telegram import send_text

@@ -200,11 +200,17 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
         import bridge.command_routes as command_routes
         import bridge.generation as generation
         import bridge.message_commands as message_commands
+        import bridge.model_router as model_router
+        import bridge.provider_port as provider_port
+        import bridge.provider_transport as provider_transport
         import bridge.panel_callback_routes as panel_callback_routes
 
         expectations = (
             (cards, ("get_persona", "default_persona_id", "persona_name", "send_panel_message", "send_persona_menu", "send_character_menu", "send_character_info_menu", "send_character_delete_menu", "send_character_delete_confirm", "send_session_menu")),
-            (generation, ("generate_text", "build_chat_messages", "regenerate_last", "continue_last")),
+            (generation, ("build_chat_messages", "regenerate_last", "continue_last")),
+            (model_router.ModelRouter, ("route", "provider_spec")),
+            (provider_port.ProviderPort, ("generate",)),
+            (provider_transport, ("generate_provider_text",)),
             (command_routes, ("handle_command_route",)),
             (message_commands, ("prepare_message", "generate_and_store_reply")),
             (callback_dispatch, ("process_callback",)),

@@ -1,5 +1,5 @@
 from application_test_setup import make_test_conversation_service
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_memory_service, make_test_persona_service, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_memory_service, make_test_persona_service, make_test_provider_port, make_test_request_context
 
 ensure_application_extensions()
 
@@ -21,6 +21,8 @@ import bridge.input_flows as _m_input_flows
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
 import bridge.generation as _m_generation
+import bridge.provider_transport as _m_provider_transport
+from bridge.model_router import ModelRouter
 import bridge.language as _m_language
 import bridge.main as _m_main
 import bridge.memory as _m_memory
@@ -54,35 +56,53 @@ class AuditRegressionTests(unittest.TestCase):
             def read(self):
                 return json.dumps({"choices": [{"message": {"content": "visible"}}]}).encode()
 
-        original_resolve = _m_generation.resolve_provider_model
-        original_spec = _m_generation.get_provider_spec
-        original_urlopen = _m_generation.strict_urlopen
+        original_urlopen = _m_provider_transport.strict_urlopen
         old_key = os.environ.get("TEST_OPENROUTER_KEY")
         old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
-        _m_generation.resolve_provider_model = lambda _model: ("openrouter", "test/model")
-        _m_generation.get_provider_spec = lambda _provider: {
-            "transport": "openai_compatible",
-            "api_endpoint": "https://openrouter.ai/api/v1",
-            "api_key_env": "TEST_OPENROUTER_KEY",
-        }
+        router = ModelRouter(
+            load_catalog=lambda: {
+                "openrouter": {
+                    "transport": "openai_compatible",
+                    "api_endpoint": "https://openrouter.ai/api/v1",
+                    "api_key_env": "TEST_OPENROUTER_KEY",
+                    "models": ["test"],
+                }
+            }
+        )
 
         def fake_urlopen(request, timeout):
             captured.append(json.loads(request.data.decode()))
             return FakeResponse()
 
-        _m_generation.strict_urlopen = fake_urlopen
+        _m_provider_transport.strict_urlopen = fake_urlopen
         os.environ["TEST_OPENROUTER_KEY"] = "test-only"
         os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "openrouter.ai"
         try:
             settings = dict(_m_sync_core.GENERATION_DEFAULTS)
             settings["reasoning_budget"] = 0
-            self.assertEqual(_m_memory_curator.generate_text("", "test", [{"role": "user", "content": "hello"}], settings=settings), "visible")
+            self.assertEqual(
+                _m_provider_transport.generate_provider_text(
+                    router,
+                    "",
+                    "test",
+                    [{"role": "user", "content": "hello"}],
+                    settings=settings,
+                ),
+                "visible",
+            )
             settings["reasoning_budget"] = 1024
-            self.assertEqual(_m_memory_curator.generate_text("", "test", [{"role": "user", "content": "hello"}], settings=settings), "visible")
+            self.assertEqual(
+                _m_provider_transport.generate_provider_text(
+                    router,
+                    "",
+                    "test",
+                    [{"role": "user", "content": "hello"}],
+                    settings=settings,
+                ),
+                "visible",
+            )
         finally:
-            _m_generation.resolve_provider_model = original_resolve
-            _m_generation.get_provider_spec = original_spec
-            _m_generation.strict_urlopen = original_urlopen
+            _m_provider_transport.strict_urlopen = original_urlopen
             if old_key is None:
                 os.environ.pop("TEST_OPENROUTER_KEY", None)
             else:
@@ -213,16 +233,13 @@ class AuditRegressionTests(unittest.TestCase):
         sent = []
         original_card = _m_message_commands.card_fields_from_file
         original_send = _m_command_routes.send_text
-        original_generate = _m_message_commands.generate_text
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unknown provider action must not generate"))
         try:
-            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/providers unknown", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/providers unknown", services=make_test_application_services(memory=make_test_memory_service(), provider=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unknown provider action must not generate")))))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
-            _m_message_commands.generate_text = original_generate
         self.assertEqual(sent, ["Unknown /providers action. Use /providers, /providers health, or /providers refresh."])
 
     def test_stscript_reset_opens_confirmation_panel(self):
@@ -275,7 +292,7 @@ class AuditRegressionTests(unittest.TestCase):
         try:
             _m_command_routes.start_text_action_input(self.db, "token", "chat", session["session_id"], "edit", "Send replacement")
             self.assertIn("edit", _m_session_naming.get_meta(self.db, "text_action_input:chat", ""))
-            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, group_service=make_test_group_service(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"])))
+            self.assertTrue(_m_message_commands.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, group_service=make_test_group_service(), provider_port=make_test_application_services().provider, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"])))
         finally:
             _m_input_flows.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "text_action_input:chat", ""), "")
@@ -326,7 +343,7 @@ class AuditRegressionTests(unittest.TestCase):
         _m_input_flows.send_voice_input_menu = lambda *_args, **_kwargs: None
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         try:
-            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "id", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "id", services=make_test_application_services(memory=make_test_memory_service(), provider=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed command must not generate")))))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_voice_input_menu = original_menu
@@ -348,16 +365,13 @@ class AuditRegressionTests(unittest.TestCase):
         sent = []
         original_card = _m_message_commands.card_fields_from_file
         original_send = _m_command_routes.send_text
-        original_generate = _m_message_commands.generate_text
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
-        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("removed command must not generate"))
         try:
             make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/model provider/model", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
-            _m_message_commands.generate_text = original_generate
         self.assertEqual(sent, ["Unknown or removed command. Use /help to see available commands."])
         self.assertEqual(_m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)["model_id"], session["model_id"])
 
@@ -421,15 +435,13 @@ class AuditRegressionTests(unittest.TestCase):
         original_panel = _m_message_commands.send_reset_confirmation_menu
         original_purge = _m_memory.purge_hindsight_session
         original_reply = _m_message_commands.send_reply
-        original_generate = _m_message_commands.generate_text
         panel = []
         _m_message_commands.card_fields_from_file = lambda _filename: fields
         _m_message_commands.send_reset_confirmation_menu = lambda *_args, **_kwargs: panel.append(True)
         _m_memory.purge_hindsight_session = lambda _db, _chat_id, _session_id: None
         _m_message_commands.send_reply = lambda _token, _chat_id, text, *_args: sent.append(text)
-        _m_message_commands.generate_text = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate"))
         try:
-            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service()))
+            make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service(), provider=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate")))))
             self.assertEqual(panel, [True])
             self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
             _m_panel_callback_routes.reset_session(self.db, "token", "chat", session, operation_id=902, memory_service=make_test_memory_service())
@@ -438,7 +450,6 @@ class AuditRegressionTests(unittest.TestCase):
             _m_message_commands.send_reset_confirmation_menu = original_panel
             _m_memory.purge_hindsight_session = original_purge
             _m_message_commands.send_reply = original_reply
-            _m_message_commands.generate_text = original_generate
 
         rows = self.db.execute(
             "SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY rowid",

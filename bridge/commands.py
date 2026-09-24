@@ -52,7 +52,7 @@ _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
 
 
 
-def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, group_service: GroupService, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
+def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, group_service: GroupService, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_service.current_speaker(db, chat_id, session, caption)
     group_context = ""
@@ -79,9 +79,9 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
     session_summary = memory_prompt.summary
     messages = build_chat_messages(session, fields, caption, history_rows, image_data_uri=image_data_uri, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context_for_prompt(db, chat_id, caption, rag_bundle), group_context=group_context, persona_service=persona_service)
     send_typing(token, chat_id)
-    reply = generate_text(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session['session_id']}", settings=get_generation_settings(db, chat_id, session["session_id"]))
+    reply = provider_port.generate(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session['session_id']}", settings=get_generation_settings(db, chat_id, session["session_id"]))
     reply += rag_citation_footer(db, chat_id, caption, rag_bundle)
-    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session["session_id"]))
+    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session["session_id"]), provider_port=provider_port)
     stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
     stored_text = f"[Image input] {caption}"
     with write_transaction(db):
@@ -114,6 +114,7 @@ def regenerate_edited_turn(
     new_text: str,
     operation_id: int | str | None = None,
     *,
+    provider_port: ProviderPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
 ) -> None:
@@ -220,7 +221,7 @@ def regenerate_edited_turn(
         chat_id,
         session_id,
     )
-    reply = generate_text(
+    reply = provider_port.generate(
         api_key,
         session["model_id"],
         messages,
@@ -239,6 +240,7 @@ def regenerate_edited_turn(
         reply,
         chat_id,
         generation_settings,
+        provider_port=provider_port,
     )
     old_message_ids = (
         _COMMAND_OPERATION_RECOVERY.outgoing_ids_after(
@@ -334,17 +336,17 @@ def regenerate_edited_turn(
     )
 
 
-def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
+def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService) -> None:
     session_id = session["session_id"]
     rows = db.execute("SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session_id)).fetchall()
     last_user = next((row for row in reversed(rows) if row[1] == "user"), None)
     if last_user is None:
         send_text(token, chat_id, "Belum ada pesan user untuk diedit.")
         return
-    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(last_user[0]), new_text, operation_id=operation_id, memory_service=memory_service, persona_service=persona_service)
+    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(last_user[0]), new_text, operation_id=operation_id, provider_port=provider_port, memory_service=memory_service, persona_service=persona_service)
 
 
-def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, memory_service: MemoryService, persona_service: PersonaService) -> None:
+def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService) -> None:
     row = db.execute("SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND telegram_message_id=? ORDER BY rowid DESC LIMIT 1", (chat_id, str(message_id))).fetchone()
     if row is None or row[2] != "user":
         send_text(token, chat_id, "Edited message was not found.")
@@ -354,7 +356,7 @@ def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str,
         return
     session = load_session(db, chat_id, str(row[1]), default_model)
     fields = card_fields_from_file(session["character_file"])
-    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(row[0]), new_text.strip()[:12000], operation_id=operation_id, memory_service=memory_service, persona_service=persona_service)
+    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(row[0]), new_text.strip()[:12000], operation_id=operation_id, provider_port=provider_port, memory_service=memory_service, persona_service=persona_service)
 
 
 def send_stscript_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
@@ -454,7 +456,6 @@ from bridge.database import (
 )
 from bridge.generation import (
     build_chat_messages,
-    generate_text,
     render_session_response,
     save_response_variant,
 )
@@ -467,6 +468,7 @@ from bridge.media import (
 )
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
+from bridge.provider_port import ProviderPort
 from bridge.memory_backend import (
     memory_mode,
     memory_scope,

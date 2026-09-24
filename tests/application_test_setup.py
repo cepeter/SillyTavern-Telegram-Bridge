@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from bridge.application_composition import initialize_extensions
 from bridge.composition import RequestContext
 from bridge.memory_service import MemoryService
+from bridge.model_router import ModelRouter
+from bridge.provider_port import ProviderPort
 from bridge.persona_service import PersonaService
 from bridge.sync_service import SyncService
 
@@ -33,6 +35,17 @@ def make_test_request_context(
 ) -> RequestContext:
     """Return an explicit request context for panel/router tests."""
     return RequestContext(db, session_id, actor_id)
+
+
+def make_test_model_router(*, catalog=None) -> ModelRouter:
+    return ModelRouter(load_catalog=lambda: dict(catalog or {}))
+
+
+def make_test_provider_port(*, generate_backend=None) -> ProviderPort:
+    return ProviderPort(
+        generate_backend=generate_backend
+        or (lambda *_args, **_kwargs: "test provider response")
+    )
 
 
 def make_test_memory_service(*, purge_session_memory=None) -> MemoryService:
@@ -182,6 +195,8 @@ def make_test_application_services(
     sync=None,
     group=None,
     group_director=None,
+    model_router=None,
+    provider=None,
     conversation=None,
 ):
     """Return an explicit test-only application service graph for routers."""
@@ -191,6 +206,8 @@ def make_test_application_services(
         sync=sync or make_test_sync_service(),
         group=group or make_test_group_service(),
         group_director=group_director or _TestGroupDirector(),
+        model_router=model_router or make_test_model_router(),
+        provider=provider or make_test_provider_port(),
         conversation=conversation or make_test_conversation_service(),
     )
 

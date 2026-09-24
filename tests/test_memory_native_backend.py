@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_provider_port
 
 ensure_application_extensions()
 
@@ -101,6 +101,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
             session_id="memory-native",
         )
         self.fields = {"name": "Mira"}
+        self.provider = make_test_provider_port()
 
     def tearDown(self):
         memory_backend.hindsight_client = self.old_hindsight
@@ -194,6 +195,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 "chat",
                 self.session,
                 self.fields,
+                provider_port=self.provider,
             )
 
         hindsight_jobs = [
@@ -347,6 +349,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 "chat",
                 self.session,
                 self.fields,
+                provider_port=self.provider,
             )
 
         hindsight_jobs = [
@@ -388,6 +391,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 "chat",
                 self.session,
                 self.fields,
+                provider_port=self.provider,
             )
 
         hindsight_jobs = [
@@ -428,6 +432,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 "chat",
                 self.session,
                 self.fields,
+                provider_port=self.provider,
             )
 
         hindsight_jobs = [
@@ -452,13 +457,14 @@ class MemoryNativeBackendTests(unittest.TestCase):
     def test_direct_guard_runs_post_retain_hook_when_memory_off(self):
         calls = []
 
-        def hook(db, chat_id, session, fields):
+        def hook(db, chat_id, session, fields, provider_port):
             calls.append(
                 (
                     db,
                     chat_id,
                     session["session_id"],
                     fields["name"],
+                    provider_port,
                 )
             )
 
@@ -477,6 +483,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 "chat",
                 self.session,
                 self.fields,
+                provider_port=self.provider,
             )
 
         self.assertEqual(
@@ -487,6 +494,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                     "chat",
                     "memory-native",
                     "Mira",
+                    self.provider,
                 )
             ],
         )

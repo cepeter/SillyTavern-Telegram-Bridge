@@ -35,13 +35,13 @@ def start_text_action_input(db, token: str, chat_id: str, session_id: str, actio
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
-def handle_inline_text_action(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, action: str, value: str, operation_id: int | None = None, *, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
+def handle_inline_text_action(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, action: str, value: str, operation_id: int | None = None, *, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
     """Run a bounded text action immediately when a command includes its value."""
     state = {"session_id": session["session_id"], "action": action, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
-    return _handle_text_action_input(db, token, api_key, chat_id, session, fields, value, state, operation_id, memory_service=memory_service, persona_service=persona_service, request_context=request_context)
+    return _handle_text_action_input(db, token, api_key, chat_id, session, fields, value, state, operation_id, provider_port=provider_port, memory_service=memory_service, persona_service=persona_service, request_context=request_context)
 
 
-def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, stripped: str, state: dict, operation_id: int | None, *, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
+def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, session: dict, fields: dict, stripped: str, state: dict, operation_id: int | None, *, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
     meta_key = f"text_action_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
         _cancel_pending(db, token, chat_id, meta_key, state)
@@ -54,7 +54,7 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
         return True
     try:
         if action == "edit":
-            edit_last_user(db, token, api_key, session, fields, chat_id, value[:12000], operation_id=operation_id, memory_service=memory_service, persona_service=persona_service)
+            edit_last_user(db, token, api_key, session, fields, chat_id, value[:12000], operation_id=operation_id, provider_port=provider_port, memory_service=memory_service, persona_service=persona_service)
         elif action == "remember":
             if len(value) > 4000 or not remember_fact(db, chat_id, session, fields, value):
                 raise ValueError("Hindsight memory is unavailable or exceeds 4,000 characters")
@@ -337,7 +337,7 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
     return True
 
 
-def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, group_service: GroupService, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
+def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, group_service: GroupService, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
     world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
@@ -351,7 +351,7 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
     text_action = _pending_state(db, f"text_action_input:{chat_id}", session_id, token, chat_id)
     if text_action:
         action_fields = fields if fields is not None else card_fields_from_file(session["character_file"])
-        return _handle_text_action_input(db, token, api_key, chat_id, session, action_fields, stripped, text_action, operation_id, memory_service=memory_service, persona_service=persona_service, request_context=request_context)
+        return _handle_text_action_input(db, token, api_key, chat_id, session, action_fields, stripped, text_action, operation_id, provider_port=provider_port, memory_service=memory_service, persona_service=persona_service, request_context=request_context)
     session_name = _pending_state(db, f"session_name_input:{chat_id}", session_id, token, chat_id)
     if session_name:
         return handle_session_name_input(db, token, chat_id, session, stripped, session_name, operation_id, group_service=group_service, request_context=request_context)
@@ -611,6 +611,7 @@ from bridge.memory_backend import remember_fact
 from bridge.message_commands import send_pending_input_message
 from bridge.persona_delete_panel import send_persona_delete_menu
 from bridge.persona_service import PersonaService
+from bridge.provider_port import ProviderPort
 from bridge.rag import handle_data_bank_command
 from bridge.session_naming import handle_session_name_input
 from bridge.status_panels import send_director_goal_menu

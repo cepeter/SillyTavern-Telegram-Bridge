@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_test_provider_port
 
 ensure_application_extensions()
 
@@ -57,12 +57,17 @@ class TaskModelRoutingTests(unittest.TestCase):
         self.db.commit()
 
         seen_models = []
-        original_generate = _m_memory.generate_text
-        _m_memory.generate_text = lambda _key, model, _messages, **_kwargs: seen_models.append(model) or "Blue key in drawer."
-        try:
-            summary = _m_groups.generate_session_summary(self.db, "chat", self.session, force=True)
-        finally:
-            _m_memory.generate_text = original_generate
+        provider = make_test_provider_port(
+            generate_backend=lambda _key, model, _messages, **_kwargs:
+            seen_models.append(model) or "Blue key in drawer."
+        )
+        summary = _m_groups.generate_session_summary(
+            self.db,
+            "chat",
+            self.session,
+            force=True,
+            provider_port=provider,
+        )
 
         self.assertEqual(summary, "Blue key in drawer.")
         self.assertEqual(seen_models, ["cheap::summary-model"])
