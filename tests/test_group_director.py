@@ -7,7 +7,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import bridge.extension_registry as extension_registry
 import bridge.config as config
 import bridge.character_identity as _m_character_identity
 import bridge.groups as _m_groups
@@ -16,7 +15,7 @@ import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
-from bridge.group_director_service import GroupDirectorService
+from bridge.group_director_service import DirectorCustomization, GroupDirectorService
 class GroupDirectorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -48,7 +47,7 @@ class GroupDirectorTests(unittest.TestCase):
         )
 
 
-    def _service(self):
+    def _service(self, director_policy=None):
         return GroupDirectorService(
             load_group_state=_m_group_core.group_state,
             safe_character=_m_groups.safe_character_path,
@@ -56,7 +55,7 @@ class GroupDirectorTests(unittest.TestCase):
             card_fields=_m_groups.card_fields_from_file,
             generation_settings=_m_groups.get_generation_settings,
             generate_text=self._generate_text,
-            director_customization=extension_registry.get_director_customization,
+            director_policy=(director_policy or (lambda _db, _chat_id, _session: None)),
             default_model=config.DEFAULT_MODEL,
         )
 
@@ -177,18 +176,13 @@ class GroupDirectorTests(unittest.TestCase):
 
         self._generate_text = fake_generate
         try:
-            with patch.object(
-                extension_registry,
-                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
-                None,
-            ):
-                plan = self._service().plan(
-                    self.db,
-                    "key",
-                    "chat|topic:1",
-                    self.session,
-                    "Continue.",
-                )
+            plan = self._service().plan(
+                self.db,
+                "key",
+                "chat|topic:1",
+                self.session,
+                "Continue.",
+            )
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
@@ -213,7 +207,7 @@ class GroupDirectorTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Bob","direction":"Notice the door."}'
 
-        customization = extension_registry.DirectorCustomization(
+        customization = DirectorCustomization(
             model="utility::director",
             hidden_instructions="Hidden scene objective: reveal the door slowly.",
             max_tokens=220,
@@ -222,18 +216,15 @@ class GroupDirectorTests(unittest.TestCase):
 
         self._generate_text = fake_generate
         try:
-            with patch.object(
-                extension_registry,
-                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
-                ("test", lambda db, chat_id, session: customization),
-            ):
-                plan = self._service().plan(
-                    self.db,
-                    "key",
-                    "chat|topic:1",
-                    self.session,
-                    "Look around.",
-                )
+            plan = self._service(
+                lambda _db, _chat_id, _session: customization
+            ).plan(
+                self.db,
+                "key",
+                "chat|topic:1",
+                self.session,
+                "Look around.",
+            )
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
@@ -258,25 +249,22 @@ class GroupDirectorTests(unittest.TestCase):
             calls.append((model, messages, kwargs))
             return '{"speaker":"Alice","direction":"Continue safely."}'
 
-        customization = extension_registry.DirectorCustomization(
+        customization = DirectorCustomization(
             model=" invalid model ",
             max_tokens="large",
         )
 
         self._generate_text = fake_generate
         try:
-            with patch.object(
-                extension_registry,
-                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
-                ("invalid", lambda db, chat_id, session: customization),
-            ):
-                plan = self._service().plan(
-                    self.db,
-                    "key",
-                    "chat|topic:1",
-                    self.session,
-                    "Continue.",
-                )
+            plan = self._service(
+                lambda _db, _chat_id, _session: customization
+            ).plan(
+                self.db,
+                "key",
+                "chat|topic:1",
+                self.session,
+                "Continue.",
+            )
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
@@ -303,23 +291,20 @@ class GroupDirectorTests(unittest.TestCase):
         try:
             for supplied, expected in ((0, 1), (-50, 1), (99999, 16000), ("220", 220)):
                 calls.clear()
-                customization = extension_registry.DirectorCustomization(
+                customization = DirectorCustomization(
                     model=" utility::director ",
                     max_tokens=supplied,
                 )
                 with self.subTest(max_tokens=supplied):
-                    with patch.object(
-                        extension_registry,
-                        "_DIRECTOR_CUSTOMIZATION_PROVIDER",
-                        ("bounded", lambda db, chat_id, session, value=customization: value),
-                    ):
-                        plan = self._service().plan(
-                            self.db,
-                            "key",
-                            "chat|topic:1",
-                            self.session,
-                            "Continue.",
-                        )
+                    plan = self._service(
+                        lambda _db, _chat_id, _session, value=customization: value
+                    ).plan(
+                        self.db,
+                        "key",
+                        "chat|topic:1",
+                        self.session,
+                        "Continue.",
+                    )
                     self.assertEqual(plan[0], "alice.png")
                     self.assertEqual(calls[0][0], "utility::director")
                     self.assertEqual(calls[0][2]["settings"]["max_tokens"], expected)
@@ -346,18 +331,13 @@ class GroupDirectorTests(unittest.TestCase):
 
         self._generate_text = fake_generate
         try:
-            with patch.object(
-                extension_registry,
-                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
-                ("broken", fail_policy),
-            ):
-                plan = self._service().plan(
-                    self.db,
-                    "key",
-                    "chat|topic:1",
-                    self.session,
-                    "Continue.",
-                )
+            plan = self._service(fail_policy).plan(
+                self.db,
+                "key",
+                "chat|topic:1",
+                self.session,
+                "Continue.",
+            )
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields
@@ -393,18 +373,13 @@ class GroupDirectorTests(unittest.TestCase):
 
         self._generate_text = generate
         try:
-            with patch.object(
-                extension_registry,
-                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
-                ("test", policy),
-            ):
-                plan = self._service().plan(
-                    self.db,
-                    "key",
-                    "chat|topic:1",
-                    self.session,
-                    "Continue.",
-                )
+            plan = self._service(policy).plan(
+                self.db,
+                "key",
+                "chat|topic:1",
+                self.session,
+                "Continue.",
+            )
         finally:
             _m_groups.safe_character_path = old_safe
             self._generate_text = old_generate
@@ -419,22 +394,19 @@ class GroupDirectorTests(unittest.TestCase):
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
-        customization = extension_registry.DirectorCustomization(
+        customization = DirectorCustomization(
             speaker_context="Hidden scene objective: keep the letter unopened."
         )
         try:
-            with patch.object(
-                extension_registry,
-                "_DIRECTOR_CUSTOMIZATION_PROVIDER",
-                ("test", lambda db, chat_id, session: customization),
-            ):
-                context = self._service().prompt_context(
-                    self.db,
-                    "chat|topic:1",
-                    self.session,
-                    "alice.png",
-                    "Keep the pace measured.",
-                )
+            context = self._service(
+                lambda _db, _chat_id, _session: customization
+            ).prompt_context(
+                self.db,
+                "chat|topic:1",
+                self.session,
+                "alice.png",
+                "Keep the pace measured.",
+            )
         finally:
             _m_groups.safe_character_path = old_safe
             _m_groups.card_fields_from_file = old_fields

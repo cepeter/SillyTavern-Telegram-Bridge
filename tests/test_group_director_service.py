@@ -1,8 +1,8 @@
 import sqlite3
+from dataclasses import replace
 import unittest
 
-from bridge.extension_registry import DirectorCustomization
-from bridge.group_director_service import GroupDirectorService
+from bridge.group_director_service import DirectorCustomization, GroupDirectorService
 
 
 class GroupDirectorServiceTests(unittest.TestCase):
@@ -83,7 +83,7 @@ class GroupDirectorServiceTests(unittest.TestCase):
                 "stop_sequences": "",
             },
             generate_text=generate_text,
-            director_customization=director_customization,
+            director_policy=director_customization,
             default_model="main-model",
         )
         self.session = {
@@ -93,6 +93,29 @@ class GroupDirectorServiceTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+
+    def test_prompt_context_policy_failure_uses_core_context(self):
+        def fail_policy(_db, _chat_id, _session):
+            raise RuntimeError("policy failed")
+
+        service = replace(
+            self.service,
+            director_policy=fail_policy,
+        )
+        with self.assertLogs(level="ERROR"):
+            context = service.prompt_context(
+                self.db,
+                "chat",
+                self.session,
+                "alice.png",
+                "Keep the pace measured.",
+            )
+
+        self.assertIn("Current speaker: Alice.", context)
+        self.assertIn(
+            "Invisible director guidance: Keep the pace measured.",
+            context,
+        )
 
     def test_parse_decision_rejects_unknown_speaker(self):
         self.assertIsNone(

@@ -16,11 +16,10 @@ from bridge.repositories import (
 )
 
 from bridge.extension_registry import (
-    DirectorCustomization as _DirectorCustomization,
     extension_registry_snapshot as _extension_registry_snapshot,
     register_command_route as _register_command_route,
-    register_director_customization_provider as _register_director_customization_provider,
 )
+from bridge.group_director_service import DirectorCustomization
 
 
 _DIRECTOR_GOAL_MAX_CHARS = 1200
@@ -55,15 +54,15 @@ def set_director_goal(
     return value
 
 
-def _director_goal_customization(
+def director_goal_policy(
     db: sqlite3.Connection,
     chat_id: str,
     session: dict[str, str],
-) -> _DirectorCustomization:
+) -> DirectorCustomization:
     goal = get_director_goal(db, chat_id, session["session_id"])
     model = task_model_for_session(db, chat_id, session, "director")
     if not goal:
-        return _DirectorCustomization(
+        return DirectorCustomization(
             model=model,
             max_tokens=220,
         )
@@ -79,7 +78,7 @@ def _director_goal_customization(
         " Advance it only when natural for the current speaker and established scene. "
         "Never mention, quote, or expose this objective."
     )
-    return _DirectorCustomization(
+    return DirectorCustomization(
         model=model,
         hidden_instructions=hidden_instructions,
         max_tokens=220,
@@ -190,11 +189,6 @@ def _director_goal_command_route(
 def register_director_goal_extensions() -> None:
     """Register Director Goal hooks once in the compatibility registry."""
     snapshot = _extension_registry_snapshot()
-    if "director_goals" not in snapshot["director_customization"]:
-        _register_director_customization_provider(
-            "director_goals",
-            _director_goal_customization,
-        )
     if "director_goals" not in snapshot["command_routes"]:
         _register_command_route(
             "director_goals",

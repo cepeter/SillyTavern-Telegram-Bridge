@@ -443,7 +443,7 @@ class RequestTimeSchemaRegressionTests(unittest.TestCase):
                 self.session["session_id"],
                 "Keep tension unresolved.",
             ),
-            lambda: _m_director_goals._director_goal_customization(
+            lambda: _m_director_goals.director_goal_policy(
                 self.db,
                 "chat",
                 self.session,

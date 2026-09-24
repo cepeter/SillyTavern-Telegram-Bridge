@@ -7,8 +7,21 @@ import logging
 from pathlib import Path
 import re
 import sqlite3
-from typing import cast
-from typing import Callable, Any
+from typing import Callable, cast
+
+
+@dataclass(frozen=True)
+class DirectorCustomization:
+    model: str | None = None
+    hidden_instructions: str = ""
+    max_tokens: int | None = None
+    speaker_context: str = ""
+
+
+DirectorPolicy = Callable[
+    [sqlite3.Connection, str, dict[str, str]],
+    DirectorCustomization | None,
+]
 
 
 @dataclass(frozen=True)
@@ -21,10 +34,27 @@ class GroupDirectorService:
     card_fields: Callable[[str], dict[str, object]]
     generation_settings: Callable[[sqlite3.Connection, str, str], dict[str, object]]
     generate_text: Callable[..., str]
-    director_customization: Callable[
-        [sqlite3.Connection, str, dict[str, str]], Any
-    ]
+    director_policy: DirectorPolicy
     default_model: str
+
+    def _load_director_customization(
+        self,
+        db: sqlite3.Connection,
+        chat_id: str,
+        session: dict[str, str],
+    ) -> DirectorCustomization | None:
+        try:
+            result = self.director_policy(db, chat_id, session)
+        except Exception:
+            logging.exception("Director policy failed; using core defaults")
+            return None
+        if result is not None and not isinstance(result, DirectorCustomization):
+            logging.error(
+                "Director policy returned invalid customization: %r",
+                type(result).__name__,
+            )
+            return None
+        return result
 
     def _parse_decision(
         self,
@@ -104,7 +134,7 @@ class GroupDirectorService:
             for role, content in reversed(recent)
         )[-9000:]
 
-        customization = self.director_customization(
+        customization = self._load_director_customization(
             db,
             chat_id,
             session,
@@ -264,7 +294,7 @@ class GroupDirectorService:
             )
 
         if state.get("mode") == "director":
-            customization = self.director_customization(
+            customization = self._load_director_customization(
                 db,
                 chat_id,
                 session,
