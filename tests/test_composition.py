@@ -1,5 +1,7 @@
+
+from dataclasses import replace
 from application_test_setup import make_test_conversation_service
-from application_test_setup import make_test_group_service, make_test_model_router, make_test_provider_port, make_test_delivery_port
+from application_test_setup import make_test_group_service, make_test_model_router, make_test_provider_port, make_test_delivery_port, make_test_input_flow_service
 from application_test_setup import ensure_application_extensions, make_test_request_context
 
 ensure_application_extensions()
@@ -141,6 +143,7 @@ class CompositionConfigTests(unittest.TestCase):
             background=background,
             group=make_test_group_service(),
             group_director=group_director,
+            input_flow=make_test_input_flow_service(),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
@@ -371,6 +374,7 @@ class WorkerInjectionTests(unittest.TestCase):
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
+            input_flow=make_test_input_flow_service(),
         )
 
     def tearDown(self):
@@ -452,22 +456,25 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_process_message_propagates_injected_persona_service(self):
         captured = {}
         db = self._db_factory()
+        services = replace(
+            self.services,
+            input_flow=make_test_input_flow_service(
+                handle_pending_backend=lambda *_args, **kwargs:
+                captured.update(kwargs) or True,
+            ),
+        )
         try:
-            with patch.object(_m_message_commands, "handle_pending_input",
-                side_effect=lambda *_args, **kwargs:
-                    captured.update(kwargs) or True,
-            ):
-                make_test_conversation_service().process_message(
-                    db,
-                    "injected-token",
-                    "injected-key",
-                    "injected::model",
-                    {"name": "Mira"},
-                    "chat",
-                    "hello",
-                    70,
-                    services=self.services,
-                )
+            make_test_conversation_service().process_message(
+                db,
+                "injected-token",
+                "injected-key",
+                "injected::model",
+                {"name": "Mira"},
+                "chat",
+                "hello",
+                70,
+                services=services,
+            )
         finally:
             db.close()
 
@@ -762,6 +769,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
+            input_flow=make_test_input_flow_service(),
         )
 
     def tearDown(self):
@@ -926,6 +934,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
+            input_flow=make_test_input_flow_service(),
         )
 
         dispatcher = _m_workers.make_durable_backlog_dispatcher(
@@ -1036,6 +1045,7 @@ class StartupCompositionTests(unittest.TestCase):
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
+            input_flow=make_test_input_flow_service(),
         )
 
     def tearDown(self):
@@ -1203,6 +1213,7 @@ class StartupCompositionTests(unittest.TestCase):
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
+            input_flow=make_test_input_flow_service(),
         )
         with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
              patch.object(_m_runtime, "start_phase3_sync_worker") as start_sync, \
@@ -1250,6 +1261,7 @@ class StartupCompositionTests(unittest.TestCase):
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
+            input_flow=make_test_input_flow_service(),
         )
         try:
             with patch.object(_m_runtime, "install_bridge_signal_handlers"), \

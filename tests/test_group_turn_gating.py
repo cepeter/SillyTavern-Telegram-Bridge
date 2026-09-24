@@ -18,6 +18,7 @@ import bridge.groups as _m_groups
 import bridge.group_core as _m_group_core
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
+import bridge.input_flows as _m_input_flows
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
@@ -137,7 +138,7 @@ class GroupTurnGatingTests(unittest.TestCase):
             _m_groups.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user", group_service=self.group, request_context=make_test_request_context(self.db, session["session_id"], "user"))
             pending = _m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "")
             self.assertTrue(pending)
-            _m_message_commands.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, group_service=self.group, provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            _m_input_flows.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, group_service=self.group, provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"], "user"))
         finally:
             _m_session_naming.close_panel_message = original_close
             _m_session_naming.send_character_menu = original_menu

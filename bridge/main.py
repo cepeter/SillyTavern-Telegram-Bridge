@@ -66,7 +66,9 @@ from bridge.group_core import (
 )
 from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
 from bridge.group_service import GroupService as _GroupService
+from bridge.input_flow_service import InputFlowService as _InputFlowService
 from bridge.help import set_bot_commands
+from bridge.input_flows import handle_pending_input
 from bridge.job_service import JobService as _JobService
 from bridge.media import (
     delete_outgoing_message_row,
@@ -200,6 +202,9 @@ def _build_startup_services(
         current_speaker_backend=group_current_speaker,
         advance_turn_backend=advance_group_turn,
     )
+    input_flow = _InputFlowService(
+        handle_pending_backend=handle_pending_input,
+    )
     group_director = _GroupDirectorService(
         load_group_state=group.state,
         safe_character=safe_character_path,
@@ -279,6 +284,7 @@ def _build_startup_services(
         background=background,
         group=group,
         group_director=group_director,
+        input_flow=input_flow,
         model_router=model_router,
         provider=provider,
         memory=memory,

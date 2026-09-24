@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from bridge.application_composition import initialize_extensions
 from bridge.composition import RequestContext
 from bridge.delivery_port import DeliveryPort
+from bridge.input_flow_service import InputFlowService
 from bridge.memory_service import MemoryService
 from bridge.model_router import ModelRouter
 from bridge.provider_port import ProviderPort
@@ -36,6 +37,13 @@ def make_test_request_context(
 ) -> RequestContext:
     """Return an explicit request context for panel/router tests."""
     return RequestContext(db, session_id, actor_id)
+
+
+def make_test_input_flow_service(*, handle_pending_backend=None) -> InputFlowService:
+    if handle_pending_backend is None:
+        from bridge.input_flows import handle_pending_input
+        handle_pending_backend = handle_pending_input
+    return InputFlowService(handle_pending_backend=handle_pending_backend)
 
 
 def make_test_delivery_port(
@@ -221,6 +229,7 @@ def make_test_application_services(
     sync=None,
     group=None,
     group_director=None,
+    input_flow=None,
     model_router=None,
     provider=None,
     conversation=None,
@@ -233,6 +242,7 @@ def make_test_application_services(
         sync=sync or make_test_sync_service(),
         group=group or make_test_group_service(),
         group_director=group_director or _TestGroupDirector(),
+        input_flow=input_flow or make_test_input_flow_service(),
         model_router=model_router or make_test_model_router(),
         provider=provider or make_test_provider_port(),
         conversation=conversation or make_test_conversation_service(),
