@@ -69,3 +69,34 @@ jobs:
 
       - name: Audit locked dependencies
         run: python -m pip_audit --no-deps --disable-pip -r requirements.lock
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            requirements-dev.txt
+
+      - name: Install static analysis tooling
+        run: uv pip install --system --python python -r requirements-dev.txt
+
+      - name: Check dependency direction
+        run: python tools/static_analysis.py
+
+      - name: Run Ruff static surface
+        run: python tools/static_analysis.py --print-targets | xargs python -m ruff check
+
+      - name: Run mypy static surface
+        run: python tools/static_analysis.py --print-targets | xargs python -m mypy
