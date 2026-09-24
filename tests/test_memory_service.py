@@ -1,4 +1,4 @@
-from application_test_setup import make_test_conversation_service, make_test_group_service, make_test_provider_port
+from application_test_setup import make_test_conversation_service, make_test_group_service, make_test_input_flow_service, make_test_provider_port
 
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service, make_test_request_context
 
@@ -465,19 +465,21 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             captured.update(kwargs)
             return True
 
-        with patch.object(_m_message_commands, "handle_pending_input",
-            side_effect=fake_pending,
-        ):
-            make_test_conversation_service().process_message(
-                self.db,
-                "token",
-                "key",
-                "provider::model",
-                self.fields,
-                "chat",
-                "replacement text",
-                services=make_test_application_services(memory=memory),
-            )
+        make_test_conversation_service().process_message(
+            self.db,
+            "token",
+            "key",
+            "provider::model",
+            self.fields,
+            "chat",
+            "replacement text",
+            services=make_test_application_services(
+                memory=memory,
+                input_flow=make_test_input_flow_service(
+                    handle_pending_backend=fake_pending,
+                ),
+            ),
+        )
 
         self.assertIs(captured["memory_service"], memory)
 
