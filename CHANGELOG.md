@@ -4,6 +4,8 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.023] - 2026-09-24
+
 ### Added
 
 - Added a user-scoped Linux installation guide covering the runtime virtual environment, startup validation, user-level systemd persistence, service logs, and optional login lingering (#115).
@@ -18,7 +20,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 ### Fixed
 
 - Fixed Help lookup for parameterized commands and aliases, corrected System Prompt help to match native JSON/TXT support, and clarified panel-only behavior for streaming and voice toggles (#117).
-- Moved updater live staging under the user-scoped bridge home by default so the hardened user systemd service can self-update without writing to the retired Hermes scripts path.
+- Moved updater live staging under the user-scoped bridge home by default so the hardened user systemd service can self-update without writing to the retired Hermes scripts path (#119).
 
 ## [0.2.022] - 2026-09-24
 
