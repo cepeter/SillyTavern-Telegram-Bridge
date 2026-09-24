@@ -21,7 +21,7 @@ HELP_CATEGORIES = {
         ("/update", "Check the latest GitHub release. If you're already current, nothing happens. Otherwise a confirmation panel lets you update and restart."),
     ],
     "characters": [
-        ("/providers", "Open the provider and model catalog. Adapter-enabled entries can generate; catalog-only entries are view-only."),
+        ("/providers", "Choose Story or Utility provider/model. Supported OpenAI-compatible, Anthropic, and OpenCode transports can generate; catalog-only entries stay view-only."),
         ("/providers refresh", "Open the provider panel and refresh discoverable model catalogs."),
         ("/providers health", "Open the provider panel and run health checks. Providers without /models use a bounded streaming chat probe."),
         ("/character", "Open the character panel — pick a card, view info, delete safely, or get upload guidance."),
@@ -35,7 +35,7 @@ HELP_CATEGORIES = {
     ],
     "generation": [
         ("/settings", "Open this session's generation panel — pick a reasoning level or set your own temperature, tokens, and sampling values."),
-        ("/stream on|off", "Toggle streaming preview on or off."),
+        ("/stream on|off", "Toggle streaming preview. Token-limit continuation stays cumulative, cancellable, and bounded."),
         ("/preset", "Open the preset panel — apply, save, or delete generation setting presets."),
         ("/macro", "Open a panel, then send one message to preview supported SillyTavern macros"),
         ("/stscript", "Open the safe STscript panel for Note or Reset — only allowlisted actions, no arbitrary scripts."),
@@ -51,7 +51,7 @@ HELP_CATEGORIES = {
         ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),
         ("/memory curated", "Open the curated-memory panel to view durable distilled facts or refresh them with the utility model."),
         ("/remember", "Open a panel, then send one explicit long-term fact to store in memory."),
-        ("/summarize", "Regenerate the active session's summary from its stored conversation."),
+        ("/summarize", "Open a confirmation panel before regenerating the active-session summary from stored conversation and memory context."),
         ("/databank", "Open Data Bank RAG controls. Same-name uploads create versions; use versions/activate to inspect or roll back."),
     ],
     "voice_group": [
