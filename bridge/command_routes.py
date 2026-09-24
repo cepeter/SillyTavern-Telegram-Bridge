@@ -396,12 +396,13 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
             chat_id,
             operation_id=operation_id,
             provider_port=services.provider,
+            delivery_port=services.delivery,
             memory_service=memory_service,
             persona_service=persona_service,
         )
         return True
     if command == "/swipe" or command == "/branch" or command.startswith("/branch "):
-        send_swipe_menu( token, db, chat_id, session["session_id"], request_context=request_context)
+        send_swipe_menu( token, db, chat_id, session["session_id"], delivery_port=services.delivery, request_context=request_context)
         return True
     if command == "/regen":
         regenerate_last(
@@ -413,6 +414,7 @@ def _handle_chat(db, token, api_key, model, fields, chat_id, stripped, command, 
             chat_id,
             operation_id=operation_id,
             provider_port=services.provider,
+            delivery_port=services.delivery,
             memory_service=memory_service,
             persona_service=persona_service,
         )

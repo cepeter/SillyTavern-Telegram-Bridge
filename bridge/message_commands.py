@@ -186,6 +186,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 chat_id,
                 operation_id=operation_id,
                 provider_port=services.provider,
+                delivery_port=services.delivery,
                 memory_service=memory_service,
                 persona_service=persona_service,
             )
@@ -200,6 +201,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
                 chat_id,
                 operation_id=operation_id,
                 provider_port=services.provider,
+                delivery_port=services.delivery,
                 memory_service=memory_service,
                 persona_service=persona_service,
             )

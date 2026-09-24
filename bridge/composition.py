@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 
 from bridge.conversation_service import ConversationService
+from bridge.delivery_port import DeliveryPort
 from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
 from bridge.job_service import JobService
@@ -57,6 +58,7 @@ class BridgeServices:
     background: BackgroundRuntime
     jobs: JobService
     conversation: ConversationService
+    delivery: DeliveryPort
     group: GroupService
     group_director: GroupDirectorService
     model_router: ModelRouter
@@ -137,6 +139,7 @@ def build_bridge_services(
     background: BackgroundRuntime,
     jobs: JobService,
     conversation: ConversationService,
+    delivery: DeliveryPort,
     group: GroupService,
     group_director: GroupDirectorService,
     model_router: ModelRouter,
@@ -159,4 +162,5 @@ def build_bridge_services(
         sync=sync,
         jobs=jobs,
         conversation=conversation,
+        delivery=delivery,
     )

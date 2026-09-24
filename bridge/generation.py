@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import time
 
+from bridge.delivery_port import DeliveryPort
 from bridge.context_compaction import (
     compact_chat_messages,
     context_history_candidate_limit,
@@ -14,64 +15,43 @@ from bridge.operation_recovery import (
 )
 
 
-_GENERATION_OPERATION_RECOVERY = _OperationRecovery(
-    operation_phase=lambda db, operation_id: operation_phase(
-        db,
-        operation_id,
-    ),
-    begin_operation=lambda db, operation_id, kind: begin_operation(
-        db,
-        operation_id,
-        kind,
-    ),
-    record_operation=lambda db, operation_id, kind: record_operation(
-        db,
-        operation_id,
-        kind,
-    ),
-    run_write_txn=lambda db, operation: run_write_txn(
-        db,
-        operation,
-    ),
-    get_meta=lambda db, key, default="": get_meta(
-        db,
-        key,
-        default,
-    ),
-    telegram_request=lambda token, method, payload: telegram_request(
-        token,
-        method,
-        payload,
-    ),
-    delete_outgoing_message_row=(
-        lambda db, token, chat_id, rowid:
-        delete_outgoing_message_row(
+def _generation_operation_recovery(
+    delivery_port: DeliveryPort,
+) -> _OperationRecovery:
+    return _OperationRecovery(
+        operation_phase=lambda db, operation_id: operation_phase(
             db,
-            token,
-            chat_id,
-            rowid,
-        )
-    ),
-    log_info=lambda message, *args, **kwargs: logging.info(
-        message,
-        *args,
-        **kwargs,
-    ),
-)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            operation_id,
+        ),
+        begin_operation=lambda db, operation_id, kind: begin_operation(
+            db,
+            operation_id,
+            kind,
+        ),
+        record_operation=lambda db, operation_id, kind: record_operation(
+            db,
+            operation_id,
+            kind,
+        ),
+        run_write_txn=lambda db, operation: run_write_txn(
+            db,
+            operation,
+        ),
+        get_meta=lambda db, key, default="": get_meta(
+            db,
+            key,
+            default,
+        ),
+        telegram_request=delivery_port.request,
+        delete_outgoing_message_row=(
+            delivery_port.delete_outgoing_message_row
+        ),
+        log_info=lambda message, *args, **kwargs: logging.info(
+            message,
+            *args,
+            **kwargs,
+        ),
+    )
 
 
 def render_response_language(api_key: str, model: str, text: str, language: str, session_id: str, settings: dict[str, object] | None = None, *, provider_port: ProviderPort) -> str:
@@ -220,9 +200,10 @@ def _generation_generate_rendered_reply(
     rag_bundle,
     *,
     provider_port: ProviderPort,
+    delivery_port: DeliveryPort,
 ):
     session_id = session["session_id"]
-    send_typing(token, chat_id)
+    delivery_port.send_typing(token, chat_id)
     settings = get_generation_settings(
         db,
         chat_id,
@@ -261,19 +242,21 @@ def regenerate_last(
     operation_id: int | str | None = None,
     *,
     provider_port: ProviderPort,
+    delivery_port: DeliveryPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
 ) -> None:
     session_id = session["session_id"]
+    recovery = _generation_operation_recovery(delivery_port)
 
     def deliver_recovered_regen():
-        user_row = _GENERATION_OPERATION_RECOVERY.latest_user_row(
+        user_row = recovery.latest_user_row(
             db,
             chat_id,
             session_id,
         )
         assistant_row = (
-            _GENERATION_OPERATION_RECOVERY.latest_assistant_row(
+            recovery.latest_assistant_row(
                 db,
                 chat_id,
                 session_id,
@@ -281,7 +264,7 @@ def regenerate_last(
         )
         if not user_row or not assistant_row:
             raise RuntimeError("regen recovery state is incomplete")
-        _GENERATION_OPERATION_RECOVERY.prepare_delivery(
+        recovery.prepare_delivery(
             db,
             token,
             chat_id,
@@ -289,14 +272,14 @@ def regenerate_last(
             operation_id,
         )
         variant = (
-            _GENERATION_OPERATION_RECOVERY.selected_variant_index(
+            recovery.selected_variant_index(
                 db,
                 chat_id,
                 session_id,
                 user_row[0],
             )
         )
-        send_reply(
+        delivery_port.send_reply(
             token,
             chat_id,
             f"♻️ Regenerated response (variant {variant})\n\n{assistant_row[1]}",
@@ -304,13 +287,13 @@ def regenerate_last(
             session_id,
             int(assistant_row[0]),
         )
-        _GENERATION_OPERATION_RECOVERY.finish(
+        recovery.finish(
             db,
             operation_id,
             "regen",
         )
 
-    if not _GENERATION_OPERATION_RECOVERY.begin_or_recover(
+    if not recovery.begin_or_recover(
         db,
         operation_id,
         "regen",
@@ -332,7 +315,7 @@ def regenerate_last(
         None,
     )
     if last_user_index is None:
-        send_text(
+        delivery_port.send_text(
             token,
             chat_id,
             "Tidak ada pesan user untuk di-regenerate.",
@@ -381,17 +364,18 @@ def regenerate_last(
         user_text,
         rag_bundle,
         provider_port=provider_port,
+        delivery_port=delivery_port,
     )
     last_user_rowid = int(rows[last_user_index][0])
     old_message_ids = (
-        _GENERATION_OPERATION_RECOVERY.outgoing_ids_after(
+        recovery.outgoing_ids_after(
             db,
             chat_id,
             session_id,
             last_user_rowid,
         )
     )
-    _GENERATION_OPERATION_RECOVERY.set_payload(
+    recovery.set_payload(
         db,
         operation_id,
         {
@@ -442,7 +426,7 @@ def regenerate_last(
         db,
         persist_regeneration,
     )
-    _GENERATION_OPERATION_RECOVERY.delete_stored_telegram_ids(
+    recovery.delete_stored_telegram_ids(
         token,
         chat_id,
         old_message_ids,
@@ -453,7 +437,7 @@ def regenerate_last(
         session,
         fields,
     )
-    send_reply(
+    delivery_port.send_reply(
         token,
         chat_id,
         f"♻️ Regenerated response (variant {variant})\n\n{reply}",
@@ -461,7 +445,7 @@ def regenerate_last(
         session_id,
         assistant_rowid,
     )
-    _GENERATION_OPERATION_RECOVERY.finish(
+    recovery.finish(
         db,
         operation_id,
         "regen",
@@ -487,26 +471,26 @@ def swipe_markup() -> dict:
     ]}
 
 
-def send_swipe_menu(token: str, db: sqlite3.Connection, chat_id: str, session_id: str, *, request_context) -> None:
+def send_swipe_menu(token: str, db: sqlite3.Connection, chat_id: str, session_id: str, *, delivery_port: DeliveryPort, request_context) -> None:
     user_row, variants = last_user_variants(db, chat_id, session_id)
     if not user_row or not variants:
-        send_text(token, chat_id, "Belum ada response variant. Kirim pesan lalu gunakan /regen terlebih dahulu.")
+        delivery_port.send_text(token, chat_id, "Belum ada response variant. Kirim pesan lalu gunakan /regen terlebih dahulu.")
         return
     selected = next((int(row[0]) for row in variants if row[2]), int(variants[-1][0]))
     set_meta(db, swipe_state_key(chat_id, session_id), str(selected))
     response = next((row[1] for row in variants if int(row[0]) == selected), variants[-1][1])
     text = f"Variant {selected} of {len(variants)}\n\n{response[:3900]}"
-    result = send_panel_request(token, "sendMessage", {"chat_id": chat_id, "text": text, "reply_markup": swipe_markup()}, request_context=request_context)
+    result = delivery_port.send_panel_request(token, "sendMessage", {"chat_id": chat_id, "text": text, "reply_markup": swipe_markup()}, request_context=request_context)
     if result.get("message_id"):
         set_meta(db, f"swipe_message:{chat_id}:{session_id}", str(result["message_id"]))
 
 
-def edit_swipe_menu(token: str, db: sqlite3.Connection, callback: dict, session_id: str, index: int, variants, *, request_context) -> None:
+def edit_swipe_menu(token: str, db: sqlite3.Connection, callback: dict, session_id: str, index: int, variants, *, delivery_port: DeliveryPort, request_context) -> None:
     message = callback.get("message") or {}
     chat_id = str((message.get("chat") or {}).get("id", ""))
     message_id = message.get("message_id")
     response = next(row[1] for row in variants if int(row[0]) == index)
-    send_panel_request(token, "editMessageText", {
+    delivery_port.send_panel_request(token, "editMessageText", {
         "chat_id": chat_id,
         "message_id": message_id,
         "text": f"Variant {index} of {len(variants)}\n\n{response[:3900]}",
@@ -539,14 +523,16 @@ def continue_last(
     operation_id: int | str | None = None,
     *,
     provider_port: ProviderPort,
+    delivery_port: DeliveryPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
 ) -> None:
     session_id = session["session_id"]
+    recovery = _generation_operation_recovery(delivery_port)
 
     def deliver_recovered_continue():
         assistant_row = (
-            _GENERATION_OPERATION_RECOVERY.latest_assistant_row(
+            recovery.latest_assistant_row(
                 db,
                 chat_id,
                 session_id,
@@ -556,14 +542,14 @@ def continue_last(
             raise RuntimeError(
                 "continue recovery state is incomplete"
             )
-        _GENERATION_OPERATION_RECOVERY.prepare_delivery(
+        recovery.prepare_delivery(
             db,
             token,
             chat_id,
             assistant_row[0],
             operation_id,
         )
-        send_reply(
+        delivery_port.send_reply(
             token,
             chat_id,
             f"↪️ Continued response\n\n{assistant_row[1]}",
@@ -571,13 +557,13 @@ def continue_last(
             session_id,
             int(assistant_row[0]),
         )
-        _GENERATION_OPERATION_RECOVERY.finish(
+        recovery.finish(
             db,
             operation_id,
             "continue",
         )
 
-    if not _GENERATION_OPERATION_RECOVERY.begin_or_recover(
+    if not recovery.begin_or_recover(
         db,
         operation_id,
         "continue",
@@ -599,7 +585,7 @@ def continue_last(
         None,
     )
     if assistant_row is None:
-        send_text(
+        delivery_port.send_text(
             token,
             chat_id,
             "Belum ada response untuk dilanjutkan.",
@@ -647,6 +633,8 @@ def continue_last(
         messages,
         instruction,
         rag_bundle,
+        provider_port=provider_port,
+        delivery_port=delivery_port,
     )
     combined = (
         assistant_row[2].rstrip()
@@ -654,7 +642,7 @@ def continue_last(
         + reply.lstrip()
     )
     old_message_ids = (
-        _GENERATION_OPERATION_RECOVERY.message_ids_from_rows(
+        recovery.message_ids_from_rows(
             db.execute(
                 "SELECT telegram_message_id,telegram_message_ids "
                 "FROM messages WHERE rowid=?",
@@ -662,7 +650,7 @@ def continue_last(
             ).fetchall()
         )
     )
-    _GENERATION_OPERATION_RECOVERY.set_payload(
+    recovery.set_payload(
         db,
         operation_id,
         {
@@ -707,7 +695,7 @@ def continue_last(
         db.commit()
 
     run_write_txn(db, persist_continuation)
-    _GENERATION_OPERATION_RECOVERY.prepare_delivery(
+    recovery.prepare_delivery(
         db,
         token,
         chat_id,
@@ -720,7 +708,7 @@ def continue_last(
         session,
         fields,
     )
-    send_reply(
+    delivery_port.send_reply(
         token,
         chat_id,
         f"↪️ Continued response\n\n{combined}",
@@ -728,7 +716,7 @@ def continue_last(
         session_id,
         int(assistant_row[0]),
     )
-    _GENERATION_OPERATION_RECOVERY.finish(
+    recovery.finish(
         db,
         operation_id,
         "continue",
@@ -768,11 +756,6 @@ from bridge.language import (
     response_language_instruction,
     response_language_label,
 )
-from bridge.media import (
-    delete_outgoing_message_row,
-    send_reply,
-    send_typing,
-)
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
@@ -780,10 +763,5 @@ from bridge.rag_core import (
     rag_citation_footer,
     rag_context_for_prompt,
     rag_retrieval_bundle,
-)
-from bridge.telegram import (
-    send_panel_request,
-    send_text,
-    telegram_request,
 )
 from pathlib import Path

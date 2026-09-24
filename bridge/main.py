@@ -7,6 +7,7 @@ import os
 
 from bridge import database as _database
 from bridge.conversation_service import ConversationService as _ConversationService
+from bridge.delivery_port import DeliveryPort as _DeliveryPort
 from bridge.command_routes import handle_command_route
 from bridge.message_commands import prepare_message, generate_and_store_reply
 from bridge.application_composition import initialize_extensions as _initialize_extensions
@@ -67,6 +68,11 @@ from bridge.group_director_service import GroupDirectorService as _GroupDirector
 from bridge.group_service import GroupService as _GroupService
 from bridge.help import set_bot_commands
 from bridge.job_service import JobService as _JobService
+from bridge.media import (
+    delete_outgoing_message_row,
+    send_reply,
+    send_typing,
+)
 from bridge.memory import (
     get_session_summary,
     purge_hindsight_session,
@@ -106,6 +112,7 @@ from bridge.sync_core import sync_binding
 from bridge.sync_service import SyncService as _SyncService
 from bridge.telegram import (
     download_telegram_file,
+    send_panel_request,
     send_text,
     telegram_request,
     update_session,
@@ -171,6 +178,14 @@ def _build_startup_services(
 ) -> _BridgeServices:
     provider = _ProviderPort(
         generate_backend=_partial(generate_provider_text, model_router)
+    )
+    delivery = _DeliveryPort(
+        request=telegram_request,
+        send_text=send_text,
+        send_reply=send_reply,
+        send_typing=send_typing,
+        send_panel_request=send_panel_request,
+        delete_outgoing_message_row=delete_outgoing_message_row,
     )
     group = _GroupService(
         load_state=group_state,
@@ -270,6 +285,7 @@ def _build_startup_services(
         persona=persona,
         sync=sync,
         jobs=jobs,
+        delivery=delivery,
         conversation=_ConversationService(
             prepare_message=prepare_message,
             dispatch_command=handle_command_route,
