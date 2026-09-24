@@ -92,7 +92,7 @@ class MainDecompositionTests(unittest.TestCase):
         self.assertIn("run_bridge_runtime(", main_chunk)
         self.assertNotIn("getUpdates", main_chunk)
         self.assertNotIn("services.jobs.recover(", main_chunk)
-        self.assertNotIn("start_phase3_sync_worker(", main_chunk)
+        self.assertNotIn("start_live_sync_worker(", main_chunk)
         self.assertNotIn("shutdown_background_executors(", main_chunk)
 
     def test_main_passes_loaded_card_fields_to_runtime(self):

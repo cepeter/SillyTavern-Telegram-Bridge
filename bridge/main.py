@@ -103,11 +103,11 @@ from bridge.runtime_lifecycle import run_bridge_runtime
 from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
 import bridge.sillytavern_api as _st_api
 from bridge.sync_api import (
-    _phase3_disable,
-    phase3_sync_now,
-    phase3_sync_poll,
-    phase3_toggle_realtime,
-    refresh_phase3_config,
+    _live_sync_disable,
+    live_sync_now,
+    live_sync_poll,
+    live_sync_toggle_realtime,
+    refresh_live_sync_config,
 )
 from bridge.sync_core import sync_binding
 from bridge.sync_service import SyncService as _SyncService
@@ -253,11 +253,11 @@ def _build_startup_services(
     sync = _SyncService(
         load_binding=sync_binding,
         count_messages=_count_session_messages,
-        sync_now_backend=phase3_sync_now,
-        toggle_realtime_backend=phase3_toggle_realtime,
-        poll_backend=phase3_sync_poll,
-        disable_realtime=_phase3_disable,
-        api_configured=_st_api.phase3_api_configured,
+        sync_now_backend=live_sync_now,
+        toggle_realtime_backend=live_sync_toggle_realtime,
+        poll_backend=live_sync_poll,
+        disable_realtime=_live_sync_disable,
+        api_configured=_st_api.live_sync_api_configured,
         expected_errors=(_st_api.SillyTavernApiError, ValueError),
     )
     background = _BackgroundRuntime(
@@ -305,9 +305,9 @@ def _build_startup_services(
 def run_check(services: _BridgeServices) -> int:
     config = services.config
     fields = card_fields(read_png_chara(config.card_file))
-    if _st_api.phase3_api_configured():
+    if _st_api.live_sync_api_configured():
         try:
-            _st_api.phase3_client().authenticate()
+            _st_api.live_sync_client().authenticate()
         except (_st_api.SillyTavernApiError, ValueError) as exc:
             raise SystemExit(f"Live Sync check failed: {exc}") from exc
     me = services.telegram.request(
@@ -331,7 +331,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
-    refresh_phase3_config()
+    refresh_live_sync_config()
 
     config = _load_startup_config(os.environ)
     model_router = _ModelRouter(load_catalog=load_provider_catalog)

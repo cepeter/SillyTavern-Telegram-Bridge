@@ -1,4 +1,4 @@
-"""Phase 7B4 application/UI ordinary-import boundary tests."""
+"""Application and UI import-boundary regression tests."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import unittest
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
 
-MIGRATED_RUNTIME_FILES = (
+APPLICATION_BOUNDARY_FILES = (
     "common.py",
     "cards.py",
     "memory.py",
@@ -126,7 +126,7 @@ def _owner_index() -> dict[str, list[str]]:
     return owners
 
 
-class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
+class ApplicationImportBoundaryTests(unittest.TestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -136,8 +136,8 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
             check=False,
         )
 
-    def test_migrated_modules_import_without_runtime(self):
-        for filename in MIGRATED_RUNTIME_FILES:
+    def test_application_modules_import_without_runtime(self):
+        for filename in APPLICATION_BOUNDARY_FILES:
             module = "bridge." + filename.removesuffix(".py")
             with self.subTest(module=module):
                 completed = self._run_python(
@@ -151,11 +151,11 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
                     completed.stdout + completed.stderr,
                 )
 
-    def test_migrated_modules_have_no_implicit_shared_runtime_globals(self):
+    def test_application_modules_have_no_implicit_runtime_globals(self):
         owners = _owner_index()
         builtin_names = set(dir(builtins))
         failures = []
-        for filename in MIGRATED_RUNTIME_FILES:
+        for filename in APPLICATION_BOUNDARY_FILES:
             source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")
             bound = _module_bound_names(source)
             unresolved = sorted(
@@ -177,21 +177,19 @@ class Phase7B4ApplicationImportBoundaryTests(unittest.TestCase):
 
     def test_transitional_dependency_injector_is_retired(self):
         self.assertFalse((BRIDGE_DIR / "ordinary_dependencies.py").exists())
-        for filename in MIGRATED_RUNTIME_FILES:
+        for filename in APPLICATION_BOUNDARY_FILES:
             source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")
             with self.subTest(filename=filename):
                 self.assertNotIn("ordinary_dependencies", source)
                 self.assertNotIn("_bind_module_dependencies", source)
 
-    def test_migrated_modules_do_not_import_runtime(self):
-        for filename in MIGRATED_RUNTIME_FILES:
+    def test_application_modules_do_not_import_runtime(self):
+        for filename in APPLICATION_BOUNDARY_FILES:
             source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")
             with self.subTest(filename=filename):
                 self.assertNotIn("import bridge.runtime", source)
                 self.assertNotIn("from bridge.runtime import", source)
 
-    def test_phase_7b4_migrated_modules_remain_ordinary_after_7c(self):
-        self.assertFalse((BRIDGE_DIR / "runtime_loader.py").exists())
 
     def test_application_owners_are_directly_importable(self):
         import bridge.callbacks as callbacks

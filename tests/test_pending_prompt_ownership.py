@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 import bridge.database as database
+import bridge.input_flows as input_flows
 import bridge.session_naming as session_naming
 import bridge.telegram as telegram
 
@@ -156,6 +157,23 @@ class PendingPromptOwnershipTests(unittest.TestCase):
                 "",
             )
             db.close()
+
+
+    def test_pending_state_rejects_retired_raw_setting_key_format(self):
+        self.assertEqual(
+            input_flows._decode_pending_state(
+                "temperature",
+                "settings_input:chat",
+            ),
+            {},
+        )
+        self.assertEqual(
+            input_flows._decode_pending_state(
+                '{"key":"temperature"}',
+                "settings_input:chat",
+            ),
+            {"key": "temperature"},
+        )
 
 
 if __name__ == "__main__":

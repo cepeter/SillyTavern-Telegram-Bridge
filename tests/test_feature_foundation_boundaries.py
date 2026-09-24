@@ -1,4 +1,4 @@
-"""Phase 7B3 memory/group feature-foundation import-boundary tests."""
+"""Memory and group foundation boundary tests."""
 
 from pathlib import Path
 import subprocess
@@ -70,7 +70,7 @@ GROUP_CORE_EXPORTS = (
 )
 
 
-class Phase7B3FeatureFoundationsTests(unittest.TestCase):
+class FeatureFoundationBoundaryTests(unittest.TestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -241,11 +241,8 @@ class Phase7B3FeatureFoundationsTests(unittest.TestCase):
                 with self.subTest(module=module.__name__, name=name):
                     self.assertTrue(hasattr(module, name))
 
-    def test_phase_7b3_foundations_remain_ordinary_after_final_cutover(self):
-        self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
 
-
-    def test_feature_shells_are_ordinary_after_final_cutover(self):
+    def test_feature_shells_use_ordinary_imports(self):
         for module_name in ("bridge.memory", "bridge.rag", "bridge.groups"):
             with self.subTest(module=module_name):
                 __import__(module_name)

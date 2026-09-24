@@ -145,7 +145,7 @@ class PersonaEditorTests(unittest.TestCase):
         self.old_backups = _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR
         self.old_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
         self.old_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
-        self.old_phase3 = _m_sillytavern_api.phase3_api_configured
+        self.old_phase3 = _m_sillytavern_api.live_sync_api_configured
         config.DB_FILE = root / "bridge.sqlite3"
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = root / "User Avatars"
@@ -156,7 +156,7 @@ class PersonaEditorTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(self.native), encoding="utf-8")
         _m_persona_sync._NATIVE_PERSONA_CACHE = {}
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        _m_sillytavern_api.phase3_api_configured = lambda: False
+        _m_sillytavern_api.live_sync_api_configured = lambda: False
         self.db = _m_memory_curator.db_connect()
         self.session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="persona-session")
         self.request_context = make_test_request_context(self.db, self.session["session_id"])
@@ -186,7 +186,7 @@ class PersonaEditorTests(unittest.TestCase):
         _m_input_flows.close_panel_message = self.old_input_close
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_cache
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
-        _m_sillytavern_api.phase3_api_configured = self.old_phase3
+        _m_sillytavern_api.live_sync_api_configured = self.old_phase3
         self.db.close()
         config.DB_FILE = self.old_db
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.old_settings

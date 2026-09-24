@@ -1,4 +1,4 @@
-"""PR 57 native runtime compatibility retirement guards."""
+"""Runtime architecture regression guards."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ BRIDGE_DIR = REPO_ROOT / "bridge"
 TESTS_DIR = REPO_ROOT / "tests"
 
 
-class NativeRuntimeRetirementTests(unittest.TestCase):
+class RuntimeArchitectureGuardTests(unittest.TestCase):
     def test_runtime_compatibility_module_is_deleted(self):
         self.assertFalse((BRIDGE_DIR / "runtime.py").exists())
 

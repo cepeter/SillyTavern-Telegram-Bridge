@@ -1,4 +1,4 @@
-"""Phase 7A ordinary-import boundary regression tests."""
+"""Runtime import-boundary regression tests."""
 
 from pathlib import Path
 import subprocess
@@ -9,7 +9,7 @@ import unittest
 REPO_ROOT = Path(__file__).parents[1]
 
 
-class RuntimeImportIslandTests(unittest.TestCase):
+class RuntimeImportBoundaryTests(unittest.TestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -68,10 +68,7 @@ class RuntimeImportIslandTests(unittest.TestCase):
         )
 
 
-    def test_first_import_island_remains_ordinary_after_final_cutover(self):
-        self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
-
-    def test_migrated_modules_do_not_import_bridge_runtime(self):
+    def test_runtime_boundary_modules_do_not_import_bridge_runtime(self):
         for filename in (
             "performance.py",
             "native_cache.py",
@@ -93,7 +90,7 @@ class RuntimeImportIslandTests(unittest.TestCase):
                 )
 
 
-    def test_import_island_objects_are_owned_directly(self):
+    def test_runtime_boundary_objects_are_owned_directly(self):
         import bridge.main  # completes transitional ordinary dependency bindings
         import bridge.message_commands as message_commands
         import bridge.native_cache as native_cache

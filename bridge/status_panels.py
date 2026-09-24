@@ -182,7 +182,7 @@ def send_prompt_menu(token, chat_id, db, session, fields, message_id=None, secti
 
 
 def handle_prompt_and_feature_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, provider_port: ProviderPort, request_context, memory_service):
-    """Handle legacy prompt and feature callbacks; status itself is text-only."""
+    """Handle prompt and feature callbacks; status itself is text-only."""
     message_id = message.get("message_id")
     if data == "prompt:close":
         answer_callback(token, str(callback.get("id", "")), "Closed")

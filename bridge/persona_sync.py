@@ -79,7 +79,7 @@ def _native_persona_maps(settings: dict, create: bool = False) -> tuple[dict, di
 
 
 def _native_settings(client=None) -> dict:
-    if client is None and not _st_api.phase3_api_configured():
+    if client is None and not _st_api.live_sync_api_configured():
         path = NATIVE_PERSONA_SETTINGS_FILE
         try:
             settings = json.loads(path.read_text(encoding="utf-8"))
@@ -88,7 +88,7 @@ def _native_settings(client=None) -> dict:
         if not isinstance(settings, dict):
             raise _st_api.SillyTavernApiError("Native SillyTavern settings have an invalid shape")
         return settings
-    api = client or _st_api.phase3_client()
+    api = client or _st_api.live_sync_client()
     if hasattr(api, "get_settings"):
         settings = api.get_settings()
     else:
@@ -161,7 +161,7 @@ def load_native_personas(force: bool = False) -> dict[str, dict[str, object]]:
 
 
 def _save_native_settings(client, settings: dict) -> None:
-    if client is None and not _st_api.phase3_api_configured():
+    if client is None and not _st_api.live_sync_api_configured():
         path = NATIVE_PERSONA_SETTINGS_FILE
         temporary = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
         try:
@@ -171,7 +171,7 @@ def _save_native_settings(client, settings: dict) -> None:
         finally:
             temporary.unlink(missing_ok=True)
         return
-    client = client or _st_api.phase3_client()
+    client = client or _st_api.live_sync_client()
     if hasattr(client, "save_settings"):
         client.save_settings(settings)
         return
@@ -260,7 +260,7 @@ def _upsert_native_persona_storage(identifier: str, name: str, description: str,
         raise ValueError("Persona ID must contain only letters, numbers, hyphens, or underscores")
     if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
         raise ValueError("Persona name must be 1–120 characters and description 1–4,000 characters")
-    api = client or (_st_api.phase3_client() if _st_api.phase3_api_configured() else None)
+    api = client or (_st_api.live_sync_client() if _st_api.live_sync_api_configured() else None)
     original = _native_settings(api)
     updated = copy.deepcopy(original)
     _power, native_names, native_descriptions = _native_persona_maps(updated, create=True)
@@ -305,7 +305,7 @@ def _upsert_native_persona_storage(identifier: str, name: str, description: str,
 
 def _delete_native_persona_storage(identifier: str, client=None) -> bool:
     """Remove one native Persona metadata entry while preserving its avatar file."""
-    api = client or (_st_api.phase3_client() if _st_api.phase3_api_configured() else None)
+    api = client or (_st_api.live_sync_client() if _st_api.live_sync_api_configured() else None)
     original = _native_settings(api)
     updated = copy.deepcopy(original)
     _power, native_names, native_descriptions = _native_persona_maps(updated)

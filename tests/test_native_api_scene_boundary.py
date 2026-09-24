@@ -56,16 +56,16 @@ def test_sillytavern_api_module_is_canonical_and_lower_level():
     module = importlib.import_module("bridge.sillytavern_api")
     assert hasattr(module, "SillyTavernApiError")
     assert hasattr(module, "SillyTavernApiClient")
-    assert callable(module.phase3_api_configured)
-    assert callable(module.phase3_client)
+    assert callable(module.live_sync_api_configured)
+    assert callable(module.live_sync_client)
     assert callable(module.refresh_sillytavern_api_config)
 
 
 def test_sync_api_no_longer_owns_client_or_error_symbols():
     assert "SillyTavernApiClient" not in top_level_classes("sync_api.py")
     assert "SillyTavernApiError" not in top_level_classes("sync_api.py")
-    assert "phase3_client" not in top_level_functions("sync_api.py")
-    assert "phase3_api_configured" not in top_level_functions("sync_api.py")
+    assert "live_sync_client" not in top_level_functions("sync_api.py")
+    assert "live_sync_api_configured" not in top_level_functions("sync_api.py")
 
 
 def test_persona_sync_has_no_sync_api_or_sync_core_imports():
@@ -84,11 +84,11 @@ def test_native_api_config_refresh_owns_api_credentials_and_timeout(monkeypatch)
 
     module.refresh_sillytavern_api_config()
 
-    assert module.PHASE3_SYNC_API_URL == "http://localhost:8123"
-    assert module.PHASE3_SYNC_API_HANDLE == "tester"
-    assert module.PHASE3_SYNC_API_PASSWORD == "secret"
-    assert module.PHASE3_SYNC_TIMEOUT_SECONDS == 30
-    assert module.phase3_api_configured() is True
+    assert module.LIVE_SYNC_API_URL == "http://localhost:8123"
+    assert module.LIVE_SYNC_API_HANDLE == "tester"
+    assert module.LIVE_SYNC_API_PASSWORD == "secret"
+    assert module.LIVE_SYNC_TIMEOUT_SECONDS == 30
+    assert module.live_sync_api_configured() is True
 
 
 def test_scene_panel_is_pure_and_exact():

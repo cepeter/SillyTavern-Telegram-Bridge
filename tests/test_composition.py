@@ -1062,7 +1062,7 @@ class StartupCompositionTests(unittest.TestCase):
             return_value={"name": "Mira"},
         ), patch.object(_m_main, "read_png_chara",
             return_value={},
-        ), patch.object(_m_sillytavern_api, "phase3_api_configured",
+        ), patch.object(_m_sillytavern_api, "live_sync_api_configured",
             return_value=False,
         ):
             self.assertEqual(_m_main.run_check(self.services), 0)
@@ -1139,11 +1139,11 @@ class StartupCompositionTests(unittest.TestCase):
 
     def test_startup_builds_sync_service_from_final_runtime_collaborators(self):
         with patch.object(_m_main, "sync_binding",
-        ) as binding, patch.object(_m_main, "phase3_sync_now",
-        ) as sync_now, patch.object(_m_main, "phase3_toggle_realtime",
-        ) as toggle, patch.object(_m_main, "phase3_sync_poll",
-        ) as poll, patch.object(_m_main, "_phase3_disable",
-        ) as disable, patch.object(_m_sillytavern_api, "phase3_api_configured",
+        ) as binding, patch.object(_m_main, "live_sync_now",
+        ) as sync_now, patch.object(_m_main, "live_sync_toggle_realtime",
+        ) as toggle, patch.object(_m_main, "live_sync_poll",
+        ) as poll, patch.object(_m_main, "_live_sync_disable",
+        ) as disable, patch.object(_m_sillytavern_api, "live_sync_api_configured",
         ) as configured:
             services = _m_main._build_startup_services(
             self.config,
@@ -1218,8 +1218,8 @@ class StartupCompositionTests(unittest.TestCase):
             input_flow=make_test_input_flow_service(),
         )
         with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
-             patch.object(_m_runtime, "start_phase3_sync_worker") as start_sync, \
-             patch.object(_m_runtime, "stop_phase3_sync_worker", return_value=True), \
+             patch.object(_m_runtime, "start_live_sync_worker") as start_sync, \
+             patch.object(_m_runtime, "stop_live_sync_worker", return_value=True), \
              patch.object(_m_runtime, "shutdown_background_executors", return_value=True), \
              patch.object(_m_runtime, "run_database_maintenance"):
             self.assertEqual(_m_runtime.run_bridge_runtime(services, {"name": "Mira"}), 0)
@@ -1267,8 +1267,8 @@ class StartupCompositionTests(unittest.TestCase):
         )
         try:
             with patch.object(_m_runtime, "install_bridge_signal_handlers"), \
-                 patch.object(_m_runtime, "start_phase3_sync_worker"), \
-                 patch.object(_m_runtime, "stop_phase3_sync_worker", return_value=True), \
+                 patch.object(_m_runtime, "start_live_sync_worker"), \
+                 patch.object(_m_runtime, "stop_live_sync_worker", return_value=True), \
                  patch.object(_m_runtime, "shutdown_background_executors", return_value=True), \
                  patch.object(_m_runtime, "run_database_maintenance"), \
                  patch.object(_m_update_callback_routing, "answer_callback"):
@@ -1523,7 +1523,7 @@ class StartupCompositionTests(unittest.TestCase):
             return_value=parsed,
         ), patch.object(
             _m_main,
-            "refresh_phase3_config",
+            "refresh_live_sync_config",
         ), patch.object(
             _m_main,
             "_load_startup_config",
@@ -1571,7 +1571,7 @@ class StartupCompositionTests(unittest.TestCase):
             argparse.ArgumentParser,
             "parse_args",
             return_value=parsed,
-        ), patch.object(_m_main, "refresh_phase3_config",
+        ), patch.object(_m_main, "refresh_live_sync_config",
         ), patch.object(_m_main, "enforce_runtime_permissions",
         ), patch.object(_m_main, "configure_logging",
         ) as configure_logging, patch.object(
