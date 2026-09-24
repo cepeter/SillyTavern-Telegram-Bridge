@@ -417,26 +417,29 @@ prevents accidental changes.
 
 | Command | What it does |
 |---|---|
-| `/start` | Show the greeting when Persona, World Info, and System Prompt are enabled |
-| `/status` | Show formatted read-only session status text |
+| `/start` | Show the greeting or setup guidance |
+| `/help` | Open the interactive command guide |
+| `/status` | Show formatted read-only session status |
 | `/new` | Create and activate a named isolated session |
 | `/reset` | Confirm an active-session reset and memory purge |
-| `/session` | Switch, create, or delete an inactive session |
+| `/session` | Switch, create, or delete inactive sessions |
+| `/cancel` | Cancel the current scoped text-input step |
 | `/character` | Manage native character cards |
 | `/persona` | Choose, create, edit, or disable a native Persona |
 | `/world` | Choose or disable World Info/lorebooks |
-| `/systemprompt` | Choose a native SillyTavern System Prompt |
+| `/systemprompt` | Choose a native JSON/TXT SillyTavern System Prompt |
 | `/note` | Configure the session Author's Note |
-| `/providers` | Choose a provider and model |
+| `/providers` | Choose Story or Utility provider/model |
+| `/update` | Check for a release update and confirm before applying it |
 
 ### 🔄 Replies and generation
 
 | Command | What it does |
 |---|---|
-| `/settings` | Configure reasoning and generation values |
-| `/stream` | Toggle streaming preview |
-| `/preset` | Use, save, or delete a generation preset |
-| `/prompt` | Open the read-only prompt inspector and safe prompt diagnostics |
+| `/settings` | Open reasoning and generation controls |
+| `/stream` | Open streaming preview controls |
+| `/preset` | Apply, save, or delete generation presets |
+| `/prompt` | Open the read-only prompt inspector |
 | `/regen` | Generate another response variant |
 | `/swipe` | Browse stored response variants |
 | `/branch` | Choose the active response branch |
@@ -446,34 +449,30 @@ prevents accidental changes.
 | `/language` | Choose the model reply language |
 | `/expression` | Choose native expression behavior |
 | `/macro` | Preview supported SillyTavern macros |
-| `/stscript` | Open the allowlisted STscript panel |
-| `/cancel` | Cancel the current pending input |
+| `/stscript` | Open allowlisted STscript actions |
 
 ### 🎙️ Voice, files, memory, and groups
 
 | Command | What it does |
 |---|---|
-| `/voice` | Toggle automatic quote-driven TTS |
+| `/voice` | Open automatic quote-driven TTS controls |
 | `/voice_input` | Configure transcription, STT model, and language |
 | `/imagine` | Generate an image through an enabled image provider |
-| `/memory` | Open Hindsight memory and search controls |
-| `/memory search <query>` | Search Hindsight memory within the active session |
-| `/memory curated` | View or refresh curated durable memory |
+| `/memory` | Open active-session Hindsight memory controls |
 | `/remember` | Store one explicit long-term fact |
-| `/summarize` | Confirm before regenerating the active-session summary |
+| `/summarize` | Confirm active-session summary regeneration |
 | `/databank` | Open Data Bank RAG controls |
 | `/sync` | Open Live API Sync controls |
 | `/group` | Open Forum Topic group controls |
-| `/group goal` | View the hidden Director scene objective |
-| `/group goal <objective>` | Set a session-local hidden objective for Director mode |
-| `/scene` | Open structured scene state panel |
-| `/scene refresh` | Rebuild scene state with the utility model |
-| `/scene clear` | Clear structured scene state |
-| `/help` | Open the interactive command guide |
-| `/help <command>` | Show detailed behavior for one command |
-| `/update` | Check and, after confirmation, update the bridge |
+| `/scene` | Open structured scene-state controls |
 
-> `/tts` is not a command. Automatic voice is controlled by `/voice`.
+The README intentionally keeps this list to top-level commands. `/help` is the
+canonical command reference for direct typed forms and subcommands. For example,
+`/help databank search`, `/help group mode`, `/help group goal`, and
+`/help scene refresh` open the matching detailed entry.
+
+> `/tts` is not a command. Automatic voice is controlled from `/voice`.
+
 
 ### How to format your messages
 
@@ -492,8 +491,8 @@ Here's how it works:
 - `*text*` (single stars) → sent to the model as an action. The stored
   transcript stays unchanged.
 - `"text"` (straight double quotes) → treated as dialogue and queued for TTS
-  when `/voice on` is enabled. Works for both your messages and character
-  replies.
+  when automatic voice is enabled from `/voice`. Works for both your messages
+  and character replies.
 - `**text**` (double stars) → preserved literally. Not an action, not spoken.
 - Curly or "smart" quotes → not recognized as TTS delimiters. Use straight
   quotes.
@@ -687,8 +686,8 @@ sprite, then the character avatar, and finally text-only.
 
 ### Automatic TTS
 
-Turn on `/voice on` and the bridge will speak any dialogue wrapped in straight
-double quotes — from both your messages and character replies:
+Open `/voice` and enable automatic voice; the bridge will speak dialogue wrapped
+in straight double quotes — from both your messages and character replies:
 
 ```text
 You send:     "Please wait for me."

@@ -20,6 +20,9 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
     def test_runtime_compatibility_module_is_deleted(self):
         self.assertFalse((BRIDGE_DIR / "runtime.py").exists())
 
+    def test_runtime_loader_is_deleted(self):
+        self.assertFalse((BRIDGE_DIR / "runtime_loader.py").exists())
+
     def test_ambient_runtime_context_module_is_deleted(self):
         self.assertFalse((BRIDGE_DIR / "runtime_context.py").exists())
 
