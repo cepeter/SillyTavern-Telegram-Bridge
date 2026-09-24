@@ -50,6 +50,66 @@ _CONTINUATION_INSTRUCTION = (
     "Continue from the exact ending without repeating existing text. "
     "Preserve the response language exactly. Output only the continuation."
 )
+_MAX_VISIBLE_CONTINUATIONS = 3
+
+
+def _join_visible_stream(prefix: str, segment: str) -> str:
+    return " ".join(
+        part
+        for part in (str(prefix or "").strip(), str(segment or "").strip())
+        if part
+    )
+
+
+def _read_openai_stream_segment(
+    response,
+    *,
+    prefix: str,
+    stream_callback,
+    cancel_event,
+) -> tuple[str, str | None, bool]:
+    parts: list[str] = []
+    finish_reason: str | None = None
+    last_emit = 0.0
+    cancelled = False
+
+    for raw_line in response:
+        if cancel_event is not None and cancel_event.is_set():
+            cancelled = True
+            break
+        line = raw_line.decode("utf-8", "replace").strip()
+        if not line.startswith("data:"):
+            continue
+        payload = line[5:].lstrip()
+        if payload == "[DONE]":
+            continue
+        try:
+            event = json.loads(payload)
+        except json.JSONDecodeError:
+            continue
+        for choice in event.get("choices", []):
+            delta = choice.get("delta") or {}
+            text_delta = _stream_text(delta.get("content"))
+            if text_delta:
+                parts.append(text_delta)
+            if choice.get("finish_reason"):
+                finish_reason = str(choice["finish_reason"])
+        if (
+            stream_callback
+            and parts
+            and time.monotonic() - last_emit >= 0.5
+        ):
+            stream_callback(
+                _join_visible_stream(prefix, "".join(parts))
+            )
+            last_emit = time.monotonic()
+
+    content = "".join(parts).strip()
+    if stream_callback and content:
+        stream_callback(_join_visible_stream(prefix, content))
+    if cancel_event is not None and cancel_event.is_set():
+        cancelled = True
+    return content, finish_reason, cancelled
 
 def _parse_stop_sequences(raw: object) -> list[str]:
     return [item for item in str(raw or "").split("\n") if item]
@@ -354,49 +414,132 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
                     break
             return " ".join(segment for segment in segments if segment)
 
-        parts = []
-        finish_reason = None
-        last_emit = 0.0
-        for raw_line in response:
-            if cancel_event is not None and cancel_event.is_set():
-                break
-            line = raw_line.decode("utf-8", "replace").strip()
-            if not line.startswith("data:"):
-                continue
-            payload = line[5:].lstrip()
-            if payload == "[DONE]":
-                continue
-            try:
-                event = json.loads(payload)
-            except json.JSONDecodeError:
-                continue
-            for choice in event.get("choices", []):
-                delta = choice.get("delta") or {}
-                text_delta = _stream_text(delta.get("content"))
-                if text_delta:
-                    parts.append(text_delta)
-                if choice.get("finish_reason"):
-                    finish_reason = choice["finish_reason"]
-            if stream_callback and parts and time.monotonic() - last_emit >= 0.5:
-                stream_callback("".join(parts))
-                last_emit = time.monotonic()
-        content = "".join(parts).strip()
-        if stream_callback and content:
-            stream_callback(content)
+        content, finish_reason, cancelled = _read_openai_stream_segment(
+            response,
+            prefix="",
+            stream_callback=stream_callback,
+            cancel_event=cancel_event,
+        )
         if not content:
-            if finish_reason == "length" and _recovery_attempt < 2:
+            can_recover = (
+                finish_reason == "length"
+                and _recovery_attempt < 2
+                and not cancelled
+                and not (
+                    cancel_event is not None
+                    and cancel_event.is_set()
+                )
+            )
+            if can_recover:
                 recovered = _recovery_settings(generation)
                 if recovered:
-                    return generate_provider_text(model_router, api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=False, request_timeout=request_timeout, _recovery_attempt=_recovery_attempt + 1)
-            raise RuntimeError(f"{provider_id} returned no visible content (finish_reason={finish_reason})")
-        if finish_reason == "length" and not force_non_stream:
-            continuation_messages = list(messages) + [
-                {"role": "assistant", "content": content},
-                {"role": "user", "content": _CONTINUATION_INSTRUCTION},
-            ]
+                    return generate_provider_text(
+                        model_router,
+                        api_key,
+                        model,
+                        messages,
+                        session_id=session_id,
+                        settings=recovered,
+                        stream_callback=stream_callback,
+                        cancel_event=cancel_event,
+                        force_non_stream=False,
+                        request_timeout=request_timeout,
+                        _recovery_attempt=_recovery_attempt + 1,
+                    )
+            raise RuntimeError(
+                f"{provider_id} returned no visible content "
+                f"(finish_reason={finish_reason})"
+            )
+
+        segments = [content]
+        if (
+            finish_reason != "length"
+            or cancelled
+            or (
+                cancel_event is not None
+                and cancel_event.is_set()
+            )
+        ):
+            return content
+
+        continuation_messages = list(messages)
+        for _attempt in range(_MAX_VISIBLE_CONTINUATIONS):
+            if (
+                cancel_event is not None
+                and cancel_event.is_set()
+            ):
+                break
+
+            continuation_messages.extend([
+                {
+                    "role": "assistant",
+                    "content": segments[-1],
+                },
+                {
+                    "role": "user",
+                    "content": _CONTINUATION_INSTRUCTION,
+                },
+            ])
+            continuation_body = dict(body)
+            continuation_body["messages"] = continuation_messages
+            continuation_request = urllib.request.Request(
+                endpoint,
+                data=json.dumps(continuation_body).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
             try:
-                continuation = generate_provider_text(model_router, api_key, model, continuation_messages, session_id=session_id, settings=generation, force_non_stream=False, request_timeout=request_timeout, _recovery_attempt=_recovery_attempt + 1)
-                return " ".join(part for part in (content, continuation) if part)
+                with strict_urlopen(
+                    continuation_request,
+                    timeout=(
+                        240
+                        if request_timeout is None
+                        else request_timeout
+                    ),
+                ) as continuation_response:
+                    prefix = " ".join(
+                        segment
+                        for segment in segments
+                        if segment
+                    )
+                    (
+                        continuation,
+                        continuation_reason,
+                        continuation_cancelled,
+                    ) = _read_openai_stream_segment(
+                        continuation_response,
+                        prefix=prefix,
+                        stream_callback=stream_callback,
+                        cancel_event=cancel_event,
+                    )
             except Exception:
-                logging.warning("Automatic continuation failed after streaming length stop", exc_info=True)
-        return content
+                logging.warning(
+                    "Automatic continuation failed after %s segment(s)",
+                    len(segments),
+                    exc_info=True,
+                )
+                break
+
+            if not continuation:
+                logging.warning(
+                    "Automatic continuation returned no content after %s segment(s)",
+                    len(segments),
+                )
+                break
+
+            segments.append(continuation)
+            if (
+                continuation_cancelled
+                or (
+                    cancel_event is not None
+                    and cancel_event.is_set()
+                )
+                or continuation_reason != "length"
+            ):
+                break
+
+        return " ".join(
+            segment
+            for segment in segments
+            if segment
+        )
