@@ -53,6 +53,7 @@ from bridge.memory_backend import (
 
 from bridge.panel_utils import (
     panel_label,
+    panel_message_request,
     panel_navigation,
     panel_page,
 )
@@ -181,13 +182,35 @@ def send_session_delete_menu(token: str, chat_id: str, sessions: list[dict[str, 
         rows.append(navigation)
     rows.append([{"text": "⬅️ Back", "callback_data": "session:back"}, {"text": "❌ Close", "callback_data": "session:cancel"}])
     text = f"Choose an inactive session to delete (page {current_page + 1}/{total_pages}). Session-scoped Hindsight documents are deleted; memories from other sessions remain."
-    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id, request_context=request_context)
+    method, payload = panel_message_request(
+        chat_id,
+        text,
+        {"inline_keyboard": rows},
+        message_id,
+    )
+    send_panel_request(
+        token,
+        method,
+        payload,
+        request_context=request_context,
+    )
 
 
 def send_session_delete_confirm(token: str, chat_id: str, session_id: str, title: str, message_id: int | None = None, *, request_context) -> None:
     token_value = dynamic_callback_token("session", session_id, chat_id, db=request_context.db)
     payload = {"chat_id": chat_id, "text": f"Delete session '{panel_label(title)}'?\n\nThis removes its SQLite transcript, variants, summary, generation settings, group state, failed turns, session record, and session-scoped Hindsight documents. Memories from other sessions remain. The active session cannot be deleted. Cleanup fails closed if Hindsight is unavailable. This cannot be undone.", "reply_markup": {"inline_keyboard": [[{"text": "✅ Confirm delete", "callback_data": "sessiondeleteconfirm:" + token_value}, {"text": "❌ Cancel", "callback_data": "session:back"}]]}}
-    send_panel_message(token, chat_id, payload["text"], payload["reply_markup"], message_id, request_context=request_context)
+    method, panel_payload = panel_message_request(
+        chat_id,
+        payload["text"],
+        payload["reply_markup"],
+        message_id,
+    )
+    send_panel_request(
+        token,
+        method,
+        panel_payload,
+        request_context=request_context,
+    )
 
 
 def delete_session_data(db: sqlite3.Connection, chat_id: str, target_session_id: str, active_session_id: str, operation_id: int | str | None = None, *, memory_service: MemoryService) -> tuple[bool, str]:
@@ -565,11 +588,6 @@ def send_text(token: str, chat_id: str, text: str) -> list[int]:
 
 
 # Explicit late imports replace transitional dependency injection.
-from bridge.cards import (
-    default_persona_id,
-    get_persona,
-    send_panel_message,
-)
 from bridge.common import (
     DEFAULT_ALLOWED_USER,
     IMAGE_MAX_BYTES,
@@ -583,6 +601,10 @@ from bridge.generation import swipe_state_key
 from bridge.group_director_service import GroupDirectorService
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
-from bridge.persona_sync import NATIVE_PERSONA_SETTINGS_FILE
+from bridge.persona_sync import (
+    NATIVE_PERSONA_SETTINGS_FILE,
+    default_persona_id,
+    get_persona,
+)
 from bridge.session_titles import normalize_session_title
 from bridge.world_storage import install_world_info_document

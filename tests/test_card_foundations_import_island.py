@@ -543,13 +543,10 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
 
         self.assertIn("from bridge.telegram import send_panel_request", source)
         self.assertIn("from bridge.persona_service import PersonaService", source)
-        self.assertIn("from bridge.persona_sync import (", source)
-        for collaborator in (
-            "load_personas",
-            "_native_settings",
-        ):
-            with self.subTest(collaborator=collaborator):
-                self.assertIn(collaborator, source)
+        self.assertIn("panel_message_request", source)
+        self.assertNotIn("from bridge.persona_sync import", source)
+        self.assertNotIn("load_personas", source)
+        self.assertNotIn("_native_settings", source)
 
         self.assertNotIn("ordinary_dependencies", source)
         self.assertNotIn("_bind_module_dependencies", source)

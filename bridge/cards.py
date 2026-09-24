@@ -6,7 +6,6 @@ modules. This file remains exec-loaded until the Phase 7 UI migration.
 from __future__ import annotations
 
 from pathlib import Path
-import logging
 
 from bridge import config as _config
 from bridge.callback_tokens import (
@@ -36,42 +35,25 @@ from bridge.card_content import (
 )
 from bridge.panel_utils import (
     panel_label,
+    panel_message_request,
     panel_navigation,
     panel_page,
 )
 
-def get_persona(persona_id: str) -> dict[str, str] | None:
-    return load_personas().get(persona_id)
-
-
-def default_persona_id() -> str:
-    """Resolve the native default Persona without exposing a private identity."""
-    try:
-        personas = load_personas()
-        settings = _native_settings()
-        power_user = settings.get("power_user") if isinstance(settings, dict) else {}
-        configured = str((power_user or {}).get("default_persona") or "").strip()
-        if configured in personas:
-            return configured
-    except Exception:
-        logging.warning("Could not resolve the native default Persona", exc_info=True)
-    return ""
-
-
-def persona_name(persona_id: str) -> str:
-    persona = get_persona(persona_id)
-    return str(persona.get("name") or "") if persona else ""
-
-
-
-
 def send_panel_message(token: str, chat_id: str, text: str, reply_markup: dict, message_id: int | None = None, *, request_context) -> None:
     """Send a panel message, or edit the existing one in place."""
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": reply_markup}
-    if message_id:
-        payload["message_id"] = message_id
-    send_panel_request(token, method, payload, request_context=request_context)
+    method, payload = panel_message_request(
+        chat_id,
+        text,
+        reply_markup,
+        message_id,
+    )
+    send_panel_request(
+        token,
+        method,
+        payload,
+        request_context=request_context,
+    )
 
 
 def send_persona_menu(token: str, chat_id: str, current_persona: str, message_id: int | None = None, page: int = 0, *, persona_service: PersonaService, request_context) -> None:
@@ -186,8 +168,4 @@ def send_session_menu(token: str, chat_id: str, sessions: list[dict[str, str]], 
 
 # Explicit late imports replace transitional dependency injection.
 from bridge.persona_service import PersonaService
-from bridge.persona_sync import (
-    _native_settings,
-    load_personas,
-)
 from bridge.telegram import send_panel_request
