@@ -119,6 +119,16 @@ def test_pure_panel_message_request_builds_exact_send_and_edit_payloads():
     }
 
 
+    method, payload = panel_utils.panel_message_request(
+        "chat",
+        "Body",
+        {"inline_keyboard": []},
+        0,
+    )
+    assert method == "sendMessage"
+    assert "message_id" not in payload
+
+
 def test_cards_and_telegram_use_shared_panel_request_builder():
     cards_source = (BRIDGE / "cards.py").read_text(encoding="utf-8")
     telegram_source = (BRIDGE / "telegram.py").read_text(encoding="utf-8")

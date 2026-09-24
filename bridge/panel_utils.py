@@ -59,12 +59,12 @@ def panel_message_request(
     reply_markup: dict,
     message_id: int | None = None,
 ) -> tuple[str, dict]:
-    method = "editMessageText" if message_id is not None else "sendMessage"
+    method = "editMessageText" if message_id else "sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
         "reply_markup": reply_markup,
     }
-    if message_id is not None:
+    if message_id:
         payload["message_id"] = message_id
     return method, payload
