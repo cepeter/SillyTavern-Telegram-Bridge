@@ -294,7 +294,7 @@ class GroupDirectorService:
             )
 
         if state.get("mode") == "director":
-            customization = self.director_policy(
+            customization = self._load_director_customization(
                 db,
                 chat_id,
                 session,
