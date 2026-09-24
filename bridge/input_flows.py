@@ -64,7 +64,7 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
         elif action == "imagine":
             handle_imagine_prompt(token, chat_id, value)
         elif action == "memory_search":
-            handle_memory_command(db, token, chat_id, session, fields, "/memory search " + value)
+            handle_memory_command(db, token, chat_id, session, fields, "/memory search " + value, send_text_fn=send_text)
             send_memory_menu( token, chat_id, db, request_context=request_context)
         elif action == "databank_search":
             handle_data_bank_command(db, token, chat_id, "/databank search " + value)

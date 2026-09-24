@@ -412,7 +412,20 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         request_context=request_context,
     ):
         return True
-    if handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context):
+    if handle_help_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        delivery_port=delivery_port,
+        request_context=request_context,
+    ):
         return True
     if handle_sync_callback(
         db,

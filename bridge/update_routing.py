@@ -46,6 +46,16 @@ def route_update(services: BridgeServices, db: sqlite3.Connection, fields: dict,
             callback_message.setdefault("chat", {})["id"] = callback_chat_id
         if sender in permitted and callback_chat_id:
             if is_help_callback(str(callback.get("data") or "")):
+                help_session_id = ensure_session(
+                    db,
+                    callback_chat_id,
+                    model,
+                )["session_id"]
+                help_request_context = RequestContext(
+                    db,
+                    help_session_id,
+                    sender,
+                )
                 handle_help_callback(
                     db,
                     token,
@@ -55,8 +65,10 @@ def route_update(services: BridgeServices, db: sqlite3.Connection, fields: dict,
                     callback_chat_id,
                     callback_message,
                     {},
-                    "",
+                    help_session_id,
                     None,
+                    delivery_port=services.delivery,
+                    request_context=help_request_context,
                 )
             else:
                 callback["_queued"] = True
@@ -321,6 +333,7 @@ def route_update(services: BridgeServices, db: sqlite3.Connection, fields: dict,
         token,
         chat_id,
         str(text),
+        delivery_port=services.delivery,
         request_context=request_context,
     ):
         complete_update(db, update_id, offset)

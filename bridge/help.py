@@ -4,65 +4,6 @@ from functools import partial
 
 from bridge.composition import BridgeServices as _BridgeServices
 
-HELP_CATEGORIES = {
-    "basic": [
-        ("/start", "Show the character greeting when Persona, World Info, and System Prompt are all enabled; otherwise show what's off and how to fix it."),
-
-        ("/help", "Open this guide. Use /help <command> to jump straight to one command."),
-        ("/status", "Show a formatted read-only session status message in Telegram."),
-        ("/new", "Name and create a fresh isolated session, then switch to it."),
-        ("/reset", "Open a confirmation panel to clear only the active session and its Hindsight memory. Other sessions stay untouched."),
-        ("/session", "Switch between sessions, create new ones, or delete inactive ones — deletion removes session data and its Hindsight documents."),
-        ("/sync", "Open session-scoped Live API Sync controls; synchronization uses the local SillyTavern API only, not chat files or JSONL transfer."),
-        ("/update", "Check the latest GitHub release. If you're already current, nothing happens. Otherwise a confirmation panel lets you update and restart."),
-    ],
-    "characters": [
-        ("/providers", "Open the provider and model catalog. Adapter-enabled entries can generate; catalog-only entries are view-only."),
-        ("/providers refresh", "Open the provider panel and refresh discoverable model catalogs."),
-        ("/providers health", "Open the provider panel and run health checks. Providers without /models use a bounded streaming chat probe."),
-        ("/character", "Open the character panel — pick a card, view info, delete safely, or get upload guidance."),
-        ("/persona", "Choose, create, edit, or disable a Persona. Delete only targets inactive, unreferenced ones."),
-        ("/world", "Open World Info selection — activate or disable one or more lorebooks."),
-        ("/note", "Open the Author's Note panel. Off clears it; User input waits for your next message."),
-        ("/systemprompt", "Open the native TXT System Prompt picker. The prompt body stays private."),
-        ("/language", "Choose the language for model replies in this session — Auto follows you, or pick a fixed language."),
-        ("/expression", "Off by default. Choose automatic sprite detection or pick a native sprite from the active card."),
-        ("/imagine", "Opt-in image generation. Opens a 1–4,000 character prompt panel, or use /imagine <prompt> when an image provider is configured."),
-    ],
-    "generation": [
-        ("/settings", "Open this session's generation panel — pick a reasoning level or set your own temperature, tokens, and sampling values."),
-        ("/stream on|off", "Toggle streaming preview on or off."),
-        ("/preset", "Open the preset panel — apply, save, or delete generation setting presets."),
-        ("/macro", "Open a panel, then send one message to preview supported SillyTavern macros"),
-        ("/stscript", "Open the safe STscript panel for Note or Reset — only allowlisted actions, no arbitrary scripts."),
-        ("/regen", "Generate a new response variant for the latest user turn."),
-        ("/swipe", "Browse stored response variants and keep the one you like."),
-        ("/branch", "Open the response branch selector for the active session."),
-        ("/continue", "Continue the latest assistant response from where it stopped."),
-        ("/edit", "Open a panel, then send replacement text for the latest user turn"),
-        ("/retry", "Retry the latest failed character response — no duplicate turns."),
-        ("/prompt", "Open a read-only prompt inspector with budget, memory/RAG, and group-context sections. Use /prompt text for the plain diagnostic output."),
-    ],
-    "memory_rag": [
-        ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),
-        ("/memory curated", "Open the curated-memory panel to view durable distilled facts or refresh them with the utility model."),
-        ("/remember", "Open a panel, then send one explicit long-term fact to store in memory."),
-        ("/summarize", "Regenerate the active session's summary from its stored conversation."),
-        ("/databank", "Open Data Bank RAG controls. Same-name uploads create versions; use versions/activate to inspect or roll back."),
-    ],
-    "voice_group": [
-        ("/voice on|off", "Toggle automatic voice replies. Only dialogue in straight double quotes gets synthesized — narration stays silent."),
-        ("/voice_input on|off", "Open transcription, STT model, and language controls."),
-        ("/voice_input language", "Open the STT language panel — Auto, a fixed code, or User input."),
-        ("/group", "Open Forum Topic group controls, including invisible Director mode for model-selected speaker and pacing guidance."),
-        ("/group goal", "View the hidden, session-local Director objective for this Forum Topic group."),
-        ("/group goal <objective>", "Set or replace the hidden Director objective; it guides speaker choice and scene direction without entering the transcript."),
-        ("/scene", "Show the active session's structured scene state — location, weather, participants, and known facts."),
-        ("/scene refresh", "Rebuild structured scene state with the configured utility model without changing the transcript."),
-    ],
-}
-
-
 def _system_prompt_key(current: str) -> str:
     if current and current in dict(system_prompt_choices()):
         return current
@@ -93,10 +34,6 @@ def send_system_prompt_menu(token: str, chat_id: str, current: str, message_id: 
     current_label = labels.get(current_key, "off")
     text = f"System Prompt choice\nCurrent: {current_label}\nChoose a TXT prompt:"
     send_panel_message(token, chat_id, text, system_prompt_menu_markup(current, page), message_id, request_context=request_context)
-
-
-def send_help_menu(token: str, chat_id: str, category: str | None = None, message_id: int | None = None, command_index: int | None = None, page: int = 0, *, request_context) -> None:
-    send_panel_message(token, chat_id, help_text(category, command_index, page), help_markup(category, command_index, page), message_id, request_context=request_context)
 
 
 def send_settings_menu(token: str, chat_id: str, db: sqlite3.Connection, session_id: str, message_id: int | None = None, *, request_context) -> None:
@@ -606,10 +543,6 @@ from bridge.database import (
     preset_names,
     set_meta,
     update_generation_settings,
-)
-from bridge.help_details import (
-    help_markup,
-    help_text,
 )
 from bridge.input_flows import start_text_action_input
 from bridge.language import (

@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_native_test_sync_service, make_test_memory_service, make_test_request_context, make_test_group_service
+from application_test_setup import ensure_application_extensions, make_native_test_sync_service, make_test_delivery_port, make_test_memory_service, make_test_request_context, make_test_group_service
 
 ensure_application_extensions()
 
@@ -31,16 +31,22 @@ class HelpDrilldownTests(unittest.TestCase):
         self.db.close()
         self.tmp.cleanup()
 
+    def _help_delivery(self, calls):
+        return make_test_delivery_port(
+            send_panel_request=lambda _token, method, payload, **_kwargs:
+            calls.append((method, payload)) or {},
+        )
+
     def test_category_renders_command_buttons_and_detail(self):
         calls = []
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_help_menu("token", "chat", "basic", request_context=make_test_request_context(self.db, "panel-session"))
+            _m_command_routes.send_help_menu("token", "chat", "basic", delivery_port=self._help_delivery(calls), request_context=make_test_request_context(self.db, "panel-session"))
             buttons = [button for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row]
             self.assertIn("help:cmd:basic:0", {button["callback_data"] for button in buttons})
             self.assertIn("/start", {button["text"] for button in buttons})
-            _m_command_routes.send_help_menu("token", "chat", "basic", 77, 0, request_context=make_test_request_context(self.db, "panel-session"))
+            _m_command_routes.send_help_menu("token", "chat", "basic", 77, 0, delivery_port=self._help_delivery(calls), request_context=make_test_request_context(self.db, "panel-session"))
             detail = calls[-1][1]
             self.assertEqual(calls[-1][0], "editMessageText")
             self.assertIn("Help — /start", detail["text"])
@@ -55,16 +61,16 @@ class HelpDrilldownTests(unittest.TestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_help_menu("token", "chat", request_context=make_test_request_context(self.db, "panel-session"))
+            _m_command_routes.send_help_menu("token", "chat", delivery_port=self._help_delivery(calls), request_context=make_test_request_context(self.db, "panel-session"))
             root = calls[-1][1]
             self.assertIn("Choose a topic below", root["text"])
             labels = {button["text"] for row in root["reply_markup"]["inline_keyboard"] for button in row}
             self.assertIn("💬 Start & Sessions", labels)
-            _m_command_routes.send_help_menu("token", "chat", "basic", request_context=make_test_request_context(self.db, "panel-session"))
+            _m_command_routes.send_help_menu("token", "chat", "basic", delivery_port=self._help_delivery(calls), request_context=make_test_request_context(self.db, "panel-session"))
             category = calls[-1][1]
             self.assertIn("Start a conversation", category["text"])
             self.assertIn("Tap a command below", category["text"])
-            _m_command_routes.send_help_menu("token", "chat", "basic", 77, 0, request_context=make_test_request_context(self.db, "panel-session"))
+            _m_command_routes.send_help_menu("token", "chat", "basic", 77, 0, delivery_port=self._help_delivery(calls), request_context=make_test_request_context(self.db, "panel-session"))
             self.assertIn("What it does:", calls[-1][1]["text"])
         finally:
             _m_cards.send_panel_request = original_request
@@ -74,7 +80,7 @@ class HelpDrilldownTests(unittest.TestCase):
         original_answer = _m_catalog.answer_callback
         _m_catalog.answer_callback = lambda _token, _callback_id, text: answers.append(text)
         try:
-            handled = _m_panel_callback_routes.handle_help_callback(self.db, "token", {"id": "cb"}, _m_catalog.answer_callback, "help:cmd:basic:99", "chat", {"message_id": 77}, {}, "default", None, request_context=make_test_request_context(self.db, "panel-session"))
+            handled = _m_panel_callback_routes.handle_help_callback(self.db, "token", {"id": "cb"}, _m_catalog.answer_callback, "help:cmd:basic:99", "chat", {"message_id": 77}, {}, "default", None, delivery_port=make_test_delivery_port(), request_context=make_test_request_context(self.db, "panel-session"))
         finally:
             _m_catalog.answer_callback = original_answer
         self.assertTrue(handled)
@@ -85,7 +91,7 @@ class HelpDrilldownTests(unittest.TestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_help_menu("token", "chat", "generation", request_context=make_test_request_context(self.db, "panel-session"))
+            _m_command_routes.send_help_menu("token", "chat", "generation", delivery_port=self._help_delivery(calls), request_context=make_test_request_context(self.db, "panel-session"))
         finally:
             _m_cards.send_panel_request = original_request
         buttons = [button for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row]
@@ -94,13 +100,13 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertIn("help:cmdpage:generation:1", {button["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for button in row})
 
     def test_standalone_export_import_are_not_public_help_commands(self):
-        public_commands = {command for entries in _m_help.HELP_CATEGORIES.values() for command, _summary in entries}
+        public_commands = {command for entries in _m_help_details.HELP_CATEGORIES.values() for command, _summary in entries}
         self.assertNotIn("/export", public_commands)
         self.assertNotIn("/import", public_commands)
         self.assertIn("/sync", public_commands)
 
     def test_sync_help_exposes_only_live_api_sync(self):
-        summary = dict(_m_help.HELP_CATEGORIES["basic"])["/sync"]
+        summary = dict(_m_help_details.HELP_CATEGORIES["basic"])["/sync"]
         detail = _m_help_details.command_detail("/sync", summary)
         self.assertIn("Live API Sync", summary)
         self.assertIn("Live API Sync controls", summary)
@@ -142,7 +148,7 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertEqual(callbacks, {"sync:realtime", "sync:now", "sync:status", "sync:close"})
 
     def test_director_goal_and_scene_commands_are_documented(self):
-        commands = {command for entries in _m_help.HELP_CATEGORIES.values() for command, _summary in entries}
+        commands = {command for entries in _m_help_details.HELP_CATEGORIES.values() for command, _summary in entries}
         self.assertIn("/group goal", commands)
         self.assertIn("/group goal <objective>", commands)
         self.assertIn("/scene", commands)
@@ -158,11 +164,11 @@ class HelpDrilldownTests(unittest.TestCase):
             self.assertEqual(_m_help_details.normalize_help_command("/help@SillyTavernPunzmeBot"), "")
             self.assertEqual(_m_help_details.normalize_help_command("/help scene refresh"), "scene refresh")
             self.assertIsNone(_m_help_details.normalize_help_command("help"))
-            self.assertTrue(_m_command_routes.send_help_command("token", "chat", "/help scene refresh", request_context=make_test_request_context(self.db, "panel-session")))
+            self.assertTrue(_m_command_routes.send_help_command("token", "chat", "/help scene refresh", delivery_port=make_test_delivery_port(), request_context=make_test_request_context(self.db, "panel-session")))
             self.assertEqual(calls[-1][0], ("token", "chat", "voice_group", None, 7))
-            self.assertTrue(_m_command_routes.send_help_command("token", "chat", "/help unknown", request_context=make_test_request_context(self.db, "panel-session")))
+            self.assertTrue(_m_command_routes.send_help_command("token", "chat", "/help unknown", delivery_port=make_test_delivery_port(), request_context=make_test_request_context(self.db, "panel-session")))
             self.assertEqual(calls[-1][0], ("token", "chat"))
-            self.assertFalse(_m_command_routes.send_help_command("token", "chat", "/helper", request_context=make_test_request_context(self.db, "panel-session")))
+            self.assertFalse(_m_command_routes.send_help_command("token", "chat", "/helper", delivery_port=make_test_delivery_port(), request_context=make_test_request_context(self.db, "panel-session")))
         finally:
             _m_help_details.send_help_menu = original_send
 

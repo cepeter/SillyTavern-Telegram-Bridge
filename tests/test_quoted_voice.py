@@ -4,7 +4,7 @@ ensure_application_extensions()
 
 import unittest
 
-import bridge.help as _m_help
+import bridge.help_details as _m_help_details
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -50,7 +50,7 @@ class QuotedVoiceTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_tts_command_is_not_in_help(self):
-        commands = [command for entries in _m_help.HELP_CATEGORIES.values() for command, _summary in entries]
+        commands = [command for entries in _m_help_details.HELP_CATEGORIES.values() for command, _summary in entries]
         self.assertNotIn("/tts", commands)
 
 
