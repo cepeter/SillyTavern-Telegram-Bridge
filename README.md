@@ -207,12 +207,13 @@ template expects:
 - virtual environment: `~/sillytavern-telegram-bridge/.venv`
 - environment file: `~/.local/share/sillytavern-telegram/.env`
 - bridge runtime data: `~/.local/share/sillytavern-telegram`
+- update staging: `~/.local/share/sillytavern-telegram/live`
 - SillyTavern user data: `~/.local/share/SillyTavern/data/default-user`
 
 If your paths differ, edit the copied service file before enabling it. In
 particular, keep `WorkingDirectory`, `ExecStart`,
-`SILLYTAVERN_BRIDGE_SOURCE_DIR`, and `ReadWritePaths` aligned with your
-actual bridge and SillyTavern locations.
+`SILLYTAVERN_BRIDGE_SOURCE_DIR`, `SILLYTAVERN_LIVE_BRIDGE_DIR`, and
+`ReadWritePaths` aligned with your actual bridge and SillyTavern locations.
 
 Install and start the service for your user account:
 
@@ -291,6 +292,7 @@ comma-separated value must be a numeric Telegram user ID.
 ```dotenv
 SILLYTAVERN_ENV_FILE=/path/to/private/.env
 SILLYTAVERN_BRIDGE_HOME=/path/to/private-bridge-data
+SILLYTAVERN_LIVE_BRIDGE_DIR=/path/to/private-bridge-data/live
 SILLYTAVERN_PROVIDER_CONFIG=/path/to/private/providers.yaml
 SILLYTAVERN_BRIDGE_SOURCE_DIR=/path/to/sillytavern-telegram-bridge
 SILLYTAVERN_CHARACTER_DIR=/path/to/SillyTavern/data/default-user/characters
@@ -855,8 +857,10 @@ the exact published release tag shown in the panel, then syncs the live bridge
 and restarts the service.
 
 The user systemd template sets `SILLYTAVERN_BRIDGE_SOURCE_DIR` to the default
-checkout at `~/sillytavern-telegram-bridge`. If you installed the source
-elsewhere, update that environment value and the related service paths.
+checkout at `~/sillytavern-telegram-bridge` and stages updater copies under
+`~/.local/share/sillytavern-telegram/live`. If you installed the source or
+runtime data elsewhere, update `SILLYTAVERN_BRIDGE_SOURCE_DIR`,
+`SILLYTAVERN_LIVE_BRIDGE_DIR`, and the related service paths.
 
 ---
 

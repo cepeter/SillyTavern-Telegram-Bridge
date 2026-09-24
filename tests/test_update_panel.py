@@ -9,6 +9,43 @@ from pathlib import Path
 import subprocess
 import bridge.update as _m_update
 class UpdatePanelTests(unittest.TestCase):
+
+    def test_update_live_dir_defaults_under_bridge_home(self):
+        self.assertEqual(
+            _m_update._resolve_update_live_dir({}),
+            Path.home() / ".local/share/sillytavern-telegram/live",
+        )
+        self.assertEqual(
+            _m_update._resolve_update_live_dir(
+                {"SILLYTAVERN_BRIDGE_HOME": "/tmp/bridge-home"}
+            ),
+            Path("/tmp/bridge-home/live"),
+        )
+        self.assertEqual(
+            _m_update._resolve_update_live_dir(
+                {
+                    "SILLYTAVERN_BRIDGE_HOME": "/tmp/bridge-home",
+                    "SILLYTAVERN_LIVE_BRIDGE_DIR": "/tmp/custom-live",
+                }
+            ),
+            Path("/tmp/custom-live"),
+        )
+
+
+    def test_user_systemd_template_uses_writable_update_staging(self):
+        root = Path(__file__).parents[1]
+        unit = (
+            root / "systemd" / "sillytavern-telegram.service.example"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "Environment=SILLYTAVERN_LIVE_BRIDGE_DIR=%h/.local/share/sillytavern-telegram/live",
+            unit,
+        )
+        self.assertIn(
+            "ReadWritePaths=%h/sillytavern-telegram-bridge %h/.local/share/sillytavern-telegram",
+            unit,
+        )
+
     def test_update_panel_uses_installed_version_and_release_notes(self):
         text = _m_update.update_menu_text("0.2.007", "0.2.008", "Added safer updates.")
         self.assertIn("Installed: v0.2.007", text)
