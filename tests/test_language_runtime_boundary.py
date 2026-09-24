@@ -114,3 +114,43 @@ def test_language_command_uses_injected_delivery_and_update_session():
     assert sent == [
         ("token", "chat", "Model response language set to: Bahasa Indonesia.")
     ]
+
+
+def test_language_boundary_does_not_change_remember_inline_action(monkeypatch):
+    from types import SimpleNamespace
+    import bridge.command_routes as routes
+
+    calls = []
+    provider = object()
+    services = SimpleNamespace(
+        memory=object(),
+        persona=object(),
+        provider=provider,
+        delivery=object(),
+    )
+
+    monkeypatch.setattr(
+        routes,
+        "handle_inline_text_action",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or True,
+    )
+
+    handled = routes._handle_memory_media(
+        object(),
+        "token",
+        "api-key",
+        "chat",
+        "/remember durable fact",
+        "/remember durable fact",
+        {"session_id": "session"},
+        {"name": "Mira"},
+        17,
+        services,
+        request_context="ctx",
+    )
+
+    assert handled is True
+    assert len(calls) == 1
+    _args, kwargs = calls[0]
+    assert "delivery_port" not in kwargs
+    assert kwargs["provider_port"] is provider
