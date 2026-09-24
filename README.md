@@ -4,7 +4,7 @@
 [![Latest release](https://img.shields.io/github/v/release/cepeter/SillyTavern-Telegram-Bridge?display_name=tag)](https://github.com/cepeter/SillyTavern-Telegram-Bridge/releases/latest)
 [![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
-> **v0.2.022** · Talk to your SillyTavern characters from Telegram. That's the whole pitch.
+> Talk to your SillyTavern characters from Telegram. That's the whole pitch.
 
 ---
 
@@ -319,11 +319,10 @@ endpoints without a `GET /models` route, set `discover_models: false` and use
 probe instead of reporting a misleading failure.
 
 OpenCode Muse works as a separate keyless transport when configured in the
-catalog. OpenAI-compatible relay responses are normalized across the supported
-plain and Cline-free/Cline-PASS response-envelope shapes, so provider relays do
-not need a Cline runtime inside the bridge. Just because a model shows up in the
-catalog doesn't mean it's runnable — the bridge validates transport, endpoint,
-credential, and streaming settings before attempting inference.
+catalog. OpenAI-compatible relay responses are normalized by the bridge when
+needed. A model appearing in the catalog does not automatically make it runnable:
+transport, endpoint, credentials, and streaming settings are validated before
+inference.
 
 The provider panel is the canonical way to select models:
 
@@ -737,11 +736,6 @@ and never replaces the original conversation history.
   files, logs, cards, Personas, and private prompts.
 - **👥 Lock down access** with the required numeric
   `SILLYTAVERN_TELEGRAM_ALLOWED_USERS` allowlist.
-- **🧩 Startup stays explicit.** Environment bootstrap happens before
-  application imports, logging is configured during startup, and background
-  executors are created only when work is submitted. The bridge owns
-  process-level logging during normal launcher startup and sets the root logger
-  level to `INFO`.
 - **🌐 HTTPS for anything external.** Loopback is fine for local services.
 - **🚫 Credentials are never displayed.** Provider hosts are validated before
   keys are attached. Health output never shows them.
@@ -760,10 +754,6 @@ and never replaces the original conversation history.
 - **⚠️ Unknown commands are rejected** before normal generation — no accidental
   messages to the character.
 - **✅ `/stscript` is allowlisted** and cannot execute arbitrary commands.
-- **⚡ SQLite performance and reclamation.** Operations run with WAL mode,
-  synchronous NORMAL, memory temp store, and a 64 MB cache; query planner
-  statistics refresh after large deletions, and disk space is reclaimed by a
-  bounded, dedicated maintenance pass at bridge shutdown.
 - **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
   reverse imports from the isolated service/port layer; Ruff and mypy run on
   that stabilized boundary on every protected PR.
@@ -816,32 +806,15 @@ dependency graph. Startup enters through `sillytavern_telegram_bridge.py`
 and composes required services/ports in `bridge.main`; there is no runtime
 loader, module override chain, or shared execution namespace.
 
-The main boundaries are:
+The current boundaries are deliberately small:
 
-```text
-sillytavern_telegram_bridge.py   launcher and environment bootstrap
-bridge/main.py                   composition root, polling, lifecycle
-bridge/composition.py            immutable config/runtime/service graph
-bridge/conversation_service.py   command-vs-generation application boundary
-bridge/job_service.py            durable job admission/recovery
-bridge/group_service.py          group application boundary
-bridge/group_director_service.py Director planning/policy execution
-bridge/input_flow_service.py     scoped pending-input application boundary
-bridge/memory_service.py         memory application boundary
-bridge/persona_service.py        Persona application boundary
-bridge/sync_service.py           Live Sync application boundary
-bridge/model_router.py           model-to-provider routing
-bridge/provider_port.py          provider generation port
-bridge/provider_transport.py     OpenAI/Anthropic/OpenCode transport and continuation
-bridge/delivery_port.py          Telegram-facing delivery port
-bridge/update_routing.py         update completion/idempotency coordinator
-bridge/update_*_routing.py       callback/message ingress adapters
-bridge/telegram.py               Telegram transport/session helpers
-bridge/database.py + schema.py   SQLite persistence and schema ownership
-bridge/rag*.py                   Data Bank ingestion/retrieval
-bridge/help*.py/json             interactive Help catalog/details
-bridge/extension_registry.py     multi-handler command/memory-summary hooks
-```
+- `sillytavern_telegram_bridge.py` bootstraps the environment and starts the app.
+- `bridge.main` composes required services and ports.
+- Application services own conversation, jobs, groups, memory, Persona, sync,
+  pending input, and Director policy behavior.
+- Provider routing/transport and Telegram delivery sit behind explicit ports.
+- SQLite schema/persistence, RAG, Help, and Telegram ingress each have focused
+  owners rather than a shared runtime namespace.
 
 `tools/static_analysis.py` enforces two repository invariants in CI:
 
