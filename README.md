@@ -29,7 +29,7 @@ text your characters from anywhere (and sync it to SillyTavern too, so you can c
 
 - [✨ What it does](#-what-it-does)
 - [🔧 Requirements](#-requirements)
-- [📦 Install and test](#-install-and-test)
+- [📦 Installation guide](#-installation-guide)
 - [⚙️ Configuration](#-configuration)
 - [🌐 Provider catalog](#-provider-catalog)
 - [🤖 Using the bot](#-using-the-bot)
@@ -40,7 +40,7 @@ text your characters from anywhere (and sync it to SillyTavern too, so you can c
 - [🔄 Live Sync and Forum Topic groups](#-live-sync-and-forum-topic-groups)
 - [🎬 Director goals and scene state](#-director-goals-and-scene-state)
 - [🔒 Reliability, privacy, and safety](#-reliability-privacy-and-safety)
-- [🚀 Run and update](#-run-and-update)
+- [🚀 Updates and database compatibility](#-updates-and-database-compatibility)
 - [🏗️ Architecture](#-architecture)
 - [📄 License](#-license)
 
@@ -139,33 +139,111 @@ round-robin, contextual, manual, or autonomous turn modes.
 
 ---
 
-## 📦 Install and test
+## 📦 Installation guide
 
-Set up a clean Python environment and install the locked runtime plus development
-dependencies:
+The recommended Linux setup keeps the bridge, its virtual environment, and its
+runtime data under your user account. You do not need a system-wide Python
+installation or a root-owned service.
+
+### 1. Clone the bridge into your home directory
+
+```bash
+cd ~
+git clone https://github.com/cepeter/SillyTavern-Telegram-Bridge.git sillytavern-telegram-bridge
+cd ~/sillytavern-telegram-bridge
+```
+
+### 2. Create a private virtual environment
+
+Install only the locked runtime dependencies required to run the bridge:
 
 ```bash
 python3.11 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements.lock
-python -m pip install -r requirements-dev.txt
+./.venv/bin/python -m pip install -r requirements.lock
 ```
 
-Run the same core checks used by CI from the repository root:
+`requirements-dev.txt` is for contributors and CI; it is not required for a
+normal bridge installation.
+
+### 3. Create the user-scoped environment file
+
+The launcher reads `~/.local/share/sillytavern-telegram/.env` by default:
 
 ```bash
-python -m pytest -q -n 2 --dist=loadfile
-python tools/static_analysis.py
-
-TARGETS=$(python tools/static_analysis.py --print-targets | tr '\n' ' ')
-python -m ruff check $TARGETS
-python -m mypy $TARGETS
-python -m compileall -q bridge tests tools
+mkdir -p ~/.local/share/sillytavern-telegram
+cp .env.example ~/.local/share/sillytavern-telegram/.env
+chmod 600 ~/.local/share/sillytavern-telegram/.env
 ```
 
-`main` is protected by the `test`, `dependency-audit`, and
-`static-analysis` checks. The static policy also rejects import cycles and
-reverse dependencies from the isolated service/port layer.
+Edit that file with your Telegram token, allowed user ID, SillyTavern path,
+default character, provider credentials, and model. The
+[Configuration](#️-configuration) and [Provider catalog](#-provider-catalog)
+sections below describe the available settings.
+
+### 4. Validate and run the bridge
+
+Check the installation without starting Telegram polling:
+
+```bash
+cd ~/sillytavern-telegram-bridge
+./.venv/bin/python sillytavern_telegram_bridge.py --check
+```
+
+When the check passes, run the bridge manually:
+
+```bash
+cd ~/sillytavern-telegram-bridge
+./.venv/bin/python sillytavern_telegram_bridge.py
+```
+
+Press `Ctrl+C` to stop a manual run.
+
+### 5. Run it persistently with user systemd
+
+The repository includes a hardened **user-service** template. The default
+template expects:
+
+- bridge checkout: `~/sillytavern-telegram-bridge`
+- virtual environment: `~/sillytavern-telegram-bridge/.venv`
+- environment file: `~/.local/share/sillytavern-telegram/.env`
+- bridge runtime data: `~/.local/share/sillytavern-telegram`
+- SillyTavern user data: `~/.local/share/SillyTavern/data/default-user`
+
+If your paths differ, edit the copied service file before enabling it. In
+particular, keep `WorkingDirectory`, `ExecStart`,
+`SILLYTAVERN_BRIDGE_SOURCE_DIR`, and `ReadWritePaths` aligned with your
+actual bridge and SillyTavern locations.
+
+Install and start the service for your user account:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp systemd/sillytavern-telegram.service.example \
+  ~/.config/systemd/user/sillytavern-telegram.service
+
+systemctl --user daemon-reload
+systemctl --user enable --now sillytavern-telegram.service
+systemctl --user status sillytavern-telegram.service
+```
+
+Useful service commands:
+
+```bash
+systemctl --user restart sillytavern-telegram.service
+systemctl --user stop sillytavern-telegram.service
+journalctl --user -u sillytavern-telegram.service -f
+```
+
+`systemctl --user enable` starts the bridge automatically when your user
+systemd manager starts. If you also want it to start at boot without an
+interactive login and remain running after logout, enable lingering for the
+account once:
+
+```bash
+loginctl enable-linger "$USER"
+```
+
+Some distributions require an administrator to enable lingering for a user.
 
 ---
 
@@ -762,16 +840,7 @@ and never replaces the original conversation history.
 
 ---
 
-## 🚀 Run and update
-
-Check your installation without starting the bot:
-
-```bash
-python sillytavern_telegram_bridge.py --check
-```
-
-This loads the environment, validates the native card, checks permissions, tests
-optional Live Sync auth, and verifies the Telegram bot identity.
+## 🚀 Updates and database compatibility
 
 ### Pre-production database reset
 
@@ -784,19 +853,16 @@ bridge, archive the existing SQLite file if you need its data for inspection,
 then remove or rename the active database and let the bridge create a fresh
 one. The bridge does not automatically convert or delete an older database.
 
-Start the bridge:
-
-```bash
-python sillytavern_telegram_bridge.py
-```
-
-A systemd template lives at `systemd/sillytavern-telegram.service.example`. Set
-`SILLYTAVERN_BRIDGE_SOURCE_DIR` if `/update` runs from a live launcher copy.
+### Updating
 
 `/update` is confirmation-gated. If you're already on the latest release, it
 does nothing. Otherwise it requires a clean checkout and fast-forwards only to
 the exact published release tag shown in the panel, then syncs the live bridge
 and restarts the service.
+
+The user systemd template sets `SILLYTAVERN_BRIDGE_SOURCE_DIR` to the default
+checkout at `~/sillytavern-telegram-bridge`. If you installed the source
+elsewhere, update that environment value and the related service paths.
 
 ---
 
