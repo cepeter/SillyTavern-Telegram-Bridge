@@ -249,14 +249,9 @@ Some distributions require an administrator to enable lingering for a user.
 
 ## ⚙️ Configuration
 
-Keep your real environment file outside Git — there's no reason for secrets to
-live in version control:
-
-```bash
-mkdir -p ~/.local/share/sillytavern-telegram
-cp .env.example ~/.local/share/sillytavern-telegram/.env
-chmod 600 ~/.local/share/sillytavern-telegram/.env
-```
+The installation guide creates the private environment file at
+`~/.local/share/sillytavern-telegram/.env`. Keep that file outside Git and
+restrict it to your user account.
 
 The bare minimum you need to fill in:
 
