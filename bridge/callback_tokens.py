@@ -1,122 +1,85 @@
-"""Canonical callback-token cache and persistence helpers."""
+"""Opaque chat-scoped callback handles stored only in the caller's SQLite DB.
 
-import hashlib
+Tokens are not authorization by themselves: panel ownership and session checks
+remain at ingress. No process cache can resurrect a rolled-back or deleted row.
+"""
+
+from __future__ import annotations
+
 import logging
+import math
+import secrets
+import sqlite3
 import time
 
-_CALLBACK_TOKEN_VALUES: dict[
-    str,
-    tuple[str, str, str, float],
-] = {}
 _CALLBACK_TOKEN_TTL_SECONDS = 900
+_TOKEN_INSERT_ATTEMPTS = 8
 
 
-def _run_db_action(db, action, error_message: str):
-    """Run action(db) on the explicit request/job database; log failures."""
+class CallbackTokenError(RuntimeError):
+    """A durable callback handle could not be created."""
+
+
+def _required_scope(kind: str, chat_id: str) -> None:
+    if not isinstance(chat_id, str) or not chat_id.strip():
+        raise ValueError("callback chat_id is required")
+    if not isinstance(kind, str) or not kind.strip():
+        raise ValueError("callback kind is required")
+
+
+def dynamic_callback_token(kind: str, value: str, chat_id: str, *, db: sqlite3.Connection) -> str:
+    """Issue an unpredictable handle; never commit an enclosing transaction.
+
+    Without an existing transaction this owns and commits one short write. If a
+    caller already owns a transaction, the token becomes durable only with that
+    transaction's commit; a rollback invalidates it without any cache cleanup.
+    """
+    _required_scope(kind, chat_id)
+    owns_transaction = not db.in_transaction
+    now = time.time()
     try:
-        return action(db)
-    except Exception:
-        logging.debug(error_message, exc_info=True)
+        db.execute("DELETE FROM callback_tokens WHERE expires_at <= ?", (now,))
+        for _attempt in range(_TOKEN_INSERT_ATTEMPTS):
+            token = "t" + secrets.token_urlsafe(16)
+            cursor = db.execute(
+                "INSERT INTO callback_tokens(token,kind,value,chat_id,expires_at) "
+                "VALUES(?,?,?,?,?) ON CONFLICT(token) DO NOTHING",
+                (token, kind, str(value), chat_id, now + _CALLBACK_TOKEN_TTL_SECONDS),
+            )
+            if cursor.rowcount == 1:
+                if owns_transaction:
+                    db.commit()
+                return token
+        raise CallbackTokenError("Could not allocate a unique callback token")
+    except (sqlite3.Error, OSError, CallbackTokenError) as exc:
+        if owns_transaction:
+            try:
+                db.rollback()
+            except sqlite3.Error:
+                pass
+        logging.warning("Could not persist callback token; reopen the panel")
+        raise CallbackTokenError("Could not persist callback token") from exc
+
+
+def resolve_dynamic_callback_token(token: str, kind: str, chat_id: str, *, db: sqlite3.Connection) -> str | None:
+    """Read a valid handle without owning, committing, or pruning a transaction."""
+    _required_scope(kind, chat_id)
+    if not isinstance(token, str) or not token or len(token) > 64:
         return None
-
-
-def dynamic_callback_token(
-    kind: str,
-    value: str,
-    chat_id: str = "",
-    *,
-    db,
-) -> str:
-    raw = f"{kind}|{chat_id}|{value}"
-    token = (
-        "t"
-        + hashlib.sha256(
-            raw.encode("utf-8")
-        ).hexdigest()[:16]
-    )
-    expires_at = time.time() + _CALLBACK_TOKEN_TTL_SECONDS
-    _CALLBACK_TOKEN_VALUES[token] = (
-        str(kind),
-        str(value),
-        str(chat_id),
-        expires_at,
-    )
-
-    def persist(conn):
-        conn.execute(
-            "INSERT OR REPLACE INTO callback_tokens("
-            "token,kind,value,chat_id,expires_at"
-            ") VALUES(?,?,?,?,?)",
-            (
-                token,
-                str(kind),
-                str(value),
-                str(chat_id),
-                expires_at,
-            ),
-        )
-        conn.commit()
-
-    _run_db_action(
-        db,
-        persist,
-        "Could not persist callback token",
-    )
-    return token
-
-
-def resolve_dynamic_callback_token(
-    token: str,
-    kind: str,
-    chat_id: str = "",
-    *,
-    db,
-) -> str | None:
-    item = _CALLBACK_TOKEN_VALUES.get(str(token))
-    if item is None:
-
-        def load(conn):
-            row = conn.execute(
-                "SELECT kind,value,chat_id,expires_at "
-                "FROM callback_tokens WHERE token=?",
-                (str(token),),
-            ).fetchone()
-            if row:
-                found = (
-                    str(row[0]),
-                    str(row[1]),
-                    str(row[2]),
-                    float(row[3]),
-                )
-                _CALLBACK_TOKEN_VALUES[str(token)] = found
-                return found
-            return None
-
-        item = _run_db_action(
-            db,
-            load,
-            "Could not load callback token",
-        )
-
-    if item is None:
+    try:
+        row = db.execute(
+            "SELECT kind,value,chat_id,expires_at FROM callback_tokens WHERE token=?",
+            (token,),
+        ).fetchone()
+    except sqlite3.Error:
+        logging.warning("Could not read callback token; reopen the panel")
         return None
-
-    (
-        stored_kind,
-        value,
-        stored_chat_id,
-        expires_at,
-    ) = item
-
-    # Lookup does not own persistence or the caller's transaction. Startup
-    # database maintenance prunes expired rows independently of resolution.
-    if expires_at < time.time():
-        _CALLBACK_TOKEN_VALUES.pop(str(token), None)
+    if row is None or row[0] != kind or not row[2] or row[2] != chat_id:
         return None
-
-    if stored_kind != str(kind) or (
-        stored_chat_id and stored_chat_id != str(chat_id)
-    ):
+    try:
+        expires_at = float(row[3])
+    except (TypeError, ValueError):
         return None
-
-    return value
+    if not math.isfinite(expires_at) or expires_at <= time.time():
+        return None
+    return str(row[1])
