@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from bridge.application_composition import initialize_extensions
 from bridge.composition import RequestContext
+from bridge.delivery_port import DeliveryPort
 from bridge.memory_service import MemoryService
 from bridge.model_router import ModelRouter
 from bridge.provider_port import ProviderPort
@@ -35,6 +36,31 @@ def make_test_request_context(
 ) -> RequestContext:
     """Return an explicit request context for panel/router tests."""
     return RequestContext(db, session_id, actor_id)
+
+
+def make_test_delivery_port(
+    *,
+    request=None,
+    send_text=None,
+    send_reply=None,
+    send_typing=None,
+    send_panel_request=None,
+    delete_outgoing_message_row=None,
+) -> DeliveryPort:
+    return DeliveryPort(
+        request=request or (lambda *_args, **_kwargs: {}),
+        send_text=send_text or (lambda *_args, **_kwargs: []),
+        send_reply=send_reply or (lambda *_args, **_kwargs: None),
+        send_typing=send_typing or (lambda *_args, **_kwargs: None),
+        send_panel_request=(
+            send_panel_request
+            or (lambda *_args, **_kwargs: {})
+        ),
+        delete_outgoing_message_row=(
+            delete_outgoing_message_row
+            or (lambda *_args, **_kwargs: None)
+        ),
+    )
 
 
 def make_test_model_router(*, catalog=None) -> ModelRouter:
@@ -198,6 +224,7 @@ def make_test_application_services(
     model_router=None,
     provider=None,
     conversation=None,
+    delivery=None,
 ):
     """Return an explicit test-only application service graph for routers."""
     return SimpleNamespace(
@@ -209,6 +236,7 @@ def make_test_application_services(
         model_router=model_router or make_test_model_router(),
         provider=provider or make_test_provider_port(),
         conversation=conversation or make_test_conversation_service(),
+        delivery=delivery or make_test_delivery_port(),
     )
 
 
