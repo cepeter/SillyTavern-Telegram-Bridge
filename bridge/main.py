@@ -69,6 +69,7 @@ from bridge.group_service import GroupService as _GroupService
 from bridge.input_flow_service import InputFlowService as _InputFlowService
 from bridge.help import set_bot_commands
 from bridge.input_flows import handle_pending_input
+from bridge.session_naming import start_session_name_input
 from bridge.job_service import JobService as _JobService
 from bridge.media import (
     delete_outgoing_message_row,
@@ -204,6 +205,7 @@ def _build_startup_services(
     )
     input_flow = _InputFlowService(
         handle_pending_backend=handle_pending_input,
+        start_session_name_backend=start_session_name_input,
     )
     group_director = _GroupDirectorService(
         load_group_state=group.state,

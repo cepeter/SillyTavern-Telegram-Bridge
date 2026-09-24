@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_memory_service, make_test_persona_service, make_test_request_context, make_test_provider_port
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_input_flow_service, make_test_memory_service, make_test_persona_service, make_test_request_context, make_test_provider_port
 
 ensure_application_extensions()
 
@@ -135,7 +135,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_session_naming.send_text = lambda *_args, **_kwargs: []
         callback = {"id": "callback", "from": {"id": "user"}, "data": "group:new_session", "message": {"message_id": 10, "chat": {"id": chat_id}}}
         try:
-            _m_groups.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user", group_service=self.group, request_context=make_test_request_context(self.db, session["session_id"], "user"))
+            _m_groups.handle_group_panel_callback(self.db, "token", chat_id, session, "group:new_session", callback["message"], sender_id="user", group_service=self.group, input_flow_service=make_test_input_flow_service(), request_context=make_test_request_context(self.db, session["session_id"], "user"))
             pending = _m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "")
             self.assertTrue(pending)
             _m_input_flows.handle_pending_input(self.db, "token", chat_id, session, "Named Group", operation_id=77, group_service=self.group, provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"], "user"))

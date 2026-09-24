@@ -36,6 +36,7 @@ from bridge.panel_utils import (
 )
 
 from bridge.group_service import GroupService
+from bridge.input_flow_service import InputFlowService
 
 
 def send_group_menu(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], message_id: int | None = None, *, group_service: GroupService, request_context) -> None:
@@ -142,10 +143,10 @@ def send_group_remove_confirm(token: str, chat_id: str, filename: str, message_i
     send_panel_message(token, chat_id, f"Remove '{Path(filename).stem}' from this group? The native character card will not be deleted.", markup, message_id, request_context=request_context)
 
 
-def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict, operation_id: int | str | None = None, sender_id: str = "", *, group_service: GroupService, request_context) -> None:
+def handle_group_panel_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict, operation_id: int | str | None = None, sender_id: str = "", *, group_service: GroupService, input_flow_service: InputFlowService, request_context) -> None:
     message_id = message.get("message_id")
     if data == "group:new_session":
-        start_session_name_input(db, token, chat_id, session, kind="group", message=message, group_service=group_service)
+        input_flow_service.start_session_name(db, token, chat_id, session, kind="group", message=message, group_service=group_service)
     elif data == "group:menu":
         send_group_menu( db, token, chat_id, session, message_id, group_service=group_service, request_context=request_context)
     elif data == "group:add":
@@ -303,7 +304,6 @@ from bridge.media import (
 )
 from bridge.memory import generate_session_summary
 from bridge.provider_port import ProviderPort
-from bridge.session_naming import start_session_name_input
 from bridge.telegram import (
     create_session,
     load_session,

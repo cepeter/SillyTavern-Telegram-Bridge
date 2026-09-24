@@ -36,7 +36,10 @@ def test_input_flow_service_is_pure_and_delegates():
         calls.append((args, kwargs))
         return True
 
-    service = module.InputFlowService(handle_pending_backend=backend)
+    service = module.InputFlowService(
+        handle_pending_backend=backend,
+        start_session_name_backend=lambda *_args, **_kwargs: None,
+    )
     assert service.handle_pending(1, 2, key="value") is True
     assert calls == [((1, 2), {"key": "value"})]
 
@@ -81,7 +84,8 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
     input_flow = module.InputFlowService(
         handle_pending_backend=lambda *args, **kwargs: (
             captured.append((args, kwargs)) or True
-        )
+        ),
+        start_session_name_backend=lambda *_args, **_kwargs: None,
     )
     services = SimpleNamespace(
         input_flow=input_flow,
