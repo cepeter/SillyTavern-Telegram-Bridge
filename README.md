@@ -134,14 +134,15 @@ round-robin, contextual, manual, or autonomous turn modes.
 - **Python 3.11**
 - A Telegram bot token and your Telegram user ID
 - A local SillyTavern installation with at least one PNG character card
-- An OpenAI-compatible chat provider (or an Anthropic Messages provider)
-- Optional: Hindsight, embeddings, image generation, STT, and TTS services
+- A configured Story model from the private provider catalog — OpenAI-compatible, Anthropic Messages, or OpenCode Muse
+- Optional: a separate Utility model, Hindsight, embeddings, image generation, STT, and TTS services
 
 ---
 
 ## 📦 Install and test
 
-Set up a clean Python environment and install the locked dependencies:
+Set up a clean Python environment and install the locked runtime plus development
+dependencies:
 
 ```bash
 python3.11 -m venv .venv
@@ -150,12 +151,21 @@ python -m pip install -r requirements.lock
 python -m pip install -r requirements-dev.txt
 ```
 
-Run the tests from the repository root:
+Run the same core checks used by CI from the repository root:
 
 ```bash
-python3 -m unittest discover -s tests -q
-python3 -m compileall -q bridge tests
+python -m pytest -q -n 2 --dist=loadfile
+python tools/static_analysis.py
+
+TARGETS=$(python tools/static_analysis.py --print-targets | tr '\n' ' ')
+python -m ruff check $TARGETS
+python -m mypy $TARGETS
+python -m compileall -q bridge tests tools
 ```
+
+`main` is protected by the `test`, `dependency-audit`, and
+`static-analysis` checks. The static policy also rejects import cycles and
+reverse dependencies from the isolated service/port layer.
 
 ---
 
@@ -309,9 +319,11 @@ endpoints without a `GET /models` route, set `discover_models: false` and use
 probe instead of reporting a misleading failure.
 
 OpenCode Muse works as a separate keyless transport when configured in the
-catalog. Just because a model shows up in the catalog doesn't mean it's
-runnable — the bridge validates adapter, transport, endpoint, and streaming
-settings before attempting inference.
+catalog. OpenAI-compatible relay responses are normalized across the supported
+plain and Cline-free/Cline-PASS response-envelope shapes, so provider relays do
+not need a Cline runtime inside the bridge. Just because a model shows up in the
+catalog doesn't mean it's runnable — the bridge validates transport, endpoint,
+credential, and streaming settings before attempting inference.
 
 The provider panel is the canonical way to select models:
 
@@ -352,14 +364,13 @@ prevents accidental changes.
 | `/settings` | Configure reasoning and generation values |
 | `/stream` | Toggle streaming preview |
 | `/preset` | Use, save, or delete a generation preset |
-| `/prompt` | Open the read-only prompt inspector panel |
+| `/prompt` | Open the read-only prompt inspector and safe prompt diagnostics |
 | `/regen` | Generate another response variant |
 | `/swipe` | Browse stored response variants |
 | `/branch` | Choose the active response branch |
 | `/continue` | Continue the latest assistant response |
 | `/edit` | Edit the latest user turn and regenerate |
 | `/retry` | Retry the latest failed response |
-| `/prompt` | Show safe prompt diagnostics |
 | `/language` | Choose the model reply language |
 | `/expression` | Choose native expression behavior |
 | `/macro` | Preview supported SillyTavern macros |
@@ -522,10 +533,13 @@ natural break points in this order:
 4. Whitespace
 5. A hard UTF-16-safe cut
 
-When a provider stops at the token limit (`finish_reason: length`), the bridge
-tries bounded auto-continuation — including cases where a reasoning-only
-stream produced no visible text. `/continue` is always there if you want
-another deliberate segment.
+When a provider stops at the token limit (`finish_reason: length`), the
+bridge tries bounded auto-continuation. Streaming continuation stays streaming,
+keeps the preview cumulative across segments, honors cancellation between and
+during continuation requests, and makes at most three automatic continuation
+requests after the initial visible segment. Reasoning-only length stops can
+retry with a larger output budget. `/continue` is always available for a
+deliberate additional segment.
 
 ### Variants and recovery
 
@@ -750,6 +764,9 @@ and never replaces the original conversation history.
   synchronous NORMAL, memory temp store, and a 64 MB cache; query planner
   statistics refresh after large deletions, and disk space is reclaimed by a
   bounded, dedicated maintenance pass at bridge shutdown.
+- **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
+  reverse imports from the isolated service/port layer; Ruff and mypy run on
+  that stabilized boundary on every protected PR.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---
@@ -794,53 +811,46 @@ and restarts the service.
 
 ## 🏗️ Architecture
 
-The bridge uses ordinary Python imports and explicit startup composition.
-Production startup enters through `bridge.main`; repository source is no longer
-executed into a shared runtime namespace. Root infrastructure is assembled in
-`bridge.composition`, built-in cross-cutting features register explicitly through
-`bridge.application_composition.initialize_extensions()`, and durable jobs are
-provided through the required `JobService` on `BridgeServices`. Production
-dependencies are ordinary module imports or explicitly injected services; no
-compatibility runtime/dependency layer participates in startup.
+The bridge uses ordinary imports, explicit composition, and an acyclic internal
+dependency graph. Startup enters through `sillytavern_telegram_bridge.py`
+and composes required services/ports in `bridge.main`; there is no runtime
+loader, module override chain, or shared execution namespace.
 
-Command-versus-generation orchestration belongs to the required
-`ConversationService` on `BridgeServices`. The composition root injects message
-preparation, command routing, and reply generation; workers, `/retry`, and voice
-transcription enter through that service rather than importing a dispatcher back
-into lower-level message or media modules.
-
-Scene State, Director Goals, and Memory Curator register command routes and
-memory/summary hooks deterministically during startup. Here are the main
-boundaries (not exhaustive):
+The main boundaries are:
 
 ```text
-sillytavern_telegram_bridge.py   launcher; imports bridge.main directly
-bridge/main.py                   production startup, polling, durable job dispatch
-bridge/composition.py            root configuration and service composition
-bridge/application_composition.py explicit built-in extension registration
-bridge/job_service.py             canonical durable job service
-bridge/extension_registry.py     explicit command and memory/summary extension hooks
-bridge/common.py                 queues, permissions, shared infrastructure
-bridge/config.py                 canonical startup and feature defaults
-bridge/cards.py                  cards, Persona display, prompts, World Info
-bridge/database.py               sessions, persistence, generation settings
-bridge/memory.py                 Hindsight orchestration and summaries
-bridge/memory_backend.py         canonical Hindsight backend
-bridge/rag.py                    Data Bank command/orchestration shell
-bridge/rag_core.py               Data Bank ingestion, indexing, and retrieval core
-bridge/catalog.py                provider catalog and health
-bridge/generation.py             adapters, streaming, continuation
-bridge/telegram.py               Telegram transport and session helpers
-bridge/help*.py/json             help menus and command details
-bridge/sync_*.py                 Live Sync primitives and API
-bridge/groups.py                 Forum Topic orchestration
-bridge/group_core.py             canonical group state and turn logic
-bridge/media.py                  voice, STT, TTS, Telegram media
-bridge/recovery.py               idempotent operation recovery
-bridge/state_integrity.py        native/Hindsight consistency hardening
-bridge/scheduler_safety.py       SQLite and durable-job hardening
-bridge/pdf_parser.py             isolated PDF worker for Data Bank
+sillytavern_telegram_bridge.py   launcher and environment bootstrap
+bridge/main.py                   composition root, polling, lifecycle
+bridge/composition.py            immutable config/runtime/service graph
+bridge/conversation_service.py   command-vs-generation application boundary
+bridge/job_service.py            durable job admission/recovery
+bridge/group_service.py          group application boundary
+bridge/group_director_service.py Director planning/policy execution
+bridge/input_flow_service.py     scoped pending-input application boundary
+bridge/memory_service.py         memory application boundary
+bridge/persona_service.py        Persona application boundary
+bridge/sync_service.py           Live Sync application boundary
+bridge/model_router.py           model-to-provider routing
+bridge/provider_port.py          provider generation port
+bridge/provider_transport.py     OpenAI/Anthropic/OpenCode transport and continuation
+bridge/delivery_port.py          Telegram-facing delivery port
+bridge/update_routing.py         update completion/idempotency coordinator
+bridge/update_*_routing.py       callback/message ingress adapters
+bridge/telegram.py               Telegram transport/session helpers
+bridge/database.py + schema.py   SQLite persistence and schema ownership
+bridge/rag*.py                   Data Bank ingestion/retrieval
+bridge/help*.py/json             interactive Help catalog/details
+bridge/extension_registry.py     multi-handler command/memory-summary hooks
 ```
+
+`tools/static_analysis.py` enforces two repository invariants in CI:
+
+1. the complete `bridge` import graph must stay acyclic;
+2. the stabilized service/port modules may not import back into `bridge.*`.
+
+Historical migration plans are intentionally not kept in the product tree. Git
+history and the changelog preserve that development history without presenting
+retired architecture as current documentation.
 
 ---
 
