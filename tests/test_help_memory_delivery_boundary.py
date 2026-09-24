@@ -162,6 +162,7 @@ def _route_db() -> sqlite3.Connection:
 
 
 def test_update_routing_help_callback_fast_path_forwards_delivery_and_context(monkeypatch):
+    import bridge.update_callback_routing as callback_routing
     import bridge.update_routing as routing
 
     db = _route_db()
@@ -171,14 +172,14 @@ def test_update_routing_help_callback_fast_path_forwards_delivery_and_context(mo
         config=SimpleNamespace(bot_token="token", default_model="model"),
         delivery=delivery,
     )
-    monkeypatch.setattr(routing, "is_help_callback", lambda _data: True)
+    monkeypatch.setattr(callback_routing, "is_help_callback", lambda _data: True)
     monkeypatch.setattr(
-        routing,
+        callback_routing,
         "ensure_session",
         lambda *_args, **_kwargs: {"session_id": "session"},
     )
     monkeypatch.setattr(
-        routing,
+        callback_routing,
         "handle_help_callback",
         lambda *args, **kwargs: calls.append((args, kwargs)) or True,
     )
@@ -216,6 +217,7 @@ def test_update_routing_help_callback_fast_path_forwards_delivery_and_context(mo
 
 
 def test_update_routing_help_text_fast_path_forwards_delivery_and_context(monkeypatch):
+    import bridge.update_message_routing as message_routing
     import bridge.update_routing as routing
 
     db = _route_db()
@@ -226,12 +228,12 @@ def test_update_routing_help_text_fast_path_forwards_delivery_and_context(monkey
         delivery=delivery,
     )
     monkeypatch.setattr(
-        routing,
+        message_routing,
         "ensure_session",
         lambda *_args, **_kwargs: {"session_id": "session"},
     )
     monkeypatch.setattr(
-        routing,
+        message_routing,
         "send_help_command",
         lambda *args, **kwargs: calls.append((args, kwargs)) or True,
     )
