@@ -498,7 +498,7 @@ def set_bot_commands(token: str) -> None:
                 {"command": "continue", "description": "Continue last response"},
                 {"command": "retry", "description": "Retry the last failed response"},
                 {"command": "note", "description": "Open Author's Note panel"},
-                {"command": "systemprompt", "description": "Choose TXT System Prompt from panel"},
+                {"command": "systemprompt", "description": "Choose native JSON/TXT System Prompt"},
                 {"command": "language", "description": "Choose model reply language"},
                 {"command": "expression", "description": "Choose manual or automatic character expressions"},
                 {"command": "imagine", "description": "Generate an image from a prompt"},

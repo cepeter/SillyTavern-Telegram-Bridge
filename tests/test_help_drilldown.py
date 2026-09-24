@@ -136,6 +136,30 @@ class HelpDrilldownTests(unittest.TestCase):
             "Cancel the current pending input",
         )
 
+
+    def test_telegram_command_menu_matches_help_top_level_commands(self):
+        calls = []
+        original_request = _m_help.telegram_request
+        _m_help.telegram_request = (
+            lambda _token, method, payload:
+            calls.append((method, payload)) or {}
+        )
+        try:
+            _m_help.set_bot_commands("token")
+        finally:
+            _m_help.telegram_request = original_request
+
+        bot_commands = {
+            "/" + item["command"]
+            for item in calls[-1][1]["commands"]
+        }
+        help_bases = {
+            command.split()[0].split("|", 1)[0]
+            for entries in _m_help_details.HELP_CATEGORIES.values()
+            for command, _summary in entries
+        }
+        self.assertEqual(bot_commands, help_bases)
+
     def test_sync_help_exposes_only_live_api_sync(self):
         summary = dict(_m_help_details.HELP_CATEGORIES["basic"])["/sync"]
         detail = _m_help_details.command_detail("/sync", summary)
@@ -210,8 +234,87 @@ class HelpDrilldownTests(unittest.TestCase):
         readme = (Path(__file__).parents[1] / "README.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("/memory search <query>", readme)
-        self.assertIn("/scene clear", readme)
+        self.assertIn("canonical command reference", readme)
+        self.assertIn("/help scene refresh", readme)
+
+
+    def test_help_details_exactly_cover_public_catalog(self):
+        public_commands = {
+            command
+            for entries in _m_help_details.HELP_CATEGORIES.values()
+            for command, _summary in entries
+        }
+        self.assertEqual(set(_m_help_details.COMMAND_DETAILS), public_commands)
+        self.assertTrue(all(_m_help_details.COMMAND_DETAILS[command].strip() for command in public_commands))
+
+    def test_direct_command_forms_are_documented_without_fake_toggles(self):
+        public_commands = {
+            command
+            for entries in _m_help_details.HELP_CATEGORIES.values()
+            for command, _summary in entries
+        }
+        expected_direct = {
+            "/language <language>",
+            "/imagine <prompt>",
+            "/macro <text>",
+            "/edit <text>",
+            "/prompt text",
+            "/memory search <query>",
+            "/memory curated refresh",
+            "/remember <fact>",
+            "/databank search <query>",
+            "/databank versions <filename>",
+            "/databank activate <filename> <version>",
+            "/databank reindex [filename]",
+            "/databank remove <filename> confirm",
+            "/group status",
+            "/group add <character>",
+            "/group remove <character>",
+            "/group speak <character>",
+            "/group mode <mode>",
+            "/group on|off",
+            "/group next",
+            "/group goal <objective>",
+            "/group goal clear",
+            "/scene refresh",
+            "/scene clear",
+        }
+        self.assertTrue(expected_direct <= public_commands)
+        self.assertNotIn("/stream on|off", public_commands)
+        self.assertNotIn("/voice on|off", public_commands)
+        self.assertNotIn("/voice_input on|off", public_commands)
+        self.assertIn("/stream", public_commands)
+        self.assertIn("/voice", public_commands)
+        self.assertIn("/voice_input", public_commands)
+
+
+    def test_help_lookup_matches_parameterized_direct_forms(self):
+        cases = {
+            "group add": "/group add <character>",
+            "group add Karen": "/group add <character>",
+            "group on": "/group on|off",
+            "group off": "/group on|off",
+            "databank reindex": "/databank reindex [filename]",
+            "databank reindex notes.pdf": "/databank reindex [filename]",
+            "databank activate notes.pdf 2": "/databank activate <filename> <version>",
+            "remember this is important": "/remember <fact>",
+            "group list": "/group status",
+            "group goal status": "/group goal",
+            "group goal off": "/group goal clear",
+            "scene status": "/scene",
+            "language status": "/language",
+            "voice on": "/voice",
+            "databank list": "/databank",
+        }
+        for requested, expected_command in cases.items():
+            with self.subTest(requested=requested):
+                target = _m_help_details._help_command_target(requested)
+                self.assertIsNotNone(target)
+                category, index = target
+                self.assertEqual(
+                    _m_help_details.HELP_CATEGORIES[category][index][0],
+                    expected_command,
+                )
 
     def test_help_command_fast_path_always_renders_panel(self):
         calls = []
@@ -222,7 +325,8 @@ class HelpDrilldownTests(unittest.TestCase):
             self.assertEqual(_m_help_details.normalize_help_command("/help scene refresh"), "scene refresh")
             self.assertIsNone(_m_help_details.normalize_help_command("help"))
             self.assertTrue(_m_command_routes.send_help_command("token", "chat", "/help scene refresh", delivery_port=make_test_delivery_port(), request_context=make_test_request_context(self.db, "panel-session")))
-            self.assertEqual(calls[-1][0], ("token", "chat", "voice_group", None, 7))
+            expected_index = [command for command, _summary in _m_help_details.HELP_CATEGORIES["voice_group"]].index("/scene refresh")
+            self.assertEqual(calls[-1][0], ("token", "chat", "voice_group", None, expected_index))
             self.assertTrue(_m_command_routes.send_help_command("token", "chat", "/help unknown", delivery_port=make_test_delivery_port(), request_context=make_test_request_context(self.db, "panel-session")))
             self.assertEqual(calls[-1][0], ("token", "chat"))
             self.assertFalse(_m_command_routes.send_help_command("token", "chat", "/helper", delivery_port=make_test_delivery_port(), request_context=make_test_request_context(self.db, "panel-session")))

@@ -11,7 +11,6 @@ HELP_DETAILS_FILE = Path(__file__).with_name("help_details.json")
 HELP_CATEGORIES = {
     "basic": [
         ("/start", "Show the character greeting when Persona, World Info, and System Prompt are all enabled; otherwise show what's off and how to fix it."),
-
         ("/help", "Open this guide. Use /help <command> to jump straight to one command."),
         ("/cancel", "Cancel the current scoped input step without applying a change."),
         ("/status", "Show a formatted read-only session status message in Telegram."),
@@ -29,42 +28,62 @@ HELP_CATEGORIES = {
         ("/persona", "Choose, create, edit, or disable a Persona. Delete only targets inactive, unreferenced ones."),
         ("/world", "Open World Info selection — activate or disable one or more lorebooks."),
         ("/note", "Open the Author's Note panel. Off clears it; User input waits for your next message."),
-        ("/systemprompt", "Open the native TXT System Prompt picker. The prompt body stays private."),
-        ("/language", "Choose the language for model replies in this session — Auto follows you, or pick a fixed language."),
-        ("/expression", "Off by default. Choose automatic sprite detection or pick a native sprite from the active card."),
-        ("/imagine", "Opt-in image generation. Opens a 1–4,000 character prompt panel, or use /imagine <prompt> when an image provider is configured."),
+        ("/systemprompt", "Open the native JSON/TXT System Prompt picker. The prompt body stays private."),
+        ("/language", "Open the reply-language panel for this session."),
+        ("/language <language>", "Set the session reply language directly, or use auto to follow the user's language."),
+        ("/expression", "Open native expression controls for the active character."),
+        ("/imagine", "Open scoped image-prompt input when an image provider is configured."),
+        ("/imagine <prompt>", "Generate an image immediately from a 1–4,000 character prompt."),
     ],
     "generation": [
-        ("/settings", "Open this session's generation panel — pick a reasoning level or set your own temperature, tokens, and sampling values."),
-        ("/stream on|off", "Toggle streaming preview. Token-limit continuation stays cumulative, cancellable, and bounded."),
+        ("/settings", "Open this session's generation panel — reasoning level, temperature, tokens, and sampling values."),
+        ("/stream", "Open the streaming on/off panel. Typed /stream on or /stream off still opens the panel; use its buttons to apply the change."),
         ("/preset", "Open the preset panel — apply, save, or delete generation setting presets."),
-        ("/macro", "Open a panel, then send one message to preview supported SillyTavern macros"),
-        ("/stscript", "Open the safe STscript panel for Note or Reset — only allowlisted actions, no arbitrary scripts."),
+        ("/macro", "Open scoped input for a SillyTavern macro preview."),
+        ("/macro <text>", "Preview supported SillyTavern macros immediately against the supplied text."),
+        ("/stscript", "Open the safe STscript panel for allowlisted bridge actions only."),
         ("/regen", "Generate a new response variant for the latest user turn."),
         ("/swipe", "Browse stored response variants and keep the one you like."),
         ("/branch", "Open the response branch selector for the active session."),
         ("/continue", "Continue the latest assistant response from where it stopped."),
-        ("/edit", "Open a panel, then send replacement text for the latest user turn"),
-        ("/retry", "Retry the latest failed character response — no duplicate turns."),
-        ("/prompt", "Open a read-only prompt inspector with budget, memory/RAG, and group-context sections. Use /prompt text for the plain diagnostic output."),
+        ("/edit", "Open scoped input for replacement text for the latest user turn."),
+        ("/edit <text>", "Replace the latest user turn immediately and regenerate from the new text."),
+        ("/retry", "Retry the latest failed character response without creating a duplicate turn."),
+        ("/prompt", "Open the read-only prompt inspector with budget, memory/RAG, and group-context sections."),
+        ("/prompt text", "Send the plain-text prompt diagnostic output without opening the inspector panel."),
     ],
     "memory_rag": [
         ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),
         ("/memory search <query>", "Search Hindsight memory for the active session and show up to five matching remembered facts."),
-        ("/memory curated", "Open the curated-memory panel to view durable distilled facts or refresh them with the utility model."),
-        ("/remember", "Open a panel, then send one explicit long-term fact to store in memory."),
-        ("/summarize", "Open a confirmation panel before regenerating the active-session summary from stored conversation and memory context."),
-        ("/databank", "Open Data Bank RAG controls. Same-name uploads create versions; use versions/activate to inspect or roll back."),
+        ("/memory curated", "Open the curated-memory panel to view durable distilled facts."),
+        ("/memory curated refresh", "Refresh curated durable memory immediately with the configured Utility model."),
+        ("/remember", "Open scoped input for one explicit long-term fact."),
+        ("/remember <fact>", "Store one explicit long-term fact immediately in active-session Hindsight memory."),
+        ("/summarize", "Open a confirmation panel before regenerating the active-session summary."),
+        ("/databank", "Open Data Bank RAG controls for status, listing, search, removal, and reindexing."),
+        ("/databank search <query>", "Search active Data Bank document versions for matching chunks."),
+        ("/databank versions <filename>", "List stored versions of one Data Bank filename and show which version is active."),
+        ("/databank activate <filename> <version>", "Atomically activate a stored Data Bank version for retrieval."),
+        ("/databank reindex [filename]", "Rebuild embeddings for all active documents, or only the named document."),
+        ("/databank remove <filename> confirm", "Delete every stored version of one Data Bank filename after explicit confirmation."),
     ],
     "voice_group": [
-        ("/voice on|off", "Toggle automatic voice replies. Only dialogue in straight double quotes gets synthesized — narration stays silent."),
-        ("/voice_input on|off", "Open transcription, STT model, and language controls."),
+        ("/voice", "Open automatic quote-driven TTS controls. Typed on/off forms also open this panel rather than changing state directly."),
+        ("/voice_input", "Open transcription, STT model, and language controls."),
         ("/voice_input language", "Open the STT language panel — Auto, a fixed code, or User input."),
-        ("/group", "Open Forum Topic group controls, including invisible Director mode for model-selected speaker and pacing guidance."),
+        ("/group", "Open Forum Topic group controls, including Director mode."),
+        ("/group status", "Show current group state, mode, members, and speaker inside a Forum Topic."),
+        ("/group add <character>", "Add a character to the current Forum Topic group, up to six members."),
+        ("/group remove <character>", "Remove a character from the current Forum Topic group."),
+        ("/group speak <character>", "Force one existing group member to be the next speaker."),
+        ("/group mode <mode>", "Set round_robin, contextual, director, manual, or autonomous turn mode."),
+        ("/group on|off", "Enable or disable the configured Forum Topic group directly."),
+        ("/group next", "Advance the group speaker index to the next configured member."),
         ("/group goal", "View the hidden, session-local Director objective for this Forum Topic group."),
-        ("/group goal <objective>", "Set or replace the hidden Director objective; it guides speaker choice and scene direction without entering the transcript."),
-        ("/scene", "Show the active session's structured scene state — location, weather, participants, and known facts."),
-        ("/scene refresh", "Rebuild structured scene state with the configured utility model without changing the transcript."),
+        ("/group goal <objective>", "Set or replace the hidden Director objective without adding it to the transcript."),
+        ("/group goal clear", "Clear the hidden Director objective for the active Forum Topic group."),
+        ("/scene", "Show the active session's structured scene-state panel."),
+        ("/scene refresh", "Rebuild structured scene state immediately with the configured Utility model."),
         ("/scene clear", "Clear the active session's stored structured scene state without changing the transcript."),
     ],
 }
@@ -98,6 +117,45 @@ HELP_CATEGORY_INTROS = {
     "generation": "Control how replies are generated, edited, continued, streamed, and retried.",
     "memory_rag": "Manage memory, summaries, and Data Bank search for this chat.",
     "voice_group": "Use voice features and manage multi-character group chats in Forum Topics.",
+}
+
+
+HELP_ALIASES = {
+    "/stream on": "/stream",
+    "/stream off": "/stream",
+    "/preset list": "/preset",
+    "/preset use": "/preset",
+    "/preset delete": "/preset",
+    "/settings reasoning": "/settings",
+    "/language list": "/language",
+    "/language status": "/language",
+    "/memory on": "/memory",
+    "/memory off": "/memory",
+    "/memory status": "/memory",
+    "/memory scope": "/memory",
+    "/memory search": "/memory search <query>",
+    "/memory curated status": "/memory curated",
+    "/databank on": "/databank",
+    "/databank off": "/databank",
+    "/databank status": "/databank",
+    "/databank list": "/databank",
+    "/databank search": "/databank search <query>",
+    "/databank versions": "/databank versions <filename>",
+    "/databank activate": "/databank activate <filename> <version>",
+    "/databank reindex": "/databank reindex [filename]",
+    "/databank remove": "/databank remove <filename> confirm",
+    "/voice status": "/voice",
+    "/voice on": "/voice",
+    "/voice off": "/voice",
+    "/voice tts": "/voice",
+    "/voice_input status": "/voice_input",
+    "/voice_input on": "/voice_input",
+    "/voice_input off": "/voice_input",
+    "/group list": "/group status",
+    "/group goal status": "/group goal",
+    "/group goal off": "/group goal clear",
+    "/group goal none": "/group goal clear",
+    "/scene status": "/scene",
 }
 
 
@@ -162,19 +220,55 @@ def normalize_help_command(text: str) -> str | None:
     return parts[1].strip() if len(parts) > 1 else ""
 
 
+def _help_pattern_matches(pattern: str, requested: str) -> bool:
+    pattern_tokens = pattern.casefold().split()
+    requested_tokens = requested.casefold().split()
+    if not pattern_tokens or not requested_tokens:
+        return False
+
+    request_index = 0
+    for pattern_index, token in enumerate(pattern_tokens):
+        is_placeholder = token.startswith("<") and token.endswith(">")
+        is_optional = token.startswith("[") and token.endswith("]")
+        if is_placeholder:
+            # Placeholder text is descriptive rather than literal. Allow Help
+            # lookup at the prefix itself ("group add") or with arguments.
+            return request_index >= pattern_index
+        if is_optional:
+            return request_index >= pattern_index
+        if request_index >= len(requested_tokens):
+            return False
+        alternatives = token.split("|")
+        if requested_tokens[request_index] not in alternatives:
+            return False
+        request_index += 1
+
+    return request_index == len(requested_tokens)
+
+
 def _help_command_target(requested: str) -> tuple[str, int] | None:
     normalized = "/" + str(requested or "").strip().lstrip("/").casefold()
     if normalized == "/":
         return None
-    base_match = None
-    for category, entries in HELP_CATEGORIES.items():
-        for index, (command, _summary) in enumerate(entries):
-            command_normalized = command.casefold()
-            if command_normalized == normalized:
-                return category, index
-            if base_match is None and command_normalized.split()[0].split("|", 1)[0] == normalized:
-                base_match = (category, index)
-    return base_match
+    normalized = HELP_ALIASES.get(normalized, normalized)
+
+    entries = [
+        (category, index, command.casefold())
+        for category, category_entries in HELP_CATEGORIES.items()
+        for index, (command, _summary) in enumerate(category_entries)
+    ]
+    for category, index, command in entries:
+        if command == normalized:
+            return category, index
+    for category, index, command in entries:
+        if _help_pattern_matches(command, normalized):
+            return category, index
+
+    base = normalized.split()[0]
+    for category, index, command in entries:
+        if command.split()[0].split("|", 1)[0] == base:
+            return category, index
+    return None
 
 
 def send_help_menu(

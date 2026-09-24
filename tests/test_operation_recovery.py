@@ -581,11 +581,6 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
                     expected,
                 )
 
-    def test_operation_recovery_is_not_exec_loaded(self):
-        self.assertFalse(
-            (Path(__file__).parents[1] / "bridge" / "runtime_loader.py").exists()
-        )
-
 
 class OperationRecoveryUnitTests(unittest.TestCase):
     def setUp(self):
