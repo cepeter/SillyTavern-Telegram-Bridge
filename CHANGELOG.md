@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Require explicit external provider hosts, a separate LAN/tailnet grant, DNS-pinned connections with verified hostname TLS, same-origin redirects, and no implicit proxy routing. Existing installations must configure their external-host allowlists.
+
 ## [0.2.024] - 2026-09-24
 
 ### Fixed
