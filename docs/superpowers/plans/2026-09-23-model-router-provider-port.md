@@ -1,6 +1,6 @@
 # ModelRouter and Provider Port Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Extract model routing and provider HTTP transport behind required pure ports while preserving all current generation behavior.
 
@@ -37,14 +37,14 @@ modify composition/main/test setup; create `tests/test_model_router_provider_por
 **Interfaces:** ModelRoute, ModelRouter.route/provider_spec; ProviderPort.generate;
 required BridgeServices.model_router/provider.
 
-- [ ] **Step 1:** Write failing tests for pure imports, routing behavior, catalog
+- [x] **Step 1:** Write failing tests for pure imports, routing behavior, catalog
   failure fallback, ProviderPort delegation, and required composition fields.
-- [ ] **Step 2:** Run focused RED; expect missing modules/fields.
-- [ ] **Step 3:** Implement pure router/port, catalog adapter, and startup objects.
+- [x] **Step 2:** Run focused RED; expect missing modules/fields.
+- [x] **Step 3:** Implement pure router/port, catalog adapter, and startup objects.
   Temporarily point ProviderPort backend at the existing generation function only
   inside composition until Task 2 moves transport; do not create production fallback.
-- [ ] **Step 4:** Run focused GREEN plus composition/config tests.
-- [ ] **Step 5:** Commit `refactor: add model router and provider port`.
+- [x] **Step 4:** Run focused GREEN plus composition/config tests.
+- [x] **Step 5:** Commit `refactor: add model router and provider port`.
 ### Task 2: Extract provider HTTP transport from generation and media
 
 **Files:** create `provider_transport.py`; modify generation/media/catalog/main;
@@ -53,17 +53,17 @@ migrate provider-focused tests.
 **Interfaces:** `generate_provider_text(model_router, api_key, model, messages, ...)`;
 canonical `opencode_muse_headers` lives in provider_transport.
 
-- [ ] **Step 1:** Add architecture tests that generation no longer owns router/transport
+- [x] **Step 1:** Add architecture tests that generation no longer owns router/transport
   helpers, media no longer owns provider specs, and provider_transport has no
   generation/media/Telegram imports.
-- [ ] **Step 2:** Add/retarget RED behavior tests for routing, credentials,
+- [x] **Step 2:** Add/retarget RED behavior tests for routing, credentials,
   OpenAI-compatible streaming/non-streaming, Anthropic and OpenCode to canonical owners.
-- [ ] **Step 3:** Move transport code verbatim where possible; recursive generation
+- [x] **Step 3:** Move transport code verbatim where possible; recursive generation
   calls stay inside provider_transport with the same router.
-- [ ] **Step 4:** Update startup ProviderPort backend, catalog OpenCode import, and
+- [x] **Step 4:** Update startup ProviderPort backend, catalog OpenCode import, and
   startup credential validation to ModelRouter.
-- [ ] **Step 5:** Run provider/generation continuation/OpenCode/audit/config focused suites.
-- [ ] **Step 6:** Commit `refactor: extract model provider transport`.
+- [x] **Step 5:** Run provider/generation continuation/OpenCode/audit/config focused suites.
+- [x] **Step 6:** Commit `refactor: extract model provider transport`.
 
 ---
 
@@ -75,15 +75,15 @@ worker_orchestration, input_flows, command_routes and affected tests.
 **Interfaces:** provider_port is a required explicit parameter wherever an application
 function can cause generation; ConversationService forwards `services.provider`.
 
-- [ ] **Step 1:** Write failing forwarding tests for ordinary generation,
+- [x] **Step 1:** Write failing forwarding tests for ordinary generation,
   response-language rendering, image generation, edit regeneration, /regen,
   /continue, start readiness, durable image/edit workers.
-- [ ] **Step 2:** Run RED; expect missing provider parameter/direct generate_text usage.
-- [ ] **Step 3:** Replace application generation calls with ProviderPort.generate and
+- [x] **Step 2:** Run RED; expect missing provider parameter/direct generate_text usage.
+- [x] **Step 3:** Replace application generation calls with ProviderPort.generate and
   propagate the required port through callers; remove production imports of provider
   transport from these application modules.
-- [ ] **Step 4:** Run conversation/operation-recovery/image/edit/command/generation suites.
-- [ ] **Step 5:** Commit `refactor: route application generation through provider port`.
+- [x] **Step 4:** Run conversation/operation-recovery/image/edit/command/generation suites.
+- [x] **Step 5:** Commit `refactor: route application generation through provider port`.
 
 
 ---
@@ -98,18 +98,18 @@ command_routes.py, main.py, test setup and affected focused tests.
 ProviderPort; post-retain and command-route extension dispatch forwards explicit
 services/provider rather than resolving globals.
 
-- [ ] **Step 1:** Write failing provider-forwarding tests for summary, forced summary,
+- [x] **Step 1:** Write failing provider-forwarding tests for summary, forced summary,
   Scene State refresh/background worker, Memory Curator refresh/background worker,
   Group Director and extension command/post-retain hooks.
-- [ ] **Step 2:** Run focused RED; expect direct generate_text imports and missing
+- [x] **Step 2:** Run focused RED; expect direct generate_text imports and missing
   provider/services arguments.
-- [ ] **Step 3:** Propagate ProviderPort through MemoryService summary callbacks,
+- [x] **Step 3:** Propagate ProviderPort through MemoryService summary callbacks,
   post-retain hook contract/background jobs, command extension dispatch and feature
   panels; GroupDirector uses the composed provider.
-- [ ] **Step 4:** Remove direct generation imports from memory.py, memory_curator.py,
+- [x] **Step 4:** Remove direct generation imports from memory.py, memory_curator.py,
   scene_state.py and GroupDirector composition path.
-- [ ] **Step 5:** Run memory/scene/director/extension/status focused suites.
-- [ ] **Step 6:** Commit `refactor: inject provider port into utility generation`.
+- [x] **Step 5:** Run memory/scene/director/extension/status focused suites.
+- [x] **Step 6:** Commit `refactor: inject provider port into utility generation`.
 
 ---
 
@@ -117,19 +117,54 @@ services/provider rather than resolving globals.
 
 **Files:** update this plan verification record; architecture guards only if needed.
 
-- [ ] **Step 1:** AST guards:
+- [x] **Step 1:** AST guards:
   - ModelRouter and ProviderPort import no bridge modules.
   - provider_transport imports neither generation, media nor Telegram.
   - generation defines no provider routing/HTTP adapter functions.
   - media defines no provider-spec lookup.
   - no production provider singleton/optional provider fallback.
-- [ ] **Step 2:** Fresh-process import checks for router, port, transport, generation,
+- [x] **Step 2:** Fresh-process import checks for router, port, transport, generation,
   memory/scene/director, composition and main.
-- [ ] **Step 3:** Run graph measurement, compileall, `git diff --check`, and full
+- [x] **Step 3:** Run graph measurement, compileall, `git diff --check`, and full
   `pytest -q -n 2 --dist=loadfile`.
-- [ ] **Step 4:** Whole-branch self-review against the five Review Focus conditions;
+- [x] **Step 4:** Whole-branch self-review against the five Review Focus conditions;
   one TDD fix pass for any Critical/Important finding.
 - [ ] **Step 5:** Publish exact head, require GitHub `test` and
   `dependency-audit` success, then merge.
 - [ ] **Step 6:** Fetch actual merged main, rerun full verification, re-scan graph,
   and choose the next Telegram/delivery or other architecture cut from evidence.
+
+
+## Local Verification Record
+
+- Base: bb6d092f9f58b15d08d2f87a506260f29fdeea18.
+- Task 1 router/port/composition RED: 6 failed; GREEN: 49 passed + 30 subtests.
+- Task 2 provider transport/canonical-owner focused: 44 passed + 4 subtests.
+- Task 3 application generation focused: 83 passed + 23 subtests.
+- Task 4 utility/background generation focused: 47 passed + 12 subtests.
+- First full migration run exposed 39 stale ownership/signature fixtures plus one
+  missing document-image ProviderPort propagation; the production propagation gap
+  was fixed and legacy test seams were migrated without compatibility exports.
+- Repaired failure cluster: 115 passed + 138 subtests.
+- Transitional generation.generate_text delegator was removed after atomic migration;
+  provider-port seam migration: 86 passed + 27 subtests.
+- Canonical provider behavior after delegator removal: 44 passed + 4 subtests.
+- Application import boundary migrated to ModelRouter / ProviderPort /
+  provider_transport canonical ownership: 7 passed + 121 subtests.
+- Full candidate suite: 797 passed + 479 subtests, exit 0.
+- compileall: passed.
+- git diff --check: passed.
+- Fresh-process imports passed for router, port, transport, generation, application
+  generation, memory/scene/director, composition, and main modules.
+- Architecture guards passed: ModelRouter/ProviderPort have no bridge imports;
+  provider_transport imports no generation/media/Telegram; generation owns no
+  provider routing/HTTP function; media owns no provider-spec lookup; no provider
+  singleton or optional fallback exists.
+- Graph is intentionally neutral before the Telegram-delivery cut: 77 modules,
+  435 edges, largest SCC 12, 23 cyclic modules, 16 reciprocal pairs, 32 Telegram
+  importers. New router/port/transport modules are outside the cyclic graph.
+- Whole-branch author self-review: no remaining Critical, Important, or Minor
+  findings against the five Review Focus conditions.
+- Deferred unchanged finding: streaming visible-content length continuation still
+  does not forward stream/cancellation callbacks and lacks an independent local
+  bound; it remains a separate focused provider behavior fix.
