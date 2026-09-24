@@ -466,6 +466,7 @@ def set_bot_commands(token: str) -> None:
             "commands": [
                 {"command": "start", "description": "Send greeting or show missing setup"},
                 {"command": "help", "description": "Browse the interactive command guide"},
+                {"command": "cancel", "description": "Cancel the current pending input"},
 
                 {"command": "providers", "description": "Choose Story or Utility provider/model"},
                 {"command": "character", "description": "Open character management panel"},

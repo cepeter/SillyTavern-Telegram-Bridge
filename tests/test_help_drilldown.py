@@ -105,6 +105,37 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertNotIn("/import", public_commands)
         self.assertIn("/sync", public_commands)
 
+    def test_cancel_is_documented_and_registered(self):
+        public_commands = {
+            command
+            for entries in _m_help_details.HELP_CATEGORIES.values()
+            for command, _summary in entries
+        }
+        self.assertIn("/cancel", public_commands)
+        detail = _m_help_details.command_detail("/cancel", "")
+        self.assertIn("pending input", detail.lower())
+        self.assertIn("nothing is applied", detail.lower())
+
+        calls = []
+        original_request = _m_help.telegram_request
+        _m_help.telegram_request = (
+            lambda _token, method, payload:
+            calls.append((method, payload)) or {}
+        )
+        try:
+            _m_help.set_bot_commands("token")
+        finally:
+            _m_help.telegram_request = original_request
+
+        commands = {
+            item["command"]: item["description"]
+            for item in calls[-1][1]["commands"]
+        }
+        self.assertEqual(
+            commands["cancel"],
+            "Cancel the current pending input",
+        )
+
     def test_sync_help_exposes_only_live_api_sync(self):
         summary = dict(_m_help_details.HELP_CATEGORIES["basic"])["/sync"]
         detail = _m_help_details.command_detail("/sync", summary)
