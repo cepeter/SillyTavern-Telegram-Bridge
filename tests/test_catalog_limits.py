@@ -30,7 +30,6 @@ class CatalogLimitTests(unittest.TestCase):
         self.old_character = _m_main.CHARACTER_DIR
         self.old_config_character = config.CHARACTER_DIR
         self.old_telegram_character = _m_telegram.CHARACTER_DIR
-        self.old_world = _m_catalog.WORLD_DIR
         self.old_config_world = config.WORLD_DIR
         self.old_prompts = _m_common.SYSTEM_PROMPTS_DIR
         self.old_config_prompts = config.SYSTEM_PROMPTS_DIR
@@ -43,8 +42,7 @@ class CatalogLimitTests(unittest.TestCase):
         _m_main.CHARACTER_DIR = root / "characters"
         config.CHARACTER_DIR = _m_main.CHARACTER_DIR
         _m_telegram.CHARACTER_DIR = _m_main.CHARACTER_DIR
-        _m_catalog.WORLD_DIR = root / "worlds"
-        config.WORLD_DIR = _m_catalog.WORLD_DIR
+        config.WORLD_DIR = root / "worlds"
         _m_common.SYSTEM_PROMPTS_DIR = root / "prompts"
         config.SYSTEM_PROMPTS_DIR = _m_common.SYSTEM_PROMPTS_DIR
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
@@ -56,7 +54,7 @@ class CatalogLimitTests(unittest.TestCase):
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
         _m_persona_sync.phase3_api_configured = lambda: False
         config.DB_FILE = root / "bridge.sqlite3"
-        for directory in (_m_main.CHARACTER_DIR, _m_catalog.WORLD_DIR, _m_common.SYSTEM_PROMPTS_DIR):
+        for directory in (_m_main.CHARACTER_DIR, config.WORLD_DIR, _m_common.SYSTEM_PROMPTS_DIR):
             directory.mkdir()
         self.db = _m_memory_curator.db_connect()
         self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
@@ -66,7 +64,6 @@ class CatalogLimitTests(unittest.TestCase):
         _m_main.CHARACTER_DIR = self.old_character
         config.CHARACTER_DIR = self.old_config_character
         _m_telegram.CHARACTER_DIR = self.old_telegram_character
-        _m_catalog.WORLD_DIR = self.old_world
         config.WORLD_DIR = self.old_config_world
         _m_common.SYSTEM_PROMPTS_DIR = self.old_prompts
         config.SYSTEM_PROMPTS_DIR = self.old_config_prompts
@@ -97,7 +94,7 @@ class CatalogLimitTests(unittest.TestCase):
     def test_file_catalogs_are_deterministically_capped_at_40(self):
         for index in range(41):
             (_m_main.CHARACTER_DIR / f"{index:02}.png").write_bytes(b"x")
-            (_m_catalog.WORLD_DIR / f"{index:02}.json").write_text("{}", encoding="utf-8")
+            (config.WORLD_DIR / f"{index:02}.json").write_text("{}", encoding="utf-8")
             (_m_common.SYSTEM_PROMPTS_DIR / f"{index:02}.txt").write_text(f"prompt {index}", encoding="utf-8")
         self.assertEqual(len(_m_character_identity.character_card_paths()), 40)
         self.assertEqual(len(_m_catalog.world_file_paths()), 40)
