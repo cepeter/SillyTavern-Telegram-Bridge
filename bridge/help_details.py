@@ -50,6 +50,7 @@ HELP_CATEGORIES = {
     ],
     "memory_rag": [
         ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),
+        ("/memory search <query>", "Search Hindsight memory for the active session and show up to five matching remembered facts."),
         ("/memory curated", "Open the curated-memory panel to view durable distilled facts or refresh them with the utility model."),
         ("/remember", "Open a panel, then send one explicit long-term fact to store in memory."),
         ("/summarize", "Open a confirmation panel before regenerating the active-session summary from stored conversation and memory context."),
@@ -64,6 +65,7 @@ HELP_CATEGORIES = {
         ("/group goal <objective>", "Set or replace the hidden Director objective; it guides speaker choice and scene direction without entering the transcript."),
         ("/scene", "Show the active session's structured scene state — location, weather, participants, and known facts."),
         ("/scene refresh", "Rebuild structured scene state with the configured utility model without changing the transcript."),
+        ("/scene clear", "Clear the active session's stored structured scene state without changing the transcript."),
     ],
 }
 
