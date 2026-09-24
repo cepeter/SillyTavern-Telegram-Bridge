@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import sqlite3
+from typing import cast
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,12 @@ class SyncService:
             session_id=session_id,
             message_count=self.count_messages(db, chat_id, session_id),
             sync_id=str(binding.get("sync_id") or ""),
-            last_synced_at=float(binding.get("last_synced_at") or 0.0),
+            last_synced_at=float(
+                cast(
+                    int | float | str,
+                    binding.get("last_synced_at") or 0.0,
+                )
+            ),
             last_direction=str(binding.get("last_direction") or ""),
             realtime_enabled=bool(binding.get("realtime_enabled")),
             api_configured=bool(self.api_configured()),

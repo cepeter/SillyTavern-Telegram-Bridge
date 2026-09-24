@@ -84,10 +84,10 @@ class JobService:
             self.schedule_backend(db, int(job_id))
         return accepted
 
-    def start(self, db, job_id: int) -> bool:
+    def start(self, db: sqlite3.Connection, job_id: int) -> bool:
         return bool(self.start_backend(db, int(job_id)))
 
-    def complete(self, db, job_id: int) -> bool:
+    def complete(self, db: sqlite3.Connection, job_id: int) -> bool:
         return bool(
             self.finish_backend(
                 db,
@@ -97,7 +97,12 @@ class JobService:
             )
         )
 
-    def fail(self, db, job_id: int, error) -> bool:
+    def fail(
+        self,
+        db: sqlite3.Connection,
+        job_id: int,
+        error: object,
+    ) -> bool:
         return bool(
             self.finish_backend(
                 db,
@@ -107,13 +112,17 @@ class JobService:
             )
         )
 
-    def actor_id(self, db, job_id: int | None) -> str:
+    def actor_id(
+        self,
+        db: sqlite3.Connection,
+        job_id: int | None,
+    ) -> str:
         return str(self.actor_backend(db, job_id) or "")
 
     def recover(
         self,
-        db,
-        resolver,
+        db: sqlite3.Connection,
+        resolver: Callable[[DurableJob], JobSubmission | None],
         *,
         recover_running: bool = True,
     ) -> None:

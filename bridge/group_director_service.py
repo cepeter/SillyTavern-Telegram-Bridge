@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 import re
 import sqlite3
+from typing import cast
 from typing import Callable, Any
 
 
@@ -77,7 +78,7 @@ class GroupDirectorService:
         state = self.load_group_state(db, chat_id, session["session_id"])
         members = [
             name
-            for name in state["members"]
+            for name in cast(list[str], state["members"])
             if self.safe_character(str(name))
         ]
         if (
@@ -208,7 +209,9 @@ class GroupDirectorService:
         if decision:
             return decision[0], state, decision[1]
 
-        index = int(state["turn_index"]) % len(members)
+        index = int(
+            cast(int | str, state["turn_index"])
+        ) % len(members)
         return members[index], state, ""
 
     def prompt_context(
@@ -223,7 +226,7 @@ class GroupDirectorService:
         state = self.load_group_state(db, chat_id, session["session_id"])
         members = [
             str(name)
-            for name in state["members"]
+            for name in cast(list[str], state["members"])
             if self.safe_character(str(name))
         ]
         labels = self.member_labels(members)

@@ -2,7 +2,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from typing import Protocol
 from dataclasses import dataclass
+
+
+class CancellationEvent(Protocol):
+    def is_set(self) -> bool: ...
+
 
 
 @dataclass(frozen=True)
@@ -17,8 +23,8 @@ class ProviderPort:
         *,
         session_id: str = "telegram",
         settings: Mapping[str, object] | None = None,
-        stream_callback=None,
-        cancel_event=None,
+        stream_callback: Callable[[str], object] | None = None,
+        cancel_event: CancellationEvent | None = None,
         force_non_stream: bool = False,
         request_timeout: float | None = None,
     ) -> str:
