@@ -4,6 +4,21 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added a user-scoped Linux installation guide covering the runtime virtual environment, startup validation, user-level systemd persistence, service logs, and optional login lingering (#115).
+- Expanded interactive `/help` coverage for direct command forms, subcommands, `/cancel`, parameterized lookups, and accepted command aliases (#112, #113, #117).
+
+### Changed
+
+- Refreshed current-product documentation, removed retired migration artifacts, and simplified README command tables so `/help` is the canonical detailed command reference (#111, #112, #114, #117).
+- Aligned the systemd example with the documented user-scoped `.venv`, environment file, bridge data, and source paths (#115).
+- Renamed internal Live Sync migration-era identifiers and logs to current terminology, removed the obsolete raw `settings_input` compatibility path, and consolidated architecture regression guards around current boundaries (#116).
+
+### Fixed
+
+- Fixed Help lookup for parameterized commands and aliases, corrected System Prompt help to match native JSON/TXT support, and clarified panel-only behavior for streaming and voice toggles (#117).
+
 ## [0.2.022] - 2026-09-24
 
 ### Added
