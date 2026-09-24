@@ -82,3 +82,34 @@ def test_macro_command_requires_request_context_for_reset_panel_delivery():
     param = inspect.signature(commands.handle_macro_command).parameters.get("request_context")
     assert param is not None
     assert param.default is inspect.Parameter.empty
+
+
+def test_macro_reset_delivers_canonical_panel_with_request_context(monkeypatch):
+    import bridge.commands as commands
+
+    calls = []
+    monkeypatch.setattr(
+        commands,
+        "send_panel_request",
+        lambda token, method, payload, **kwargs: (
+            calls.append((token, method, payload, kwargs)) or {}
+        ),
+    )
+
+    commands.handle_macro_command(
+        object(),
+        "token",
+        "chat",
+        {"persona_id": ""},
+        {},
+        "/stscript reset",
+        request_context="ctx",
+    )
+
+    assert len(calls) == 1
+    token, method, payload, kwargs = calls[0]
+    assert token == "token"
+    assert method == "sendMessage"
+    assert payload["chat_id"] == "chat"
+    assert payload["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == "reset:confirm"
+    assert kwargs["request_context"] == "ctx"
