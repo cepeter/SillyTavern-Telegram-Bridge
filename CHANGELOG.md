@@ -4,9 +4,11 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.024] - 2026-09-24
+
 ### Fixed
 
-- Fixed `/update` release-state detection so an empty Unreleased section is not reported as local unreleased changes.
+- Fixed `/update` release-state detection so an empty Unreleased section is not reported as local unreleased changes (#121).
 
 ## [0.2.023] - 2026-09-24
 
