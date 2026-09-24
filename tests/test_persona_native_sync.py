@@ -13,6 +13,7 @@ import bridge.command_routes as _m_command_routes
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.cards as _m_cards
 import bridge.persona_sync as _m_persona_sync
+import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.sync_core as _m_sync_core
 class NativePersonaSyncTests(unittest.TestCase):
     def setUp(self):
@@ -23,7 +24,7 @@ class NativePersonaSyncTests(unittest.TestCase):
         self.old_backups = _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR
         self.old_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
         self.old_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
-        self.old_phase3 = _m_persona_sync.phase3_api_configured
+        self.old_phase3 = _m_sillytavern_api.phase3_api_configured
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = root / "avatars"
         _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR = root / "backups"
@@ -33,14 +34,14 @@ class NativePersonaSyncTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(self.settings), encoding="utf-8")
         _m_persona_sync._NATIVE_PERSONA_CACHE = {}
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        _m_persona_sync.phase3_api_configured = lambda: False
+        _m_sillytavern_api.phase3_api_configured = lambda: False
         self.calls = []
         self.old_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: self.calls.append((method, payload)) or {}
 
     def tearDown(self):
         _m_cards.send_panel_request = self.old_request
-        _m_persona_sync.phase3_api_configured = self.old_phase3
+        _m_sillytavern_api.phase3_api_configured = self.old_phase3
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_cache
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.old_settings

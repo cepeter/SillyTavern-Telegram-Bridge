@@ -22,6 +22,7 @@ import bridge.persona_sync as _m_persona_sync
 import bridge.session_naming as _m_session_naming
 import bridge.status_panels as _m_status_panels
 import bridge.sync_api as _m_sync_api
+import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.sync_core as _m_sync_core
 import bridge.telegram as _m_telegram
 import bridge.card_content as _m_card_content
@@ -132,33 +133,33 @@ class Phase3SyncTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
-        self.old_url = _m_sync_api.PHASE3_SYNC_API_URL
-        self.old_handle = _m_sync_api.PHASE3_SYNC_API_HANDLE
-        self.old_password = _m_sync_api.PHASE3_SYNC_API_PASSWORD
+        self.old_url = _m_sillytavern_api.PHASE3_SYNC_API_URL
+        self.old_handle = _m_sillytavern_api.PHASE3_SYNC_API_HANDLE
+        self.old_password = _m_sillytavern_api.PHASE3_SYNC_API_PASSWORD
         self.old_interval = _m_sync_api.PHASE3_SYNC_INTERVAL_SECONDS
-        self.old_timeout = _m_sync_api.PHASE3_SYNC_TIMEOUT_SECONDS
-        self.old_client = _m_sync_api.phase3_client
+        self.old_timeout = _m_sillytavern_api.PHASE3_SYNC_TIMEOUT_SECONDS
+        self.old_client = _m_sillytavern_api.phase3_client
         self.old_sync_api_card = _m_sync_api.card_fields_from_file
         self.old_sync_core_card = _m_sync_core.card_fields_from_file
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        _m_sync_api.PHASE3_SYNC_API_URL = "http://127.0.0.1:8000"
+        _m_sillytavern_api.PHASE3_SYNC_API_URL = "http://127.0.0.1:8000"
         card_stub = lambda _name: {"name": "Test", "first_mes": "", "description": "", "personality": "", "scenario": ""}
         _m_sync_api.card_fields_from_file = card_stub
         _m_sync_core.card_fields_from_file = card_stub
         self.db = _m_memory_curator.db_connect()
         self.session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="phase3")
         self.fake = _FakeApi()
-        _m_sync_api.phase3_client = lambda: self.fake
+        _m_sillytavern_api.phase3_client = lambda: self.fake
 
     def tearDown(self):
         self.db.close()
         config.DB_FILE = self.old_db
-        _m_sync_api.PHASE3_SYNC_API_URL = self.old_url
-        _m_sync_api.PHASE3_SYNC_API_HANDLE = self.old_handle
-        _m_sync_api.PHASE3_SYNC_API_PASSWORD = self.old_password
+        _m_sillytavern_api.PHASE3_SYNC_API_URL = self.old_url
+        _m_sillytavern_api.PHASE3_SYNC_API_HANDLE = self.old_handle
+        _m_sillytavern_api.PHASE3_SYNC_API_PASSWORD = self.old_password
         _m_sync_api.PHASE3_SYNC_INTERVAL_SECONDS = self.old_interval
-        _m_sync_api.PHASE3_SYNC_TIMEOUT_SECONDS = self.old_timeout
-        _m_sync_api.phase3_client = self.old_client
+        _m_sillytavern_api.PHASE3_SYNC_TIMEOUT_SECONDS = self.old_timeout
+        _m_sillytavern_api.phase3_client = self.old_client
         _m_sync_api.card_fields_from_file = self.old_sync_api_card
         _m_sync_core.card_fields_from_file = self.old_sync_core_card
         self.tmp.cleanup()
@@ -168,19 +169,19 @@ class Phase3SyncTests(unittest.TestCase):
         self.db.commit()
 
     def test_loopback_url_policy(self):
-        self.assertEqual(_m_sync_api.validate_phase3_api_url("http://127.0.0.1:8000"), "http://127.0.0.1:8000")
+        self.assertEqual(_m_sillytavern_api.validate_phase3_api_url("http://127.0.0.1:8000"), "http://127.0.0.1:8000")
         for value in ("http://0.0.0.0:8000", "https://example.com", "http://user:pass@127.0.0.1:8000", "http://127.0.0.1:8000/path"):
             with self.subTest(value=value), self.assertRaises(ValueError):
-                _m_sync_api.validate_phase3_api_url(value)
+                _m_sillytavern_api.validate_phase3_api_url(value)
 
     def test_phase3_config_refreshes_after_env_load_and_bad_numbers_are_safe(self):
         with patch.dict(os.environ, {"SILLYTAVERN_SYNC_API_URL": "http://localhost:8123", "SILLYTAVERN_SYNC_API_HANDLE": "tester", "SILLYTAVERN_SYNC_API_PASSWORD": "secret", "SILLYTAVERN_SYNC_API_INTERVAL_SECONDS": "bad", "SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS": "bad"}, clear=False):
             _m_sync_api.refresh_phase3_config()
-        self.assertEqual(_m_sync_api.PHASE3_SYNC_API_URL, "http://localhost:8123")
-        self.assertEqual(_m_sync_api.PHASE3_SYNC_API_HANDLE, "tester")
-        self.assertEqual(_m_sync_api.PHASE3_SYNC_API_PASSWORD, "secret")
+        self.assertEqual(_m_sillytavern_api.PHASE3_SYNC_API_URL, "http://localhost:8123")
+        self.assertEqual(_m_sillytavern_api.PHASE3_SYNC_API_HANDLE, "tester")
+        self.assertEqual(_m_sillytavern_api.PHASE3_SYNC_API_PASSWORD, "secret")
         self.assertEqual(_m_sync_api.PHASE3_SYNC_INTERVAL_SECONDS, 2.0)
-        self.assertEqual(_m_sync_api.PHASE3_SYNC_TIMEOUT_SECONDS, 10)
+        self.assertEqual(_m_sillytavern_api.PHASE3_SYNC_TIMEOUT_SECONDS, 10)
 
     def test_http_client_uses_cookie_login_and_csrf(self):
         _ApiHandler.records, _ApiHandler.seen = [], []
@@ -188,7 +189,7 @@ class Phase3SyncTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            client = _m_sync_api.SillyTavernApiClient(f"http://127.0.0.1:{server.server_port}", "tester", "password")
+            client = _m_sillytavern_api.SillyTavernApiClient(f"http://127.0.0.1:{server.server_port}", "tester", "password")
             session = {"character_file": "Test.png"}
             client.save_chat(session, {"name": "Test"}, "chat-id", False, [{"chat_metadata": {}}, {"is_user": True, "mes": "Hello"}])
             records = client.get_chat(session, "chat-id", False)
@@ -206,7 +207,7 @@ class Phase3SyncTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            client = _m_sync_api.SillyTavernApiClient(f"http://127.0.0.1:{server.server_port}")
+            client = _m_sillytavern_api.SillyTavernApiClient(f"http://127.0.0.1:{server.server_port}")
             settings = client.get_settings()
             settings["power_user"]["personas"]["user-default.png"] = "Test User"
             client.save_settings(settings)
@@ -242,7 +243,7 @@ class Phase3SyncTests(unittest.TestCase):
         _m_sync_core.ensure_sync_binding(self.db, "chat", "phase3")
         self.db.execute("UPDATE sync_bindings SET realtime_enabled=1 WHERE chat_id='chat' AND session_id='phase3'")
         self.db.commit()
-        self.fake.error = _m_persona_sync.SillyTavernApiError("authentication failed", status=403)
+        self.fake.error = _m_sillytavern_api.SillyTavernApiError("authentication failed", status=403)
         _m_sync_api.phase3_sync_poll(self.db)
         binding = _m_sync_api.sync_binding(self.db, "chat", "phase3")
         self.assertEqual(binding["realtime_enabled"], 0)
@@ -603,7 +604,7 @@ class Phase3SyncTests(unittest.TestCase):
         self.db.commit()
         original_sync = _m_sync_api.phase3_sync_now
         original_menu = _m_panel_callback_routes.send_sync_menu
-        _m_sync_api.phase3_sync_now = lambda *_args: (_ for _ in ()).throw(_m_persona_sync.SillyTavernApiError("API unavailable", transient=True))
+        _m_sync_api.phase3_sync_now = lambda *_args: (_ for _ in ()).throw(_m_sillytavern_api.SillyTavernApiError("API unavailable", transient=True))
         _m_panel_callback_routes.send_sync_menu = lambda *_args, **_kwargs: None
         answers = []
         callback = {"id": "cb", "message": {"message_id": 90, "chat": {"id": "chat"}}}

@@ -21,6 +21,7 @@ import bridge.message_commands as _m_message_commands
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.persona_sync as _m_persona_sync
+import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.status_panels as _m_status_panels
 import bridge.telegram as _m_telegram
 class CatalogLimitTests(unittest.TestCase):
@@ -37,7 +38,7 @@ class CatalogLimitTests(unittest.TestCase):
         self.old_native_avatars = _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR
         self.old_native_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
         self.old_native_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
-        self.old_phase3 = _m_persona_sync.phase3_api_configured
+        self.old_phase3 = _m_sillytavern_api.phase3_api_configured
         self.old_db = config.DB_FILE
         _m_main.CHARACTER_DIR = root / "characters"
         config.CHARACTER_DIR = _m_main.CHARACTER_DIR
@@ -52,7 +53,7 @@ class CatalogLimitTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps({"power_user": {"personas": {}, "persona_descriptions": {}}}), encoding="utf-8")
         _m_persona_sync._NATIVE_PERSONA_CACHE = {}
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        _m_persona_sync.phase3_api_configured = lambda: False
+        _m_sillytavern_api.phase3_api_configured = lambda: False
         config.DB_FILE = root / "bridge.sqlite3"
         for directory in (_m_main.CHARACTER_DIR, config.WORLD_DIR, _m_common.SYSTEM_PROMPTS_DIR):
             directory.mkdir()
@@ -71,7 +72,7 @@ class CatalogLimitTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.old_native_avatars
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_native_cache
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_native_cache_time
-        _m_persona_sync.phase3_api_configured = self.old_phase3
+        _m_sillytavern_api.phase3_api_configured = self.old_phase3
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
 

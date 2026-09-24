@@ -262,11 +262,10 @@ def make_test_application_services(
 
 def make_native_test_sync_service() -> SyncService:
     """Compose SyncService from the canonical collaborators used by startup."""
-    from bridge.persona_sync import SillyTavernApiError
+    import bridge.sillytavern_api as _st_api
     from bridge.repositories import count_session_messages
     from bridge.sync_api import (
         _phase3_disable,
-        phase3_api_configured,
         phase3_sync_now,
         phase3_sync_poll,
         phase3_toggle_realtime,
@@ -280,6 +279,6 @@ def make_native_test_sync_service() -> SyncService:
         toggle_realtime_backend=phase3_toggle_realtime,
         poll_backend=phase3_sync_poll,
         disable_realtime=_phase3_disable,
-        api_configured=phase3_api_configured,
-        expected_errors=(SillyTavernApiError, ValueError),
+        api_configured=_st_api.phase3_api_configured,
+        expected_errors=(_st_api.SillyTavernApiError, ValueError),
     )

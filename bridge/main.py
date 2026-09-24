@@ -101,11 +101,9 @@ from bridge.repositories import (
 )
 from bridge.runtime_lifecycle import run_bridge_runtime
 from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
+import bridge.sillytavern_api as _st_api
 from bridge.sync_api import (
-    SillyTavernApiError,
     _phase3_disable,
-    phase3_api_configured,
-    phase3_client,
     phase3_sync_now,
     phase3_sync_poll,
     phase3_toggle_realtime,
@@ -257,8 +255,8 @@ def _build_startup_services(
         toggle_realtime_backend=phase3_toggle_realtime,
         poll_backend=phase3_sync_poll,
         disable_realtime=_phase3_disable,
-        api_configured=phase3_api_configured,
-        expected_errors=(SillyTavernApiError, ValueError),
+        api_configured=_st_api.phase3_api_configured,
+        expected_errors=(_st_api.SillyTavernApiError, ValueError),
     )
     background = _BackgroundRuntime(
         submit_chat=submit_chat_background,
@@ -305,10 +303,10 @@ def _build_startup_services(
 def run_check(services: _BridgeServices) -> int:
     config = services.config
     fields = card_fields(read_png_chara(config.card_file))
-    if phase3_api_configured():
+    if _st_api.phase3_api_configured():
         try:
-            phase3_client().authenticate()
-        except (SillyTavernApiError, ValueError) as exc:
+            _st_api.phase3_client().authenticate()
+        except (_st_api.SillyTavernApiError, ValueError) as exc:
             raise SystemExit(f"Live Sync check failed: {exc}") from exc
     me = services.telegram.request(
         config.bot_token,

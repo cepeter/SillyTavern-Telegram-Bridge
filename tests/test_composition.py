@@ -24,6 +24,7 @@ import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.command_routes as _m_command_routes
 import bridge.help as _m_help
 import bridge.main as _m_main
+import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.runtime_lifecycle as _m_runtime
 import bridge.update_routing as _m_update_routing
 import bridge.worker_orchestration as _m_workers
@@ -1060,7 +1061,7 @@ class StartupCompositionTests(unittest.TestCase):
             return_value={"name": "Mira"},
         ), patch.object(_m_main, "read_png_chara",
             return_value={},
-        ), patch.object(_m_main, "phase3_api_configured",
+        ), patch.object(_m_sillytavern_api, "phase3_api_configured",
             return_value=False,
         ):
             self.assertEqual(_m_main.run_check(self.services), 0)
@@ -1141,7 +1142,7 @@ class StartupCompositionTests(unittest.TestCase):
         ) as sync_now, patch.object(_m_main, "phase3_toggle_realtime",
         ) as toggle, patch.object(_m_main, "phase3_sync_poll",
         ) as poll, patch.object(_m_main, "_phase3_disable",
-        ) as disable, patch.object(_m_main, "phase3_api_configured",
+        ) as disable, patch.object(_m_sillytavern_api, "phase3_api_configured",
         ) as configured:
             services = _m_main._build_startup_services(
             self.config,

@@ -309,6 +309,38 @@ def _scene_state_summary_clear(db: sqlite3.Connection, chat_id: str, session_id:
     clear_scene_state(db, chat_id, session_id)
 
 
+def send_scene_menu(
+    token: str,
+    chat_id: str,
+    db: sqlite3.Connection,
+    session: dict[str, str],
+    message_id: int | None = None,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+) -> None:
+    state, covered = get_scene_state(
+        db,
+        chat_id,
+        session["session_id"],
+    )
+    text, markup = scene_panel(state, covered)
+    method = "editMessageText" if message_id else "sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": markup,
+    }
+    if message_id:
+        payload["message_id"] = message_id
+    delivery_port.send_panel_request(
+        token,
+        method,
+        payload,
+        request_context=request_context,
+    )
+
+
 def handle_scene_command(
     db: sqlite3.Connection,
     token: str,
@@ -319,18 +351,26 @@ def handle_scene_command(
     command: str,
     *,
     provider_port: ProviderPort,
+    delivery_port: DeliveryPort,
     request_context,
 ) -> None:
     action = command.split(None, 1)[1].strip().casefold() if " " in command else "status"
     if action in {"", "status"}:
-        send_scene_menu( token, chat_id, db, session, request_context=request_context)
+        send_scene_menu(
+            token,
+            chat_id,
+            db,
+            session,
+            delivery_port=delivery_port,
+            request_context=request_context,
+        )
         return
     if action == "clear":
         clear_scene_state(db, chat_id, session["session_id"])
-        send_text(token, chat_id, "Scene state cleared.")
+        delivery_port.send_text(token, chat_id, "Scene state cleared.")
         return
     if action == "refresh":
-        send_typing(token, chat_id)
+        delivery_port.send_typing(token, chat_id)
         state = refresh_scene_state_now(
             db,
             api_key,
@@ -339,14 +379,14 @@ def handle_scene_command(
             str(fields.get("name") or "unknown"),
             provider_port=provider_port,
         )
-        send_text(
+        delivery_port.send_text(
             token,
             chat_id,
             "Scene state refreshed:\n" +
             (json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) if state else "No scene state could be extracted."),
         )
         return
-    send_text(token, chat_id, "Use /scene, /scene status, /scene refresh, or /scene clear.")
+    delivery_port.send_text(token, chat_id, "Use /scene, /scene status, /scene refresh, or /scene clear.")
 
 
 def _scene_state_command_route(
@@ -369,7 +409,7 @@ def _scene_state_command_route(
     services,
 ):
     if command == "/scene" or command.startswith("/scene "):
-        handle_scene_command(db, token, api_key, chat_id, session, fields, command, provider_port=services.provider, request_context=request_context)
+        handle_scene_command(db, token, api_key, chat_id, session, fields, command, provider_port=services.provider, delivery_port=services.delivery, request_context=request_context)
         return True
     return False
 
@@ -397,10 +437,7 @@ from bridge.database import (
     task_model_for_session,
     write_transaction,
 )
-from bridge.media import send_typing
+from bridge.delivery_port import DeliveryPort
 from bridge.provider_port import ProviderPort
-from bridge.status_panels import send_scene_menu
-from bridge.telegram import (
-    load_session,
-    send_text,
-)
+from bridge.scene_panel import scene_panel
+from bridge.telegram import load_session

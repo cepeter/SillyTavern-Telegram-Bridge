@@ -196,8 +196,22 @@ class HelpDrilldownTests(unittest.TestCase):
                 request_context=make_test_request_context(self.db, session["session_id"]),
             )
             self.assertIn("prompt:budget", str(calls[-1]))
-            _m_scene_state.send_scene_menu("token", "chat", self.db, session, request_context=make_test_request_context(self.db, session["session_id"]))
-            self.assertIn("scene:refresh", str(calls[-1]))
+            scene_calls = []
+            _m_scene_state.send_scene_menu(
+                "token",
+                "chat",
+                self.db,
+                session,
+                delivery_port=make_test_delivery_port(
+                    send_panel_request=lambda *args, **kwargs:
+                    scene_calls.append((args, kwargs)) or {},
+                ),
+                request_context=make_test_request_context(
+                    self.db,
+                    session["session_id"],
+                ),
+            )
+            self.assertIn("scene:refresh", str(scene_calls[-1]))
             _m_director_goals.set_director_goal(self.db, "chat", session["session_id"], "Reveal the door")
             _m_status_panels.send_director_goal_menu("token", "chat", self.db, session, request_context=make_test_request_context(self.db, session["session_id"]))
             self.assertIn("goal:set", str(calls[-1]))
