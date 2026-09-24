@@ -130,6 +130,7 @@ def process_callback(
             session,
             data,
             message,
+            input_flow_service=services.input_flow,
             request_context=request_context,
         )
         return

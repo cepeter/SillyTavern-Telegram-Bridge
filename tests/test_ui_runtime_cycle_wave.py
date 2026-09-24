@@ -93,6 +93,8 @@ def test_input_flow_service_requires_session_name_backend_and_delegates():
         start_session_name_backend=lambda *args, **kwargs: (
             calls.append((args, kwargs))
         ),
+        start_text_action_backend=lambda *_args, **_kwargs: None,
+        handle_session_name_backend=lambda *_args, **_kwargs: False,
     )
     service.start_session_name(1, 2, kind="group")
 

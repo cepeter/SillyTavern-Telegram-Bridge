@@ -1,4 +1,4 @@
-from application_test_setup import make_test_conversation_service
+from application_test_setup import make_test_conversation_service, make_test_input_flow_service
 from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_group_service, make_test_memory_service, make_test_persona_service, make_test_provider_port, make_test_request_context
 
 ensure_application_extensions()
@@ -293,7 +293,7 @@ class AuditRegressionTests(unittest.TestCase):
         try:
             _m_command_routes.start_text_action_input(self.db, "token", "chat", session["session_id"], "edit", "Send replacement")
             self.assertIn("edit", _m_session_naming.get_meta(self.db, "text_action_input:chat", ""))
-            self.assertTrue(_m_input_flows.handle_pending_input(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, group_service=make_test_group_service(), provider_port=make_test_application_services().provider, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"])))
+            self.assertTrue(make_test_input_flow_service().handle_pending(self.db, "token", "chat", session, "/cancel", api_key="key", fields={}, group_service=make_test_group_service(), provider_port=make_test_application_services().provider, memory_service=make_test_memory_service(), persona_service=make_test_persona_service(), request_context=make_test_request_context(self.db, session["session_id"])))
         finally:
             _m_input_flows.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "text_action_input:chat", ""), "")

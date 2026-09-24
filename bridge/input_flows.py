@@ -72,8 +72,23 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
         elif action == "director_goal":
             if len(value) > 1200:
                 raise ValueError("Director objective exceeds 1,200 characters")
-            set_director_goal(db, chat_id, session["session_id"], value)
-            send_director_goal_menu( token, chat_id, db, session, request_context=request_context)
+            saved_goal = set_director_goal(
+                db,
+                chat_id,
+                session["session_id"],
+                value,
+            )
+            panel_text, panel_markup = director_goal_panel(saved_goal)
+            send_panel_request(
+                token,
+                "sendMessage",
+                {
+                    "chat_id": chat_id,
+                    "text": panel_text,
+                    "reply_markup": panel_markup,
+                },
+                request_context=request_context,
+            )
         else:
             raise ValueError("Unknown text action")
     except ValueError as exc:
@@ -337,7 +352,7 @@ def _handle_persona_input(db, token: str, chat_id: str, session: dict, stripped:
     return True
 
 
-def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, group_service: GroupService, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
+def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, session: dict, stripped: str, api_key: str = "", fields: dict | None = None, operation_id: int | None = None, *, handle_session_name, group_service: GroupService, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService, request_context) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
     world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
@@ -354,7 +369,7 @@ def handle_pending_input(db: sqlite3.Connection, token: str, chat_id: str, sessi
         return _handle_text_action_input(db, token, api_key, chat_id, session, action_fields, stripped, text_action, operation_id, provider_port=provider_port, memory_service=memory_service, persona_service=persona_service, request_context=request_context)
     session_name = _pending_state(db, f"session_name_input:{chat_id}", session_id, token, chat_id)
     if session_name:
-        return handle_session_name_input(db, token, chat_id, session, stripped, session_name, operation_id, group_service=group_service, request_context=request_context)
+        return handle_session_name(db, token, chat_id, session, stripped, session_name, operation_id, group_service=group_service, request_context=request_context)
     settings = _pending_state(db, f"settings_input:{chat_id}", session_id, token, chat_id)
     if settings.get("key"):
         return _handle_settings_input(db, token, chat_id, session_id, stripped, settings, request_context=request_context)
@@ -590,6 +605,7 @@ from bridge.database import (
     update_generation_settings,
 )
 from bridge.director_goals import set_director_goal
+from bridge.director_goal_panel import director_goal_panel
 from bridge.help import (
     send_databank_menu,
     send_memory_menu,
@@ -613,8 +629,6 @@ from bridge.persona_delete_panel import send_persona_delete_menu
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.rag import handle_data_bank_command
-from bridge.session_naming import handle_session_name_input
-from bridge.status_panels import send_director_goal_menu
 from bridge.telegram import (
     delete_pending_input_prompts,
     send_panel_request,

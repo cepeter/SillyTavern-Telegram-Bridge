@@ -234,7 +234,7 @@ def send_databank_remove_menu(token: str, chat_id: str, db: sqlite3.Connection, 
     send_panel_message(token, chat_id, f"Choose a document to remove (page {current_page + 1}/{total_pages}):", {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
-def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict, *, request_context) -> None:
+def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], data: str, message: dict, *, input_flow_service: InputFlowService, request_context) -> None:
     message_id = message.get("message_id")
     if data == "enum:close":
         discard_panel_binding(db, chat_id, message_id)
@@ -323,7 +323,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
             set_meta(db, f"stt_model:{chat_id}", value)
         send_voice_input_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:memory:search":
-        start_text_action_input(db, token, chat_id, session["session_id"], "memory_search", "Send a query to search Hindsight memory for the active session.", {"message": message}, request_context=request_context)
+        input_flow_service.start_text_action(db, token, chat_id, session["session_id"], "memory_search", "Send a query to search Hindsight memory for the active session.", {"message": message}, request_context=request_context)
     elif data == "enum:memory:scope":
         send_memory_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:memory:back":
@@ -366,7 +366,7 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
         else:
             send_preset_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:rag:search":
-        start_text_action_input(db, token, chat_id, session["session_id"], "databank_search", "Send a query to search the active Data Bank.", {"message": message}, request_context=request_context)
+        input_flow_service.start_text_action(db, token, chat_id, session["session_id"], "databank_search", "Send a query to search the active Data Bank.", {"message": message}, request_context=request_context)
     elif data == "enum:rag:versions":
         send_databank_versions_menu( token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:ragversionspage:"):
@@ -544,7 +544,7 @@ from bridge.database import (
     set_meta,
     update_generation_settings,
 )
-from bridge.input_flows import start_text_action_input
+from bridge.input_flow_service import InputFlowService
 from bridge.language import (
     normalize_stt_language,
     RESPONSE_LANGUAGES,

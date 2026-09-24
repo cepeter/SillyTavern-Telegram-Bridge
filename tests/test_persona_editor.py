@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service, make_native_test_persona_service, make_test_request_context, make_test_group_service, make_test_provider_port
+from application_test_setup import ensure_application_extensions, make_test_memory_service, make_native_test_persona_service, make_test_request_context, make_test_group_service, make_test_provider_port, make_test_input_flow_service
 
 ensure_application_extensions()
 
@@ -219,7 +219,7 @@ class PersonaEditorTests(unittest.TestCase):
             "upsert_native_persona",
             side_effect=AssertionError("raw upsert bypassed service"),
         ):
-            handled = _m_input_flows.handle_pending_input(
+            handled = make_test_input_flow_service().handle_pending(
                 self.db,
                 "token",
                 "chat",
@@ -253,7 +253,7 @@ class PersonaEditorTests(unittest.TestCase):
             "upsert_native_persona",
             side_effect=AssertionError("raw upsert bypassed service"),
         ):
-            handled = _m_input_flows.handle_pending_input(
+            handled = make_test_input_flow_service().handle_pending(
                 self.db,
                 "token",
                 "chat",
@@ -277,7 +277,7 @@ class PersonaEditorTests(unittest.TestCase):
         state = self._start("create")
         fake = FakePersonaService()
         self.assertTrue(
-            _m_input_flows.handle_pending_input(
+            make_test_input_flow_service().handle_pending(
                 self.db,
                 "token",
                 "chat",
@@ -299,7 +299,7 @@ class PersonaEditorTests(unittest.TestCase):
         fake = FakePersonaService()
         fake.create_error = RuntimeError("offline")
         self.assertTrue(
-            _m_input_flows.handle_pending_input(
+            make_test_input_flow_service().handle_pending(
                 self.db,
                 "token",
                 "chat",
@@ -415,7 +415,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_native_catalog_loads_and_create_selects_avatar(self):
         self._start("create")
-        self.assertTrue(_m_input_flows.handle_pending_input(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes.", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
+        self.assertTrue(make_test_input_flow_service().handle_pending(self.db, "token", "chat", self.session, "writer | Writer | I write concise notes.", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-writer.png"], "Writer")
@@ -430,7 +430,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_edit_name_and_description_updates_native_settings(self):
         self._start("edit", "bridge-user.png")
-        _m_input_flows.handle_pending_input(self.db, "token", "chat", self.session, "Updated Name | Updated description", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
+        make_test_input_flow_service().handle_pending(self.db, "token", "chat", self.session, "Updated Name | Updated description", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,)
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Updated Name")
@@ -439,7 +439,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_edit_description_only_preserves_native_name(self):
         self._start("edit_description", "bridge-user.png")
-        _m_input_flows.handle_pending_input(self.db, "token", "chat", self.session, "Description only", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
+        make_test_input_flow_service().handle_pending(self.db, "token", "chat", self.session, "Description only", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,)
         settings = self._settings()
         self.assertEqual(settings["power_user"]["personas"]["bridge-user.png"], "Test User")
@@ -615,7 +615,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_invalid_create_keeps_pending_state_and_native_file(self):
         state = self._start("create")
-        self.assertTrue(_m_input_flows.handle_pending_input(self.db, "token", "chat", self.session, "bad input", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
+        self.assertTrue(make_test_input_flow_service().handle_pending(self.db, "token", "chat", self.session, "bad input", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         self.assertEqual(self._settings(), self.native)
         current = json.loads(_m_session_naming.get_meta(self.db, "persona_input:chat"))
@@ -624,7 +624,7 @@ class PersonaEditorTests(unittest.TestCase):
 
     def test_cancel_clears_pending_persona_input(self):
         self._start("create")
-        self.assertTrue(_m_input_flows.handle_pending_input(self.db, "token", "chat", self.session, "/cancel", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
+        self.assertTrue(make_test_input_flow_service().handle_pending(self.db, "token", "chat", self.session, "/cancel", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         self.assertEqual(_m_session_naming.get_meta(self.db, "persona_input:chat"), "")
         self.assertEqual(self._settings(), self.native)
@@ -633,7 +633,7 @@ class PersonaEditorTests(unittest.TestCase):
         self._start("create")
         other = dict(self.session)
         other["session_id"] = "other-session"
-        self.assertFalse(_m_input_flows.handle_pending_input(self.db, "token", "chat", other, "writer | Writer | Should not apply", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
+        self.assertFalse(make_test_input_flow_service().handle_pending(self.db, "token", "chat", other, "writer | Writer | Should not apply", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         self.assertEqual(self._settings(), self.native)
 
@@ -642,7 +642,7 @@ class PersonaEditorTests(unittest.TestCase):
         original_save = _m_persona_sync._save_native_settings
         _m_persona_sync._save_native_settings = lambda *_args: (_ for _ in ()).throw(RuntimeError("offline"))
         try:
-            self.assertTrue(_m_input_flows.handle_pending_input(self.db, "token", "chat", self.session, "Attempted update", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
+            self.assertTrue(make_test_input_flow_service().handle_pending(self.db, "token", "chat", self.session, "Attempted update", group_service=make_test_group_service(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), request_context=self.request_context,
                 persona_service=self.persona_service,))
         finally:
             _m_persona_sync._save_native_settings = original_save
