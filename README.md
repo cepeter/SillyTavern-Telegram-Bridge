@@ -384,6 +384,7 @@ prevents accidental changes.
 | `/voice_input` | Configure transcription, STT model, and language |
 | `/imagine` | Generate an image through an enabled image provider |
 | `/memory` | Open Hindsight memory and search controls |
+| `/memory search <query>` | Search Hindsight memory within the active session |
 | `/memory curated` | View or refresh curated durable memory |
 | `/remember` | Store one explicit long-term fact |
 | `/summarize` | Confirm before regenerating the active-session summary |

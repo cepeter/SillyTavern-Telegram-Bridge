@@ -32,6 +32,7 @@
   "/retry": "Retries the latest failed character response. It replays the original message without creating a duplicate committed turn — clean recovery after a crash or timeout.",
   "/prompt": "Opens a read-only prompt inspector with sections for budget, memory/RAG, and group context. Use /prompt text for the full plain diagnostic output.",
   "/memory": "Opens Hindsight memory controls. You can turn memory on or off and search within the active session. Recall is always session-scoped — it never pulls in memories from other sessions, users, or characters.",
+  "/memory search <query>": "Searches Hindsight memory for <query> within the active session and returns up to five matching remembered facts. Recall stays strictly session-scoped, so results never come from another session.",
   "/memory curated": "Opens the curated-memory panel to view durable distilled facts or refresh them with the utility model. Memory must be enabled for refresh.",
   "/remember": "Opens a panel, then waits for one explicit long-term fact to store in Hindsight. Send /cancel to leave without storing anything.",
   "/summarize": "Opens a confirmation panel before regenerating the active-session summary from its stored conversation and current memory context. The resulting summary remains scoped to this session and is used as continuity context when older turns are compacted.",
@@ -43,5 +44,6 @@
   "/group goal": "Shows the current hidden Director objective for this Forum Topic group. The objective is session-local, capped at 1,200 characters, and never added to the roleplay transcript.",
   "/group goal <objective>": "Sets or replaces the hidden Director objective for the active group session. It guides speaker selection and scene direction without being revealed to the characters; use /group goal clear to remove it.",
   "/scene": "Shows the active session's structured scene state — bounded continuity such as location, weather, participants, and known facts — without displaying the full transcript.",
-  "/scene refresh": "Rebuilds structured scene state with the configured utility model. It runs as optional background continuity work and never replaces the original conversation history. Use /scene clear to remove it."
+  "/scene refresh": "Rebuilds structured scene state with the configured utility model. It runs as optional background continuity work and never replaces the original conversation history. Use /scene clear to remove it.",
+  "/scene clear": "Clears only the active session's stored structured scene state. It does not delete or rewrite the conversation transcript, session summary, Hindsight memory, or Data Bank content."
 }

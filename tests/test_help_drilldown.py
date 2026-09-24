@@ -187,6 +187,32 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertIn("1,200 characters", _m_help_details.command_detail("/group goal", ""))
         self.assertIn("utility model", _m_help_details.command_detail("/scene refresh", ""))
 
+    def test_memory_search_and_scene_clear_are_first_class_help_commands(self):
+        commands = {
+            command
+            for entries in _m_help_details.HELP_CATEGORIES.values()
+            for command, _summary in entries
+        }
+        self.assertIn("/memory search <query>", commands)
+        self.assertIn("/scene clear", commands)
+
+        memory_detail = _m_help_details.command_detail(
+            "/memory search <query>",
+            "",
+        )
+        self.assertIn("active session", memory_detail.lower())
+        self.assertIn("query", memory_detail.lower())
+
+        scene_detail = _m_help_details.command_detail("/scene clear", "")
+        self.assertIn("structured scene state", scene_detail.lower())
+        self.assertIn("transcript", scene_detail.lower())
+
+        readme = (Path(__file__).parents[1] / "README.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("/memory search <query>", readme)
+        self.assertIn("/scene clear", readme)
+
     def test_help_command_fast_path_always_renders_panel(self):
         calls = []
         original_send = _m_help_details.send_help_menu
