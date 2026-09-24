@@ -240,7 +240,7 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
     if command == "/reset":
         send_reset_confirmation_menu( token, chat_id, request_context=request_context)
         return
-    if handle_pending_input(
+    if services.input_flow.handle_pending(
         db,
         token,
         chat_id,
@@ -338,7 +338,6 @@ from bridge.generation import (
     save_response_variant,
     swipe_state_key,
 )
-from bridge.input_flows import handle_pending_input
 from bridge.language import normalize_response_language
 from bridge.media import (
     queue_user_quote_tts,

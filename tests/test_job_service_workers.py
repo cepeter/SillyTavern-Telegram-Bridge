@@ -1,5 +1,5 @@
 from application_test_setup import make_test_conversation_service
-from application_test_setup import make_test_group_service, make_test_model_router, make_test_provider_port, make_test_delivery_port
+from application_test_setup import make_test_group_service, make_test_model_router, make_test_provider_port, make_test_delivery_port, make_test_input_flow_service
 from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
@@ -89,6 +89,7 @@ class JobWorkerServiceTests(unittest.TestCase):
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
+            input_flow=make_test_input_flow_service(),
         )
 
     def tearDown(self):
