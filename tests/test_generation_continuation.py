@@ -6,6 +6,7 @@ import json
 import unittest
 
 import os
+import threading
 import bridge.generation as _m_generation
 import bridge.provider_transport as _m_provider_transport
 from bridge.model_router import ModelRoute
@@ -35,6 +36,19 @@ class _FakeStreamResponse(_FakeResponse):
 
     def __iter__(self):
         return iter(self.lines)
+
+
+class _CancelAfterLineStreamResponse(_FakeStreamResponse):
+    def __init__(self, lines, cancel_event, cancel_after_index):
+        super().__init__(lines)
+        self.cancel_event = cancel_event
+        self.cancel_after_index = cancel_after_index
+
+    def __iter__(self):
+        for index, line in enumerate(self.lines):
+            yield line
+            if index == self.cancel_after_index:
+                self.cancel_event.set()
 
 
 class GenerationContinuationTests(unittest.TestCase):
@@ -237,6 +251,210 @@ class GenerationContinuationTests(unittest.TestCase):
 
         self.assertEqual(result, "Partial but usable.")
         self.assertEqual(calls, 2)
+
+
+
+    def test_streaming_length_continuation_callback_is_cumulative(self):
+        self.spec["streaming"] = True
+        responses = [
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ]),
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":"stop"}]}\n',
+                "data: [DONE]\n",
+            ]),
+        ]
+        callbacks = []
+
+        def fake_urlopen(_request, timeout):
+            return responses.pop(0)
+
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+            stream_callback=callbacks.append,
+        )
+
+        self.assertEqual(result, "Part one. Part two.")
+        self.assertEqual(callbacks[0], "Part one.")
+        self.assertEqual(callbacks[-1], "Part one. Part two.")
+
+    def test_streaming_length_cancellation_after_first_segment_skips_continuation(self):
+        self.spec["streaming"] = True
+        cancel_event = threading.Event()
+        calls = 0
+
+        def fake_urlopen(_request, timeout):
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                raise AssertionError("continuation request must not start after cancellation")
+            return _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ])
+
+        def callback(partial):
+            if partial == "Part one.":
+                cancel_event.set()
+
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+            stream_callback=callback,
+            cancel_event=cancel_event,
+        )
+
+        self.assertEqual(result, "Part one.")
+        self.assertEqual(calls, 1)
+
+    def test_streaming_cancellation_during_continuation_preserves_visible_text(self):
+        self.spec["streaming"] = True
+        cancel_event = threading.Event()
+        responses = [
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ]),
+            _CancelAfterLineStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":null}]}\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ], cancel_event, 1),
+        ]
+        calls = 0
+        callbacks = []
+
+        def fake_urlopen(_request, timeout):
+            nonlocal calls
+            calls += 1
+            if not responses:
+                raise AssertionError("no third request expected after cancellation")
+            return responses.pop(0)
+
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+            stream_callback=callbacks.append,
+            cancel_event=cancel_event,
+        )
+
+        self.assertEqual(result, "Part one. Part two.")
+        self.assertEqual(calls, 2)
+        self.assertEqual(callbacks[-1], "Part one. Part two.")
+
+    def test_empty_stream_length_recovery_forwards_stream_callback(self):
+        self.spec["streaming"] = True
+        responses = [
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"reasoning":"thinking"},"finish_reason":null}]}\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ]),
+            _FakeStreamResponse([
+                'data: {"choices":[{"delta":{"content":"Recovered answer."},"finish_reason":"stop"}]}\n',
+                "data: [DONE]\n",
+            ]),
+        ]
+        callbacks = []
+
+        def fake_urlopen(_request, timeout):
+            return responses.pop(0)
+
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+            stream_callback=callbacks.append,
+        )
+
+        self.assertEqual(result, "Recovered answer.")
+        self.assertEqual(callbacks[-1], "Recovered answer.")
+
+    def test_empty_stream_length_cancelled_before_recovery_opens_no_retry(self):
+        self.spec["streaming"] = True
+        cancel_event = threading.Event()
+        calls = 0
+
+        def fake_urlopen(_request, timeout):
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                raise AssertionError("recovery request must not start after cancellation")
+            return _CancelAfterLineStreamResponse([
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ], cancel_event, 0)
+
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        with self.assertRaisesRegex(RuntimeError, "returned no visible content"):
+            _m_provider_transport.generate_provider_text(
+                self.router,
+                "",
+                "test",
+                [{"role": "user", "content": "Write a complete answer."}],
+                settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+                cancel_event=cancel_event,
+            )
+
+        self.assertEqual(calls, 1)
+
+    def test_streaming_visible_continuation_is_bounded_to_three_requests(self):
+        self.spec["streaming"] = True
+        segments = ["One.", "Two.", "Three.", "Four."]
+        requests = []
+        responses = [
+            _FakeStreamResponse([
+                f'data: {{"choices":[{{"delta":{{"content":"{segment}"}},"finish_reason":null}}]}}\n',
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                "data: [DONE]\n",
+            ])
+            for segment in segments
+        ]
+
+        def fake_urlopen(request, timeout):
+            requests.append(json.loads(request.data.decode()))
+            if not responses:
+                raise AssertionError("visible continuation exceeded three requests")
+            return responses.pop(0)
+
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+        )
+
+        self.assertEqual(result, "One. Two. Three. Four.")
+        self.assertEqual(len(requests), 4)
+        self.assertTrue(all(request["stream"] for request in requests))
+        self.assertEqual(requests[1]["messages"][-2]["content"], "One.")
+        self.assertEqual(requests[2]["messages"][-2]["content"], "Two.")
+        self.assertEqual(requests[3]["messages"][-2]["content"], "Three.")
+        for request in requests[1:]:
+            self.assertIn("exact ending", request["messages"][-1]["content"])
 
     def test_auto_language_render_returns_original_without_backend_call(self):
         provider = ProviderPort(
