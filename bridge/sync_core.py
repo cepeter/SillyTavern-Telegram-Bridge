@@ -268,7 +268,7 @@ from bridge.card_content import (
     safe_character_path,
     safe_world_path,
 )
-from bridge.cards import (
+from bridge.persona_sync import (
     get_persona,
     persona_name,
 )

@@ -86,10 +86,10 @@ class NativePersonaSyncTests(unittest.TestCase):
         }
 
         with patch.object(
-            _m_cards, "load_personas",
+            _m_persona_sync, "load_personas",
             return_value=personas,
         ), patch.object(
-            _m_cards, "_native_settings",
+            _m_persona_sync, "_native_settings",
             return_value={
                 "power_user": {
                     "default_persona": "patched.png",

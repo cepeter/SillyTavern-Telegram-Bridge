@@ -316,10 +316,8 @@ from bridge.card_content import (
     card_fields_from_file,
     system_prompt_label,
 )
-from bridge.cards import (
-    persona_name,
-    send_panel_message,
-)
+from bridge.cards import send_panel_message
+from bridge.persona_sync import persona_name
 from bridge.commands import prompt_diagnostics
 from bridge.config import DEFAULT_MODEL
 from bridge.context_compaction import (

@@ -157,9 +157,9 @@ def make_test_persona_service(*, personas=None) -> PersonaService:
 
 def make_native_test_persona_service() -> PersonaService:
     """Compose PersonaService from the same canonical collaborators as startup."""
-    from bridge.cards import default_persona_id
     from bridge.persona_sync import (
         PERSONA_EDIT_LOCK,
+        default_persona_id,
         delete_native_persona,
         load_personas,
         upsert_native_persona,

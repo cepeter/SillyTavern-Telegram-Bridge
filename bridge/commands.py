@@ -440,7 +440,7 @@ from bridge.card_content import (
     card_fields_from_file,
     replace_macros,
 )
-from bridge.cards import persona_name
+from bridge.persona_sync import persona_name
 from bridge.common import MAX_HISTORY_MESSAGES
 from bridge.context_compaction import (
     context_history_candidate_limit,

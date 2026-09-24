@@ -17,7 +17,6 @@ from bridge.card_content import (
     read_png_chara,
     safe_character_path,
 )
-from bridge.cards import default_persona_id
 from bridge.common import (
     begin_background_shutdown,
     configure_logging,
@@ -91,6 +90,7 @@ from bridge.provider_transport import generate_provider_text
 from bridge.persona_service import PersonaService as _PersonaService
 from bridge.persona_sync import (
     PERSONA_EDIT_LOCK,
+    default_persona_id,
     delete_native_persona,
     load_personas,
     upsert_native_persona,

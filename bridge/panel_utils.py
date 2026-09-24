@@ -51,3 +51,20 @@ def panel_navigation(
             }
         )
     return row
+
+
+def panel_message_request(
+    chat_id: str,
+    text: str,
+    reply_markup: dict,
+    message_id: int | None = None,
+) -> tuple[str, dict]:
+    method = "editMessageText" if message_id is not None else "sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": reply_markup,
+    }
+    if message_id is not None:
+        payload["message_id"] = message_id
+    return method, payload

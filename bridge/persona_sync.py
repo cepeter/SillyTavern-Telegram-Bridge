@@ -103,6 +103,38 @@ def _native_settings(client=None) -> dict:
     return settings
 
 
+def get_persona(persona_id: str) -> dict[str, str] | None:
+    return load_personas().get(persona_id)
+
+
+def default_persona_id() -> str:
+    """Resolve the native default Persona without exposing a private identity."""
+    try:
+        personas = load_personas()
+        settings = _native_settings()
+        power_user = (
+            settings.get("power_user")
+            if isinstance(settings, dict)
+            else {}
+        )
+        configured = str(
+            (power_user or {}).get("default_persona") or ""
+        ).strip()
+        if configured in personas:
+            return configured
+    except Exception:
+        logging.warning(
+            "Could not resolve the native default Persona",
+            exc_info=True,
+        )
+    return ""
+
+
+def persona_name(persona_id: str) -> str:
+    persona = get_persona(persona_id)
+    return str(persona.get("name") or "") if persona else ""
+
+
 def load_native_personas(force: bool = False) -> dict[str, dict[str, object]]:
     """Load Persona metadata directly from native SillyTavern settings."""
     global _NATIVE_PERSONA_CACHE_LAST_REFRESH, _NATIVE_PERSONA_CACHE
@@ -322,8 +354,6 @@ def delete_native_persona(identifier: str, client=None) -> bool:
 
 
 # Explicit late imports replace transitional dependency injection.
-from bridge.cards import default_persona_id
 from bridge.common import IMAGE_MAX_BYTES
 from bridge.config import CATALOG_MAX_ITEMS
 import bridge.sillytavern_api as _st_api
-from bridge.telegram import update_session
