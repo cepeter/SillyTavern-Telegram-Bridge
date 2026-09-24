@@ -87,6 +87,34 @@ def _director_goal_customization(
     )
 
 
+def send_director_goal_menu(
+    token: str,
+    chat_id: str,
+    db: sqlite3.Connection,
+    session: dict[str, str],
+    message_id: int | None = None,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+) -> None:
+    goal = get_director_goal(db, chat_id, session["session_id"])
+    text, markup = director_goal_panel(goal)
+    method = "editMessageText" if message_id else "sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": markup,
+    }
+    if message_id:
+        payload["message_id"] = message_id
+    delivery_port.send_panel_request(
+        token,
+        method,
+        payload,
+        request_context=request_context,
+    )
+
+
 def handle_director_goal_command(
     db: sqlite3.Connection,
     token: str,
@@ -94,24 +122,31 @@ def handle_director_goal_command(
     session: dict[str, str],
     command: str,
     *,
+    delivery_port: DeliveryPort,
     request_context,
 ) -> None:
     if parse_topic_scope(chat_id)[1] is None:
-        send_text(token, chat_id, "Director goals are available only inside a Telegram Forum Topic.")
+        delivery_port.send_text(token, chat_id, "Director goals are available only inside a Telegram Forum Topic.")
         return
 
     raw = str(command or "")
     suffix = raw[len("/group goal"):].strip()
-    current = get_director_goal(db, chat_id, session["session_id"])
     if not suffix or suffix.casefold() == "status":
-        send_director_goal_menu( token, chat_id, db, session, request_context=request_context)
+        send_director_goal_menu(
+            token,
+            chat_id,
+            db,
+            session,
+            delivery_port=delivery_port,
+            request_context=request_context,
+        )
         return
     if suffix.casefold() in {"clear", "off", "none"}:
         set_director_goal(db, chat_id, session["session_id"], "")
-        send_text(token, chat_id, "Director scene objective cleared.")
+        delivery_port.send_text(token, chat_id, "Director scene objective cleared.")
         return
     value = set_director_goal(db, chat_id, session["session_id"], suffix)
-    send_text(
+    delivery_port.send_text(
         token,
         chat_id,
         "Director scene objective set:\n" + value +
@@ -139,7 +174,15 @@ def _director_goal_command_route(
     services,
 ):
     if command == "/group goal" or command.startswith("/group goal "):
-        handle_director_goal_command(db, token, chat_id, session, stripped, request_context=request_context)
+        handle_director_goal_command(
+            db,
+            token,
+            chat_id,
+            session,
+            stripped,
+            delivery_port=services.delivery,
+            request_context=request_context,
+        )
         return True
     return False
 
@@ -162,9 +205,9 @@ def register_director_goal_extensions() -> None:
 # Explicit late imports replace transitional dependency injection.
 import sqlite3
 from bridge.common import parse_topic_scope
+from bridge.delivery_port import DeliveryPort
+from bridge.director_goal_panel import director_goal_panel
 from bridge.database import (
     task_model_for_session,
     write_transaction,
 )
-from bridge.status_panels import send_director_goal_menu
-from bridge.telegram import send_text

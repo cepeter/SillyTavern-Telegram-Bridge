@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_request_context
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_delivery_port, make_test_memory_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -74,7 +74,13 @@ class PanelificationTests(unittest.TestCase):
             session.get("persona_id") or "",
             "user",
             request_context=make_test_request_context(self.db, session["session_id"]),
-            services=make_test_application_services(memory=make_test_memory_service()),
+            services=make_test_application_services(
+                memory=make_test_memory_service(),
+                delivery=make_test_delivery_port(
+                    send_panel_request=lambda *args, **kwargs:
+                    self.calls.append((args, kwargs)) or {},
+                ),
+            ),
         )
 
     def test_character_panel_has_inline_delete_actions(self):
