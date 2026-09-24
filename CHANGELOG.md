@@ -6,6 +6,8 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Security
 
+- Replace deterministic callback IDs with random chat-scoped handles, remove the process cache, and preserve caller transaction ownership during token creation and lookup.
+
 - Require explicit external provider hosts, a separate LAN/tailnet grant, DNS-pinned connections with verified hostname TLS, same-origin redirects, and no implicit proxy routing. Existing installations must configure their external-host allowlists.
 
 ## [0.2.024] - 2026-09-24

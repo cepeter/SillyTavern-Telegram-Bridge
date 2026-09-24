@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import sqlite3
 from unittest.mock import patch
 
 import logging
@@ -126,7 +127,10 @@ class NativePersonaSyncTests(unittest.TestCase):
         self.assertEqual(self._read()["power_user"]["personas"][avatar], "Writer")
 
     def test_persona_panel_has_no_bridge_import_export_actions(self):
-        _m_command_routes.send_persona_menu("token", "chat", "native.png", persona_service=make_native_test_persona_service(), request_context=make_test_request_context())
+        db = sqlite3.connect(":memory:")
+        self.addCleanup(db.close)
+        db.execute("CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value TEXT, chat_id TEXT, expires_at REAL)")
+        _m_command_routes.send_persona_menu("token", "chat", "native.png", persona_service=make_native_test_persona_service(), request_context=make_test_request_context(db))
         callbacks = {button["callback_data"] for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
         self.assertNotIn("persona:native_import", callbacks)
         self.assertNotIn("persona:native_export", callbacks)

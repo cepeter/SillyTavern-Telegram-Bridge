@@ -5,6 +5,7 @@ ensure_application_extensions()
 import json
 import tempfile
 import unittest
+import sqlite3
 from pathlib import Path
 
 import os
@@ -83,12 +84,15 @@ class CatalogPanelTests(unittest.TestCase):
         self.assertIn("Where should the next selected model be used?", calls[0][1]["text"])
 
     def test_model_panel_treats_not_modified_as_success(self):
+        db = sqlite3.connect(":memory:")
+        self.addCleanup(db.close)
+        db.execute("CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value TEXT, chat_id TEXT, expires_at REAL)")
         original_groups = _m_catalog.get_model_groups
         original_request = _m_cards.send_panel_request
         _m_catalog.get_model_groups = lambda: {"provider": ("Provider", [("model", "provider::model")], True)}
         _m_cards.send_panel_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified"))
         try:
-            _m_panel_callback_routes.send_model_menu("token", "chat", "provider::model", message_id=10, request_context=make_test_request_context())
+            _m_panel_callback_routes.send_model_menu("token", "chat", "provider::model", message_id=10, request_context=make_test_request_context(db))
         finally:
             _m_catalog.get_model_groups = original_groups
             _m_cards.send_panel_request = original_request

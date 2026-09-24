@@ -540,6 +540,12 @@ Valid input applies the change and returns you to the panel. Pending inputs
 expire after a while, and stale callbacks are rejected rather than applied to
 the wrong session.
 
+Dynamic panel choices use random, chat-scoped handles stored in SQLite. They
+expire after 15 minutes, survive service restarts while valid, and are rejected
+when their chat or panel ownership does not match. A failed database write does
+not issue a memory-only handle. Expired handles are pruned when new handles are
+created; token resolution itself never commits or mutates a request transaction.
+
 `/stscript` only exposes allowlisted bridge actions. It can't run shell
 commands, touch the filesystem, or make network requests. Its Reset action goes
 through the normal confirmation flow.
