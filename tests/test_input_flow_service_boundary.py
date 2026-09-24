@@ -36,12 +36,23 @@ def test_input_flow_service_is_pure_and_delegates():
         calls.append((args, kwargs))
         return True
 
+    session_handler = object()
     service = module.InputFlowService(
         handle_pending_backend=backend,
         start_session_name_backend=lambda *_args, **_kwargs: None,
+        start_text_action_backend=lambda *_args, **_kwargs: None,
+        handle_session_name_backend=session_handler,
     )
     assert service.handle_pending(1, 2, key="value") is True
-    assert calls == [((1, 2), {"key": "value"})]
+    assert calls == [
+        (
+            (1, 2),
+            {
+                "handle_session_name": session_handler,
+                "key": "value",
+            },
+        )
+    ]
 
 
 def test_input_flow_service_is_required_by_composition():
@@ -86,6 +97,8 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
             captured.append((args, kwargs)) or True
         ),
         start_session_name_backend=lambda *_args, **_kwargs: None,
+        start_text_action_backend=lambda *_args, **_kwargs: None,
+        handle_session_name_backend=lambda *_args, **_kwargs: False,
     )
     services = SimpleNamespace(
         input_flow=input_flow,

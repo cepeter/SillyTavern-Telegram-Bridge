@@ -9,9 +9,20 @@ from dataclasses import dataclass
 class InputFlowService:
     handle_pending_backend: Callable[..., bool]
     start_session_name_backend: Callable[..., None]
+    start_text_action_backend: Callable[..., None]
+    handle_session_name_backend: Callable[..., bool]
 
     def handle_pending(self, *args, **kwargs) -> bool:
-        return bool(self.handle_pending_backend(*args, **kwargs))
+        return bool(
+            self.handle_pending_backend(
+                *args,
+                handle_session_name=self.handle_session_name_backend,
+                **kwargs,
+            )
+        )
 
     def start_session_name(self, *args, **kwargs) -> None:
         self.start_session_name_backend(*args, **kwargs)
+
+    def start_text_action(self, *args, **kwargs) -> None:
+        self.start_text_action_backend(*args, **kwargs)

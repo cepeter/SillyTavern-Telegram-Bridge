@@ -43,16 +43,29 @@ def make_test_input_flow_service(
     *,
     handle_pending_backend=None,
     start_session_name_backend=None,
+    start_text_action_backend=None,
+    handle_session_name_backend=None,
 ) -> InputFlowService:
     if handle_pending_backend is None:
         from bridge.input_flows import handle_pending_input
         handle_pending_backend = handle_pending_input
-    if start_session_name_backend is None:
-        from bridge.session_naming import start_session_name_input
-        start_session_name_backend = start_session_name_input
+    if start_text_action_backend is None:
+        from bridge.input_flows import start_text_action_input
+        start_text_action_backend = start_text_action_input
+    if start_session_name_backend is None or handle_session_name_backend is None:
+        from bridge.session_naming import (
+            handle_session_name_input,
+            start_session_name_input,
+        )
+        if start_session_name_backend is None:
+            start_session_name_backend = start_session_name_input
+        if handle_session_name_backend is None:
+            handle_session_name_backend = handle_session_name_input
     return InputFlowService(
         handle_pending_backend=handle_pending_backend,
         start_session_name_backend=start_session_name_backend,
+        start_text_action_backend=start_text_action_backend,
+        handle_session_name_backend=handle_session_name_backend,
     )
 
 
