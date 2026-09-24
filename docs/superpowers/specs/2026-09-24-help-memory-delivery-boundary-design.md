@@ -171,7 +171,7 @@ Expected graph:
 
 - largest SCC: 7 -> 6
 - cyclic modules: 14 -> 12
-- reciprocal pairs: 10 -> 8
+- reciprocal pairs: 10 -> 9 (measured; memory -> telegram is not reciprocal)
 - Telegram importers: 28 -> 27
 - SCC sizes: 6 + 6
 - no newly cyclic module

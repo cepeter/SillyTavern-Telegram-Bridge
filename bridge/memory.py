@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from bridge.common import (
     logging,
     sqlite3,
@@ -114,33 +116,33 @@ def purge_hindsight_session(
     )
 
 
-def handle_memory_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict[str, str], command_text: str) -> None:
+def handle_memory_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict[str, str], command_text: str, *, send_text_fn: Callable[[str, str, str], object]) -> None:
     parts = command_text.split(None, 2)
     argument = parts[1].casefold() if len(parts) > 1 else "status"
     if argument == "scope":
         requested_scope = parts[2].casefold() if len(parts) > 2 else ""
         if requested_scope != "session":
-            send_text(token, chat_id, "Hindsight recall is fixed to the active session; broader scopes are disabled.")
+            send_text_fn(token, chat_id, "Hindsight recall is fixed to the active session; broader scopes are disabled.")
             return
-        send_text(token, chat_id, "Hindsight memory scope is already fixed to session.")
+        send_text_fn(token, chat_id, "Hindsight memory scope is already fixed to session.")
         return
     if argument in {"status", "on", "off"}:
         if argument in {"on", "off"}:
             set_meta(db, f"memory_mode:{chat_id}", argument)
         status = memory_mode(db, chat_id)
-        send_text(token, chat_id, f"Hindsight memory: {status}\nScope: {memory_scope(db, chat_id)}\nBank: {hindsight_bank_id(chat_id)}\nRecall is hard-filtered to the active session; character tags are provenance only.")
+        send_text_fn(token, chat_id, f"Hindsight memory: {status}\nScope: {memory_scope(db, chat_id)}\nBank: {hindsight_bank_id(chat_id)}\nRecall is hard-filtered to the active session; character tags are provenance only.")
         return
     if argument == "search":
         query = parts[2].strip() if len(parts) > 2 else ""
         if not query:
-            send_text(token, chat_id, "Use /memory search <query>.")
+            send_text_fn(token, chat_id, "Use /memory search <query>.")
             return
         results = recall_memory_results(db, chat_id, session, query, fields["name"], max_tokens=1600)
         lines = [str(getattr(result, "text", "") or "").strip() for result in results]
         lines = [f"- {line}" for line in lines if line][:5]
-        send_text(token, chat_id, "Recalled memories:\n" + ("\n".join(lines) if lines else "No matching memories found."))
+        send_text_fn(token, chat_id, "Recalled memories:\n" + ("\n".join(lines) if lines else "No matching memories found."))
         return
-    send_text(token, chat_id, "Use /memory on, /memory off, /memory status, or /memory search <query>.")
+    send_text_fn(token, chat_id, "Use /memory on, /memory off, /memory status, or /memory search <query>.")
 
 
 def get_session_summary(db: sqlite3.Connection, chat_id: str, session_id: str) -> tuple[str, int]:
@@ -212,4 +214,3 @@ def session_summary_for_prompt(db: sqlite3.Connection, chat_id: str, session: di
 # Explicit late imports replace transitional dependency injection.
 from bridge.common import submit_background
 from bridge.provider_port import ProviderPort
-from bridge.telegram import send_text

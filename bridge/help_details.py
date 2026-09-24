@@ -8,6 +8,65 @@ from pathlib import Path
 HELP_DETAILS_FILE = Path(__file__).with_name("help_details.json")
 
 
+HELP_CATEGORIES = {
+    "basic": [
+        ("/start", "Show the character greeting when Persona, World Info, and System Prompt are all enabled; otherwise show what's off and how to fix it."),
+
+        ("/help", "Open this guide. Use /help <command> to jump straight to one command."),
+        ("/status", "Show a formatted read-only session status message in Telegram."),
+        ("/new", "Name and create a fresh isolated session, then switch to it."),
+        ("/reset", "Open a confirmation panel to clear only the active session and its Hindsight memory. Other sessions stay untouched."),
+        ("/session", "Switch between sessions, create new ones, or delete inactive ones — deletion removes session data and its Hindsight documents."),
+        ("/sync", "Open session-scoped Live API Sync controls; synchronization uses the local SillyTavern API only, not chat files or JSONL transfer."),
+        ("/update", "Check the latest GitHub release. If you're already current, nothing happens. Otherwise a confirmation panel lets you update and restart."),
+    ],
+    "characters": [
+        ("/providers", "Open the provider and model catalog. Adapter-enabled entries can generate; catalog-only entries are view-only."),
+        ("/providers refresh", "Open the provider panel and refresh discoverable model catalogs."),
+        ("/providers health", "Open the provider panel and run health checks. Providers without /models use a bounded streaming chat probe."),
+        ("/character", "Open the character panel — pick a card, view info, delete safely, or get upload guidance."),
+        ("/persona", "Choose, create, edit, or disable a Persona. Delete only targets inactive, unreferenced ones."),
+        ("/world", "Open World Info selection — activate or disable one or more lorebooks."),
+        ("/note", "Open the Author's Note panel. Off clears it; User input waits for your next message."),
+        ("/systemprompt", "Open the native TXT System Prompt picker. The prompt body stays private."),
+        ("/language", "Choose the language for model replies in this session — Auto follows you, or pick a fixed language."),
+        ("/expression", "Off by default. Choose automatic sprite detection or pick a native sprite from the active card."),
+        ("/imagine", "Opt-in image generation. Opens a 1–4,000 character prompt panel, or use /imagine <prompt> when an image provider is configured."),
+    ],
+    "generation": [
+        ("/settings", "Open this session's generation panel — pick a reasoning level or set your own temperature, tokens, and sampling values."),
+        ("/stream on|off", "Toggle streaming preview on or off."),
+        ("/preset", "Open the preset panel — apply, save, or delete generation setting presets."),
+        ("/macro", "Open a panel, then send one message to preview supported SillyTavern macros"),
+        ("/stscript", "Open the safe STscript panel for Note or Reset — only allowlisted actions, no arbitrary scripts."),
+        ("/regen", "Generate a new response variant for the latest user turn."),
+        ("/swipe", "Browse stored response variants and keep the one you like."),
+        ("/branch", "Open the response branch selector for the active session."),
+        ("/continue", "Continue the latest assistant response from where it stopped."),
+        ("/edit", "Open a panel, then send replacement text for the latest user turn"),
+        ("/retry", "Retry the latest failed character response — no duplicate turns."),
+        ("/prompt", "Open a read-only prompt inspector with budget, memory/RAG, and group-context sections. Use /prompt text for the plain diagnostic output."),
+    ],
+    "memory_rag": [
+        ("/memory", "Open Hindsight memory controls. Recall is always limited to the active session."),
+        ("/memory curated", "Open the curated-memory panel to view durable distilled facts or refresh them with the utility model."),
+        ("/remember", "Open a panel, then send one explicit long-term fact to store in memory."),
+        ("/summarize", "Regenerate the active session's summary from its stored conversation."),
+        ("/databank", "Open Data Bank RAG controls. Same-name uploads create versions; use versions/activate to inspect or roll back."),
+    ],
+    "voice_group": [
+        ("/voice on|off", "Toggle automatic voice replies. Only dialogue in straight double quotes gets synthesized — narration stays silent."),
+        ("/voice_input on|off", "Open transcription, STT model, and language controls."),
+        ("/voice_input language", "Open the STT language panel — Auto, a fixed code, or User input."),
+        ("/group", "Open Forum Topic group controls, including invisible Director mode for model-selected speaker and pacing guidance."),
+        ("/group goal", "View the hidden, session-local Director objective for this Forum Topic group."),
+        ("/group goal <objective>", "Set or replace the hidden Director objective; it guides speaker choice and scene direction without entering the transcript."),
+        ("/scene", "Show the active session's structured scene state — location, weather, participants, and known facts."),
+        ("/scene refresh", "Rebuild structured scene state with the configured utility model without changing the transcript."),
+    ],
+}
+
+
 def _load_command_details() -> dict:
     try:
         payload = json.loads(HELP_DETAILS_FILE.read_text(encoding="utf-8"))
@@ -115,16 +174,65 @@ def _help_command_target(requested: str) -> tuple[str, int] | None:
     return base_match
 
 
-def send_help_command(token: str, chat_id: str, text: str, message_id: int | None = None, *, request_context) -> bool:
+def send_help_menu(
+    token: str,
+    chat_id: str,
+    category: str | None = None,
+    message_id: int | None = None,
+    command_index: int | None = None,
+    page: int = 0,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+) -> None:
+    method = "editMessageText" if message_id else "sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": help_text(category, command_index, page),
+        "reply_markup": help_markup(category, command_index, page),
+    }
+    if message_id:
+        payload["message_id"] = message_id
+    delivery_port.send_panel_request(
+        token,
+        method,
+        payload,
+        request_context=request_context,
+    )
+
+
+def send_help_command(
+    token: str,
+    chat_id: str,
+    text: str,
+    message_id: int | None = None,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+) -> bool:
     """Render a Help panel for an exact Help command without text fallback."""
     requested = normalize_help_command(text)
     if requested is None:
         return False
     target = _help_command_target(requested) if requested else None
     if target is None:
-        send_help_menu(token, chat_id, message_id=message_id, request_context=request_context)
+        send_help_menu(
+            token,
+            chat_id,
+            message_id=message_id,
+            delivery_port=delivery_port,
+            request_context=request_context,
+        )
     else:
-        send_help_menu(token, chat_id, target[0], message_id, target[1], request_context=request_context)
+        send_help_menu(
+            token,
+            chat_id,
+            target[0],
+            message_id,
+            target[1],
+            delivery_port=delivery_port,
+            request_context=request_context,
+        )
     return True
 
 
@@ -132,8 +240,23 @@ def is_help_callback(data: str) -> bool:
     return str(data or "").startswith("help:")
 
 
-def handle_help_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_help_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+):
     """Handle paginated help categories, command details, Back, and Close."""
+    message_id = message.get("message_id")
     if data.startswith("help:cmdpage:"):
         parts = data.split(":")
         if len(parts) != 4 or parts[2] not in HELP_CATEGORIES:
@@ -141,7 +264,10 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
             return True
         try:
             page = int(parts[3])
-            _options, current_page, total_pages = panel_page(HELP_CATEGORIES[parts[2]], page)
+            _options, current_page, total_pages = panel_page(
+                HELP_CATEGORIES[parts[2]],
+                page,
+            )
         except (TypeError, ValueError):
             answer_callback(token, str(callback.get("id", "")), "Help page expired")
             return True
@@ -149,7 +275,15 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
             answer_callback(token, str(callback.get("id", "")), "Help page expired")
             return True
         answer_callback(token, str(callback.get("id", "")), "Help")
-        send_help_menu(token, chat_id, parts[2], message.get("message_id", request_context=request_context), page=page)
+        send_help_menu(
+            token,
+            chat_id,
+            parts[2],
+            message_id,
+            page=page,
+            delivery_port=delivery_port,
+            request_context=request_context,
+        )
         return True
     if data.startswith("help:cmd:"):
         parts = data.split(":")
@@ -165,7 +299,15 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
             answer_callback(token, str(callback.get("id", "")), "Help choice expired")
             return True
         answer_callback(token, str(callback.get("id", "")), "Help")
-        send_help_menu(token, chat_id, parts[2], message.get("message_id", request_context=request_context), command_index)
+        send_help_menu(
+            token,
+            chat_id,
+            parts[2],
+            message_id,
+            command_index,
+            delivery_port=delivery_port,
+            request_context=request_context,
+        )
         return True
     if data.startswith("help:"):
         category = data.split(":", 1)[1]
@@ -174,24 +316,45 @@ def handle_help_callback(db, token, callback, answer_callback, data, chat_id, me
             try:
                 answer_callback(token, str(callback.get("id", "")), "Closed")
             except Exception:
-                logging.debug("Could not acknowledge closed help panel", exc_info=True)
+                logging.debug(
+                    "Could not acknowledge closed help panel",
+                    exc_info=True,
+                )
         elif category == "menu":
             answer_callback(token, str(callback.get("id", "")), "Help")
-            send_help_menu(token, chat_id, None, message.get("message_id", request_context=request_context))
+            send_help_menu(
+                token,
+                chat_id,
+                None,
+                message_id,
+                delivery_port=delivery_port,
+                request_context=request_context,
+            )
         elif category in HELP_CATEGORIES:
             answer_callback(token, str(callback.get("id", "")), "Help")
-            send_help_menu(token, chat_id, category, message.get("message_id", request_context=request_context))
+            send_help_menu(
+                token,
+                chat_id,
+                category,
+                message_id,
+                delivery_port=delivery_port,
+                request_context=request_context,
+            )
         else:
             answer_callback(token, str(callback.get("id", "")), "Help")
-            send_help_menu(token, chat_id, None, message.get("message_id", request_context=request_context))
+            send_help_menu(
+                token,
+                chat_id,
+                None,
+                message_id,
+                delivery_port=delivery_port,
+                request_context=request_context,
+            )
         return True
     return False
 
 
 # Explicit late imports replace transitional dependency injection.
 from bridge.callbacks import close_panel_message
-from bridge.help import (
-    HELP_CATEGORIES,
-    send_help_menu,
-)
+from bridge.delivery_port import DeliveryPort
 from bridge.panel_utils import panel_page

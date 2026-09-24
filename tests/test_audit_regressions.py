@@ -557,14 +557,19 @@ class AuditRegressionTests(unittest.TestCase):
 
         session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         sent = []
-        original_send = _m_memory.send_text
         original_recall = _m_memory.recall_memory_results
-        _m_memory.send_text = lambda _token, _chat_id, text: sent.append(text)
         _m_memory.recall_memory_results = lambda *_args, **_kwargs: [type("Result", (), {"text": "session fact"})()]
         try:
-            _m_command_routes.handle_memory_command(self.db, "token", "chat", session, {"name": "Test"}, "/memory search session fact")
+            _m_command_routes.handle_memory_command(
+                self.db,
+                "token",
+                "chat",
+                session,
+                {"name": "Test"},
+                "/memory search session fact",
+                send_text_fn=lambda _token, _chat_id, text: sent.append(text),
+            )
         finally:
-            _m_memory.send_text = original_send
             _m_memory.recall_memory_results = original_recall
         self.assertEqual(sent, ["Recalled memories:\n- session fact"])
 

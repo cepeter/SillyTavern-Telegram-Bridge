@@ -37,7 +37,13 @@ def _start_model_readiness_error(provider_port, api_key, current_model, session_
 
 def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command, session, session_id, current_model, current_persona, user_name, operation_id, services, *, request_context):
     if command.startswith("/help "):
-        send_help_command(request_context, token, chat_id, stripped)
+        send_help_command(
+            token,
+            chat_id,
+            stripped,
+            delivery_port=services.delivery,
+            request_context=request_context,
+        )
         return True
     if command in {"/start", "start"}:
         readiness_error = _start_model_readiness_error(
@@ -66,7 +72,12 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
         send_greeting_menu( token, chat_id, fields, user_name, request_context=request_context)
         return True
     if command == "/help":
-        send_help_menu( token, chat_id, request_context=request_context)
+        send_help_menu(
+            token,
+            chat_id,
+            delivery_port=services.delivery,
+            request_context=request_context,
+        )
         return True
     if command == "/new":
         start_session_name_input(db, token, chat_id, session, group_service=services.group)
@@ -205,7 +216,7 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
         send_memory_menu( token, chat_id, db, request_context=request_context)
         return True
     if command.startswith("/memory search "):
-        handle_memory_command(db, token, chat_id, session, fields, stripped)
+        handle_memory_command(db, token, chat_id, session, fields, stripped, send_text_fn=services.delivery.send_text)
         return True
     if command.startswith("/memory "):
         send_memory_menu( token, chat_id, db, request_context=request_context)
@@ -555,7 +566,6 @@ from bridge.groups import (
 )
 from bridge.help import (
     send_databank_menu,
-    send_help_menu,
     send_memory_menu,
     send_preset_menu,
     send_settings_menu,
@@ -565,7 +575,7 @@ from bridge.help import (
     send_voice_input_menu,
     send_voice_menu,
 )
-from bridge.help_details import send_help_command
+from bridge.help_details import send_help_command, send_help_menu
 from bridge.image_generation import handle_imagine_prompt
 from bridge.input_flows import (
     handle_inline_text_action,
