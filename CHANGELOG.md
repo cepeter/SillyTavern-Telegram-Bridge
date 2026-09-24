@@ -4,6 +4,38 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.022] - 2026-09-24
+
+### Added
+
+- Added Cline-free provider pass-through and Cline-PASS response-envelope handling for native API relay flows (#109).
+- Added streaming continuation support across provider boundaries (#108).
+- Added Director policy injection with explicit boundaries for group customization (#107).
+- Added static architecture enforcement to prevent back-edge regressions through the application layer (#106).
+
+### Changed
+
+- Refactored update routing into a decomposed service boundary with explicit provider-first model selection (#105).
+- Refactored final cycle retirement to remove the last runtime back-edge into the application boundary (#104).
+- Refactored final input flow into an explicit service boundary (#103).
+- Refactored native API scene delivery into its own boundary port (#102).
+- Refactored help/memory delivery into a dedicated v2 boundary (#101).
+- Refactored world and curated memory into an explicit delivery boundary (#100).
+- Refactored UI runtime cycle into a self-contained boundary wave (#99).
+- Refactored Director goal delivery into a dedicated boundary (#98).
+- Refactored reset command to enforce session/task ownership (#97).
+- Refactored input flow into an explicit service boundary (#96).
+- Refactored language runtime into a dedicated boundary (#95).
+- Refactored generation delivery into its own port (#94).
+- Refactored model router into an explicit provider port (#93).
+- Refactored group service into a v2 boundary with explicit ownership (#92).
+- Retired the application backedge for native API flow, completing the boundary refactor wave (#91).
+
+### Fixed
+
+- Fixed Cline-free provider response envelope handling to preserve stream continuity.
+- Fixed model router provider port to resolve transient routing fallbacks.
+
 ## [0.2.018] - 2026-09-20
 
 ### Added
