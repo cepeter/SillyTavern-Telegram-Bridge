@@ -399,6 +399,36 @@ needed. A model appearing in the catalog does not automatically make it runnable
 transport, endpoint, credentials, and streaming settings are validated before
 inference.
 
+### Outbound host policy
+
+List each trusted external provider or image-download host explicitly in your
+private environment file. An empty host list denies external destinations; the
+provider catalog cannot silently authorize its own endpoints.
+
+```dotenv
+SILLYTAVERN_PROVIDER_ALLOWED_HOSTS=provider.example,images.example
+SILLYTAVERN_RAG_ALLOWED_HOSTS=embedding.example
+SILLYTAVERN_HINDSIGHT_ALLOWED_HOSTS=memory.example
+```
+
+Entries are exact hostnames, without schemes, paths, ports, or wildcards.
+Loopback addresses and `localhost` remain available for local HTTP services.
+LAN and tailnet endpoints additionally require the corresponding
+`SILLYTAVERN_PROVIDER_PRIVATE_HOSTS`, `SILLYTAVERN_RAG_PRIVATE_HOSTS`, or
+`SILLYTAVERN_HINDSIGHT_PRIVATE_HOSTS` entry; external endpoints still require HTTPS.
+Metadata/link-local, unspecified, multicast, and reserved addresses are refused.
+
+The built-in provider, image, and embedding HTTP transport resolves DNS once per
+connection, validates every returned address, and connects to an approved numeric
+address while retaining the original hostname for TLS verification. Redirects
+cannot change the host, scheme, or port. Environment/OS proxy settings are not
+inherited. These controls do not replace trust in your chosen provider or in the
+local configuration file. Hindsight's SDK also receives endpoint allowlist
+validation; its own HTTP transport is separate from this built-in transport.
+
+Existing installations must populate these host lists before upgrading; otherwise
+external model requests are intentionally refused. No credentials belong in URLs.
+
 The provider panel is the canonical way to select models:
 
 ```text

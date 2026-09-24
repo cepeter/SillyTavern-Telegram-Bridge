@@ -6,6 +6,7 @@ import base64
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import os
@@ -60,7 +61,8 @@ class ImageGenerationTests(unittest.TestCase):
             return _Response({"data": [{"b64_json": base64.b64encode(raw).decode(), "revised_prompt": "revised"}]})
 
         _m_image_generation.strict_urlopen = fake_urlopen
-        result = _m_image_generation.generate_image("test-image::test-model", "a small moon", "1024x1024")
+        with patch.dict(os.environ, {"SILLYTAVERN_PROVIDER_ALLOWED_HOSTS": "images.example"}):
+            result = _m_image_generation.generate_image("test-image::test-model", "a small moon", "1024x1024")
         body = json.loads(captured[0][0].data.decode())
         self.assertEqual(result, (raw, "revised", "test-image::test-model"))
         self.assertEqual(body["model"], "test-model")
