@@ -22,6 +22,7 @@ import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
 import bridge.generation as _m_generation
 import bridge.provider_transport as _m_provider_transport
+import bridge.reset_panel as _m_reset_panel
 from bridge.model_router import ModelRouter
 import bridge.language as _m_language
 import bridge.main as _m_main
@@ -432,22 +433,23 @@ class AuditRegressionTests(unittest.TestCase):
         }
         sent = []
         original_card = _m_message_commands.card_fields_from_file
-        original_panel = _m_message_commands.send_reset_confirmation_menu
+        original_panel = _m_message_commands.send_panel_request
         original_purge = _m_memory.purge_hindsight_session
         original_reply = _m_message_commands.send_reply
         panel = []
         _m_message_commands.card_fields_from_file = lambda _filename: fields
-        _m_message_commands.send_reset_confirmation_menu = lambda *_args, **_kwargs: panel.append(True)
+        _m_message_commands.send_panel_request = lambda _token, method, payload, **_kwargs: panel.append((method, payload)) or {}
         _m_memory.purge_hindsight_session = lambda _db, _chat_id, _session_id: None
         _m_message_commands.send_reply = lambda _token, _chat_id, text, *_args: sent.append(text)
         try:
             make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, fields, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service(), provider=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("reset must not generate")))))
-            self.assertEqual(panel, [True])
+            self.assertEqual(panel[0][0], "sendMessage")
+            self.assertEqual(panel[0][1]["reply_markup"]["inline_keyboard"][0][0]["callback_data"], "reset:confirm")
             self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
             _m_panel_callback_routes.reset_session(self.db, "token", "chat", session, operation_id=902, memory_service=make_test_memory_service())
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_message_commands.send_reset_confirmation_menu = original_panel
+            _m_message_commands.send_panel_request = original_panel
             _m_memory.purge_hindsight_session = original_purge
             _m_message_commands.send_reply = original_reply
 
@@ -460,17 +462,11 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(_m_message_commands.operation_phase(self.db, 902), "applied")
 
     def test_reset_confirmation_panel_has_destructive_confirm_and_cancel(self):
-        calls = []
-        original_request = _m_message_commands.send_panel_request
-        _m_message_commands.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
-        try:
-            _m_message_commands.send_reset_confirmation_menu("token", "chat", request_context=make_test_request_context(self.db))
-        finally:
-            _m_message_commands.send_panel_request = original_request
-        self.assertEqual(len(calls), 1)
+        method, payload = _m_reset_panel.reset_confirmation_request("chat")
+        self.assertEqual(method, "sendMessage")
         expected = "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n• Delete session SQLite data, and session documents.\n\nThis cannot be undone."
-        self.assertEqual(calls[0][1]["text"], expected)
-        markup = calls[0][1]["reply_markup"]["inline_keyboard"]
+        self.assertEqual(payload["text"], expected)
+        markup = payload["reply_markup"]["inline_keyboard"]
         callbacks = {button["callback_data"] for row in markup for button in row}
         self.assertEqual(callbacks, {"reset:confirm", "reset:cancel"})
 

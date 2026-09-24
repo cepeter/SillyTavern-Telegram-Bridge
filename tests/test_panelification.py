@@ -122,7 +122,7 @@ class PanelificationTests(unittest.TestCase):
         old_macro = _m_input_flows.handle_macro_command
         _m_command_routes.handle_memory_command = lambda *args: memory_calls.append(args[-1])
         _m_command_routes.handle_group_command = lambda *args, **_kwargs: group_calls.append(args[4])
-        _m_input_flows.handle_macro_command = lambda *args: macro_calls.append(args[-1])
+        _m_input_flows.handle_macro_command = lambda *args, **_kwargs: macro_calls.append(args[-1])
         try:
             self.assertTrue(self._route("/memory search hidden fact"))
             self.assertEqual(memory_calls, ["/memory search hidden fact"])

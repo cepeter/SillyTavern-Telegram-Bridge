@@ -46,13 +46,17 @@ class ResetBehaviorTests(unittest.TestCase):
             "expires_at": time.time() + 600,
         }))
         opened = []
-        original_menu = _m_message_commands.send_reset_confirmation_menu
-        setattr(_m_message_commands, "send_reset_confirmation_menu", lambda *_args, **_kwargs: opened.append(True))
+        original_request = _m_message_commands.send_panel_request
+        _m_message_commands.send_panel_request = (
+            lambda _token, method, payload, **_kwargs:
+            opened.append((method, payload)) or {}
+        )
         try:
             make_test_conversation_service().process_message(self.db, "token", "key", _m_memory_curator.DEFAULT_MODEL, {}, "chat", "/reset", services=make_test_application_services(memory=make_test_memory_service()))
         finally:
-            setattr(_m_message_commands, "send_reset_confirmation_menu", original_menu)
-        self.assertEqual(opened, [True])
+            _m_message_commands.send_panel_request = original_request
+        self.assertEqual(opened[0][0], "sendMessage")
+        self.assertEqual(opened[0][1]["reply_markup"]["inline_keyboard"][0][0]["callback_data"], "reset:confirm")
         self.assertIn('"action": "edit"', _m_session_naming.get_meta(self.db, "text_action_input:chat", ""))
 
     def test_confirmed_reset_sends_visible_completion_message(self):

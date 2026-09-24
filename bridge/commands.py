@@ -381,7 +381,7 @@ def send_note_menu(token: str, chat_id: str, current_note: str, message_id: int 
     send_panel_request(token, method, payload, request_context=request_context)
 
 
-def handle_macro_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict, command_text: str) -> None:
+def handle_macro_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict, command_text: str, *, request_context) -> None:
     parts = command_text.split(None, 1)
     if parts[0].casefold() == "/macro":
         raw = parts[1] if len(parts) > 1 else ""
@@ -390,7 +390,13 @@ def handle_macro_command(db: sqlite3.Connection, token: str, chat_id: str, sessi
     script = parts[1].strip() if len(parts) > 1 else ""
     action, _, argument = script.partition(" ")
     if action.casefold() == "reset":
-        send_reset_confirmation_menu(token, chat_id)
+        method, payload = reset_confirmation_request(chat_id)
+        send_panel_request(
+            token,
+            method,
+            payload,
+            request_context=request_context,
+        )
     else:
         send_text(token, chat_id, "Use /stscript to open the safe Reset action panel.")
 
@@ -473,7 +479,7 @@ from bridge.memory_backend import (
     memory_mode,
     memory_scope,
 )
-from bridge.message_commands import send_reset_confirmation_menu
+from bridge.reset_panel import reset_confirmation_request
 from bridge.rag_core import (
     data_bank_documents,
     rag_citation_footer,

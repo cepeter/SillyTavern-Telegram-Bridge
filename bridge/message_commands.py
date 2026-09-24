@@ -7,21 +7,6 @@ from bridge.conversation_service import PreparedMessage
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices
 
-def send_reset_confirmation_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
-    method = "editMessageText" if message_id else "sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": "Reset active session and purge its memory?\n\nThis will:\n• Reset only the active session conversation.\n• Delete Hindsight memories for this active session only.\n• Delete session SQLite data, and session documents.\n\nThis cannot be undone.",
-        "reply_markup": {"inline_keyboard": [
-            [{"text": "✅ Confirm active-session reset", "callback_data": "reset:confirm"}],
-            [{"text": "❌ Cancel", "callback_data": "reset:cancel"}],
-        ]},
-    }
-    if message_id:
-        payload["message_id"] = message_id
-    send_panel_request(token, method, payload, request_context=request_context)
-
-
 def reset_session(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], operation_id: int | str | None = None, *, memory_service: MemoryService) -> None:
     if operation_id is not None:
         if operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, "reset"):
@@ -238,7 +223,13 @@ def prepare_message(db: sqlite3.Connection, token: str, api_key: str, model: str
             db.commit()
             return
     if command == "/reset":
-        send_reset_confirmation_menu( token, chat_id, request_context=request_context)
+        method, payload = reset_confirmation_request(chat_id)
+        send_panel_request(
+            token,
+            method,
+            payload,
+            request_context=request_context,
+        )
         return
     if services.input_flow.handle_pending(
         db,
@@ -350,6 +341,7 @@ from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.performance import timed_call
+from bridge.reset_panel import reset_confirmation_request
 from bridge.rag_core import (
     rag_citation_footer,
     rag_context_for_prompt,
