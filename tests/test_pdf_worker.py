@@ -11,6 +11,7 @@ import bridge.callbacks as _m_callbacks
 import bridge.telegram as _m_telegram
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.language as _m_language
 import bridge.rag as _m_rag
 import bridge.session_naming as _m_session_naming
 class PdfWorkerTests(unittest.TestCase):
@@ -48,7 +49,10 @@ class PdfWorkerTests(unittest.TestCase):
             _m_rag.extract_data_bank_text("fixture.pdf", b"not a pdf")
 
         first = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
-        _m_panel_callback_routes.set_response_language(self.db, "chat", first["session_id"], "id")
+        _m_language.set_response_language(
+            self.db, "chat", first["session_id"], "id",
+            update_session=_m_telegram.update_session,
+        )
         second = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="second")
 
         self.assertEqual(

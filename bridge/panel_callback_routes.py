@@ -58,21 +58,21 @@ def handle_note_callback(db, token, callback, answer_callback, data, chat_id, me
     return False
 
 
-def handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, delivery_port: DeliveryPort, request_context):
     """Handle model response language selection and pagination callbacks."""
     if data.startswith("language:"):
         value = data.split(":", 1)[1]
         if value.startswith("page:"):
             page = int(value.split(":", 1)[1])
             answer_callback(token, str(callback.get("id", "")), "Page")
-            send_language_menu( token, chat_id, session.get("response_language") or "auto", message.get("message_id"), page, request_context=request_context)
+            send_language_menu( token, chat_id, session.get("response_language") or "auto", message.get("message_id"), page, delivery_port=delivery_port, request_context=request_context)
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
             remove_inline_keyboard(db, token, callback)
             return True
         try:
-            language = set_response_language(db, chat_id, session_id, value, operation_id=operation_id)
+            language = set_response_language(db, chat_id, session_id, value, operation_id=operation_id, update_session=update_session)
         except ValueError:
             answer_callback(token, str(callback.get("id", "")), "Language choice expired")
             return True
@@ -391,7 +391,7 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         return True
     if handle_note_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context):
         return True
-    if handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context):
+    if handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, delivery_port=delivery_port, request_context=request_context):
         return True
     if handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, memory_service=memory_service):
         return True
