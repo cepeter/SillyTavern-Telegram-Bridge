@@ -46,6 +46,34 @@ class UpdatePanelTests(unittest.TestCase):
             unit,
         )
 
+
+    def test_empty_unreleased_section_is_not_local_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "CHANGELOG.md"
+            path.write_text(
+                "# Changelog\n\n## [Unreleased]\n\n## [0.2.023] - 2026-09-24\n",
+                encoding="utf-8",
+            )
+            self.assertFalse(_m_update._changelog_has_unreleased(path))
+
+    def test_empty_unreleased_subheadings_are_not_local_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "CHANGELOG.md"
+            path.write_text(
+                "# Changelog\n\n## [Unreleased]\n\n### Added\n\n### Fixed\n\n## [0.2.023] - 2026-09-24\n",
+                encoding="utf-8",
+            )
+            self.assertFalse(_m_update._changelog_has_unreleased(path))
+
+    def test_populated_unreleased_section_is_local_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "CHANGELOG.md"
+            path.write_text(
+                "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- Fixed update status.\n\n## [0.2.023] - 2026-09-24\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(_m_update._changelog_has_unreleased(path))
+
     def test_update_panel_uses_installed_version_and_release_notes(self):
         text = _m_update.update_menu_text("0.2.007", "0.2.008", "Added safer updates.")
         self.assertIn("Installed: v0.2.007", text)
@@ -63,7 +91,7 @@ class UpdatePanelTests(unittest.TestCase):
         self.assertIn("Status: Local unreleased changes", text)
         self.assertNotIn("Confirm update", text)
 
-    def test_unreleased_changelog_uses_latest_released_heading(self):
+    def test_empty_unreleased_changelog_uses_latest_released_heading(self):
         old_live = _m_update.UPDATE_LIVE_DIR
         old_repo = _m_update.UPDATE_REPO_DIR
         with tempfile.TemporaryDirectory() as directory:
@@ -77,7 +105,7 @@ class UpdatePanelTests(unittest.TestCase):
             _m_update.UPDATE_REPO_DIR = repo
             try:
                 self.assertEqual(_m_update.installed_bridge_version(), "0.2.013")
-                self.assertTrue(_m_update.installed_bridge_has_unreleased())
+                self.assertFalse(_m_update.installed_bridge_has_unreleased())
             finally:
                 _m_update.UPDATE_LIVE_DIR = old_live
                 _m_update.UPDATE_REPO_DIR = old_repo

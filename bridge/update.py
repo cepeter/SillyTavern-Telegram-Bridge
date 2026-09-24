@@ -75,10 +75,20 @@ def _changelog_version(path: Path) -> str:
 
 def _changelog_has_unreleased(path: Path) -> bool:
     try:
-        match = re.search(r"^## \[([^]]+)\]", path.read_text(encoding="utf-8"), re.MULTILINE)
+        text = path.read_text(encoding="utf-8")
     except OSError:
         return False
-    return bool(match and match.group(1).casefold() == "unreleased")
+    match = re.search(
+        r"^## \[Unreleased\]\s*(.*?)(?=^## \[|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL | re.IGNORECASE,
+    )
+    if not match:
+        return False
+    return any(
+        line.strip() and not line.lstrip().startswith("### ")
+        for line in match.group(1).splitlines()
+    )
 
 
 def installed_bridge_version() -> str:
