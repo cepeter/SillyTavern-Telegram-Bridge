@@ -264,37 +264,6 @@ def send_world_menu(token: str, chat_id: str, current_world: str, message_id: in
         raise
 
 
-def install_world_info_document(filename: str, raw: bytes) -> Path:
-    name = Path(str(filename)).name
-    if name != str(filename) or Path(name).suffix != ".json" or name in {"", ".", ".."}:
-        raise ValueError("World Info upload must be a JSON file with a simple filename")
-    try:
-        payload = json.loads(raw.decode("utf-8-sig"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("World Info JSON is invalid") from exc
-    if not isinstance(payload, dict) or not isinstance(payload.get("entries"), dict):
-        raise ValueError("World Info JSON must contain an entries object")
-    WORLD_DIR.mkdir(parents=True, exist_ok=True)
-    target = WORLD_DIR / name
-    if target.exists():
-        raise FileExistsError(f"World Info file already exists: {name}")
-    temporary = tempfile.NamedTemporaryFile(prefix=".world-", suffix=".tmp", dir=WORLD_DIR, delete=False)
-    try:
-        temporary.write(raw)
-        temporary.flush()
-        os.fsync(temporary.fileno())
-        temporary.close()
-        os.replace(temporary.name, target)
-    except Exception:
-        try:
-            temporary.close()
-        except Exception:
-            logging.debug("Could not close temporary provider catalog file", exc_info=True)
-        Path(temporary.name).unlink(missing_ok=True)
-        raise
-    return target
-
-
 def delete_world_info_file(db, chat_id: str, filename: str) -> None:
     path = safe_world_path(filename)
     if path is None:
@@ -316,7 +285,6 @@ def answer_callback(token: str, callback_id: str, text: str) -> None:
 import json
 import logging
 import os
-import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -334,7 +302,6 @@ from bridge.common import (
 )
 from bridge.config import (
     MODEL_CACHE_FILE,
-    WORLD_DIR,
 )
 from bridge.provider_catalog import load_provider_catalog
 from bridge.provider_transport import opencode_muse_headers

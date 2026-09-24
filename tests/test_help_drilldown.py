@@ -195,7 +195,7 @@ class HelpDrilldownTests(unittest.TestCase):
             _m_director_goals.set_director_goal(self.db, "chat", session["session_id"], "Reveal the door")
             _m_status_panels.send_director_goal_menu("token", "chat", self.db, session, request_context=make_test_request_context(self.db, session["session_id"]))
             self.assertIn("goal:set", str(calls[-1]))
-            _m_memory_curator.send_curated_memory_menu("token", "chat", self.db, session, request_context=make_test_request_context(self.db, session["session_id"]))
+            _m_status_panels.send_curated_memory_menu("token", "chat", self.db, session, request_context=make_test_request_context(self.db, session["session_id"]))
             self.assertIn("curated:refresh", str(calls[-1]))
         finally:
             _m_status_panels.send_panel_message = original_panel

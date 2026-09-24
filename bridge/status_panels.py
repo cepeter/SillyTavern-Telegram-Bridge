@@ -283,8 +283,15 @@ def handle_feature_panel_callback(db, token, callback, answer_callback, data, ch
 
 def send_curated_memory_menu(token, chat_id, db, session, message_id=None, *, request_context):
     text = curated_memory_text(db, chat_id, session["session_id"])
-    markup = {"inline_keyboard": [[{"text": "🔄 Refresh", "callback_data": "curated:refresh"}], [{"text": "⬅️ Memory", "callback_data": "curated:back"}, {"text": "❌ Close", "callback_data": "curated:close"}]]}
-    send_panel_message(token, chat_id, "Curated memory\n\n" + (text or "No curated durable memories yet."), markup, message_id, request_context=request_context)
+    panel_text, markup = curated_memory_panel(text)
+    send_panel_message(
+        token,
+        chat_id,
+        panel_text,
+        markup,
+        message_id,
+        request_context=request_context,
+    )
 
 
 def send_summary_menu(token, chat_id, db, session, message_id=None, *, request_context):
@@ -318,6 +325,7 @@ from bridge.database import (
     get_meta,
     task_model_for_session,
 )
+from bridge.curated_memory_panel import curated_memory_panel
 from bridge.director_goal_panel import director_goal_panel
 from bridge.director_goals import (
     get_director_goal,

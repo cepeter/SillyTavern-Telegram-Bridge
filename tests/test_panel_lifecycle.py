@@ -192,9 +192,7 @@ class PanelLifecycleTests(unittest.TestCase):
         _m_telegram.bind_panel_session(self.db, "chat", 107, session["session_id"], "user-1")
         answers = []
         original_answer = _m_callback_dispatch.answer_callback
-        original_send = _m_memory_curator.send_text
         _m_callback_dispatch.answer_callback = lambda _token, _callback_id, text: answers.append(text)
-        _m_memory_curator.send_text = lambda *_args, **_kwargs: []
         callback = {
             "id": "callback-107",
             "from": {"id": "user-2"},
@@ -205,7 +203,6 @@ class PanelLifecycleTests(unittest.TestCase):
             _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
         finally:
             _m_callback_dispatch.answer_callback = original_answer
-            _m_memory_curator.send_text = original_send
         self.assertEqual(answers, ["This panel belongs to another user"])
         self.assertEqual(
             _m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)["author_note"],

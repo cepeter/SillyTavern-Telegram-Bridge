@@ -336,6 +336,34 @@ def _memory_curator_post_retain(
         logging.warning("Could not queue memory curator for %s/%s", chat_id, session.get("session_id"), exc_info=True)
 
 
+def send_curated_memory_menu(
+    token: str,
+    chat_id: str,
+    db: sqlite3.Connection,
+    session: dict[str, str],
+    message_id: int | None = None,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+) -> None:
+    text = curated_memory_text(db, chat_id, session["session_id"])
+    panel_text, markup = curated_memory_panel(text)
+    method = "editMessageText" if message_id else "sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": panel_text,
+        "reply_markup": markup,
+    }
+    if message_id:
+        payload["message_id"] = message_id
+    delivery_port.send_panel_request(
+        token,
+        method,
+        payload,
+        request_context=request_context,
+    )
+
+
 def handle_curated_memory_command(
     db: sqlite3.Connection,
     token: str,
@@ -346,17 +374,25 @@ def handle_curated_memory_command(
     command: str,
     *,
     provider_port: ProviderPort,
+    delivery_port: DeliveryPort,
     request_context,
 ) -> None:
     suffix = command[len("/memory curated"):].strip().casefold()
     if suffix in {"", "status"}:
-        send_curated_memory_menu( token, chat_id, db, session, request_context=request_context)
+        send_curated_memory_menu(
+            token,
+            chat_id,
+            db,
+            session,
+            delivery_port=delivery_port,
+            request_context=request_context,
+        )
         return
     if suffix == "refresh":
         if memory_mode(db, chat_id) != "on":
-            send_text(token, chat_id, "Hindsight memory is off. Enable /memory first.")
+            delivery_port.send_text(token, chat_id, "Hindsight memory is off. Enable /memory first.")
             return
-        send_typing(token, chat_id)
+        delivery_port.send_typing(token, chat_id)
         items = curate_memory_now(
             db,
             api_key,
@@ -365,14 +401,14 @@ def handle_curated_memory_command(
             str(fields.get("name") or "unknown"),
             provider_port=provider_port,
         )
-        send_text(
+        delivery_port.send_text(
             token,
             chat_id,
             "Curated memory refreshed:\n" +
             (curated_memory_text(db, chat_id, session["session_id"]) if items is not None else "No curated memory update was produced."),
         )
         return
-    send_text(token, chat_id, "Use /memory curated or /memory curated refresh.")
+    delivery_port.send_text(token, chat_id, "Use /memory curated or /memory curated refresh.")
 
 
 def _memory_curator_command_route(
@@ -395,7 +431,7 @@ def _memory_curator_command_route(
     services,
 ):
     if command == "/memory curated" or command.startswith("/memory curated "):
-        handle_curated_memory_command(db, token, api_key, chat_id, session, fields, command, provider_port=services.provider, request_context=request_context)
+        handle_curated_memory_command(db, token, api_key, chat_id, session, fields, command, provider_port=services.provider, delivery_port=services.delivery, request_context=request_context)
         return True
     return False
 
@@ -425,15 +461,12 @@ from bridge.database import (
     task_model_for_session,
     write_transaction,
 )
-from bridge.media import send_typing
+from bridge.delivery_port import DeliveryPort
+from bridge.curated_memory_panel import curated_memory_panel
 from bridge.provider_port import ProviderPort
 from bridge.memory_backend import (
     _retain_with_client,
     hindsight_session_prefix,
     memory_mode,
 )
-from bridge.status_panels import send_curated_memory_menu
-from bridge.telegram import (
-    load_session,
-    send_text,
-)
+from bridge.telegram import load_session
