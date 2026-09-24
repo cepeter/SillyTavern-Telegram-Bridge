@@ -152,7 +152,7 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
             send_text(token, chat_id, f"Image generation unavailable: {exc}")
         return True
     if command == "/expression":
-        send_expression_menu( token, chat_id, session, db, request_context=request_context)
+        send_expression_menu( token, chat_id, session, db, delivery_port=delivery_port, request_context=request_context)
         return True
     if command == "/stream" or command.startswith("/stream "):
         send_stream_menu( token, chat_id, db, request_context=request_context)

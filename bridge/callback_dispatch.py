@@ -159,6 +159,7 @@ def process_callback(
             operation_id,
             sender_id=sender,
             group_service=services.group,
+            input_flow_service=services.input_flow,
             request_context=request_context,
         )
         return

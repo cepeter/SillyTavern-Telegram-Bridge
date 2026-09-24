@@ -143,7 +143,7 @@ def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, m
     return False
 
 
-def handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, delivery_port: DeliveryPort, request_context):
     """Handle manual, automatic, and disabled expression modes."""
     if not data.startswith("expression:"):
         return False
@@ -154,7 +154,7 @@ def handle_expression_callback(db, token, callback, answer_callback, data, chat_
         except ValueError:
             page = 0
         answer_callback(token, str(callback.get("id", "")), "Page updated")
-        send_expression_menu( token, chat_id, session, db, message.get("message_id"), page, request_context=request_context)
+        send_expression_menu( token, chat_id, session, db, message.get("message_id"), page, delivery_port=delivery_port, request_context=request_context)
         return True
     if value == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
@@ -167,7 +167,7 @@ def handle_expression_callback(db, token, callback, answer_callback, data, chat_
     set_meta(db, expression_last_key(chat_id, session_id), "")
     db.commit()
     answer_callback(token, str(callback.get("id", "")), "Expression updated")
-    send_expression_menu( token, chat_id, session, db, message.get("message_id"), request_context=request_context)
+    send_expression_menu( token, chat_id, session, db, message.get("message_id"), delivery_port=delivery_port, request_context=request_context)
     return True
 
 
@@ -385,7 +385,7 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         request_context=request_context,
     ):
         return True
-    if handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context):
+    if handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, delivery_port=delivery_port, request_context=request_context):
         return True
     if handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context):
         return True

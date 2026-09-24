@@ -39,11 +39,21 @@ def make_test_request_context(
     return RequestContext(db, session_id, actor_id)
 
 
-def make_test_input_flow_service(*, handle_pending_backend=None) -> InputFlowService:
+def make_test_input_flow_service(
+    *,
+    handle_pending_backend=None,
+    start_session_name_backend=None,
+) -> InputFlowService:
     if handle_pending_backend is None:
         from bridge.input_flows import handle_pending_input
         handle_pending_backend = handle_pending_input
-    return InputFlowService(handle_pending_backend=handle_pending_backend)
+    if start_session_name_backend is None:
+        from bridge.session_naming import start_session_name_input
+        start_session_name_backend = start_session_name_input
+    return InputFlowService(
+        handle_pending_backend=handle_pending_backend,
+        start_session_name_backend=start_session_name_backend,
+    )
 
 
 def make_test_delivery_port(
