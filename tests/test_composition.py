@@ -26,6 +26,7 @@ import bridge.help as _m_help
 import bridge.main as _m_main
 import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.runtime_lifecycle as _m_runtime
+import bridge.update_callback_routing as _m_update_callback_routing
 import bridge.update_routing as _m_update_routing
 import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
@@ -1270,7 +1271,7 @@ class StartupCompositionTests(unittest.TestCase):
                  patch.object(_m_runtime, "stop_phase3_sync_worker", return_value=True), \
                  patch.object(_m_runtime, "shutdown_background_executors", return_value=True), \
                  patch.object(_m_runtime, "run_database_maintenance"), \
-                 patch.object(_m_update_routing, "answer_callback"):
+                 patch.object(_m_update_callback_routing, "answer_callback"):
                 self.assertEqual(_m_runtime.run_bridge_runtime(services, {"name": "Mira"}), 0)
         finally:
             _m_runtime._SHUTDOWN_EVENT.clear()

@@ -450,17 +450,19 @@ class JobServiceSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("process_image_job", source)
 
     def test_update_routing_durable_intake_uses_job_service(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "update_routing.py"
-        ).read_text(encoding="utf-8")
-        routing_chunk = source[source.index("def route_update"):]
-        self.assertNotIn("enqueue_job(", routing_chunk)
-        self.assertNotIn(
-            "submit_durable_chat_job(",
-            routing_chunk,
-        )
-        self.assertIn("services.jobs.enqueue(", routing_chunk)
-        self.assertIn("services.jobs.submit(", routing_chunk)
+        bridge = Path(__file__).parents[1] / "bridge"
+        coordinator = (bridge / "update_routing.py").read_text(encoding="utf-8")
+        callback = (bridge / "update_callback_routing.py").read_text(encoding="utf-8")
+        message = (bridge / "update_message_routing.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("services.jobs.enqueue(", coordinator)
+        self.assertNotIn("services.jobs.submit(", coordinator)
+
+        for source in (callback, message):
+            self.assertNotIn("enqueue_job(", source)
+            self.assertNotIn("submit_durable_chat_job(", source)
+            self.assertIn("services.jobs.enqueue(", source)
+            self.assertIn("services.jobs.submit(", source)
 
 
 if __name__ == "__main__":

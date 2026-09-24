@@ -38,18 +38,38 @@ class MainDecompositionTests(unittest.TestCase):
 
     def test_update_routing_has_focused_owner(self):
         routing_path = BRIDGE_DIR / "update_routing.py"
+        callback_path = BRIDGE_DIR / "update_callback_routing.py"
+        message_path = BRIDGE_DIR / "update_message_routing.py"
         self.assertTrue(routing_path.is_file(), "update routing module must exist")
+        self.assertTrue(callback_path.is_file(), "callback routing module must exist")
+        self.assertTrue(message_path.is_file(), "message routing module must exist")
 
-        expected = {
-            "route_update",
-            "complete_update",
-            "is_long_running_command",
-        }
         routing_functions = _top_level_functions(routing_path)
+        callback_functions = _top_level_functions(callback_path)
+        message_functions = _top_level_functions(message_path)
         main_functions = _top_level_functions(BRIDGE_DIR / "main.py")
 
-        self.assertTrue(expected <= routing_functions)
-        self.assertTrue(expected.isdisjoint(main_functions))
+        self.assertTrue({"route_update", "complete_update"} <= routing_functions)
+        self.assertNotIn("is_long_running_command", routing_functions)
+        self.assertIn("route_callback_update", callback_functions)
+        self.assertTrue(
+            {
+                "route_edited_message_update",
+                "route_message_update",
+                "is_long_running_command",
+            }
+            <= message_functions
+        )
+        self.assertTrue(
+            {
+                "route_update",
+                "complete_update",
+                "route_callback_update",
+                "route_edited_message_update",
+                "route_message_update",
+                "is_long_running_command",
+            }.isdisjoint(main_functions)
+        )
 
     def test_runtime_lifecycle_has_focused_owner(self):
         lifecycle_path = BRIDGE_DIR / "runtime_lifecycle.py"
