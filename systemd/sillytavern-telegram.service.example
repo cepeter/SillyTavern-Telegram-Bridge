@@ -7,6 +7,7 @@ WorkingDirectory=%h/sillytavern-telegram-bridge
 Environment=SILLYTAVERN_ENV_FILE=%h/.local/share/sillytavern-telegram/.env
 Environment=SILLYTAVERN_BRIDGE_HOME=%h/.local/share/sillytavern-telegram
 Environment=SILLYTAVERN_BRIDGE_SOURCE_DIR=%h/sillytavern-telegram-bridge
+Environment=SILLYTAVERN_LIVE_BRIDGE_DIR=%h/.local/share/sillytavern-telegram/live
 ExecStart=%h/sillytavern-telegram-bridge/.venv/bin/python %h/sillytavern-telegram-bridge/sillytavern_telegram_bridge.py
 Restart=on-failure
 RestartSec=5

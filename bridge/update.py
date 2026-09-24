@@ -11,7 +11,24 @@ from pathlib import Path
 
 UPDATE_REPO = "cepeter/SillyTavern-Telegram-Bridge"
 UPDATE_CANONICAL_GIT_URL = f"https://github.com/{UPDATE_REPO}.git"
-UPDATE_LIVE_DIR = Path(os.environ.get("SILLYTAVERN_LIVE_BRIDGE_DIR", str(Path.home() / ".hermes/scripts")))
+
+
+def _resolve_update_live_dir(environ) -> Path:
+    bridge_home = Path(
+        environ.get(
+            "SILLYTAVERN_BRIDGE_HOME",
+            str(Path.home() / ".local/share/sillytavern-telegram"),
+        )
+    )
+    return Path(
+        environ.get(
+            "SILLYTAVERN_LIVE_BRIDGE_DIR",
+            str(bridge_home / "live"),
+        )
+    )
+
+
+UPDATE_LIVE_DIR = _resolve_update_live_dir(os.environ)
 
 
 def _is_bridge_checkout(path: Path) -> bool:
