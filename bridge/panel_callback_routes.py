@@ -108,7 +108,7 @@ def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, m
     return False
 
 
-def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, delivery_port: DeliveryPort, request_context):
     """Handle response variant browsing and keep/cancel callbacks."""
     if data.startswith("swipe:"):
         action = data.split(":", 1)[1]
@@ -127,7 +127,7 @@ def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, m
             position = indexes.index(current) if current in indexes else 0
             position = (position - 1) % len(indexes) if action == "prev" else (position + 1) % len(indexes)
             answer_callback(token, str(callback.get("id", "")), f"Variant {indexes[position]}")
-            edit_swipe_menu( token, db, callback, session_id, indexes[position], variants, request_context=request_context)
+            edit_swipe_menu( token, db, callback, session_id, indexes[position], variants, delivery_port=delivery_port, request_context=request_context)
             return True
         if action == "keep":
             if user_row:
@@ -366,7 +366,7 @@ def handle_greeting_callback(
     return True
 
 
-def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, provider_port: ProviderPort, memory_service, persona_service, sync_service: SyncService, request_context):
+def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, provider_port: ProviderPort, delivery_port: DeliveryPort, memory_service, persona_service, sync_service: SyncService, request_context):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(db, token, callback, data, chat_id)
@@ -429,7 +429,7 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         request_context=request_context,
     ):
         return True
-    return handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context)
+    return handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, delivery_port=delivery_port, request_context=request_context)
 
 
 def handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context):
@@ -866,6 +866,7 @@ from bridge.greetings import (
     send_greeting_menu,
 )
 from bridge.group_service import GroupService
+from bridge.delivery_port import DeliveryPort
 from bridge.provider_port import ProviderPort
 from bridge.groups import (
     apply_group_setup_character,

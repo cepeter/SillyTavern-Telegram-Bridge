@@ -61,3 +61,45 @@ def test_startup_binds_delivery_port_to_canonical_concrete_owners():
         "delete_outgoing_message_row=delete_outgoing_message_row",
     ):
         assert binding in source
+
+
+def test_generation_imports_no_concrete_delivery_modules():
+    imports = imported_modules("generation.py")
+    assert "bridge.media" not in imports
+    assert "bridge.telegram" not in imports
+
+
+def test_generation_has_no_module_global_recovery_binding():
+    tree = ast.parse((BRIDGE / "generation.py").read_text(encoding="utf-8"))
+    assigned = {
+        target.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    assert "_GENERATION_OPERATION_RECOVERY" not in assigned
+
+
+def test_regen_and_continue_require_delivery_port():
+    import bridge.generation as generation
+
+    for fn in (generation.regenerate_last, generation.continue_last):
+        param = inspect.signature(fn).parameters.get("delivery_port")
+        assert param is not None
+        assert param.default is inspect.Parameter.empty
+
+
+def test_recovery_factory_binds_exact_delivery_collaborators():
+    import bridge.generation as generation
+    from application_test_setup import make_test_delivery_port
+
+    request = lambda *_args, **_kwargs: {}
+    delete = lambda *_args, **_kwargs: None
+    port = make_test_delivery_port(
+        request=request,
+        delete_outgoing_message_row=delete,
+    )
+    recovery = generation._generation_operation_recovery(port)
+    assert recovery.telegram_request is request
+    assert recovery.delete_outgoing_message_row is delete

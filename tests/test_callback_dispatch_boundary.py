@@ -62,6 +62,7 @@ class CallbackDispatchBoundaryTests(unittest.TestCase):
         services = SimpleNamespace(
             group=object(),
             provider=object(),
+            delivery=object(),
             memory=object(),
             persona=object(),
             sync=object(),

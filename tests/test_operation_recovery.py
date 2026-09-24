@@ -1,5 +1,5 @@
 from application_test_setup import make_test_conversation_service
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_provider_port
+from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_delivery_port, make_test_memory_service, make_test_persona_service, make_test_provider_port
 
 ensure_application_extensions()
 
@@ -109,20 +109,24 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             {"old_message_ids": ["41", "42"], "user_rowid": user_rowid},
         )
 
-        with patch.object(_m_generation, "delete_outgoing_message_row",
-        ) as delete_current, patch.object(_m_generation, "telegram_request",
-            return_value={},
-        ) as telegram, patch.object(_m_generation, "send_reply",
-        ) as send_reply:
-            _m_message_commands.regenerate_last(
-                self.db,
-                "token",
-                "key",
-                self.session,
-                self.fields,
-                "chat",
-                operation_id=operation_id,
-             provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("provider must not run"))), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
+        delete_current = Mock()
+        telegram = Mock(return_value={})
+        send_reply = Mock()
+        delivery = make_test_delivery_port(
+            request=telegram,
+            send_reply=send_reply,
+            delete_outgoing_message_row=delete_current,
+        )
+        _m_message_commands.regenerate_last(
+            self.db,
+            "token",
+            "key",
+            self.session,
+            self.fields,
+            "chat",
+            operation_id=operation_id,
+            delivery_port=delivery,
+            provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("provider must not run"))), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         delete_current.assert_called_once_with(
             self.db,
@@ -166,27 +170,25 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             {"old_message_ids": [], "user_rowid": user_rowid},
         )
 
-        with patch.object(
-            _m_media,
-            "delete_outgoing_message_row",
-        ), patch.object(
-            _m_media,
-            "send_reply",
-            side_effect=RuntimeError("Telegram sendMessage failed"),
+        delivery = make_test_delivery_port(
+            send_reply=Mock(
+                side_effect=RuntimeError("Telegram sendMessage failed")
+            ),
+        )
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Telegram sendMessage failed",
         ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "Telegram sendMessage failed",
-            ):
-                _m_message_commands.regenerate_last(
-                    self.db,
-                    "token",
-                    "key",
-                    self.session,
-                    self.fields,
-                    "chat",
-                    operation_id=operation_id,
-                 provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("provider must not run"))), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
+            _m_message_commands.regenerate_last(
+            self.db,
+            "token",
+            "key",
+            self.session,
+            self.fields,
+            "chat",
+                operation_id=operation_id,
+                delivery_port=delivery,
+                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("provider must not run"))), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
@@ -213,7 +215,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-             provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
+             delivery_port=make_test_delivery_port(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
@@ -232,20 +234,21 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             },
         )
 
-        with patch.object(_m_generation, "delete_outgoing_message_row",
-        ), patch.object(_m_generation, "telegram_request",
-            return_value={},
-        ), patch.object(_m_generation, "send_reply",
-        ) as send_reply:
-            _m_message_commands.continue_last(
-                self.db,
-                "token",
-                "key",
-                self.session,
-                self.fields,
-                "chat",
-                operation_id=operation_id,
-             provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("provider must not run"))), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
+        send_reply = Mock()
+        delivery = make_test_delivery_port(
+            request=Mock(return_value={}),
+            send_reply=send_reply,
+        )
+        _m_message_commands.continue_last(
+            self.db,
+            "token",
+            "key",
+            self.session,
+            self.fields,
+            "chat",
+            operation_id=operation_id,
+            delivery_port=delivery,
+            provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("provider must not run"))), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertIn(
             "↪️ Continued response",
@@ -318,7 +321,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 self.fields,
                 "chat",
                 operation_id=operation_id,
-             provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
+             delivery_port=make_test_delivery_port(), provider_port=make_test_provider_port(), memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
 
         self.assertEqual(
             _m_message_commands.operation_phase(self.db, operation_id),
@@ -523,7 +526,19 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "_GENERATION_OPERATION_RECOVERY",
+            "def _generation_operation_recovery(",
+            source,
+        )
+        self.assertNotIn(
+            "_GENERATION_OPERATION_RECOVERY =",
+            source,
+        )
+        self.assertIn(
+            "telegram_request=delivery_port.request",
+            source,
+        )
+        self.assertIn(
+            "delivery_port.delete_outgoing_message_row",
             source,
         )
         self.assertIn(
