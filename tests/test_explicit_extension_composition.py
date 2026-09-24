@@ -81,7 +81,6 @@ class ExplicitExtensionCompositionTests(unittest.TestCase):
             "  'post_retain': ('scene_state', 'memory_curator'),\n"
             "  'summary_context': ('scene_state',),\n"
             "  'summary_clear': ('scene_state',),\n"
-            "  'director_customization': ('director_goals',),\n"
             "}\n"
             "assert first == expected, first\n"
             "assert second == expected, second\n"

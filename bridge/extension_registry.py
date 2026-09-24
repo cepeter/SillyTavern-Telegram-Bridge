@@ -8,7 +8,6 @@ diagnostics.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 import logging
 from typing import Any
 
@@ -19,36 +18,18 @@ SummaryContextHook = Callable[[str, Any, str, dict[str, str]], str | None]
 SummaryClearHook = Callable[[Any, str, str], None]
 
 
-@dataclass(frozen=True)
-class DirectorCustomization:
-    model: str | None = None
-    hidden_instructions: str = ""
-    max_tokens: int | None = None
-    speaker_context: str = ""
-
-
-DirectorCustomizationProvider = Callable[
-    [Any, str, dict[str, str]],
-    DirectorCustomization | None,
-]
-
-
 _COMMAND_ROUTES: dict[str, CommandRoute] = {}
 _POST_RETAIN_HOOKS: dict[str, PostRetainHook] = {}
 _SUMMARY_CONTEXT_HOOKS: dict[str, SummaryContextHook] = {}
 _SUMMARY_CLEAR_HOOKS: dict[str, SummaryClearHook] = {}
-_DIRECTOR_CUSTOMIZATION_PROVIDER: tuple[str, DirectorCustomizationProvider] | None = None
 
 
 def reset_extension_registry() -> None:
     """Clear all registered extensions before explicit application composition."""
-    global _DIRECTOR_CUSTOMIZATION_PROVIDER
-
     _COMMAND_ROUTES.clear()
     _POST_RETAIN_HOOKS.clear()
     _SUMMARY_CONTEXT_HOOKS.clear()
     _SUMMARY_CLEAR_HOOKS.clear()
-    _DIRECTOR_CUSTOMIZATION_PROVIDER = None
 
 
 def _register(registry: dict[str, Callable], name: str, handler: Callable) -> None:
@@ -131,50 +112,6 @@ def run_summary_clear_hooks(db: Any, chat_id: str, session_id: str) -> None:
             logging.exception("Summary-clear extension hook failed: %s", name)
 
 
-def register_director_customization_provider(
-    name: str,
-    provider: DirectorCustomizationProvider,
-) -> None:
-    global _DIRECTOR_CUSTOMIZATION_PROVIDER
-
-    key = str(name or "").strip()
-    if not key:
-        raise ValueError("extension name must not be empty")
-    if not callable(provider):
-        raise TypeError(f"extension {key} must be callable")
-    if _DIRECTOR_CUSTOMIZATION_PROVIDER is not None:
-        existing_name, _existing_provider = _DIRECTOR_CUSTOMIZATION_PROVIDER
-        raise RuntimeError(
-            f"director customization provider already registered: {existing_name}"
-        )
-    _DIRECTOR_CUSTOMIZATION_PROVIDER = (key, provider)
-
-
-def get_director_customization(
-    db: Any,
-    chat_id: str,
-    session: dict[str, str],
-) -> DirectorCustomization | None:
-    registered = _DIRECTOR_CUSTOMIZATION_PROVIDER
-    if registered is None:
-        return None
-
-    name, provider = registered
-    try:
-        result = provider(db, chat_id, session)
-    except Exception:
-        logging.exception("Director customization provider failed: %s", name)
-        return None
-
-    if result is not None and not isinstance(result, DirectorCustomization):
-        logging.error(
-            "Director customization provider returned invalid value: %s",
-            name,
-        )
-        return None
-    return result
-
-
 def extension_registry_snapshot() -> dict[str, tuple[str, ...]]:
     """Return registered extension names in dispatch order for diagnostics/tests."""
     return {
@@ -182,9 +119,4 @@ def extension_registry_snapshot() -> dict[str, tuple[str, ...]]:
         "post_retain": tuple(_POST_RETAIN_HOOKS),
         "summary_context": tuple(_SUMMARY_CONTEXT_HOOKS),
         "summary_clear": tuple(_SUMMARY_CLEAR_HOOKS),
-        "director_customization": (
-            (_DIRECTOR_CUSTOMIZATION_PROVIDER[0],)
-            if _DIRECTOR_CUSTOMIZATION_PROVIDER is not None
-            else ()
-        ),
     }

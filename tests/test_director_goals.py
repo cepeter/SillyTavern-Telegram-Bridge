@@ -7,7 +7,6 @@ import tempfile
 import unittest
 
 import bridge.config as config
-import bridge.extension_registry as extension_registry
 import bridge.character_identity as _m_character_identity
 import bridge.director_goals as _m_director_goals
 import bridge.groups as _m_groups
@@ -59,7 +58,7 @@ class DirectorGoalsTests(unittest.TestCase):
             card_fields=_m_groups.card_fields_from_file,
             generation_settings=_m_groups.get_generation_settings,
             generate_text=self._generate_text,
-            director_customization=extension_registry.get_director_customization,
+            director_policy=_m_director_goals.director_goal_policy,
             default_model=config.DEFAULT_MODEL,
         )
 

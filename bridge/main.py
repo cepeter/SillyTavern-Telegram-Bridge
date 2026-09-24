@@ -49,7 +49,6 @@ from bridge.database import (
     mark_job_scheduled,
     recover_jobs,
 )
-from bridge.extension_registry import get_director_customization as _get_director_customization_value
 from bridge.group_core import (
     advance_group_turn,
     claim_group_user_turn,
@@ -63,6 +62,7 @@ from bridge.group_core import (
     resolve_character_file,
     save_group_state,
 )
+from bridge.director_goals import director_goal_policy
 from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
 from bridge.group_service import GroupService as _GroupService
 from bridge.input_flow_service import InputFlowService as _InputFlowService
@@ -214,7 +214,7 @@ def _build_startup_services(
         card_fields=card_fields_from_file,
         generation_settings=get_generation_settings,
         generate_text=provider.generate,
-        director_customization=_get_director_customization_value,
+        director_policy=director_goal_policy,
         default_model=config.default_model,
     )
     memory = _MemoryService(
