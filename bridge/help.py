@@ -310,7 +310,14 @@ def handle_enum_callback(db: sqlite3.Connection, token: str, chat_id: str, sessi
     if data == "enum:stscript:reset":
         discard_panel_binding(db, chat_id, message_id)
         close_panel_message(db, token, chat_id, {"message": message})
-        send_reset_confirmation_menu( token, chat_id, request_context=request_context)
+        _method, payload = reset_confirmation_request(chat_id)
+        send_panel_message(
+            token,
+            chat_id,
+            payload["text"],
+            payload["reply_markup"],
+            request_context=request_context,
+        )
         return
     parts = data.split(":", 2)
     if data.startswith("enum:settings:input:"):
@@ -611,7 +618,7 @@ from bridge.language import (
     stt_language_label,
 )
 from bridge.memory_backend import memory_mode
-from bridge.message_commands import send_reset_confirmation_menu
+from bridge.reset_panel import reset_confirmation_request
 from bridge.panel_utils import (
     panel_label,
     panel_navigation,

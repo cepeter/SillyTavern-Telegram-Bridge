@@ -60,7 +60,7 @@ def _handle_text_action_input(db, token: str, api_key: str, chat_id: str, sessio
                 raise ValueError("Hindsight memory is unavailable or exceeds 4,000 characters")
             send_text(token, chat_id, "Memory queued for Hindsight.")
         elif action == "macro":
-            handle_macro_command(db, token, chat_id, session, fields, "/macro " + value)
+            handle_macro_command(db, token, chat_id, session, fields, "/macro " + value, request_context=request_context)
         elif action == "imagine":
             handle_imagine_prompt(token, chat_id, value)
         elif action == "memory_search":
