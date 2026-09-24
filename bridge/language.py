@@ -11,6 +11,9 @@ from bridge.panel_utils import (
 )
 
 import re
+from collections.abc import Callable
+
+from bridge.delivery_port import DeliveryPort
 
 RESPONSE_LANGUAGES = (
     ("auto", "Auto — match user"),
@@ -107,7 +110,7 @@ def language_menu_markup(current: str, page: int = 0) -> dict:
     return {"inline_keyboard": rows}
 
 
-def send_language_menu(token: str, chat_id: str, current: str, message_id: int | None = None, page: int = 0, *, request_context) -> None:
+def send_language_menu(token: str, chat_id: str, current: str, message_id: int | None = None, page: int = 0, *, delivery_port: DeliveryPort, request_context) -> None:
     current = normalize_response_language(current or "auto")
     _options, current_page, total_pages = panel_page(list(RESPONSE_LANGUAGES), page)
     page_text = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
@@ -116,32 +119,23 @@ def send_language_menu(token: str, chat_id: str, current: str, message_id: int |
     payload = {"chat_id": chat_id, "text": text, "reply_markup": language_menu_markup(current, page)}
     if message_id:
         payload["message_id"] = message_id
-    send_panel_request(token, method, payload, request_context=request_context)
+    delivery_port.send_panel_request(token, method, payload, request_context=request_context)
 
 
-def set_response_language(db: sqlite3.Connection, chat_id: str, session_id: str, value: str, operation_id: int | str | None = None) -> str:
+def set_response_language(db: sqlite3.Connection, chat_id: str, session_id: str, value: str, operation_id: int | str | None = None, *, update_session: Callable[..., object]) -> str:
     language = normalize_response_language(value)
     update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="language_select", response_language=language)
     return language
 
 
-def handle_language_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], command_text: str, operation_id: int | str | None = None, *, request_context) -> None:
+def handle_language_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], command_text: str, operation_id: int | str | None = None, *, delivery_port: DeliveryPort, update_session: Callable[..., object], request_context) -> None:
     parts = command_text.strip().split(None, 1)
     if len(parts) == 1 or parts[1].strip().casefold() in {"list", "status"}:
-        send_language_menu(token, chat_id, session.get("response_language") or "auto", request_context=request_context)
+        send_language_menu(token, chat_id, session.get("response_language") or "auto", delivery_port=delivery_port, request_context=request_context)
         return
     try:
-        language = set_response_language(db, chat_id, session["session_id"], parts[1], operation_id=operation_id)
+        language = set_response_language(db, chat_id, session["session_id"], parts[1], operation_id=operation_id, update_session=update_session)
     except ValueError as exc:
-        send_text(token, chat_id, f"Invalid response language: {exc}")
+        delivery_port.send_text(token, chat_id, f"Invalid response language: {exc}")
         return
-    send_text(token, chat_id, f"Model response language set to: {response_language_label(language)}.")
-
-
-# Explicit late imports replace transitional dependency injection.
-from bridge.telegram import (
-    send_panel_request,
-    send_text,
-    telegram_request,
-    update_session,
-)
+    delivery_port.send_text(token, chat_id, f"Model response language set to: {response_language_label(language)}.")

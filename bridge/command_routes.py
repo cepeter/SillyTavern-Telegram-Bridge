@@ -137,7 +137,7 @@ def _handle_basic(db, token, api_key, model, fields, chat_id, stripped, command,
     return False
 
 
-def _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id, *, provider_port, memory_service, persona_service, request_context):
+def _handle_generation_panels(db, token, fields, chat_id, stripped, command, session, session_id, operation_id, *, delivery_port, provider_port, memory_service, persona_service, request_context):
     """Handle generation, preset, settings, and response-language panels."""
     if command == "/update":
         send_update_menu( token, chat_id, request_context=request_context)
@@ -186,10 +186,10 @@ def _handle_generation_panels(db, token, fields, chat_id, stripped, command, ses
         send_settings_menu( token, chat_id, db, session_id, request_context=request_context)
         return True
     if command == "/language" or command in {"/language list", "/language status"}:
-        send_language_menu( token, chat_id, session.get("response_language") or "auto", request_context=request_context)
+        send_language_menu( token, chat_id, session.get("response_language") or "auto", delivery_port=delivery_port, request_context=request_context)
         return True
     if command.startswith("/language "):
-        handle_language_command(db, token, chat_id, session, stripped, operation_id=operation_id, request_context=request_context)
+        handle_language_command(db, token, chat_id, session, stripped, operation_id=operation_id, delivery_port=delivery_port, update_session=update_session, request_context=request_context)
         return True
     return False
 
@@ -224,7 +224,8 @@ def _handle_memory_media(db, token, api_key, chat_id, stripped, command, session
             "remember",
             stripped.split(None, 1)[1],
             operation_id,
-            provider_port=services.provider,
+            delivery_port=services.delivery,
+        provider_port=services.provider,
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
@@ -303,6 +304,7 @@ def _handle_panels(db, token, api_key, model, fields, chat_id, stripped, command
         session,
         session_id,
         operation_id,
+        delivery_port=services.delivery,
         provider_port=services.provider,
         memory_service=memory_service,
         request_context=request_context,
@@ -587,5 +589,6 @@ from bridge.status_panels import (
 from bridge.telegram import (
     list_sessions,
     send_text,
+    update_session,
 )
 from bridge.update import send_update_menu
