@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 def curated_memory_panel(text: str) -> tuple[str, dict]:
-    body = str(text or "").strip() or "No curated durable memories yet."
+    body = text or "No curated durable memories yet."
     panel_text = "Curated memory\n\n" + body
     markup = {
         "inline_keyboard": [

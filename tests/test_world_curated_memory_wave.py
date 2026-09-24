@@ -175,3 +175,10 @@ def test_memory_curator_extension_route_forwards_provider_and_delivery(monkeypat
     assert captured["provider_port"] is provider
     assert captured["delivery_port"] is delivery
     assert captured["request_context"] == "ctx"
+
+
+def test_curated_memory_panel_preserves_existing_text_whitespace():
+    from bridge.curated_memory_panel import curated_memory_panel
+
+    text, _markup = curated_memory_panel("  Remember exactly.  ")
+    assert text == "Curated memory\n\n  Remember exactly.  "
