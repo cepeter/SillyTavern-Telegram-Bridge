@@ -2,7 +2,7 @@
 
 Date: 2026-09-24
 Status: approved for implementation
-Base: `main` at `e2d9f9134d349d6aeb53dcaf9d2858c3119c8c6f`
+Base: `main` at `2abaceb6884ab3e9837cca52e867ce6eff9c424c`
 
 ## Purpose
 
@@ -14,16 +14,16 @@ strongly connected components:
 
 Fresh merged-main graph:
 
-- 81 bridge modules
-- 443 internal edges
-- largest SCC: 7
-- cyclic modules: 14
-- reciprocal pairs: 10
+- 83 bridge modules
+- 445 internal edges
+- largest SCC: 6
+- cyclic modules: 12
+- reciprocal pairs: 8
 - concrete Telegram importers: 28
-- SCC sizes: 7 + 7
+- SCC sizes: 6 + 6
 
 The graph model predicts that full Help decoupling plus removal of
-`memory -> telegram` yields SCC sizes 6 + 6 and cyclic modules 12.
+`memory -> telegram` yields SCC sizes 5 + 5 and cyclic modules 10.
 
 ## Cut A — Help ownership and DeliveryPort
 
@@ -169,11 +169,11 @@ After this wave:
 
 Expected graph:
 
-- largest SCC: 7 -> 6
-- cyclic modules: 14 -> 12
-- reciprocal pairs: 10 -> 9 (measured; memory -> telegram is not reciprocal)
+- largest SCC: 6 -> 5
+- cyclic modules: 12 -> 10
+- reciprocal pairs: 8 -> 7 (measured; memory -> telegram is not reciprocal)
 - Telegram importers: 28 -> 27
-- SCC sizes: 6 + 6
+- SCC sizes: 5 + 5
 - no newly cyclic module
 
 ## Behavior invariants
@@ -215,6 +215,6 @@ Memory:
 5. `memory.py` imports no `bridge.telegram`.
 6. all memory command text goes through required `send_text_fn`.
 7. focused Help/Memory/routing tests are green.
-8. graph largest SCC <=6 and cyclic modules <=12 with no new cyclic module.
+8. graph largest SCC <=5 and cyclic modules <=10 with no new cyclic module.
 9. full exact-head local and GitHub CI pass.
 10. merge and re-scan actual main before the next cut.
