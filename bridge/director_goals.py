@@ -131,7 +131,6 @@ def handle_director_goal_command(
 
     raw = str(command or "")
     suffix = raw[len("/group goal"):].strip()
-    current = get_director_goal(db, chat_id, session["session_id"])
     if not suffix or suffix.casefold() == "status":
         send_director_goal_menu(
             token,
