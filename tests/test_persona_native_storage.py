@@ -9,6 +9,7 @@ import unittest
 
 import bridge.memory_curator as _m_memory_curator
 import bridge.persona_sync as _m_persona_sync
+import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.session_naming as _m_session_naming
 class NativePersonaStorageTests(unittest.TestCase):
     def setUp(self):
@@ -19,7 +20,7 @@ class NativePersonaStorageTests(unittest.TestCase):
         self.old_backups = _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR
         self.old_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
         self.old_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
-        self.old_phase3 = _m_persona_sync.phase3_api_configured
+        self.old_phase3 = _m_sillytavern_api.phase3_api_configured
 
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.root / "settings.json"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.root / "avatars"
@@ -48,10 +49,10 @@ class NativePersonaStorageTests(unittest.TestCase):
         )
         _m_persona_sync._NATIVE_PERSONA_CACHE = {}
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        _m_persona_sync.phase3_api_configured = lambda: False
+        _m_sillytavern_api.phase3_api_configured = lambda: False
 
     def tearDown(self):
-        _m_persona_sync.phase3_api_configured = self.old_phase3
+        _m_sillytavern_api.phase3_api_configured = self.old_phase3
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_cache
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.old_settings

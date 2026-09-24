@@ -11,7 +11,7 @@ import time
 import threading
 from pathlib import Path
 
-from bridge.config import BRIDGE_HOME, SILLYTAVERN_DIR
+from bridge.config import BRIDGE_HOME, SILLYTAVERN_DIR, SYNC_MAX_BYTES
 
 from bridge.persona_integrity import (
     IntegrityCheckedPersonaStore as _IntegrityCheckedPersonaStore,
@@ -79,16 +79,16 @@ def _native_persona_maps(settings: dict, create: bool = False) -> tuple[dict, di
 
 
 def _native_settings(client=None) -> dict:
-    if client is None and not phase3_api_configured():
+    if client is None and not _st_api.phase3_api_configured():
         path = NATIVE_PERSONA_SETTINGS_FILE
         try:
             settings = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise SillyTavernApiError("Native SillyTavern settings cannot be read") from exc
+            raise _st_api.SillyTavernApiError("Native SillyTavern settings cannot be read") from exc
         if not isinstance(settings, dict):
-            raise SillyTavernApiError("Native SillyTavern settings have an invalid shape")
+            raise _st_api.SillyTavernApiError("Native SillyTavern settings have an invalid shape")
         return settings
-    api = client or phase3_client()
+    api = client or _st_api.phase3_client()
     if hasattr(api, "get_settings"):
         settings = api.get_settings()
     else:
@@ -97,9 +97,9 @@ def _native_settings(client=None) -> dict:
         try:
             settings = json.loads(raw) if isinstance(raw, str) else raw
         except json.JSONDecodeError as exc:
-            raise SillyTavernApiError("SillyTavern settings are invalid JSON") from exc
+            raise _st_api.SillyTavernApiError("SillyTavern settings are invalid JSON") from exc
     if not isinstance(settings, dict):
-        raise SillyTavernApiError("SillyTavern settings response has an invalid shape")
+        raise _st_api.SillyTavernApiError("SillyTavern settings response has an invalid shape")
     return settings
 
 
@@ -129,7 +129,7 @@ def load_native_personas(force: bool = False) -> dict[str, dict[str, object]]:
 
 
 def _save_native_settings(client, settings: dict) -> None:
-    if client is None and not phase3_api_configured():
+    if client is None and not _st_api.phase3_api_configured():
         path = NATIVE_PERSONA_SETTINGS_FILE
         temporary = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
         try:
@@ -139,13 +139,13 @@ def _save_native_settings(client, settings: dict) -> None:
         finally:
             temporary.unlink(missing_ok=True)
         return
-    client = client or phase3_client()
+    client = client or _st_api.phase3_client()
     if hasattr(client, "save_settings"):
         client.save_settings(settings)
         return
     result = client.post("/api/settings/save", settings)
     if not isinstance(result, dict) or result.get("result") != "ok":
-        raise SillyTavernApiError("SillyTavern refused the persona settings update")
+        raise _st_api.SillyTavernApiError("SillyTavern refused the persona settings update")
 
 
 def _backup_native_settings(expected: dict) -> Path:
@@ -153,7 +153,7 @@ def _backup_native_settings(expected: dict) -> Path:
     if not path.is_file():
         raise OSError("SillyTavern settings file is unavailable for backup")
     raw = path.read_bytes()
-    if len(raw) > SYNC_MAX_PAYLOAD_BYTES:
+    if len(raw) > SYNC_MAX_BYTES:
         raise ValueError("SillyTavern settings exceed the backup limit")
     try:
         disk_settings = json.loads(raw.decode("utf-8"))
@@ -228,7 +228,7 @@ def _upsert_native_persona_storage(identifier: str, name: str, description: str,
         raise ValueError("Persona ID must contain only letters, numbers, hyphens, or underscores")
     if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
         raise ValueError("Persona name must be 1–120 characters and description 1–4,000 characters")
-    api = client or (phase3_client() if phase3_api_configured() else None)
+    api = client or (_st_api.phase3_client() if _st_api.phase3_api_configured() else None)
     original = _native_settings(api)
     updated = copy.deepcopy(original)
     _power, native_names, native_descriptions = _native_persona_maps(updated, create=True)
@@ -266,14 +266,14 @@ def _upsert_native_persona_storage(identifier: str, name: str, description: str,
     if verified_names.get(avatar) != name or not isinstance(target, dict) or target.get("description") != description:
         if created_avatar and avatar not in verified_names:
             (NATIVE_PERSONA_AVATAR_DIR / avatar).unlink(missing_ok=True)
-        raise save_error or SillyTavernApiError("SillyTavern Persona readback did not match")
+        raise save_error or _st_api.SillyTavernApiError("SillyTavern Persona readback did not match")
     _NATIVE_PERSONA_CACHE.clear()
     return avatar
 
 
 def _delete_native_persona_storage(identifier: str, client=None) -> bool:
     """Remove one native Persona metadata entry while preserving its avatar file."""
-    api = client or (phase3_client() if phase3_api_configured() else None)
+    api = client or (_st_api.phase3_client() if _st_api.phase3_api_configured() else None)
     original = _native_settings(api)
     updated = copy.deepcopy(original)
     _power, native_names, native_descriptions = _native_persona_maps(updated)
@@ -289,7 +289,7 @@ def _delete_native_persona_storage(identifier: str, client=None) -> bool:
     verified = _native_settings(api)
     _power, verified_names, _verified_descriptions = _native_persona_maps(verified)
     if avatar in verified_names:
-        raise SillyTavernApiError("SillyTavern Persona deletion readback did not match")
+        raise _st_api.SillyTavernApiError("SillyTavern Persona deletion readback did not match")
     _NATIVE_PERSONA_CACHE.clear()
     return True
 
@@ -325,10 +325,5 @@ def delete_native_persona(identifier: str, client=None) -> bool:
 from bridge.cards import default_persona_id
 from bridge.common import IMAGE_MAX_BYTES
 from bridge.config import CATALOG_MAX_ITEMS
-from bridge.sync_api import (
-    phase3_api_configured,
-    phase3_client,
-    SillyTavernApiError,
-)
-from bridge.sync_core import SYNC_MAX_PAYLOAD_BYTES
+import bridge.sillytavern_api as _st_api
 from bridge.telegram import update_session

@@ -204,9 +204,15 @@ def handle_prompt_and_feature_callback(db, token, callback, answer_callback, dat
 
 def send_scene_menu(token, chat_id, db, session, message_id=None, *, request_context):
     state, covered = get_scene_state(db, chat_id, session["session_id"])
-    body = json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) if state else "No structured scene state has been established yet."
-    markup = {"inline_keyboard": [[{"text": "🔄 Refresh", "callback_data": "scene:refresh"}, {"text": "🧹 Clear", "callback_data": "scene:clear"}], [{"text": "⬅️ Status", "callback_data": "scene:status"}, {"text": "❌ Close", "callback_data": "scene:close"}]]}
-    send_panel_message(token, chat_id, f"Scene state (through message row {covered})\n\n{body}", markup, message_id, request_context=request_context)
+    text, markup = scene_panel(state, covered)
+    send_panel_message(
+        token,
+        chat_id,
+        text,
+        markup,
+        message_id,
+        request_context=request_context,
+    )
 
 
 def send_director_goal_menu(token, chat_id, db, session, message_id=None, *, request_context):
@@ -352,6 +358,7 @@ from bridge.rag_core import (
     data_bank_documents,
     rag_mode,
 )
+from bridge.scene_panel import scene_panel
 from bridge.scene_state import (
     clear_scene_state,
     get_scene_state,
