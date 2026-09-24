@@ -118,6 +118,129 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertNotIn("Write a complete answer", logs)
         self.assertNotIn("test-only", logs)
 
+
+    def test_nested_data_choices_returns_assistant_content(self):
+        _m_provider_transport.strict_urlopen = lambda _request, **_kwargs: _FakeResponse(
+            {
+                "data": {
+                    "choices": [
+                        {
+                            "message": {"content": "OK"},
+                            "finish_reason": "stop",
+                        }
+                    ]
+                },
+                "success": True,
+            }
+        )
+
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "test",
+            [{"role": "user", "content": "Reply OK."}],
+            settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+        )
+
+        self.assertEqual(result, "OK")
+
+    def test_standard_top_level_choices_still_returns_assistant_content(self):
+        _m_provider_transport.strict_urlopen = lambda _request, **_kwargs: _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "message": {"content": "TOP"},
+                        "finish_reason": "stop",
+                    }
+                ]
+            }
+        )
+
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "test",
+            [{"role": "user", "content": "Reply TOP."}],
+            settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+        )
+
+        self.assertEqual(result, "TOP")
+
+    def test_nested_empty_choices_raises_existing_error_with_sanitized_diagnostics(self):
+        _m_provider_transport.strict_urlopen = lambda _request, **_kwargs: _FakeResponse(
+            {
+                "data": {"choices": []},
+                "success": True,
+            },
+            status=200,
+        )
+
+        with self.assertLogs(
+            "bridge.provider_transport",
+            level="WARNING",
+        ) as captured:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "backend returned no assistant content",
+            ):
+                _m_provider_transport.generate_provider_text(
+                    self.router,
+                    "",
+                    "test",
+                    [
+                        {
+                            "role": "user",
+                            "content": "SENSITIVE REQUEST CONTENT",
+                        }
+                    ],
+                    settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+                )
+
+        logs = "\n".join(captured.output)
+        self.assertIn("http_status=200", logs)
+        self.assertIn("choice_count=0", logs)
+        self.assertIn("response_keys=['data', 'success']", logs)
+        self.assertNotIn("SENSITIVE REQUEST CONTENT", logs)
+        self.assertNotIn("test-only", logs)
+
+    def test_nested_data_choices_is_used_for_non_stream_continuation(self):
+        payloads = [
+            {
+                "choices": [
+                    {
+                        "message": {"content": "Part one."},
+                        "finish_reason": "length",
+                    }
+                ]
+            },
+            {
+                "data": {
+                    "choices": [
+                        {
+                            "message": {"content": "Part two."},
+                            "finish_reason": "stop",
+                        }
+                    ]
+                },
+                "success": True,
+            },
+        ]
+
+        def fake_urlopen(_request, **_kwargs):
+            return _FakeResponse(payloads.pop(0))
+
+        _m_provider_transport.strict_urlopen = fake_urlopen
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "test",
+            [{"role": "user", "content": "Write a complete answer."}],
+            settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+        )
+
+        self.assertEqual(result, "Part one. Part two.")
+        self.assertEqual(payloads, [])
+
     def test_generate_text_honors_explicit_request_timeout(self):
         seen = []
 

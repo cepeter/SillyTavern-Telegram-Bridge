@@ -36,6 +36,38 @@ def _stream_text(value) -> str:
         return "".join(str(item.get("text") or item.get("content") or "") for item in value if isinstance(item, dict))
     return ""
 
+
+def _openai_response_choices(result: object) -> list[dict]:
+    """Return OpenAI-compatible choices from standard or wrapped responses."""
+    if not isinstance(result, dict):
+        return []
+
+    top_level = result.get("choices")
+    if isinstance(top_level, list) and top_level:
+        return [
+            choice
+            for choice in top_level
+            if isinstance(choice, dict)
+        ]
+
+    data = result.get("data")
+    if isinstance(data, dict):
+        nested = data.get("choices")
+        if isinstance(nested, list):
+            return [
+                choice
+                for choice in nested
+                if isinstance(choice, dict)
+            ]
+
+    if isinstance(top_level, list):
+        return [
+            choice
+            for choice in top_level
+            if isinstance(choice, dict)
+        ]
+    return []
+
 def _recovery_settings(settings: dict[str, object]) -> dict[str, object] | None:
     """Increase the output budget when a provider spends the whole budget reasoning."""
     current = int(settings.get("max_tokens") or DEFAULT_MAX_TOKENS)
@@ -351,7 +383,7 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
     with strict_urlopen(request, timeout=(240 if is_streaming else 180) if request_timeout is None else request_timeout) as response:
         if not is_streaming:
             result = json.loads(response.read().decode("utf-8"))
-            choices = result.get("choices") or []
+            choices = _openai_response_choices(result)
             finish_reason = choices[0].get("finish_reason") if choices else None
             content = choices[0].get("message", {}).get("content") if choices else None
             if not content:
@@ -400,7 +432,7 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
                 try:
                     with strict_urlopen(continuation_request, timeout=180 if request_timeout is None else request_timeout) as continuation_response:
                         continuation_result = json.loads(continuation_response.read().decode("utf-8"))
-                    continuation_choices = continuation_result.get("choices") or []
+                    continuation_choices = _openai_response_choices(continuation_result)
                     continuation = continuation_choices[0].get("message", {}).get("content") if continuation_choices else None
                     continuation_reason = continuation_choices[0].get("finish_reason") if continuation_choices else None
                 except Exception:
