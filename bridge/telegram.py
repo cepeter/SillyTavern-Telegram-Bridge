@@ -570,7 +570,6 @@ from bridge.cards import (
     get_persona,
     send_panel_message,
 )
-from bridge.catalog import install_world_info_document
 from bridge.common import (
     DEFAULT_ALLOWED_USER,
     IMAGE_MAX_BYTES,
@@ -586,3 +585,4 @@ from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.persona_sync import NATIVE_PERSONA_SETTINGS_FILE
 from bridge.session_titles import normalize_session_title
+from bridge.world_storage import install_world_info_document

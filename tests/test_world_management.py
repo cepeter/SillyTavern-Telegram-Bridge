@@ -12,6 +12,7 @@ import bridge.config as config
 import bridge.callbacks as _m_callbacks
 import bridge.telegram as _m_telegram
 import bridge.catalog as _m_catalog
+import bridge.world_storage as _m_world_storage
 import bridge.cards as _m_cards
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
@@ -20,11 +21,11 @@ class WorldManagementTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
-        self.old_world = _m_catalog.WORLD_DIR
+        self.old_world = _m_world_storage.WORLD_DIR
         self.old_config_world = config.WORLD_DIR
         self.old_db = config.DB_FILE
         world_dir = root / "worlds"
-        _m_catalog.WORLD_DIR = world_dir
+        _m_world_storage.WORLD_DIR = world_dir
         config.WORLD_DIR = world_dir
         world_dir.mkdir()
         config.DB_FILE = root / "bridge.sqlite3"
@@ -33,25 +34,25 @@ class WorldManagementTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
-        _m_catalog.WORLD_DIR = self.old_world
+        _m_world_storage.WORLD_DIR = self.old_world
         config.WORLD_DIR = self.old_config_world
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
 
     def test_upload_accepts_world_info_and_refuses_duplicate(self):
         raw = json.dumps({"entries": {"0": {"key": ["dragon"], "content": "A dragon."}}}).encode()
-        installed = _m_catalog.install_world_info_document("dragons.json", raw)
+        installed = _m_world_storage.install_world_info_document("dragons.json", raw)
         self.assertEqual(installed.name, "dragons.json")
         self.assertEqual(installed.read_bytes(), raw)
         with self.assertRaises(FileExistsError):
-            _m_catalog.install_world_info_document("dragons.json", raw)
+            _m_world_storage.install_world_info_document("dragons.json", raw)
         with self.assertRaises(ValueError):
-            _m_catalog.install_world_info_document("not-world.txt", raw)
+            _m_world_storage.install_world_info_document("not-world.txt", raw)
         with self.assertRaises(ValueError):
-            _m_catalog.install_world_info_document("bad.json", b"{}");
+            _m_world_storage.install_world_info_document("bad.json", b"{}");
 
     def test_delete_removes_inactive_world_info_and_protects_references(self):
-        path = _m_catalog.WORLD_DIR / "lore.json"
+        path = config.WORLD_DIR / "lore.json"
         path.write_text(json.dumps({"entries": {}}), encoding="utf-8")
         _m_panel_callback_routes.delete_world_info_file(self.db, "chat", "lore.json")
         self.assertFalse(path.exists())
@@ -64,7 +65,7 @@ class WorldManagementTests(unittest.TestCase):
         self.assertTrue(path.exists())
 
     def test_world_panel_has_upload_and_delete_actions(self):
-        (_m_catalog.WORLD_DIR / "lore.json").write_text(json.dumps({"entries": {}}), encoding="utf-8")
+        (config.WORLD_DIR / "lore.json").write_text(json.dumps({"entries": {}}), encoding="utf-8")
         calls = []
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
