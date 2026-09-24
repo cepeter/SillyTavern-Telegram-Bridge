@@ -10,7 +10,7 @@
 
 You know that feeling when you've spent hours building the perfect character card,
 tuning World Info, crafting personas — and then you step away from your computer
-and can't talk to any of them?
+and can't talk to any of them? or when you take a shit, and want to chat with your wai-fu/s when looking for inspiration?, no more, pals.
 
 That's what this fixes.
 
@@ -21,7 +21,7 @@ those files and lets you chat from your phone.
 
 It doesn't patch SillyTavern. It doesn't launch SillyTavern. Think of it as a
 remote control that reads the same files SillyTavern uses, then lets you
-text your characters from anywhere.
+text your characters from anywhere (and sync it to SillyTavern too, so you can continue later)
 
 ---
 
