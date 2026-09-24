@@ -13,10 +13,10 @@ import urllib.request
 from bridge.config import SYNC_MAX_BYTES
 
 
-PHASE3_SYNC_API_URL = ""
-PHASE3_SYNC_API_HANDLE = ""
-PHASE3_SYNC_API_PASSWORD = None
-PHASE3_SYNC_TIMEOUT_SECONDS = 10
+LIVE_SYNC_API_URL = ""
+LIVE_SYNC_API_HANDLE = ""
+LIVE_SYNC_API_PASSWORD = None
+LIVE_SYNC_TIMEOUT_SECONDS = 10
 
 _ALLOWED_PATHS = {
     "/csrf-token",
@@ -42,17 +42,17 @@ def _bounded_number(raw: str, default, low, high, cast):
 
 def refresh_sillytavern_api_config() -> None:
     """Refresh loopback API configuration from the current environment."""
-    global PHASE3_SYNC_API_URL, PHASE3_SYNC_API_HANDLE, PHASE3_SYNC_API_PASSWORD
-    global PHASE3_SYNC_TIMEOUT_SECONDS, _CLIENT
+    global LIVE_SYNC_API_URL, LIVE_SYNC_API_HANDLE, LIVE_SYNC_API_PASSWORD
+    global LIVE_SYNC_TIMEOUT_SECONDS, _CLIENT
 
-    PHASE3_SYNC_API_URL = (
+    LIVE_SYNC_API_URL = (
         os.environ.get("SILLYTAVERN_SYNC_API_URL", "").strip().rstrip("/")
     )
-    PHASE3_SYNC_API_HANDLE = (
+    LIVE_SYNC_API_HANDLE = (
         os.environ.get("SILLYTAVERN_SYNC_API_HANDLE", "").strip()
     )
-    PHASE3_SYNC_API_PASSWORD = os.environ.get("SILLYTAVERN_SYNC_API_PASSWORD")
-    PHASE3_SYNC_TIMEOUT_SECONDS = _bounded_number(
+    LIVE_SYNC_API_PASSWORD = os.environ.get("SILLYTAVERN_SYNC_API_PASSWORD")
+    LIVE_SYNC_TIMEOUT_SECONDS = _bounded_number(
         os.environ.get("SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS", "10"),
         10,
         2,
@@ -84,7 +84,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         )
 
 
-def validate_phase3_api_url(value: str) -> str:
+def validate_live_sync_api_url(value: str) -> str:
     """Accept only an origin URL using a loopback host."""
     raw = str(value or "").strip().rstrip("/")
     parsed = urlparse(raw)
@@ -116,7 +116,7 @@ class SillyTavernApiClient:
         handle: str = "",
         password: str | None = None,
     ):
-        self.base_url = validate_phase3_api_url(base_url)
+        self.base_url = validate_live_sync_api_url(base_url)
         self.handle = str(handle or "")
         self.password = str(password or "")
         self.cookies = CookieJar()
@@ -142,7 +142,7 @@ class SillyTavernApiClient:
             )
         headers = {
             "Accept": "application/json",
-            "User-Agent": "SillyTavern-Telegram-Bridge/Phase3",
+            "User-Agent": "SillyTavern-Telegram-Bridge/LiveSync",
         }
         data = None
         if payload is not None:
@@ -167,7 +167,7 @@ class SillyTavernApiClient:
         try:
             with self.opener.open(
                 request,
-                timeout=PHASE3_SYNC_TIMEOUT_SECONDS,
+                timeout=LIVE_SYNC_TIMEOUT_SECONDS,
             ) as response:
                 raw = response.read(SYNC_MAX_BYTES + 1)
         except urllib.error.HTTPError as exc:
@@ -350,27 +350,27 @@ class SillyTavernApiClient:
             )
 
 
-def phase3_api_configured() -> bool:
-    if not PHASE3_SYNC_API_URL:
+def live_sync_api_configured() -> bool:
+    if not LIVE_SYNC_API_URL:
         return False
     try:
-        validate_phase3_api_url(PHASE3_SYNC_API_URL)
+        validate_live_sync_api_url(LIVE_SYNC_API_URL)
         return True
     except ValueError:
         return False
 
 
-def phase3_client() -> SillyTavernApiClient:
+def live_sync_client() -> SillyTavernApiClient:
     global _CLIENT
-    if not phase3_api_configured():
+    if not live_sync_api_configured():
         raise SillyTavernApiError(
             "Live Sync API is not configured"
         )
     with _CLIENT_LOCK:
         identity = (
-            PHASE3_SYNC_API_URL,
-            PHASE3_SYNC_API_HANDLE,
-            PHASE3_SYNC_API_PASSWORD,
+            LIVE_SYNC_API_URL,
+            LIVE_SYNC_API_HANDLE,
+            LIVE_SYNC_API_PASSWORD,
         )
         cached_identity = (
             (

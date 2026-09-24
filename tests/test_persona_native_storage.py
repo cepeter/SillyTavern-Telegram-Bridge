@@ -20,7 +20,7 @@ class NativePersonaStorageTests(unittest.TestCase):
         self.old_backups = _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR
         self.old_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
         self.old_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
-        self.old_phase3 = _m_sillytavern_api.phase3_api_configured
+        self.old_phase3 = _m_sillytavern_api.live_sync_api_configured
 
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.root / "settings.json"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.root / "avatars"
@@ -49,10 +49,10 @@ class NativePersonaStorageTests(unittest.TestCase):
         )
         _m_persona_sync._NATIVE_PERSONA_CACHE = {}
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        _m_sillytavern_api.phase3_api_configured = lambda: False
+        _m_sillytavern_api.live_sync_api_configured = lambda: False
 
     def tearDown(self):
-        _m_sillytavern_api.phase3_api_configured = self.old_phase3
+        _m_sillytavern_api.live_sync_api_configured = self.old_phase3
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_cache
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.old_settings
@@ -125,7 +125,7 @@ class NativePersonaStorageTests(unittest.TestCase):
             self._settings()["power_user"]["personas"],
         )
 
-    def test_public_persona_functions_use_explicit_store_after_cutover(self):
+    def test_public_persona_functions_use_explicit_store(self):
         avatar = _m_persona_sync.upsert_native_persona(
             "public",
             "Public",

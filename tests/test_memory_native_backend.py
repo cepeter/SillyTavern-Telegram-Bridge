@@ -329,7 +329,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
             1,
         )
 
-    def test_public_retain_rejects_stale_transcript_after_cutover(self):
+    def test_public_retain_rejects_stale_transcript(self):
         self._add_message()
         queued = []
         fake = _FakeHindsight()

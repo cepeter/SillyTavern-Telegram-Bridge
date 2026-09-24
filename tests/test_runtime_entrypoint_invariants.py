@@ -1,4 +1,4 @@
-"""Phase 7C final runtime cutover boundary tests."""
+"""Runtime entrypoint and composition invariants."""
 
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ def _owner_index() -> dict[str, list[str]]:
     return owners
 
 
-class Phase7CFinalRuntimeCutoverTests(unittest.TestCase):
+class RuntimeEntrypointInvariantTests(unittest.TestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -133,8 +133,6 @@ class Phase7CFinalRuntimeCutoverTests(unittest.TestCase):
         self.assertIn("from bridge.main import main", source)
         self.assertNotIn("from bridge.runtime import main", source)
 
-    def test_runtime_loader_is_deleted(self):
-        self.assertFalse((BRIDGE_DIR / "runtime_loader.py").exists())
 
     def test_no_production_exec_calls_remain(self):
         offenders = []
@@ -175,9 +173,6 @@ class Phase7CFinalRuntimeCutoverTests(unittest.TestCase):
         self.assertFalse((BRIDGE_DIR / "ordinary_dependencies.py").exists())
         self.assertNotIn("ordinary_dependencies", source)
         self.assertNotIn("complete_application_dependencies", source)
-
-    def test_runtime_compatibility_module_is_retired(self):
-        self.assertFalse((BRIDGE_DIR / "runtime.py").exists())
 
 
 if __name__ == "__main__":

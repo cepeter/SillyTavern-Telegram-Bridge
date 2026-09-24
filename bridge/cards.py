@@ -1,7 +1,6 @@
-"""Persona and Telegram-facing card/panel compatibility shell.
+"""Persona and Telegram-facing card and panel orchestration.
 
-Content, callback-token state, and pure panel helpers live in ordinary
-modules. This file remains exec-loaded until the Phase 7 UI migration.
+Content, callback-token state, and pure panel helpers live in focused modules.
 """
 from __future__ import annotations
 

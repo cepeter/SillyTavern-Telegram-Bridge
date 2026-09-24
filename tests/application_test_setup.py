@@ -278,20 +278,20 @@ def make_native_test_sync_service() -> SyncService:
     import bridge.sillytavern_api as _st_api
     from bridge.repositories import count_session_messages
     from bridge.sync_api import (
-        _phase3_disable,
-        phase3_sync_now,
-        phase3_sync_poll,
-        phase3_toggle_realtime,
+        _live_sync_disable,
+        live_sync_now,
+        live_sync_poll,
+        live_sync_toggle_realtime,
     )
     from bridge.sync_core import sync_binding
 
     return SyncService(
         load_binding=sync_binding,
         count_messages=count_session_messages,
-        sync_now_backend=phase3_sync_now,
-        toggle_realtime_backend=phase3_toggle_realtime,
-        poll_backend=phase3_sync_poll,
-        disable_realtime=_phase3_disable,
-        api_configured=_st_api.phase3_api_configured,
+        sync_now_backend=live_sync_now,
+        toggle_realtime_backend=live_sync_toggle_realtime,
+        poll_backend=live_sync_poll,
+        disable_realtime=_live_sync_disable,
+        api_configured=_st_api.live_sync_api_configured,
         expected_errors=(_st_api.SillyTavernApiError, ValueError),
     )

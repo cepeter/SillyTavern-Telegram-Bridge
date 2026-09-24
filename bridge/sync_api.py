@@ -24,13 +24,13 @@ from bridge.sync_poll_safety import (
 from bridge.sync_service import SyncService as _SyncService
 
 
-PHASE3_SYNC_INTERVAL_SECONDS = 2.0
-_PHASE3_WORKER_LOCK = threading.Lock()
-_PHASE3_WORKER = None
-_PHASE3_STOP_EVENT = threading.Event()
-_PHASE3_STOP_RESULTS = {"sync ID mismatch; realtime stopped", "initial divergence; realtime stopped", "conflict detected; realtime stopped"}
-_PHASE3_MAX_MESSAGE_CHARS = 12000
-_PHASE3_MAX_TOTAL_CHARS = 200000
+LIVE_SYNC_INTERVAL_SECONDS = 2.0
+_LIVE_SYNC_WORKER_LOCK = threading.Lock()
+_LIVE_SYNC_WORKER = None
+_LIVE_SYNC_STOP_EVENT = threading.Event()
+_LIVE_SYNC_STOP_RESULTS = {"sync ID mismatch; realtime stopped", "initial divergence; realtime stopped", "conflict detected; realtime stopped"}
+_LIVE_SYNC_MAX_MESSAGE_CHARS = 12000
+_LIVE_SYNC_MAX_TOTAL_CHARS = 200000
 
 
 def _bounded_number(raw: str, default, low, high, cast):
@@ -40,10 +40,10 @@ def _bounded_number(raw: str, default, low, high, cast):
         return default
 
 
-def refresh_phase3_config() -> None:
+def refresh_live_sync_config() -> None:
     """Refresh realtime polling and loopback API configuration."""
-    global PHASE3_SYNC_INTERVAL_SECONDS
-    PHASE3_SYNC_INTERVAL_SECONDS = _bounded_number(
+    global LIVE_SYNC_INTERVAL_SECONDS
+    LIVE_SYNC_INTERVAL_SECONDS = _bounded_number(
         os.environ.get("SILLYTAVERN_SYNC_API_INTERVAL_SECONDS", "2"),
         2.0,
         1.0,
@@ -53,14 +53,14 @@ def refresh_phase3_config() -> None:
     _st_api.refresh_sillytavern_api_config()
 
 
-refresh_phase3_config()
+refresh_live_sync_config()
 
 
-def _phase3_records(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], binding: dict[str, object], rows: list[tuple]) -> list[dict]:
+def _live_sync_records(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], binding: dict[str, object], rows: list[tuple]) -> list[dict]:
     return build_sync_records(db, chat_id, session, fields, str(binding["sync_id"]), rows)
 
 
-def _phase3_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], dict[int, tuple[list[str], int]]]:
+def _live_sync_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], dict[int, tuple[list[str], int]]]:
     metadata = records[0].get("chat_metadata", {}) if records and isinstance(records[0], dict) else {}
     messages = []
     total_chars = 0
@@ -70,12 +70,12 @@ def _phase3_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], 
         if not isinstance(record, dict) or record.get("is_system") or "mes" not in record:
             continue
         content = str(record.get("mes") or "").strip()
-        if len(content) > _PHASE3_MAX_MESSAGE_CHARS:
+        if len(content) > _LIVE_SYNC_MAX_MESSAGE_CHARS:
             raise ValueError("SillyTavern API message exceeds the sync limit")
         if not content:
             continue
         total_chars += len(content)
-        if total_chars > _PHASE3_MAX_TOTAL_CHARS:
+        if total_chars > _LIVE_SYNC_MAX_TOTAL_CHARS:
             raise ValueError("SillyTavern API transcript exceeds the sync limit")
         messages.append(("user" if record.get("is_user") else "assistant", content))
         if not record.get("is_user") and isinstance(record.get("swipes"), list):
@@ -94,23 +94,23 @@ def _phase3_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], 
     return metadata, messages, variants
 
 
-def _phase3_reset_failures(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
+def _live_sync_reset_failures(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
     def write():
         db.execute("UPDATE sync_bindings SET realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE chat_id=? AND session_id=?", (chat_id, session_id))
         db.commit()
     run_write_txn(db, write)
 
 
-def _phase3_disable(db: sqlite3.Connection, chat_id: str, session_id: str, error: str) -> None:
+def _live_sync_disable(db: sqlite3.Connection, chat_id: str, session_id: str, error: str) -> None:
     def write():
         db.execute("UPDATE sync_bindings SET realtime_enabled=0,last_error=?,realtime_next_retry_at=0 WHERE chat_id=? AND session_id=?", (error[:1000], chat_id, session_id))
         db.commit()
     run_write_txn(db, write)
 
 
-def phase3_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
+def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
     """Synchronize one binding through SillyTavern's supported chat API."""
-    client = _st_api.phase3_client()
+    client = _st_api.live_sync_client()
     session = load_session(db, chat_id, session_id, DEFAULT_MODEL)
     binding = sync_binding(db, chat_id, session_id)
     file_id = sync_file_id(binding)
@@ -121,54 +121,54 @@ def phase3_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> st
     remote_records = client.get_chat(session, file_id, is_group)
     fields = card_fields_from_file(session["character_file"])
     if not remote_records:
-        client.save_chat(session, fields, file_id, is_group, _phase3_records(db, chat_id, session, fields, binding, rows))
+        client.save_chat(session, fields, file_id, is_group, _live_sync_records(db, chat_id, session, fields, binding, rows))
         set_sync_state(db, chat_id, session_id, local_hash, "bridge_to_sillytavern_api")
-        _phase3_reset_failures(db, chat_id, session_id)
+        _live_sync_reset_failures(db, chat_id, session_id)
         return "created SillyTavern API chat"
-    metadata, remote_messages, remote_variants = _phase3_snapshot(remote_records)
+    metadata, remote_messages, remote_variants = _live_sync_snapshot(remote_records)
     remote_sync = metadata.get("bridge_sync") if isinstance(metadata.get("bridge_sync"), dict) else {}
     if remote_sync.get("sync_id") and remote_sync.get("sync_id") != binding["sync_id"]:
         set_sync_state(db, chat_id, session_id, local_hash, "", "sync_id_mismatch", "API chat sync ID does not match this session")
-        _phase3_disable(db, chat_id, session_id, "sync ID mismatch")
+        _live_sync_disable(db, chat_id, session_id, "sync ID mismatch")
         return "sync ID mismatch; realtime stopped"
     remote_hash = sync_transcript_hash(remote_messages)
     baseline = str(binding.get("last_hash") or "")
     if remote_hash == local_hash:
         set_sync_state(db, chat_id, session_id, local_hash, str(binding.get("last_direction") or ""))
-        _phase3_reset_failures(db, chat_id, session_id)
+        _live_sync_reset_failures(db, chat_id, session_id)
         return "unchanged"
     if not baseline:
         set_sync_state(db, chat_id, session_id, local_hash, "", "initial_divergence", "API chat has no common checkpoint")
-        _phase3_disable(db, chat_id, session_id, "initial divergence")
+        _live_sync_disable(db, chat_id, session_id, "initial divergence")
         return "initial divergence; realtime stopped"
     if local_hash == baseline and remote_hash != baseline:
         imported_hash = apply_sync_snapshot(db, chat_id, session, metadata, remote_messages, remote_variants)
         set_sync_state(db, chat_id, session_id, imported_hash, "sillytavern_api_to_bridge")
-        _phase3_reset_failures(db, chat_id, session_id)
+        _live_sync_reset_failures(db, chat_id, session_id)
         return "imported SillyTavern API changes"
     if remote_hash == baseline and local_hash != baseline:
-        client.save_chat(session, fields, file_id, is_group, _phase3_records(db, chat_id, session, fields, binding, rows))
+        client.save_chat(session, fields, file_id, is_group, _live_sync_records(db, chat_id, session, fields, binding, rows))
         set_sync_state(db, chat_id, session_id, local_hash, "bridge_to_sillytavern_api")
-        _phase3_reset_failures(db, chat_id, session_id)
+        _live_sync_reset_failures(db, chat_id, session_id)
         return "exported bridge changes through API"
     set_sync_state(db, chat_id, session_id, local_hash, "", "conflict", "both sides changed since the last checkpoint")
-    _phase3_disable(db, chat_id, session_id, "conflict detected")
+    _live_sync_disable(db, chat_id, session_id, "conflict detected")
     return "conflict detected; realtime stopped"
 
 
-def phase3_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
+def live_sync_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
     binding = sync_binding(db, chat_id, session_id)
     if binding.get("realtime_enabled"):
-        _phase3_disable(db, chat_id, session_id, "")
+        _live_sync_disable(db, chat_id, session_id, "")
         return "realtime API sync disabled"
-    if not _st_api.phase3_api_configured():
+    if not _st_api.live_sync_api_configured():
         return "realtime API sync is not configured"
     try:
-        result = phase3_sync_now(db, chat_id, session_id)
+        result = live_sync_now(db, chat_id, session_id)
     except (_st_api.SillyTavernApiError, ValueError) as exc:
-        _phase3_disable(db, chat_id, session_id, str(exc))
+        _live_sync_disable(db, chat_id, session_id, str(exc))
         return f"realtime API unavailable: {exc}"
-    if result in _PHASE3_STOP_RESULTS:
+    if result in _LIVE_SYNC_STOP_RESULTS:
         return result
     def mark_enabled():
         db.execute("UPDATE sync_bindings SET realtime_enabled=1,realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE chat_id=? AND session_id=?", (chat_id, session_id))
@@ -177,17 +177,17 @@ def phase3_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: str
     return "realtime API sync enabled; " + result
 
 
-def phase3_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
+def live_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
     binding = sync_binding(db, chat_id, session_id)
     enabled = "on" if binding.get("realtime_enabled") else "off"
-    configured = "configured" if _st_api.phase3_api_configured() else "not configured"
+    configured = "configured" if _st_api.live_sync_api_configured() else "not configured"
     return f"Live API sync: {enabled} ({configured})"
 
 
 _SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
     sync_now=(
         lambda db, chat_id, session_id:
-        phase3_sync_now(
+        live_sync_now(
             db,
             chat_id,
             session_id,
@@ -199,7 +199,7 @@ _SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
     ),
     disable_realtime=(
         lambda db, chat_id, session_id, error:
-        _phase3_disable(
+        _live_sync_disable(
             db,
             chat_id,
             session_id,
@@ -212,7 +212,7 @@ _SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
     ),
     sync_interval=(
         lambda:
-        PHASE3_SYNC_INTERVAL_SECONDS
+        LIVE_SYNC_INTERVAL_SECONDS
     ),
     now=(
         lambda:
@@ -229,16 +229,16 @@ _SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
 )
 
 
-def phase3_sync_poll(
+def live_sync_poll(
     db: sqlite3.Connection,
 ) -> None:
     _SYNC_POLL_SAFETY.poll(db)
 
 
-def _phase3_worker_loop(sync_service: _SyncService) -> None:
+def _live_sync_worker_loop(sync_service: _SyncService) -> None:
     db = None
     try:
-        while not _PHASE3_STOP_EVENT.wait(PHASE3_SYNC_INTERVAL_SECONDS):
+        while not _LIVE_SYNC_STOP_EVENT.wait(LIVE_SYNC_INTERVAL_SECONDS):
             try:
                 if db is None:
                     db = db_connect()
@@ -254,36 +254,36 @@ def _phase3_worker_loop(sync_service: _SyncService) -> None:
                 if db is not None and isinstance(exc, sqlite3.Error):
                     db.close()
                     db = None
-                logging.warning("Phase 3 realtime sync worker failed", exc_info=True)
+                logging.warning("Live Sync worker failed", exc_info=True)
     finally:
         if db is not None:
             db.close()
 
 
-def start_phase3_sync_worker(*, sync_service: _SyncService) -> bool:
+def start_live_sync_worker(*, sync_service: _SyncService) -> bool:
     """Start one daemon worker when the loopback API is configured."""
-    global _PHASE3_WORKER
-    if not _st_api.phase3_api_configured():
+    global _LIVE_SYNC_WORKER
+    if not _st_api.live_sync_api_configured():
         return False
-    with _PHASE3_WORKER_LOCK:
-        if _PHASE3_WORKER is not None and _PHASE3_WORKER.is_alive():
+    with _LIVE_SYNC_WORKER_LOCK:
+        if _LIVE_SYNC_WORKER is not None and _LIVE_SYNC_WORKER.is_alive():
             return True
-        _PHASE3_STOP_EVENT.clear()
-        _PHASE3_WORKER = threading.Thread(
-            target=_phase3_worker_loop,
+        _LIVE_SYNC_STOP_EVENT.clear()
+        _LIVE_SYNC_WORKER = threading.Thread(
+            target=_live_sync_worker_loop,
             args=(sync_service,),
-            name="sillytavern-phase3-sync",
+            name="sillytavern-live-sync",
             daemon=True,
         )
-        _PHASE3_WORKER.start()
+        _LIVE_SYNC_WORKER.start()
         return True
 
 
-def stop_phase3_sync_worker(timeout: float = 5.0) -> bool:
+def stop_live_sync_worker(timeout: float = 5.0) -> bool:
     """Stop the realtime sync worker and wait briefly for it to exit."""
-    global _PHASE3_WORKER
-    _PHASE3_STOP_EVENT.set()
-    worker = _PHASE3_WORKER
+    global _LIVE_SYNC_WORKER
+    _LIVE_SYNC_STOP_EVENT.set()
+    worker = _LIVE_SYNC_WORKER
     if worker is None:
         return True
     if worker is threading.current_thread():
@@ -291,7 +291,7 @@ def stop_phase3_sync_worker(timeout: float = 5.0) -> bool:
     worker.join(timeout=max(0.0, float(timeout)))
     stopped = not worker.is_alive()
     if stopped:
-        _PHASE3_WORKER = None
+        _LIVE_SYNC_WORKER = None
     return stopped
 
 

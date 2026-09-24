@@ -38,7 +38,7 @@ class CatalogLimitTests(unittest.TestCase):
         self.old_native_avatars = _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR
         self.old_native_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
         self.old_native_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
-        self.old_phase3 = _m_sillytavern_api.phase3_api_configured
+        self.old_phase3 = _m_sillytavern_api.live_sync_api_configured
         self.old_db = config.DB_FILE
         _m_main.CHARACTER_DIR = root / "characters"
         config.CHARACTER_DIR = _m_main.CHARACTER_DIR
@@ -53,7 +53,7 @@ class CatalogLimitTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps({"power_user": {"personas": {}, "persona_descriptions": {}}}), encoding="utf-8")
         _m_persona_sync._NATIVE_PERSONA_CACHE = {}
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        _m_sillytavern_api.phase3_api_configured = lambda: False
+        _m_sillytavern_api.live_sync_api_configured = lambda: False
         config.DB_FILE = root / "bridge.sqlite3"
         for directory in (_m_main.CHARACTER_DIR, config.WORLD_DIR, _m_common.SYSTEM_PROMPTS_DIR):
             directory.mkdir()
@@ -72,7 +72,7 @@ class CatalogLimitTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.old_native_avatars
         _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_native_cache
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_native_cache_time
-        _m_sillytavern_api.phase3_api_configured = self.old_phase3
+        _m_sillytavern_api.live_sync_api_configured = self.old_phase3
         config.DB_FILE = self.old_db
         self.tmp.cleanup()
 

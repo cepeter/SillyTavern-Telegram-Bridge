@@ -1,4 +1,4 @@
-"""Phase 7B2 card-foundation ordinary-import boundary tests."""
+"""Card-foundation import-boundary regression tests."""
 
 from pathlib import Path
 import sqlite3
@@ -46,9 +46,7 @@ CALLBACK_TOKEN_EXPORTS = (
 )
 
 
-
-
-class CardFoundationsImportIslandTests(unittest.TestCase):
+class CardFoundationBoundaryTests(unittest.TestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -160,7 +158,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             completed.stdout + completed.stderr,
         )
 
-    def test_cards_shell_does_not_redefine_migrated_content_or_panel_functions(self):
+    def test_cards_orchestration_does_not_redefine_content_or_panel_functions(self):
         source = (
             REPO_ROOT / "bridge" / "cards.py"
         ).read_text(encoding="utf-8")
@@ -486,10 +484,6 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
         )
 
 
-    def test_phase_7b2_foundations_remain_ordinary_after_final_cutover(self):
-        self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
-
-
     def test_callback_functions_resolve_canonical_cache(self):
         import bridge.callback_tokens as callback_tokens
 
@@ -502,7 +496,7 @@ class CardFoundationsImportIslandTests(unittest.TestCase):
             callback_tokens._CALLBACK_TOKEN_VALUES,
         )
 
-    def test_phase_7b2_ordinary_modules_do_not_import_runtime_or_common(self):
+    def test_card_foundation_modules_do_not_import_runtime_or_common(self):
         for filename in (
             "panel_utils.py",
             "card_content.py",

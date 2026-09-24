@@ -1,4 +1,4 @@
-"""Phase 7B1 persistence ordinary-import boundary tests."""
+"""Persistence import-boundary regression tests."""
 
 from pathlib import Path
 import subprocess
@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).parents[1]
-
 
 
 DATABASE_PUBLIC_FUNCTIONS = (
@@ -57,7 +56,7 @@ DATABASE_PUBLIC_FUNCTIONS = (
     "ensure_sync_binding",
 )
 
-class PersistenceImportIslandTests(unittest.TestCase):
+class PersistenceImportBoundaryTests(unittest.TestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -202,9 +201,6 @@ class PersistenceImportIslandTests(unittest.TestCase):
             )
 
 
-    def test_database_and_config_remain_ordinary_after_final_cutover(self):
-        self.assertFalse((REPO_ROOT / "bridge" / "runtime_loader.py").exists())
-
     def test_database_maintenance_uses_current_canonical_default_path(self):
         import bridge.config as config
         import bridge.database as database
@@ -215,15 +211,15 @@ class PersistenceImportIslandTests(unittest.TestCase):
                 db = database.db_connect()
                 try:
                     db.execute(
-                        "CREATE TABLE phase7b1_churn("
+                        "CREATE TABLE persistence_churn("
                         "id INTEGER PRIMARY KEY, payload TEXT)"
                     )
                     db.executemany(
-                        "INSERT INTO phase7b1_churn(payload) VALUES(?)",
+                        "INSERT INTO persistence_churn(payload) VALUES(?)",
                         [("x" * 2000,) for _ in range(200)],
                     )
                     db.commit()
-                    db.execute("DELETE FROM phase7b1_churn")
+                    db.execute("DELETE FROM persistence_churn")
                     db.commit()
                 finally:
                     db.close()

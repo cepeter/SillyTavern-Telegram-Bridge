@@ -7,7 +7,7 @@ import sqlite3
 
 
 _UNEXPECTED_SYNC_ERROR = (
-    "unexpected Phase 3 binding failure"
+    "unexpected Live Sync polling failure"
 )
 
 
@@ -166,7 +166,7 @@ class SyncPollSafetyAdapter:
                     )
                 except Exception:
                     self.log_warning(
-                        "Phase 3 binding failed for session %s",
+                        "Live Sync polling failed for session %s",
                         session_id,
                         exc_info=True,
                     )

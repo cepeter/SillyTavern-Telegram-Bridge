@@ -127,7 +127,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         # A full VACUUM would have reclaimed every free page.
         self.assertGreater(self.db.execute("PRAGMA freelist_count").fetchone()[0], 0)
 
-    def test_phase3_worker_reuses_connection_between_polls(self):
+    def test_live_sync_worker_reuses_connection_between_polls(self):
         class FakeStopEvent:
             def __init__(self):
                 self.calls = 0
@@ -144,7 +144,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
             def close(self):
                 self.closed = True
 
-        original_event = _m_sync_api._PHASE3_STOP_EVENT
+        original_event = _m_sync_api._LIVE_SYNC_STOP_EVENT
         original_connect = _m_sync_api.db_connect
         stop_event = FakeStopEvent()
         connections = []
@@ -159,12 +159,12 @@ class DatabaseOptimizationTests(unittest.TestCase):
             connections.append(connection)
             return connection
 
-        _m_sync_api._PHASE3_STOP_EVENT = stop_event
+        _m_sync_api._LIVE_SYNC_STOP_EVENT = stop_event
         _m_sync_api.db_connect = connect
         try:
-            _m_sync_api._phase3_worker_loop(FakeSync())
+            _m_sync_api._live_sync_worker_loop(FakeSync())
         finally:
-            _m_sync_api._PHASE3_STOP_EVENT = original_event
+            _m_sync_api._LIVE_SYNC_STOP_EVENT = original_event
             _m_sync_api.db_connect = original_connect
 
         self.assertEqual(len(connections), 1)

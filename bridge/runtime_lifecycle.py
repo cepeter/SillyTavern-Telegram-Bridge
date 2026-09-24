@@ -10,7 +10,7 @@ import urllib.error
 from bridge.common import shutdown_background_executors
 from bridge.composition import BridgeServices
 from bridge.database import get_meta, run_database_maintenance
-from bridge.sync_api import start_phase3_sync_worker, stop_phase3_sync_worker
+from bridge.sync_api import start_live_sync_worker, stop_live_sync_worker
 from bridge.update_routing import route_update
 from bridge.worker_orchestration import (
     make_durable_backlog_dispatcher,
@@ -60,7 +60,7 @@ def run_bridge_runtime(services: BridgeServices, fields: dict) -> int:
     _SHUTDOWN_EVENT.clear()
     install_bridge_signal_handlers(services.background.begin_shutdown)
     db = services.db_factory()
-    start_phase3_sync_worker(sync_service=services.sync)
+    start_live_sync_worker(sync_service=services.sync)
     services.background.register_backlog_dispatcher(
         make_durable_backlog_dispatcher(services, fields)
     )
@@ -116,7 +116,7 @@ def run_bridge_runtime(services: BridgeServices, fields: dict) -> int:
             _SHUTDOWN_EVENT.wait(5)
 
     request_bridge_shutdown(services.background.begin_shutdown)
-    sync_stopped = stop_phase3_sync_worker(timeout=5.0)
+    sync_stopped = stop_live_sync_worker(timeout=5.0)
     drained = shutdown_background_executors(timeout=20.0)
     db.close()
     # Explicit maintenance on a dedicated connection after executors drained:

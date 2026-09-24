@@ -5,8 +5,7 @@ def _decode_pending_state(raw: str, meta_key: str) -> dict:
     try:
         return json.loads(raw) if raw else {}
     except json.JSONDecodeError:
-        # Legacy settings_input state stored the raw setting key instead of JSON.
-        return {"key": raw} if meta_key.startswith("settings_input:") else {}
+        return {}
 
 
 def _pending_state(db, meta_key: str, session_id: str, token: str, chat_id: str) -> dict:

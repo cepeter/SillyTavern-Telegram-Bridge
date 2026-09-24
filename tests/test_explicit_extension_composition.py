@@ -1,4 +1,4 @@
-"""PR 56 explicit extension composition regression tests."""
+"""Explicit extension composition regression tests."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""SQL-only persistence primitives for Phase 3 migrated domains."""
+"""SQL-only persistence primitives for current application domains."""
 from __future__ import annotations
 
 import sqlite3

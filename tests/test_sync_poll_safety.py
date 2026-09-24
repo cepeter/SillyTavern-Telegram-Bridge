@@ -584,7 +584,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             (
                 2,
                 self.now_value + 8.0,
-                "unexpected Phase 3 binding failure",
+                "unexpected Live Sync polling failure",
             ),
         )
 
@@ -611,7 +611,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
 
         self.assertEqual(
             self.warnings[0][0],
-            "Phase 3 binding failed for session %s",
+            "Live Sync polling failed for session %s",
         )
         self.assertEqual(
             self.warnings[0][1],
@@ -649,7 +649,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
                 (
                     "chat",
                     "session",
-                    "unexpected Phase 3 binding failure",
+                    "unexpected Live Sync polling failure",
                     (5, ""),
                 )
             ],

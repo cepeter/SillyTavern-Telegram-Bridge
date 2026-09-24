@@ -150,9 +150,9 @@ class SyncSourceBoundaryTests(unittest.TestCase):
             "def handle_sync_callback",
         )
         for forbidden in (
-            "phase3_sync_now(",
-            "phase3_toggle_realtime(",
-            "_phase3_disable(",
+            "live_sync_now(",
+            "live_sync_toggle_realtime(",
+            "_live_sync_disable(",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, chunk)
@@ -163,9 +163,9 @@ class SyncSourceBoundaryTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         chunk = self._function_chunk(
             source,
-            "def _phase3_worker_loop",
+            "def _live_sync_worker_loop",
         )
-        self.assertNotIn("phase3_sync_poll(", chunk)
+        self.assertNotIn("live_sync_poll(", chunk)
         self.assertNotIn("resolve_sync_service", chunk)
         self.assertIn("sync_service.poll(", chunk)
 
@@ -185,7 +185,7 @@ class SyncSourceBoundaryTests(unittest.TestCase):
 
         service = FakeSyncService()
         with patch.object(
-            _m_sync_api._PHASE3_STOP_EVENT,
+            _m_sync_api._LIVE_SYNC_STOP_EVENT,
             "wait",
             side_effect=[False, True],
         ), patch.object(
@@ -193,7 +193,7 @@ class SyncSourceBoundaryTests(unittest.TestCase):
             "db_connect",
             return_value=FakeDb(),
         ):
-            _m_sync_api._phase3_worker_loop(service)
+            _m_sync_api._live_sync_worker_loop(service)
 
         self.assertEqual(service.polls, 1)
 
