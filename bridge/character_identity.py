@@ -10,8 +10,8 @@ from pathlib import Path
 
 from bridge.card_content import character_card_paths, character_display_name, safe_character_path
 from bridge.limits import IMAGE_MAX_BYTES
+from bridge.session_core import update_session
 from bridge.settings import AppSettings
-from bridge.telegram import update_session
 
 
 def character_image_fingerprint(path: Path) -> str:

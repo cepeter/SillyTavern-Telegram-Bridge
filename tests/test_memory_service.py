@@ -29,9 +29,9 @@ import bridge.memory as _m_memory
 import bridge.memory_backend as _m_memory_backend
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
+import bridge.native_imports as _m_telegram
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
-import bridge.telegram as _m_telegram
 from bridge.memory_service import MemoryPromptContext, MemoryService
 
 

@@ -6,8 +6,11 @@ from application_test_setup import (
     make_test_input_flow_service,
     make_test_model_router,
     make_test_provider_port,
+    make_test_session_service,
 )
 from settings_test_support import SettingsTestCase, make_test_settings
+
+from bridge.session_service import SessionService
 
 ensure_application_extensions()
 
@@ -88,6 +91,7 @@ class JobWorkerServiceTests(SettingsTestCase):
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
+            session=make_test_session_service(app_settings=config),
         )
 
     def tearDown(self):
@@ -180,8 +184,8 @@ class JobWorkerServiceTests(SettingsTestCase):
                 return_value=None,
             ),
             patch.object(
-                _m_workers,
-                "ensure_session",
+                SessionService,
+                "ensure",
                 return_value={"session_id": "session", "character_file": "mira.png"},
             ),
             patch.object(
@@ -216,8 +220,8 @@ class JobWorkerServiceTests(SettingsTestCase):
                 return_value=None,
             ),
             patch.object(
-                _m_workers,
-                "ensure_session",
+                SessionService,
+                "ensure",
                 return_value={"session_id": "session", "character_file": "mira.png"},
             ),
             patch.object(

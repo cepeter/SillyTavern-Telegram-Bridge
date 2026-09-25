@@ -13,7 +13,6 @@ from bridge.help_details import send_help_command
 from bridge.job_service import JobSubmission
 from bridge.media import process_voice_job
 from bridge.request_types import RequestContext
-from bridge.telegram import ensure_session
 from bridge.topic_scope import topic_scope_from_message
 from bridge.worker_orchestration import process_edit_job, process_image_job, process_message_job
 
@@ -58,7 +57,7 @@ def route_edited_message_update(
     edited_session_id = (
         str(target[1])
         if target is not None and target[2] == "user"
-        else ensure_session(db, edited_chat_id, model, app_settings=services.config)["session_id"]
+        else services.session.ensure(db, edited_chat_id, model)["session_id"]
     )
     if not services.group.user_turn_allowed(db, edited_chat_id, edited_session_id, edited_sender):
         services.telegram.send_text(token, edited_chat_id, "It is not your turn in manual group mode.")
@@ -133,7 +132,7 @@ def route_message_update(
 
     if voice:
         message_id = int(message.get("message_id"))
-        queued_session_id = ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+        queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
         job_id = services.jobs.enqueue(
             db,
             update_id,
@@ -176,7 +175,7 @@ def route_message_update(
     if photos:
         largest = photos[-1]
         message_id = int(message.get("message_id"))
-        queued_session_id = ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+        queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
         job_id = services.jobs.enqueue(
             db,
             update_id,
@@ -225,7 +224,7 @@ def route_message_update(
         and str(document.get("mime_type") or "").startswith("image/")
     ):
         message_id = int(message.get("message_id"))
-        queued_session_id = ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+        queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
         job_id = services.jobs.enqueue(
             db,
             update_id,
@@ -270,7 +269,7 @@ def route_message_update(
 
     if document:
         message_id = int(message.get("message_id"))
-        queued_session_id = ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+        queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
         job_id = services.jobs.enqueue(
             db,
             update_id,
@@ -316,7 +315,7 @@ def route_message_update(
         return True
 
     message_id = int(message.get("message_id"))
-    queued_session_id = ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+    queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
     request_context = RequestContext(db, queued_session_id, sender, app_settings=services.config)
     if send_help_command(
         token,

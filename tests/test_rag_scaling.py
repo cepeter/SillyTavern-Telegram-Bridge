@@ -13,8 +13,8 @@ from pathlib import Path
 import bridge.help as _m_help
 import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
+import bridge.rag_core as _m_telegram
 import bridge.rag_core as rag_core
-import bridge.telegram as _m_telegram
 
 
 class RagScalingTests(SettingsTestCase):

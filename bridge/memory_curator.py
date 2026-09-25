@@ -27,9 +27,9 @@ from bridge.memory_backend import _retain_with_client, hindsight_session_prefix,
 from bridge.provider_port import ProviderPort
 from bridge.repositories import load_meta_value as _repo_load_meta_value
 from bridge.repositories import store_meta_value as _repo_store_meta_value
+from bridge.session_core import load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import db_connect, write_transaction
-from bridge.telegram import load_session
 
 _MEMORY_CURATOR_MAX_ITEMS = 24
 _MEMORY_CURATOR_TRANSCRIPT_MESSAGES = 20

@@ -14,6 +14,8 @@ from application_test_setup import (
     make_test_request_context,
 )
 
+from bridge.session_service import SessionService
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -129,8 +131,8 @@ def test_callback_dispatch_forwards_exact_input_flow_service(monkeypatch, *, app
         lambda *_args, **_kwargs: "",
     )
     monkeypatch.setattr(
-        dispatch,
-        "ensure_session",
+        SessionService,
+        "ensure",
         lambda *_args, app_settings=None, **_kwargs: {
             "session_id": "session",
             "character_file": "mira.png",

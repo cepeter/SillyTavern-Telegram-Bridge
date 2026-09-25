@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_application_services
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import tempfile
@@ -27,7 +29,7 @@ class PanelExpiryFeedbackTests(SettingsTestCase):
         self.tmp.cleanup()
 
     def test_queued_expired_panel_sends_visible_feedback_and_purges_binding(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_session_naming.update_session(self.db, "chat", session["session_id"], author_note="keep me")
@@ -83,7 +85,7 @@ class PanelExpiryFeedbackTests(SettingsTestCase):
         )
 
     def test_nonqueued_expired_panel_keeps_callback_toast_behavior(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_telegram.bind_panel_session(self.db, "chat", 502, session["session_id"])

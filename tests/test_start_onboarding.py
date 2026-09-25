@@ -6,6 +6,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import tempfile
@@ -15,7 +17,6 @@ from unittest.mock import Mock, patch
 
 import bridge.command_routes as _m_command_routes
 import bridge.memory_curator as _m_memory_curator
-import bridge.telegram as _m_telegram
 
 PLACEHOLDER_MODEL = "provider-one::provider-one/model-a"
 REAL_MODEL = "real-provider::real-model"
@@ -26,7 +27,7 @@ class StartOnboardingTests(SettingsTestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
-        self.session = _m_telegram.ensure_session(
+        self.session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         self.fields = {

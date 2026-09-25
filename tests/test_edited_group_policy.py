@@ -6,11 +6,13 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from application_test_setup import make_test_session_service
 from settings_test_support import make_test_settings
 
 from bridge import group_core, update_message_routing, worker_orchestration
 from bridge.job_service import DurableJob
 from bridge.session_naming import create_session
+from bridge.session_service import SessionService
 from bridge.sqlite_store import db_connect
 
 CHAT = "-100|topic:7"
@@ -57,6 +59,7 @@ def case(tmp_path):
         memory=object(),
         persona=object(),
         delivery=object(),
+        session=make_test_session_service(app_settings=config),
     )
     services.jobs.start.return_value = True
     services.jobs.enqueue.return_value = 91
@@ -106,9 +109,7 @@ def test_valid_edits_still_queue_and_preserve_actor_and_topic(case, mode, enable
 
 
 def test_unpermitted_edit_returns_before_session_or_group_state(case, monkeypatch):
-    monkeypatch.setattr(
-        update_message_routing, "ensure_session", lambda *a, **k: pytest.fail("unauthorized state read")
-    )
+    monkeypatch.setattr(SessionService, "ensure", lambda *a, **k: pytest.fail("unauthorized state read"))
     case.services.group = SimpleNamespace(user_turn_allowed=lambda *a: pytest.fail("unauthorized group read"))
     update_message_routing.route_edited_message_update(case.services, case.db, edited("300"), 90, frozenset({"100"}))
     case.services.jobs.enqueue.assert_not_called()

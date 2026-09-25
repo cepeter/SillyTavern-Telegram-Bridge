@@ -9,6 +9,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import json
@@ -569,7 +571,7 @@ class PersonaEditorTests(SettingsTestCase):
         )
         answers = []
         with patch.object(
-            _m_telegram,
+            _owner_session_core,
             "update_session",
             side_effect=AssertionError("direct session mutation"),
         ):
@@ -597,7 +599,7 @@ class PersonaEditorTests(SettingsTestCase):
         fake = FakePersonaService()
         answers = []
         with patch.object(
-            _m_telegram,
+            _owner_session_core,
             "update_session",
             side_effect=AssertionError("direct session mutation"),
         ):

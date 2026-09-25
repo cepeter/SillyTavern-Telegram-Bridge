@@ -18,7 +18,7 @@ from bridge.panel_callback_routes import (
     handle_provider_model_callback,
 )
 from bridge.request_types import RequestContext
-from bridge.telegram import ensure_session, load_session, send_text
+from bridge.telegram import send_text
 from bridge.topic_scope import parse_topic_scope
 
 
@@ -67,9 +67,9 @@ def process_callback(
         return
 
     session = (
-        load_session(db, chat_id, bound_session_id, services.config.default_model, app_settings=services.config)
+        services.session.load(db, chat_id, bound_session_id, services.config.default_model)
         if bound_session_id
-        else ensure_session(db, chat_id, services.config.default_model, app_settings=services.config)
+        else services.session.ensure(db, chat_id, services.config.default_model)
     )
     session_id = session["session_id"]
     request_context = RequestContext(db, session_id, sender, app_settings=services.config)

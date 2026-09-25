@@ -8,7 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from application_test_setup import make_test_session_service
 from settings_test_support import SettingsTestCase, make_test_settings
+
+from bridge.session_service import SessionService
 
 BRIDGE_DIR = Path(__file__).parents[1] / "bridge"
 
@@ -69,12 +72,13 @@ class CallbackDispatchBoundaryTests(SettingsTestCase):
             memory=object(),
             persona=object(),
             sync=object(),
+            session=make_test_session_service(app_settings=make_test_settings()),
         )
         with (
             patch.object(callback_dispatch, "answer_callback", external_answer),
             patch.object(
-                callback_dispatch,
-                "ensure_session",
+                SessionService,
+                "ensure",
                 return_value={"session_id": "session"},
             ),
             patch.object(

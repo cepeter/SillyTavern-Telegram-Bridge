@@ -177,3 +177,18 @@ is an in-process serialization policy, not a SQL parser or sandbox for arbitrary
 native-extension/UDF side effects. SQLite's own file locking still governs other
 processes. Keep connections on their owning thread and make commit/rollback/close
 explicit at the owning boundary.
+
+
+### Session and Telegram ownership
+
+`SessionService` is a required application collaborator. The composition root
+binds its per-application native defaults and memory cleanup. Ingress, callback
+orchestration and workers use `services.session`; leaf adapters may depend on the
+narrow canonical lifecycle functions in `session_core.py`, never session helpers
+re-exported by the Telegram transport. `session_repository.py` is SQL-only and
+requires an active caller-owned write transaction. Session creation/selection,
+updates and local deletion each commit at their lifecycle boundary, not inside
+repository primitives. Hindsight cleanup precedes local deletion outside the
+write transaction. `session_panels.py` owns deletion views; `native_imports.py`
+owns character/World Info installation and document routing. `telegram.py` owns
+transport, bounded file transfer, text splitting and panel-message binding only.

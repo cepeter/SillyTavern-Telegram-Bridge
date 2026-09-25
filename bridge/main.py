@@ -77,13 +77,22 @@ from bridge.repositories import count_session_messages as _count_session_message
 from bridge.runtime_lifecycle import run_bridge_runtime
 from bridge.runtime_logging import configure_logging, enforce_runtime_permissions
 from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
+from bridge.session_core import (
+    create_session,
+    delete_session_data,
+    ensure_session,
+    list_sessions,
+    load_session,
+    update_session,
+)
 from bridge.session_naming import handle_session_name_input, start_session_name_input
+from bridge.session_service import SessionService as _SessionService
 from bridge.settings import AppSettings, load_app_settings, validate_app_settings
 from bridge.sqlite_store import db_connect
 from bridge.sync_api import _live_sync_disable, live_sync_now, live_sync_poll, live_sync_toggle_realtime
 from bridge.sync_core import sync_binding
 from bridge.sync_service import SyncService as _SyncService
-from bridge.telegram import download_telegram_file, send_panel_request, send_text, telegram_request, update_session
+from bridge.telegram import download_telegram_file, send_panel_request, send_text, telegram_request
 
 
 def validate_startup_credential(model: str, model_router: _ModelRouter, *, app_settings: AppSettings) -> None:
@@ -176,12 +185,20 @@ def _build_startup_services(
         ),
         purge_session_memory=_partial(purge_hindsight_session, app_settings=config),
     )
+    session = _SessionService(
+        load_backend=_partial(load_session, app_settings=config),
+        ensure_backend=_partial(ensure_session, app_settings=config),
+        create_backend=_partial(create_session, app_settings=config),
+        update_backend=update_session,
+        list_backend=list_sessions,
+        delete_backend=_partial(delete_session_data, memory_service=memory),
+    )
     persona = _PersonaService(
         load_personas=_partial(load_personas, app_settings=config),
         load_default_persona=_partial(default_persona_id, app_settings=config),
         upsert_persona=_partial(upsert_native_persona, app_settings=config),
         delete_persona=_partial(delete_native_persona, app_settings=config),
-        update_session_persona=update_session,
+        update_session_persona=session.update,
         persona_reference_count=_count_persona_references,
         persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
     )
@@ -286,6 +303,7 @@ def _build_startup_services(
         ),
         background=background,
         group=group,
+        session=session,
         group_director=group_director,
         input_flow=input_flow,
         model_router=model_router,

@@ -7,6 +7,7 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
+import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
 
@@ -75,7 +76,7 @@ class NotePanelTests(SettingsTestCase):
         self.assertIn("Author's Note — on", calls[0][1]["text"])
 
     def test_note_text_command_opens_panel_without_mutating(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         fields = self._fields()
@@ -110,7 +111,7 @@ class NotePanelTests(SettingsTestCase):
         )
 
     def test_note_user_input_updates_session_and_expires_state(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         fields = self._fields()
@@ -159,7 +160,7 @@ class NotePanelTests(SettingsTestCase):
         self.assertEqual(deleted, [("deleteMessage", {"chat_id": "chat", "message_id": 90})])
 
     def test_note_cancel_deletes_text_prompt(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         fields = self._fields()
@@ -198,7 +199,7 @@ class NotePanelTests(SettingsTestCase):
         self.assertEqual(_m_session_naming.get_meta(self.db, "note_input:chat", ""), "")
 
     def test_note_user_input_closes_original_panel(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_telegram.bind_panel_session(self.db, "chat", 78, session["session_id"])
@@ -236,7 +237,7 @@ class NotePanelTests(SettingsTestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 78))
 
     def test_note_cancel_closes_previous_panel(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_telegram.bind_panel_session(self.db, "chat", 77, session["session_id"])
@@ -266,7 +267,7 @@ class NotePanelTests(SettingsTestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 77))
 
     def test_note_close_uses_valid_marker_when_delete_is_rejected(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_telegram.bind_panel_session(self.db, "chat", 79, session["session_id"])
@@ -291,7 +292,7 @@ class NotePanelTests(SettingsTestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 79))
 
     def test_removed_authornote_alias_does_not_generate(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         fields = self._fields()

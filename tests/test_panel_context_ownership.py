@@ -11,6 +11,7 @@ from unittest.mock import patch
 from application_test_setup import ensure_application_extensions, make_test_application_services
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
 
 ensure_application_extensions()
@@ -67,7 +68,7 @@ class PanelContextOwnershipTests(SettingsTestCase):
         self.assertIsNone(row)
 
     def test_update_cancel_through_callback_uses_caller_database(self):
-        session = telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         telegram.bind_panel_session(

@@ -19,12 +19,15 @@ STATIC_TARGETS: tuple[str, ...] = (
     "bridge/persona_service.py",
     "bridge/provider_port.py",
     "bridge/sync_service.py",
+    "bridge/session_service.py",
 )
 
 
 # Type coverage grows independently of the deliberately isolated service layer.
 TYPE_TARGETS: tuple[str, ...] = (
     *STATIC_TARGETS,
+    "bridge/session_repository.py",
+    "bridge/repository_contracts.py",
     "bridge/network_security.py",
     "bridge/callback_tokens.py",
     "bridge/config_values.py",
@@ -51,6 +54,8 @@ SERVICE_CONTRACT_IMPORTS = frozenset({"bridge.port_contracts", "bridge.request_t
 
 
 LOW_LEVEL_IMPORTS = {
+    "bridge.repository_contracts": frozenset(),
+    "bridge.session_repository": frozenset({"bridge.repository_contracts"}),
     "bridge.topic_scope": frozenset(),
     "bridge.limits": frozenset(),
     "bridge.config": frozenset({"bridge.limits"}),
@@ -58,7 +63,12 @@ LOW_LEVEL_IMPORTS = {
     "bridge.runtime_logging": frozenset({"bridge.settings"}),
     "bridge.sqlite_store": frozenset({"bridge.limits", "bridge.settings", "bridge.schema", "bridge.scheduler_safety"}),
 }
-FORBIDDEN_OWNER_IMPORTS = {"bridge.command_panels": frozenset({"bridge.command_routes"})}
+FORBIDDEN_OWNER_IMPORTS = {
+    "bridge.command_panels": frozenset({"bridge.command_routes"}),
+    "bridge.telegram": frozenset(
+        {"bridge.session_core", "bridge.session_repository", "bridge.native_imports", "bridge.session_panels"}
+    ),
+}
 
 
 class DependencyReport(NamedTuple):

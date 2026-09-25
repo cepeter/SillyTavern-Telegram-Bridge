@@ -40,10 +40,11 @@ from bridge.rag_core import (
     rag_retrieval_bundle,
 )
 from bridge.reset_panel import reset_confirmation_request
+from bridge.session_core import ensure_session as ensure_session
+from bridge.session_core import load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import run_write_txn, write_transaction
-from bridge.telegram import ensure_session as ensure_session
-from bridge.telegram import load_session, send_panel_request, send_text, telegram_request
+from bridge.telegram import send_panel_request, send_text, telegram_request
 
 _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
     operation_phase=lambda db, operation_id: operation_phase(

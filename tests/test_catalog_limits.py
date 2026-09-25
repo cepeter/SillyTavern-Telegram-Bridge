@@ -5,6 +5,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import json
@@ -20,9 +22,9 @@ import bridge.command_routes as _m_command_routes
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
+import bridge.native_imports as _m_telegram
 import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.status_panels as _m_status_panels
-import bridge.telegram as _m_telegram
 
 
 class CatalogLimitTests(SettingsTestCase):
@@ -61,7 +63,7 @@ class CatalogLimitTests(SettingsTestCase):
         ):
             directory.mkdir()
         self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
-        self.session = _m_telegram.ensure_session(
+        self.session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
 

@@ -26,9 +26,10 @@ from bridge.help import (
 from bridge.help_details import send_help_command, send_help_menu
 from bridge.input_flows import handle_inline_text_action, start_text_action_input
 from bridge.media import send_reply
+from bridge.session_core import list_sessions
 from bridge.session_naming import start_session_name_input
 from bridge.status_panels import send_prompt_menu, status_text
-from bridge.telegram import list_sessions, send_text
+from bridge.telegram import send_text
 
 if TYPE_CHECKING:
     pass

@@ -10,6 +10,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import json
@@ -26,7 +28,6 @@ import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.session_titles as _m_session_titles
 import bridge.sync_api as _m_sync_api
-import bridge.telegram as _m_telegram
 
 
 class SessionNamingTests(SettingsTestCase):
@@ -36,7 +37,7 @@ class SessionNamingTests(SettingsTestCase):
         self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.group = make_test_group_service(app_settings=self.app_settings_builder.build())
-        self.session = _m_telegram.ensure_session(
+        self.session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         self.sent = []
@@ -265,7 +266,7 @@ class SessionNamingTests(SettingsTestCase):
 
     def test_group_session_waits_for_name_then_opens_character_stage(self):
         chat_id = "chat|topic:7"
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, chat_id, self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         old_menu = _m_session_naming.send_character_menu

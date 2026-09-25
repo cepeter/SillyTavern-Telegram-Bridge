@@ -6,7 +6,10 @@ import inspect
 from dataclasses import MISSING
 from pathlib import Path
 
+from application_test_setup import make_test_session_service
+
 from bridge.request_types import PreparedMessage
+from bridge.session_service import SessionService
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -220,6 +223,9 @@ def test_committed_recovery_uses_group_service_for_advance(monkeypatch):
         group=Group(),
         conversation=object(),
         telegram=SimpleNamespace(send_text=lambda *_args, **_kwargs: None),
+        session=make_test_session_service(
+            app_settings=SimpleNamespace(bot_token="token", api_key="key", default_model="model")
+        ),
     )
     monkeypatch.setattr(
         workers,
@@ -227,8 +233,8 @@ def test_committed_recovery_uses_group_service_for_advance(monkeypatch):
         lambda *_args: (7, "stored reply", "[]"),
     )
     monkeypatch.setattr(
-        workers,
-        "load_session",
+        SessionService,
+        "load",
         lambda *_args, app_settings=None: {"session_id": "session"},
     )
     monkeypatch.setattr(workers, "send_reply", lambda *_args, app_settings=None, **_kwargs: None)

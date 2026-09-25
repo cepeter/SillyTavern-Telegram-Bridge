@@ -17,6 +17,7 @@ from bridge.model_router import ModelRouter
 from bridge.persona_service import PersonaService
 from bridge.port_contracts import ChatSubmit, DownloadFile, SendText, TelegramRequest
 from bridge.provider_port import ProviderPort
+from bridge.session_service import SessionService
 from bridge.settings import AppSettings
 from bridge.sync_service import SyncService
 
@@ -45,6 +46,7 @@ class BridgeServices:
     conversation: ConversationService
     delivery: DeliveryPort
     group: GroupService
+    session: SessionService
     group_director: GroupDirectorService
     input_flow: InputFlowService
     model_router: ModelRouter

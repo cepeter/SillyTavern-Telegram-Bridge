@@ -162,7 +162,7 @@ def make_native_test_persona_service(*, app_settings=None) -> PersonaService:
         upsert_native_persona,
     )
     from bridge.repositories import count_persona_references
-    from bridge.telegram import update_session
+    from bridge.session_core import update_session
 
     return PersonaService(
         load_personas=_partial(load_personas, app_settings=app_settings),
@@ -381,6 +381,7 @@ def make_test_application_services(
         provider=provider,
         conversation=conversation,
         delivery=delivery,
+        session=make_test_session_service(app_settings=app_settings),
     )
 
 
@@ -406,4 +407,29 @@ def make_native_test_sync_service(*, app_settings=None, retain_memory=None) -> S
         disable_realtime=_live_sync_disable,
         api_configured=_partial(_st_api.live_sync_api_configured, app_settings=app_settings),
         expected_errors=(_st_api.SillyTavernApiError, ValueError),
+    )
+
+
+def make_test_session_service(*, app_settings=None, memory_service=None):
+    from bridge.session_core import (
+        create_session,
+        delete_session_data,
+        ensure_session,
+        list_sessions,
+        load_session,
+        update_session,
+    )
+    from bridge.session_service import SessionService
+
+    if app_settings is None:
+        app_settings = make_test_settings()
+    if memory_service is None:
+        memory_service = make_test_memory_service()
+    return SessionService(
+        load_backend=_partial(load_session, app_settings=app_settings),
+        ensure_backend=_partial(ensure_session, app_settings=app_settings),
+        create_backend=_partial(create_session, app_settings=app_settings),
+        update_backend=update_session,
+        list_backend=list_sessions,
+        delete_backend=_partial(delete_session_data, memory_service=memory_service),
     )
