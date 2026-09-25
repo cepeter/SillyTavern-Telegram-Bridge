@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Schedule self-update restarts through a transient user-systemd timer outside the bridge service cgroup, preventing successful restarts from being misreported as failures when `KillMode=control-group` terminates child processes.
+
 ## [0.2.028] - 2026-09-25
 
 ### Added
