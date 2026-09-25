@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Show the selected native character-card PNG in Telegram Character Info, with Back/Close controls and a text-only fallback when Telegram cannot render the image.
+
 ### Configuration cleanup
 
 - Remove empty built-in provider URL/model fallback stubs, give empty catalogs actionable panel guidance, and report missing Chat Completions endpoints before network access. Clarify GitHub-managed CodeQL Default Setup and the privacy of stored diagnostics.

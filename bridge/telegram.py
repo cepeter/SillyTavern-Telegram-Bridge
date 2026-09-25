@@ -504,6 +504,62 @@ def send_panel_request(token: str, method: str, payload: dict, *, request_contex
     return result
 
 
+def send_panel_photo(
+    token: str,
+    chat_id: str,
+    photo_path: Path,
+    caption: str,
+    reply_markup: dict,
+    *,
+    request_context: RequestContext,
+) -> dict:
+    """Send a local PNG as a session-owned Telegram photo panel."""
+    real_chat_id, thread_id = parse_topic_scope(str(chat_id))
+    raw = Path(photo_path).read_bytes()
+    if not raw:
+        raise ValueError("character photo is empty")
+    boundary = f"----BridgePanelPhoto{time.time_ns()}"
+    fields = [("chat_id", real_chat_id), ("caption", str(caption)[:1024]), ("reply_markup", json.dumps(reply_markup))]
+    if thread_id is not None:
+        fields.append(("message_thread_id", str(thread_id)))
+    chunks: list[bytes] = []
+    for name, value in fields:
+        chunks.append(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode("utf-8")
+        )
+    chunks.append(
+        (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="character.png"\r\n'
+            "Content-Type: image/png\r\n\r\n"
+        ).encode("utf-8")
+        + raw
+        + b"\r\n"
+    )
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendPhoto",
+        data=b"".join(chunks),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=65) as response:  # noqa: S310 -- fixed Telegram HTTPS endpoint
+        payload = json.loads(response.read().decode("utf-8"))
+    if not payload.get("ok") or not isinstance(payload.get("result"), dict):
+        detail = payload.get("description") or "unknown Telegram error"
+        raise RuntimeError(f"Telegram sendPhoto failed: {detail}")
+    result = payload["result"]
+    message_id = result.get("message_id")
+    if request_context.session_id and message_id:
+        bind_panel_session(
+            request_context.db,
+            str(chat_id),
+            message_id,
+            request_context.session_id,
+            request_context.actor_id,
+        )
+    return result
+
+
 def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_BYTES) -> bytes:
     file_info = telegram_request(token, "getFile", {"file_id": file_id})
     file_path = file_info.get("file_path")

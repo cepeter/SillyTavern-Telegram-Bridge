@@ -71,6 +71,7 @@ from bridge.telegram import (
     character_delete_references,
     delete_session_data,
     list_sessions,
+    send_panel_photo,
     send_panel_request,
     send_session_delete_confirm,
     send_session_delete_menu,
@@ -717,6 +718,24 @@ def handle_primary_panel_callback(
     )
 
 
+def _character_info_text(info: dict, filename: str) -> str:
+    return (
+        "Character: "
+        f"{info['name']}"
+        "\nFile: "
+        f"{filename}"
+        "\nDescription: "
+        f"{len(info['description'])}"
+        " chars\nPersonality: "
+        f"{len(info['personality'])}"
+        " chars\nScenario: "
+        f"{len(info['scenario'])}"
+        " chars\nFirst message: "
+        f"{len(info['first_mes'])}"
+        " chars"
+    )
+
+
 def handle_character_callback(
     db,
     token,
@@ -780,49 +799,63 @@ def handle_character_callback(
         return True
     if data.startswith("characterinfo:"):
         value = data.split(":", 1)[1]
+        if value == "back":
+            answer_callback(token, str(callback.get("id", "")), "Back")
+            close_panel_message(db, token, chat_id, callback)
+            send_character_info_menu(token, chat_id, request_context=request_context)
+            return True
         if value.startswith("page:"):
             send_character_info_menu(
                 token, chat_id, message.get("message_id"), int(value.split(":", 1)[1]), request_context=request_context
             )
             return True
         filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
-        if not safe_character_path(filename, app_settings=request_context.app_settings):
+        path = safe_character_path(filename, app_settings=request_context.app_settings)
+        if not path:
             answer_callback(token, str(callback.get("id", "")), "Character choice expired")
             return True
         info = card_fields_from_file(filename, app_settings=request_context.app_settings)
         answer_callback(token, str(callback.get("id", "")), "Info")
-        send_panel_request(
-            token,
-            "editMessageText",
-            {
-                "chat_id": chat_id,
-                "message_id": message.get("message_id"),
-                "text": (
-                    "Character: "
-                    f"""{info["name"]}"""
-                    "\nFile: "
-                    f"""{filename}"""
-                    "\nDescription: "
-                    f"""{len(info["description"])}"""
-                    " chars\nPersonality: "
-                    f"""{len(info["personality"])}"""
-                    " chars\nScenario: "
-                    f"""{len(info["scenario"])}"""
-                    " chars\nFirst message: "
-                    f"""{len(info["first_mes"])}"""
-                    " chars"
-                ),
-                "reply_markup": {
-                    "inline_keyboard": [
-                        [
-                            {"text": "⬅️ Back", "callback_data": "character:info"},
-                            {"text": "❌ Close", "callback_data": "character:cancel"},
+        text = _character_info_text(info, filename)
+        reply_markup = {
+            "inline_keyboard": [
+                [
+                    {"text": "⬅️ Back", "callback_data": "characterinfo:back"},
+                    {"text": "❌ Close", "callback_data": "character:cancel"},
+                ]
+            ]
+        }
+        try:
+            send_panel_photo(
+                token,
+                chat_id,
+                path,
+                text,
+                reply_markup,
+                request_context=request_context,
+            )
+        except (OSError, RuntimeError, ValueError):
+            logging.info("Character photo preview unavailable; using text-only info panel", exc_info=True)
+            send_panel_request(
+                token,
+                "editMessageText",
+                {
+                    "chat_id": chat_id,
+                    "message_id": message.get("message_id"),
+                    "text": text,
+                    "reply_markup": {
+                        "inline_keyboard": [
+                            [
+                                {"text": "⬅️ Back", "callback_data": "character:info"},
+                                {"text": "❌ Close", "callback_data": "character:cancel"},
+                            ]
                         ]
-                    ]
+                    },
                 },
-            },
-            request_context=request_context,
-        )
+                request_context=request_context,
+            )
+            return True
+        close_panel_message(db, token, chat_id, callback)
         return True
     if data.startswith("characterdelete:"):
         value = data.split(":", 1)[1]
