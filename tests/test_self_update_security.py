@@ -311,3 +311,34 @@ def test_source_edit_during_preparation_is_preserved(engine, release_tree, monke
     assert outcome.code == "dirty"
     assert git(data.source, "rev-parse", "HEAD") == data.old
     assert (data.source / "bridge" / "feature.py").read_text() == "concurrent user edit\n"
+
+
+def test_private_key_is_never_copied_as_public_trust_policy(engine, release_tree, monkeypatch):
+    data = release_tree
+    data.signers.write_bytes(data.key.read_bytes())
+    fake_supervisor(monkeypatch, engine)
+
+    def no_fetch_or_copy(*_args, **_kwargs):
+        pytest.fail("private key must be rejected before fetching or creating a signer snapshot")
+
+    monkeypatch.setattr(engine, "_verified_release", no_fetch_or_copy)
+    outcome = engine.apply_update(make_plan(engine, data))
+    assert outcome.status is engine.UpdateStatus.REFUSED
+    assert outcome.code == "trust"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "principal secret not-public",
+        "principal ssh-ed25519 invalid-base64",
+        'principal namespaces="file" ssh-ed25519 AAAA',
+    ],
+)
+def test_malformed_public_signer_policy_is_refused_before_network(engine, release_tree, monkeypatch, line):
+    data = release_tree
+    data.signers.write_text(line + "\n")
+    fake_supervisor(monkeypatch, engine)
+    monkeypatch.setattr(engine, "_verified_release", lambda *_a, **_k: pytest.fail("policy must be validated first"))
+    result = engine.apply_update(make_plan(engine, data))
+    assert result.code == "trust"

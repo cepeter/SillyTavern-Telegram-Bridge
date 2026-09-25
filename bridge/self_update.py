@@ -7,11 +7,14 @@ mirror. A supervisor failure is reported as restart-required, never as success.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -167,7 +170,77 @@ def validate_plan(plan: UpdatePlan) -> None:
     _validate_live_contents(live)
 
 
-def _trusted_signers(path: Path) -> bytes:
+@dataclass(frozen=True)
+class PublicSignerPolicy:
+    """Validated public SSH keys only; never private signing material."""
+
+    entries: tuple[str, ...]
+
+    def render(self) -> str:
+        return "\n".join(self.entries) + "\n"
+
+
+def _parse_public_signer_policy(raw: bytes) -> PublicSignerPolicy:
+    try:
+        text = raw.decode("ascii")
+    except UnicodeError:
+        raise UpdateRefused("trust") from None
+    entries: list[str] = []
+    algorithms = {"ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"}
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        try:
+            parts = shlex.split(line, comments=True)
+        except ValueError:
+            raise UpdateRefused("trust") from None
+        if len(parts) > 1 and parts[1] == "namespaces=git":
+            del parts[1]
+        if len(parts) < 3 or parts[1] not in algorithms:
+            # Reject private-key PEM blocks and unsupported options; never
+            # silently discard a validity restriction or another namespace.
+            raise UpdateRefused("trust")
+        principal, algorithm, encoded = parts[:3]
+        if not re.fullmatch(r"[A-Za-z0-9_.@*?,!+-]{1,256}", principal):
+            raise UpdateRefused("trust")
+        try:
+            blob = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            raise UpdateRefused("trust") from None
+        if not 16 <= len(blob) <= 16384:
+            raise UpdateRefused("trust")
+        fields: list[bytes] = []
+        cursor = 0
+        while cursor < len(blob):
+            if cursor + 4 > len(blob):
+                raise UpdateRefused("trust")
+            length = int.from_bytes(blob[cursor : cursor + 4], "big")
+            cursor += 4
+            if not length or cursor + length > len(blob):
+                raise UpdateRefused("trust")
+            fields.append(blob[cursor : cursor + length])
+            cursor += length
+        if fields[0] != algorithm.encode("ascii"):
+            raise UpdateRefused("trust")
+        if algorithm == "ssh-ed25519":
+            if len(fields) != 2 or len(fields[1]) != 32:
+                raise UpdateRefused("trust")
+        elif len(fields) != 3:
+            raise UpdateRefused("trust")
+        if algorithm.startswith("ecdsa-sha2-") and fields[1].decode("ascii", "replace") != algorithm[11:]:
+            raise UpdateRefused("trust")
+        # Serialize only the validated public-key fields, not trailing comments
+        # or arbitrary input. Constrain the copied policy to Git's namespace.
+        public_blob = base64.b64encode(blob).decode("ascii")
+        entries.append(f'{principal} namespaces="git" {algorithm} {public_blob}')
+        if len(entries) > 64:
+            raise UpdateRefused("trust")
+    if not entries:
+        raise UpdateRefused("trust")
+    return PublicSignerPolicy(tuple(entries))
+
+
+def _read_public_signer_policy(path: Path) -> PublicSignerPolicy:
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
     except OSError:
@@ -182,7 +255,7 @@ def _trusted_signers(path: Path) -> bytes:
             raw = stream.read(65537)
         if len(raw) > 65536 or b"\x00" in raw:
             raise UpdateRefused("trust")
-        return raw
+        return _parse_public_signer_policy(raw)
     finally:
         os.close(fd)
 
@@ -208,7 +281,9 @@ def _update_lock(parent: Path) -> Iterator[None]:
         os.close(fd)
 
 
-def _verified_release(plan: UpdatePlan, workspace: Path, tools: Mapping[str, str], trust: bytes) -> tuple[Path, str]:
+def _verified_release(
+    plan: UpdatePlan, workspace: Path, tools: Mapping[str, str], public_policy: PublicSignerPolicy
+) -> tuple[Path, str]:
     bare = workspace / "objects.git"
     _run([tools["git"], "init", "--bare", str(bare)])
     _git(
@@ -230,7 +305,7 @@ def _verified_release(plan: UpdatePlan, workspace: Path, tools: Mapping[str, str
     if f"tag v{plan.release_version}" not in headers or "type commit" not in headers:
         raise UpdateRefused("signature")
     signers = workspace / "trusted-signers"
-    signers.write_bytes(trust)
+    signers.write_text(public_policy.render(), encoding="ascii")
     signers.chmod(0o600)
     try:
         _git(
@@ -332,7 +407,7 @@ def apply_update(plan: UpdatePlan) -> UpdateOutcome:
         validate_plan(plan)
         tools = {name: _executable(name) for name in ("git", "ssh-keygen", "systemctl")}
         assert plan.trusted_signers is not None  # noqa: S101 -- validated above, type narrowing only
-        trust = _trusted_signers(plan.trusted_signers)
+        public_policy = _read_public_signer_policy(plan.trusted_signers)
         old = _clean_source(plan.source, tools["git"])
         state = _run([tools["systemctl"], "--user", "show", plan.unit, "--property=LoadState", "--value"])
         if state.stdout.strip() != "loaded":
@@ -346,7 +421,7 @@ def apply_update(plan: UpdatePlan) -> UpdateOutcome:
         ):
             workspace = Path(scratch)
             phase = "verify"
-            bare, commit = _verified_release(plan, workspace, tools, trust)
+            bare, commit = _verified_release(plan, workspace, tools, public_policy)
             try:
                 _git(["merge-base", "--is-ancestor", old, commit], bare, executable=tools["git"])
             except subprocess.CalledProcessError:

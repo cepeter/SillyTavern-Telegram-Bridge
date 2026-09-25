@@ -912,6 +912,12 @@ the current user and not writable by group/others. Historical unsigned tags are
 not rewritten or grandfathered into trust; use reviewed manual installation for
 those releases. No signing key is generated or trusted automatically.
 
+Use one `principal key-type base64-public-key` record per line, optionally with
+`namespaces="git"` after the principal. Ed25519, RSA and NIST ECDSA public keys are
+accepted. Unsupported policy options are rejected rather than silently weakened;
+private-key files are rejected before network access or snapshot creation. Only
+validated public fields are snapshotted, with comments removed.
+
 The updater requires Git, `ssh-keygen`, and the configured user systemd service
 (`SILLYTAVERN_UPDATE_SERVICE`, default `sillytavern-telegram.service`). The source
 must be a clean `main` checkout. The checkout directory and the live directory's
