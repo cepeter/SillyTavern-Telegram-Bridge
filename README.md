@@ -891,7 +891,7 @@ and never replaces the original conversation history.
 - **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
   reverse imports from the isolated service/port layer. Ruff linting, security
   rules, and formatting cover the complete Python tree. Mypy currently checks
-  23 explicitly listed modules, including the network and callback-token policy.
+  24 explicitly listed source files, including the network and callback-token policy.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---
@@ -1035,3 +1035,26 @@ retired architecture as current documentation.
 ## 📄 License
 
 GNU General Public License v3.0. See [LICENSE](LICENSE).
+
+
+## Maintenance and contribution policy
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch-first work, isolated Python 3.11
+setup, verification commands and runtime lock regeneration. See
+[SECURITY.md](SECURITY.md) for vulnerability reporting and deployment boundaries.
+The project remains preproduction; merging changes does not deploy them or create
+a signed release.
+
+Dependabot is configured for weekly pip and GitHub Actions update proposals with
+bounded open requests. No automatic merging is configured. Do not assume those
+proposals regenerate the custom `requirements.lock`; maintainers must review and
+regenerate the hashed runtime lock when required. CI runs
+`python tools/check_dependency_lock.py` to check exact pins, SHA-256 metadata,
+and active direct-requirement compatibility. This offline guard does not replace
+hash-enforced installation, dependency resolution, `pip check`, or `pip-audit`.
+
+`tools/public_examples.json` protects the three intentional System Prompt
+examples against accidental changes. The test suite also rejects unexpected
+non-loopback Python socket connections during test cases; external transports
+must be mocked. This is a test safeguard, not a subprocess or operating-system
+network sandbox.

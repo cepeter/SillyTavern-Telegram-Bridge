@@ -201,6 +201,16 @@ class PersonaEditorTests(SettingsTestCase):
         _m_message_commands.send_text = send_stub
         _m_input_flows.close_panel_message = lambda _db, _token, _chat, _callback: None
         self.persona_service = make_native_test_persona_service(app_settings=self.app_settings_builder.build())
+        self.prompt_deletions = []
+
+        def cleanup_request(_token, method, payload):
+            self.assertEqual(method, "deleteMessage")
+            self.prompt_deletions.append(payload)
+            return {}
+
+        cleanup_patch = patch.object(_m_telegram, "telegram_request", side_effect=cleanup_request)
+        cleanup_patch.start()
+        self.addCleanup(cleanup_patch.stop)
 
     def tearDown(self):
         _m_panel_callback_routes.telegram_request = self.old_panel_request
@@ -750,6 +760,7 @@ class PersonaEditorTests(SettingsTestCase):
         )
         self.assertEqual(_m_session_naming.get_meta(self.db, "persona_input:chat"), "")
         self.assertEqual(self._settings(), self.native)
+        self.assertEqual(self.prompt_deletions, [{"chat_id": "chat", "message_id": 501}])
 
     def test_pending_persona_input_is_session_scoped(self):
         self._start("create")

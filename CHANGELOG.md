@@ -4,6 +4,12 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Maintenance
+
+- Add security disclosure and contribution guidance aligned with the actual preproduction workflow, with no invented contacts or response-time promises.
+- Configure bounded weekly pip and GitHub Actions dependency proposals; document explicit regeneration of the custom hash-pinned runtime lock and add an offline manifest/lock compatibility gate.
+- Guard the reviewed public-example hashes and reject unexpected external Python socket connections during tests.
+
 ### Configuration
 
 - Replace environment-derived module globals with explicit immutable application settings. Both entry points perform the same runtime bootstrap, provider callbacks capture their own settings, native API clients are operation-owned, and Persona reads no longer share a process-global configuration cache.

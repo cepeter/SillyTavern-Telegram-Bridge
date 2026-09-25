@@ -106,6 +106,9 @@ jobs:
       - name: Install static analysis tooling
         run: uv pip install --system --python python -r requirements-dev.txt
 
+      - name: Check runtime lock and manifests
+        run: python tools/check_dependency_lock.py
+
       - name: Check dependency direction
         run: python tools/static_analysis.py
 

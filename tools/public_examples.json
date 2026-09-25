@@ -1,0 +1,8 @@
+{
+  "source_commit": "efb5b2bbdd0d6eddb34cf57733db1bbfd19e9c33",
+  "sha256": {
+    "config/system_prompts.example/balanced.txt": "650d90653881ce076d30c86b8becda89223ccb2a2a406fed647cde39c8a082f4",
+    "config/system_prompts.example/concise.txt": "e23471efaa11f0095b63ab3f96890eaaff6aa1dc15c8b28592f65ac8aab2f1af",
+    "config/system_prompts.example/natural.txt": "1c9ac9e6611595ff089ad03881742e77db54de5a91b7a7c58630adfdd29daf45"
+  }
+}
