@@ -81,3 +81,31 @@ def test_guard_typechecks_with_the_installed_development_dependencies():
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def checked_dev(runtime, development, locked):
+    import inspect
+
+    checker = guard().validate
+    assert "development_locked" in inspect.signature(checker).parameters
+    return checker("demo>=1", runtime, development, development_locked=locked)
+
+
+def test_complete_development_lock_preserves_runtime_and_tooling_pins():
+    runtime = f"demo==1.4 --hash=sha256:{HASH}\n"
+    devlock = runtime + f"pytest==9.1.1 --hash=sha256:{HASH}\n"
+    assert checked_dev(runtime, "pytest==9.1.1", devlock) == ()
+
+
+@pytest.mark.parametrize(
+    "development_lock, expected",
+    [
+        ("demo==1.4 --hash=sha256:" + HASH, "pytest"),
+        ("demo==1.4 --hash=sha256:" + HASH + "\npytest==9.1.1", "hash"),
+        ("demo==1.5 --hash=sha256:" + HASH + "\npytest==9.1.1 --hash=sha256:" + HASH, "runtime"),
+        ("demo==1.4 --hash=sha256:" + HASH + "\npytest==9.1.0 --hash=sha256:" + HASH, "pytest"),
+    ],
+)
+def test_development_lock_rejects_missing_unhashed_and_drifted_pins(development_lock, expected):
+    errors = checked_dev(f"demo==1.4 --hash=sha256:{HASH}", "pytest==9.1.1", development_lock)
+    assert errors and any(expected in error for error in errors)
