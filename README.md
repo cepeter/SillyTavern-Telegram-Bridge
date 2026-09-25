@@ -8,20 +8,14 @@
 
 ---
 
-You know that feeling when you've spent hours building the perfect character card,
-tuning World Info, crafting personas — and then you step away from your computer
-and can't talk to any of them? or when you take a shit, and want to chat with your wai-fu/s when looking for inspiration?, no more, pals.
+Use your SillyTavern characters from Telegram without replacing or patching
+SillyTavern. The bridge reads the same character cards, Personas, World Info and
+System Prompts, keeps Telegram-side sessions and memory, and sends generation
+requests to providers you configure.
 
-That's what this fixes.
-
-The bridge sits between Telegram and your model provider. It handles sessions,
-memory, voice, images, and all the plumbing. SillyTavern stays in charge of
-character cards, Personas, World Info, and System Prompts. The bridge just reads
-those files and lets you chat from your phone.
-
-It doesn't patch SillyTavern. It doesn't launch SillyTavern. Think of it as a
-remote control that reads the same files SillyTavern uses, then lets you
-text your characters from anywhere (and sync it to SillyTavern too, so you can continue later)
+SillyTavern remains the owner of its native data. The bridge is a user-scoped
+remote interface: chat from your phone, use voice/images/documents, and optionally
+sync conversation state back through the SillyTavern Live API.
 
 ---
 
@@ -40,9 +34,10 @@ text your characters from anywhere (and sync it to SillyTavern too, so you can c
 - [🔄 Live Sync and Forum Topic groups](#-live-sync-and-forum-topic-groups)
 - [🎬 Director goals and scene state](#-director-goals-and-scene-state)
 - [🔒 Reliability, privacy, and safety](#-reliability-privacy-and-safety)
-- [🚀 Updates and database compatibility](#-updates-and-database-compatibility)
-- [🏗️ Architecture](#-architecture)
+- [🚀 Downloads, updates, and database compatibility](#-downloads-updates-and-database-compatibility)
+- [🧰 Troubleshooting](#-troubleshooting)
 - [📄 License](#-license)
+- [Contributing and security](#contributing-and-security)
 
 ---
 
@@ -145,13 +140,21 @@ The recommended Linux setup keeps the bridge, its virtual environment, and its
 runtime data under your user account. You do not need a system-wide Python
 installation or a root-owned service.
 
-### 1. Clone the bridge into your home directory
+### 1. Install the bridge source
+
+**Recommended:** clone with Git. A clean `main` checkout is required for the
+built-in signed `/update` flow.
 
 ```bash
 cd ~
 git clone https://github.com/cepeter/SillyTavern-Telegram-Bridge.git sillytavern-telegram-bridge
 cd ~/sillytavern-telegram-bridge
 ```
+
+For a manual/offline install, the latest GitHub release also includes an explicit
+`SillyTavern-Telegram-Bridge-vX.Y.Z.zip` asset and matching `.sha256` checksum.
+Release-ZIP installs are supported for manual updates, but `/update` expects a Git
+checkout on `main`.
 
 ### 2. Create a private virtual environment
 
@@ -250,154 +253,232 @@ Some distributions require an administrator to enable lingering for a user.
 
 ## ⚙️ Configuration
 
-The installation guide creates the private environment file at
-`~/.local/share/sillytavern-telegram/.env`. Keep that file outside Git and
-restrict it to your user account.
+The bridge is configured primarily through a private environment file. The
+recommended location is:
 
-On POSIX systems startup verifies the opened environment file is owned by the
-current user and has no group/other permissions (`chmod 600`). Symlinks and
-non-regular files are rejected; files are bounded to 1 MiB and parsed completely
-before any values are applied. Windows deployments must protect the file with
-an appropriate user-only ACL; POSIX mode/UID checks do not apply there.
+```text
+~/.local/share/sillytavern-telegram/.env
+```
 
-Numeric configuration is validated with the variable name in diagnostics, without
-printing its supplied value. Embedding dimensions must be 1–65,536; extracted
-characters 1–10,000,000; PDF pages 1–10,000; PDF timeout 1–300 seconds; model
-catalog refresh interval 1–86,400 seconds.
+Create it from the maintained example and keep it private:
 
-The bare minimum you need to fill in:
+```bash
+mkdir -p ~/.local/share/sillytavern-telegram
+cp .env.example ~/.local/share/sillytavern-telegram/.env
+chmod 600 ~/.local/share/sillytavern-telegram/.env
+```
+
+On POSIX, startup rejects an environment file that is not owned by the current
+user, is group/other-accessible, is a symlink/non-regular file, exceeds 1 MiB, or
+contains invalid UTF-8/NUL data. The complete file is parsed before any values are
+applied. On Windows, protect the file with a user-only ACL.
+
+Existing process/systemd environment variables take precedence over values from
+the file. Configuration is captured when the bridge starts, so restart the
+service after changing `.env`.
+
+> **Special case:** `SILLYTAVERN_ENV_FILE` selects the file *before* that file is
+> read. Set it in the process or systemd environment when using a non-default
+> path; putting it only inside the alternate file cannot select that same file.
+
+### Minimum required configuration
+
+The bridge validates these values before polling Telegram:
 
 ```dotenv
 SILLYTAVERN_TELEGRAM_BOT_TOKEN=replace-me
 SILLYTAVERN_TELEGRAM_ALLOWED_USERS=123456789
-SILLYTAVERN_DIR=/path/to/SillyTavern
 SILLYTAVERN_DEFAULT_CHARACTER=example-character.png
 SILLYTAVERN_MODEL=provider-one::provider-one/model-a
 ```
 
-The default character name used as a display fallback is derived from
-`SILLYTAVERN_DEFAULT_CHARACTER` (the filename without extension), so renaming
-the file renames the fallback too.
+`SILLYTAVERN_TELEGRAM_ALLOWED_USERS` must contain comma-separated **numeric**
+Telegram user IDs. `SILLYTAVERN_DEFAULT_CHARACTER` must name an existing card in
+the configured character directory. `SILLYTAVERN_MODEL` uses
+`provider-id::model-id` from the private provider catalog.
 
-Both supported entry points load configuration at runtime:
+`SILLYTAVERN_DIR` defaults to `~/.local/share/SillyTavern`; set it when your
+SillyTavern installation lives elsewhere.
 
-```bash
-./.venv/bin/python sillytavern_telegram_bridge.py --check
-./.venv/bin/python -m bridge.main --check
-```
+### Environment variable reference
 
-Startup reads the private environment file into a detached mapping, constructs
-one immutable `AppSettings`, and validates required inputs before starting
-application services. Importing `bridge.config` or `bridge.main` does not read
-application environment variables or bootstrap the runtime. `--help` is available
-without configured credentials or a character card.
+#### Bot, model, and catalog
 
-The default environment file is `~/.local/share/sillytavern-telegram/.env`;
-`SILLYTAVERN_ENV_FILE` selects a different path. A missing file remains allowed
-when process environment values already supply configuration. Existing process
-values take precedence over file values. The parser accepts strict `KEY=VALUE`
-assignments with optional `export ` and matching quotes. Invalid settings name
-the affected variable without printing its supplied value.
+| Variable | Default | Purpose |
+|---|---|---|
+| `SILLYTAVERN_TELEGRAM_BOT_TOKEN` | required | Telegram BotFather token. Secret. |
+| `SILLYTAVERN_TELEGRAM_ALLOWED_USERS` | required | Comma-separated numeric Telegram user IDs allowed to use the bot. |
+| `SILLYTAVERN_DEFAULT_CHARACTER` | required | PNG character filename used for new/default sessions. |
+| `SILLYTAVERN_MODEL` | required | Default Story route in `provider-id::model-id` form. |
+| `SILLYTAVERN_DEFAULT_USER_NAME` | empty | Fallback display value for `{{user}}`. |
+| `LLM_API_KEY` | empty | Generic provider-key fallback. Prefer a provider-specific `api_key_env`. |
+| `SILLYTAVERN_PROVIDER_CONFIG` | `$SILLYTAVERN_BRIDGE_HOME/sillytavern_telegram_providers.yaml` | Private YAML provider catalog. |
+| `SILLYTAVERN_MODEL_CACHE` | `$SILLYTAVERN_BRIDGE_HOME/model_catalog_cache.json` | Cache for discovered provider model IDs. |
+| `SILLYTAVERN_MODEL_REFRESH_SECONDS` | `3600` | Model discovery cache lifetime; range `1..86400`. |
+| `OPENCODE_CLIENT_VERSION` | `1.18.31` | Client-version header used by the OpenCode Muse transport. |
 
-Settings are captured per application instance rather than read again from
-process globals. Change the private configuration and restart the service to
-apply new settings. Native card and Persona data are still read from the paths
-owned by that instance. Queued provider callbacks retain their instance's model
-catalog, credentials and outbound policy; they do not inherit another instance's
-configuration. This does not promise independent process-wide scheduler capacity
-for multiple bots running inside a single Python process.
+Provider-specific credential names are intentionally dynamic: whatever string you
+put in a catalog entry's `api_key_env` must exist in the private environment, for
+example `PROVIDER_ONE_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`.
 
-`SILLYTAVERN_TELEGRAM_ALLOWED_USERS` is required and every retained
-comma-separated value must be a numeric Telegram user ID.
+#### Paths and native SillyTavern data
 
-**Need custom paths?** These overrides are available:
+| Variable | Default | Purpose |
+|---|---|---|
+| `SILLYTAVERN_ENV_FILE` | `~/.local/share/sillytavern-telegram/.env` | Environment-file selector; set outside the file when overriding. |
+| `SILLYTAVERN_BRIDGE_HOME` | `~/.local/share/sillytavern-telegram` | Private bridge data root; database/log paths derive from it. |
+| `SILLYTAVERN_BRIDGE_SOURCE_DIR` | current repository root | Git checkout used by signed `/update`. |
+| `SILLYTAVERN_LIVE_BRIDGE_DIR` | `$SILLYTAVERN_BRIDGE_HOME/live` | Managed code mirror used by the updater. |
+| `SILLYTAVERN_DIR` | `~/.local/share/SillyTavern` | SillyTavern installation/data root used to derive native paths. |
+| `SILLYTAVERN_CHARACTER_DIR` | `$SILLYTAVERN_DIR/data/default-user/characters` | Native character cards. |
+| `SILLYTAVERN_CHARACTER_BACKUP_DIR` | `$SILLYTAVERN_BRIDGE_HOME/backups/sillytavern/characters` | Character backup destination. |
+| `SILLYTAVERN_WORLD_DIR` | `$SILLYTAVERN_DIR/data/default-user/worlds` | Native World Info/lorebooks. |
+| `SILLYTAVERN_SYSTEM_PROMPTS_DIR` | `$SILLYTAVERN_DIR/data/default-user/sysprompt` | Native System Prompt directory. |
+| `SILLYTAVERN_NATIVE_SETTINGS_FILE` | `$SILLYTAVERN_DIR/data/default-user/settings.json` | Persona names/descriptions and native defaults. |
+| `SILLYTAVERN_NATIVE_AVATAR_DIR` | `$SILLYTAVERN_DIR/data/default-user/User Avatars` | Persona avatars. |
+| `SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS` | `false` | Enable prompt-file permission enforcement where supported. |
 
-```dotenv
-SILLYTAVERN_ENV_FILE=/path/to/private/.env
-SILLYTAVERN_BRIDGE_HOME=/path/to/private-bridge-data
-SILLYTAVERN_LIVE_BRIDGE_DIR=/path/to/private-bridge-data/live
-SILLYTAVERN_PROVIDER_CONFIG=/path/to/private/providers.yaml
-SILLYTAVERN_BRIDGE_SOURCE_DIR=/path/to/sillytavern-telegram-bridge
-SILLYTAVERN_CHARACTER_DIR=/path/to/SillyTavern/data/default-user/characters
-SILLYTAVERN_WORLD_DIR=/path/to/SillyTavern/data/default-user/worlds
-SILLYTAVERN_SYSTEM_PROMPTS_DIR=/path/to/SillyTavern/data/default-user/sysprompt
-```
-
-By default, the bridge reads native Persona settings from:
+Derived private paths that do **not** have separate environment variables:
 
 ```text
-$SILLYTAVERN_DIR/data/default-user/settings.json
+$SILLYTAVERN_BRIDGE_HOME/scripts/sillytavern_telegram.sqlite3
+$SILLYTAVERN_BRIDGE_HOME/logs/sillytavern_telegram_bridge.log
+$SILLYTAVERN_BRIDGE_HOME/backups/sillytavern/personas/
 ```
 
-and Persona avatars from:
+#### Provider and network policy
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SILLYTAVERN_PROVIDER_ALLOWED_HOSTS` | empty | Exact external provider/image hostnames. Empty intentionally denies external destinations. |
+| `SILLYTAVERN_PROVIDER_PRIVATE_HOSTS` | empty | Separate opt-in for approved LAN/tailnet provider hosts. |
+| `SILLYTAVERN_RAG_ALLOWED_HOSTS` | empty | Exact external embedding hostnames. |
+| `SILLYTAVERN_RAG_PRIVATE_HOSTS` | empty | Separate LAN/tailnet embedding-host opt-in. |
+| `SILLYTAVERN_HINDSIGHT_ALLOWED_HOSTS` | empty | Exact external Hindsight hostnames. |
+| `SILLYTAVERN_HINDSIGHT_PRIVATE_HOSTS` | empty | Separate LAN/tailnet Hindsight-host opt-in. |
+
+Host entries are plain exact hostnames: no scheme, path, port, or wildcard. Local
+loopback HTTP is allowed for local services. External destinations require HTTPS.
+Private/LAN/tailnet destinations require both their normal allowlist and matching
+`*_PRIVATE_HOSTS` opt-in.
+
+#### Context planning and diagnostics
+
+| Variable | Default | Valid range / behavior |
+|---|---:|---|
+| `SILLYTAVERN_CONTEXT_WINDOW_TOKENS` | `32768` | `4096..1000000`; total prompt context window. |
+| `SILLYTAVERN_CONTEXT_OUTPUT_RESERVE_TOKENS` | `4096` | `512..131072`; tokens reserved for model output. |
+| `SILLYTAVERN_CONTEXT_HISTORY_CANDIDATES` | `96` | `8..512`; recent transcript messages considered before compaction. |
+| `SILLYTAVERN_PERF_LOG` | `false` | Boolean (`true/yes/on/1` or `false/no/off/0`); logs low-overhead timing spans. |
+
+The prompt input budget is approximately context window minus output reserve.
+When over budget, older history, Data Bank context, Hindsight recall and continuity
+summary are reduced before fixed character/system instructions or the current
+user turn.
+
+#### Hindsight memory
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HINDSIGHT_API_URL` | `http://127.0.0.1:8890` | Hindsight service URL. |
+| `HINDSIGHT_API_KEY` | empty | Optional Hindsight credential. Secret. |
+| `SILLYTAVERN_HINDSIGHT_ALLOWED_HOSTS` | empty | External Hindsight allowlist. |
+| `SILLYTAVERN_HINDSIGHT_PRIVATE_HOSTS` | empty | Private/LAN Hindsight opt-in. |
+
+Hindsight is optional. Session generation only recalls memory scoped to the active
+session. Reset/session deletion refuses destructive local cleanup when required
+Hindsight cleanup cannot be verified.
+
+#### Data Bank semantic embeddings
+
+| Variable | Default | Valid range / purpose |
+|---|---|---|
+| `SILLYTAVERN_RAG_EMBEDDING_URL` | `http://127.0.0.1:8891/v1/embeddings` | OpenAI-compatible embeddings endpoint. |
+| `SILLYTAVERN_RAG_EMBEDDING_API_KEY` | empty | Dedicated key; required for external embedding endpoints. |
+| `SILLYTAVERN_RAG_ALLOWED_HOSTS` | empty | External embedding hostname allowlist. |
+| `SILLYTAVERN_RAG_PRIVATE_HOSTS` | empty | Private/LAN embedding-host opt-in. |
+| `SILLYTAVERN_RAG_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model ID. |
+| `SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS` | `1536` | `1..65536`; vector size. |
+| `SILLYTAVERN_RAG_EMBEDDING_REVISION` | `1` | User-controlled embedding revision; change when embeddings become incompatible. |
+| `SILLYTAVERN_RAG_MAX_EXTRACTED_CHARS` | `1000000` | `1..10000000`; extraction cap per document. |
+| `SILLYTAVERN_RAG_MAX_PDF_PAGES` | `200` | `1..10000`; PDF page cap. |
+| `SILLYTAVERN_RAG_PDF_PARSE_TIMEOUT_SECONDS` | `45` | `1..300`; isolated PDF parser timeout. |
+| `SILLYTAVERN_RAG_SEMANTIC_CANDIDATES` | `384` | `64..2048`; candidate chunks considered by semantic retrieval. |
+
+Full-text Data Bank search works without embeddings. Reindex documents after
+changing embedding model, dimensions, or revision.
+
+#### Live Sync
+
+| Variable | Default | Valid range / purpose |
+|---|---|---|
+| `SILLYTAVERN_SYNC_API_URL` | empty (off) | SillyTavern Live API base URL. |
+| `SILLYTAVERN_SYNC_API_HANDLE` | empty | API account/handle when required. |
+| `SILLYTAVERN_SYNC_API_PASSWORD` | empty | API password when required. Secret. |
+| `SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS` | `10` | `2..30`; request timeout. |
+| `SILLYTAVERN_SYNC_API_INTERVAL_SECONDS` | `2.0` | `1..30`; realtime polling interval. |
+
+Live Sync is disabled until `SILLYTAVERN_SYNC_API_URL` is set. It uses the API,
+not chat-file polling or JSONL transfer.
+
+#### Voice
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SILLYTAVERN_STT_MODEL` | `base` | Speech-to-text model name. |
+| `SILLYTAVERN_TTS_BIN` | `$SILLYTAVERN_BRIDGE_HOME/venv/bin/edge-tts` | `edge-tts` executable path. Override when your executable lives elsewhere. |
+| `SILLYTAVERN_TTS_VOICE` | empty | Edge TTS voice; required when TTS output is enabled. |
+
+#### Signed self-update
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SILLYTAVERN_UPDATE_ALLOWED_SIGNERS` | unset | External OpenSSH allowed-signers file containing trusted **public** release keys. Required for automatic installation. |
+| `SILLYTAVERN_UPDATE_SERVICE` | `sillytavern-telegram.service` | User systemd unit restarted after a verified update. |
+| `SILLYTAVERN_BRIDGE_SOURCE_DIR` | repository root | Clean `main` checkout that the updater fast-forwards. |
+| `SILLYTAVERN_LIVE_BRIDGE_DIR` | `$SILLYTAVERN_BRIDGE_HOME/live` | Managed mirror replaced after verification/staging. |
+
+The current maintainer release-signing key has fingerprint:
 
 ```text
-$SILLYTAVERN_DIR/data/default-user/User Avatars/
+SHA256:kFUr31xAkxOVpg9D6G5oKP3l+WY2anmAXWWgLFZ8Ecw
 ```
 
-Each provider entry in your private catalog names its own `api_key_env` for
-credentials. **Never put real keys in Git, README files, release assets, or
-Telegram messages.**
+Its public allowed-signers record is:
 
-### Smart context compaction
-
-Long sessions use a budget-aware prompt planner instead of a fixed recent-history
-cutoff. The bridge considers up to 96 recent transcript messages by default,
-keeps the newest turns, then reduces older history, Data Bank context, Hindsight
-recall, and finally the continuity summary when needed. Character and fixed
-system instructions plus the current user turn are never silently truncated.
-
-The defaults assume a 32k-token context window with 4k reserved for output:
-
-```dotenv
-SILLYTAVERN_CONTEXT_WINDOW_TOKENS=32768
-SILLYTAVERN_CONTEXT_OUTPUT_RESERVE_TOKENS=4096
-SILLYTAVERN_CONTEXT_HISTORY_CANDIDATES=96
+```text
+cepeter namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAPEP4Ucw+6lvdP0VQD3Z71+8eKj2ePXlLXRW9gA/8d
 ```
 
-Set the context window to match the models you actually use. `/prompt` shows
-the current estimated input budget and history candidate limit.
+Verify the fingerprint against a GitHub **Verified** release tag or another
+independent maintainer channel before installing it as trust material. Do not use
+a private key as an allowed-signers file and do not store the trust file inside
+the source checkout or managed live mirror.
 
-### Hindsight and Data Bank
+### Environment syntax and validation
 
-Hindsight is optional. When enabled, point it at your private instance:
+The parser accepts `KEY=VALUE` and optional `export KEY=VALUE`. Matching single or
+double quotes are removed. Existing process variables win over file values.
+Integer/float/boolean validation reports the variable name without printing the
+supplied secret value.
 
-```dotenv
-HINDSIGHT_API_URL=http://127.0.0.1:8890
-HINDSIGHT_API_KEY=
-```
-
-If Hindsight cleanup can't be verified during a reset or session deletion, the
-bridge refuses to delete local data. This prevents orphaned remote documents
-that no longer match any local session.
-
-The Data Bank works locally through FTS5. For semantic retrieval, configure an
-OpenAI-compatible embeddings endpoint:
-
-```dotenv
-SILLYTAVERN_RAG_EMBEDDING_URL=http://127.0.0.1:8891/v1/embeddings
-SILLYTAVERN_RAG_EMBEDDING_MODEL=text-embedding-3-small
-SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS=1536
-SILLYTAVERN_RAG_EMBEDDING_REVISION=1
-```
-
-Use loopback HTTP for local services. Anything external needs HTTPS and an
-explicit host allowlist. Reindex the Data Bank when you change the embedding
-model, dimensions, or revision.
+Use the maintained `.env.example` as the copyable configuration template. It
+contains the same supported user-facing variables documented above.
 
 ---
 
 ## 🌐 Provider catalog
 
-The bridge keeps its own provider catalog. It doesn't read SillyTavern's
-provider settings or any other application's configuration. Start from the
-example file:
+The bridge uses its own **private YAML provider catalog**; it does not import
+SillyTavern provider credentials/settings. Start from the maintained example:
 
 ```bash
-cp config/providers.example.yaml /path/to/private/providers.yaml
+cp config/providers.example.yaml ~/.local/share/sillytavern-telegram/sillytavern_telegram_providers.yaml
+chmod 600 ~/.local/share/sillytavern-telegram/sillytavern_telegram_providers.yaml
 ```
 
-A typical entry looks like this:
+Point `SILLYTAVERN_PROVIDER_CONFIG` elsewhere if you prefer another private path.
+A minimal OpenAI-compatible provider looks like:
 
 ```yaml
 providers:
@@ -411,22 +492,57 @@ providers:
       - provider-one/model-a
 ```
 
-Set `streaming: true` only if the endpoint actually returns SSE chunks. For
-endpoints without a `GET /models` route, set `discover_models: false` and use
-`health_check: chat_completion` — the health panel will run a small streaming
-probe instead of reporting a misleading failure.
+Then place the referenced credential in your private environment file:
 
-OpenCode Muse works as a separate keyless transport when configured in the
-catalog. OpenAI-compatible relay responses are normalized by the bridge when
-needed. A model appearing in the catalog does not automatically make it runnable:
-transport, endpoint, credentials, and streaming settings are validated before
-inference.
+```dotenv
+PROVIDER_ONE_API_KEY=replace-me
+SILLYTAVERN_PROVIDER_ALLOWED_HOSTS=provider.example
+```
+
+### Provider catalog field reference
+
+| Field | Default / values | Purpose |
+|---|---|---|
+| `name` | provider ID | Human-readable label shown in Telegram panels. |
+| `api_endpoint` | none | Provider base URL. `api` is accepted as an alias. Remote providers must use HTTPS. |
+| `api_key_env` | `LLM_API_KEY` | Environment-variable name that contains this provider's credential. |
+| `transport` | `chat_completions` | `chat_completions`/`openai`/`openai_compatible`, `anthropic_messages`, or `opencode_muse`. |
+| `adapter` | `transport` | Model-menu capability label; normally match the transport. |
+| `models` | empty | Explicit model IDs for this provider. Required when discovery is disabled/unavailable. |
+| `discover_models` | false | When true, refresh model IDs from `GET /models` and cache them. |
+| `streaming` | false | Enable SSE streaming for compatible Chat Completions providers. `stream` is also accepted. |
+| `health_check` | `GET /models` | Set `chat_completion` for providers without a useful `/models` endpoint. |
+| `extra_headers` | `{}` | Additional HTTP headers merged into provider requests. Do not put secrets here if the YAML might be shared. |
+| `anthropic_version` | `2023-06-01` | Anthropic `anthropic-version` header for `anthropic_messages`. |
+| `image_enabled` | false | Opt this provider into `/imagine`. |
+| `image_endpoint` | `<api_endpoint>/images/generations` | Explicit OpenAI-compatible Images endpoint override. |
+| `image_models` | empty | Image model IDs; first item is the provider default for image selection. |
+
+`config/providers.example.yaml` contains normal Chat Completions, Anthropic,
+OpenCode Muse and image-provider examples. Only fields consumed by the current
+runtime are shown there.
+
+### Model discovery and health checks
+
+`discover_models: true` enables `GET /models` discovery. Results are stored in
+`SILLYTAVERN_MODEL_CACHE` and refreshed according to
+`SILLYTAVERN_MODEL_REFRESH_SECONDS`. If a provider has no usable `/models`
+endpoint, keep explicit `models`, set `discover_models: false`, and optionally set
+`health_check: chat_completion`.
+
+The provider panel is the normal user interface:
+
+```text
+/providers          Open providers and models
+/providers health   Run provider health checks
+/providers refresh  Refresh discoverable model catalogs
+```
 
 ### Outbound host policy
 
-List each trusted external provider or image-download host explicitly in your
-private environment file. An empty host list denies external destinations; the
-provider catalog cannot silently authorize its own endpoints.
+The YAML catalog describes **where** to call; it does not grant network trust.
+External endpoints must also be present in the corresponding environment
+allowlist. An empty external-host list is fail-closed.
 
 ```dotenv
 SILLYTAVERN_PROVIDER_ALLOWED_HOSTS=provider.example,images.example
@@ -434,31 +550,16 @@ SILLYTAVERN_RAG_ALLOWED_HOSTS=embedding.example
 SILLYTAVERN_HINDSIGHT_ALLOWED_HOSTS=memory.example
 ```
 
-Entries are exact hostnames, without schemes, paths, ports, or wildcards.
-Loopback addresses and `localhost` remain available for local HTTP services.
-LAN and tailnet endpoints additionally require the corresponding
-`SILLYTAVERN_PROVIDER_PRIVATE_HOSTS`, `SILLYTAVERN_RAG_PRIVATE_HOSTS`, or
-`SILLYTAVERN_HINDSIGHT_PRIVATE_HOSTS` entry; external endpoints still require HTTPS.
+Entries are exact hostnames without schemes, paths, ports, or wildcards.
+Loopback addresses/`localhost` remain available to local HTTP services. LAN and
+tailnet destinations also require the appropriate `*_PRIVATE_HOSTS` entry.
 Metadata/link-local, unspecified, multicast, and reserved addresses are refused.
 
-The built-in provider, image, and embedding HTTP transport resolves DNS once per
-connection, validates every returned address, and connects to an approved numeric
-address while retaining the original hostname for TLS verification. Redirects
-cannot change the host, scheme, or port. Environment/OS proxy settings are not
-inherited. These controls do not replace trust in your chosen provider or in the
-local configuration file. Hindsight's SDK also receives endpoint allowlist
-validation; its own HTTP transport is separate from this built-in transport.
-
-Existing installations must populate these host lists before upgrading; otherwise
-external model requests are intentionally refused. No credentials belong in URLs.
-
-The provider panel is the canonical way to select models:
-
-```text
-/providers          Open the provider and model panel
-/providers health   Run provider health checks
-/providers refresh  Refresh discoverable model catalogs
-```
+The built-in provider/image/embedding HTTP transport validates DNS addresses,
+pins an approved numeric address for the connection, retains the original host
+for TLS verification, rejects cross-origin redirects, and does not inherit
+OS/environment proxy settings. Hindsight receives the same endpoint-policy
+validation before its SDK client is created, but the SDK owns its own transport.
 
 ---
 
@@ -896,139 +997,156 @@ and never replaces the original conversation history.
 
 ---
 
-## 🚀 Updates and database compatibility
+## 🚀 Downloads, updates, and database compatibility
 
-### Pre-production database reset
+### Release downloads
 
-SQLite now starts from one `initial_schema` migration containing the complete
-current schema and constraints. Databases created by earlier pre-production
-revisions are intentionally unsupported.
+The latest GitHub release includes a real downloadable archive:
 
-Before starting this revision with an older development database, stop the
-bridge, archive the existing SQLite file if you need its data for inspection,
-then remove or rename the active database and let the bridge create a fresh
-one. The bridge does not automatically convert or delete an older database.
+```text
+SillyTavern-Telegram-Bridge-vX.Y.Z.zip
+SillyTavern-Telegram-Bridge-vX.Y.Z.zip.sha256
+```
 
-### Updating
+The ZIP is produced directly from the signed release tag and contains only
+tracked repository content. Verify the checksum before manual installation.
+GitHub's automatically generated source archives may also appear, but the named
+ZIP above is the maintained release asset.
 
-`/update` verifies stable release metadata through the fixed GitHub HTTPS policy.
-The confirmation is bound to the version displayed in the panel; a changed
-release requires a new confirmation. An already-current installation is a no-op.
+This repository intentionally keeps **only the latest GitHub release and tag**.
+Release history remains available in `CHANGELOG.md` and Git history.
 
-Automatic installation now requires an **SSH-signed annotated release tag** and
-an independently provisioned OpenSSH allowed-signers file. Set
-`SILLYTAVERN_UPDATE_ALLOWED_SIGNERS` to that file outside both the source checkout
-and the live mirror. Its public keys must come from an independently verified
-maintainer channel, not the repository being fetched. The file must be owned by
-the current user and not writable by group/others. Historical unsigned tags are
-not rewritten or grandfathered into trust; use reviewed manual installation for
-those releases. No signing key is generated or trusted automatically.
+### Automatic signed `/update`
 
-Use one `principal key-type base64-public-key` record per line, optionally with
-`namespaces="git"` after the principal. Ed25519, RSA and NIST ECDSA public keys are
-accepted. Unsupported policy options are rejected rather than silently weakened;
-private-key files are rejected before network access or snapshot creation. Only
-validated public fields are snapshotted, with comments removed.
+Automatic installation is fail-closed. `/update` requires:
 
-The updater requires Git, `ssh-keygen`, and the configured user systemd service
-(`SILLYTAVERN_UPDATE_SERVICE`, default `sillytavern-telegram.service`). The source
-must be a clean `main` checkout. The checkout directory and the live directory's
-parent must be user-owned and not group/other-writable (`chmod go-w` on those
-directories). The dedicated live mirror must be empty or contain the updater's
-`.bridge-deployment.json` marker; roots, the home directory, overlapping paths,
-symlinks and unmarked nonempty directories are refused. For a pre-hardening
-installation, archive the old **live code mirror only** elsewhere and leave an
-empty mirror directory. Do not move or reset the SQLite data directory.
+1. a clean Git checkout on branch `main`;
+2. an SSH-signed annotated release tag;
+3. a trusted public key in an allowed-signers file outside the source/live trees;
+4. user-owned source/live parent directories that are not group/other-writable;
+5. an empty managed live directory or one containing the bridge's
+   `.bridge-deployment.json` marker;
+6. Git, `ssh-keygen`, and the configured user systemd service.
 
-Verification and preparation occur in an isolated directory: the exact tag
-object is signature-checked against a snapshot of the external trust file, the
-commit must descend from the current checkout, and archive paths, file types,
-size and Python syntax are checked before activation. A changed runtime
-`requirements.lock` requires a manual locked-dependency installation; the
-updater never silently mutates the running Python environment.
+Create the trust directory/file on Linux:
 
-Only after preparation passes does it fast-forward the unchanged checkout and
-replace the managed live mirror. Obsolete modules are not carried into the new
-mirror. A previous mirror is retained as `.bridge-previous-*` beside the live
-directory for recovery; remove old backups only after verifying the deployment.
-Activation spans the source checkout and live directory, so it is **not one
-filesystem-wide atomic transaction**. A failure after the source advances is
-reported explicitly and requires operator inspection. A failed service restart
-is reported as restart-required; a successful nonblocking restart request is
-not represented as proof that the new process is healthy.
+```bash
+mkdir -p ~/.config/sillytavern-telegram
+chmod 700 ~/.config/sillytavern-telegram
+cat > ~/.config/sillytavern-telegram/trusted-maintainers <<'EOF'
+cepeter namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAPEP4Ucw+6lvdP0VQD3Z71+8eKj2ePXlLXRW9gA/8d
+EOF
+chmod 600 ~/.config/sillytavern-telegram/trusted-maintainers
+```
 
-The user systemd template runs from `~/sillytavern-telegram-bridge` and uses
-`~/.local/share/sillytavern-telegram/live` for the managed updater mirror.
-Keep `SILLYTAVERN_BRIDGE_SOURCE_DIR`, `SILLYTAVERN_LIVE_BRIDGE_DIR`, and the service
-paths aligned with your installation. The update path never copies or resets
-session databases, private environment files or native SillyTavern content.
+Verify that key's fingerprint independently before trusting it:
 
----
+```text
+SHA256:kFUr31xAkxOVpg9D6G5oKP3l+WY2anmAXWWgLFZ8Ecw
+```
 
-## 🏗️ Architecture
+Then configure:
 
-The bridge uses ordinary imports, explicit composition, and an acyclic internal
-dependency graph. Startup enters through `sillytavern_telegram_bridge.py`
-and composes required services/ports in `bridge.main`; there is no runtime
-loader, module override chain, or shared execution namespace.
+```dotenv
+SILLYTAVERN_UPDATE_ALLOWED_SIGNERS=/home/you/.config/sillytavern-telegram/trusted-maintainers
+SILLYTAVERN_UPDATE_SERVICE=sillytavern-telegram.service
+```
 
-Shared responsibilities have explicit owners: `topic_scope.py` parses chat/topic
-identifiers; `background.py` owns bounded process-wide executors and scheduling;
-`runtime_logging.py` handles logging and configured private-path permissions;
-`limits.py` owns fixed resource budgets. `sqlite_store.py` owns connection gates,
-transactions and maintenance, while `database.py` owns SQL operations.
-`command_panels.py` handles grouped panel commands and `command_routes.py` keeps
-root dispatch, onboarding and retry orchestration. The old `common.py` umbrella
-is removed; callers import the actual owner or standard library directly.
+and restart the bridge once so it loads the setting.
 
-CI rejects application imports from the low-level owners, reverse dependencies
-from SQLite mechanics into SQL operations, and imports from panel commands back
-into root command dispatch. Resource limits are preserved by this decomposition.
-Permission setup uses the environment-file path and validated boolean settings
-from its immutable application settings, not another process environment.
+A successful update verifies the exact signed tag, checks ancestry and archive
+safety, compiles the staged Python tree, fast-forwards the unchanged source
+checkout, replaces the managed live mirror, retains the previous mirror for
+recovery, and requests a nonblocking user-service restart.
 
-Core provider, delivery, Telegram, conversation, group and memory callbacks use
-named `Protocol` signatures; negative type-check fixtures verify rejected
-keywords, argument counts and return types. `RequestContext` and
-`PreparedMessage` have one low-level owner in `bridge/request_types.py`.
-Conversation processing is prebound to its preparation, command and generation
-callbacks. Leaf command handlers receive named collaborators rather than the
-root service container; `BridgeServices` remains the orchestration assembly.
-Live Sync imports retain memory through that application's configured memory
-port, preserving its provider binding.
+If `requirements.lock` changed, automatic installation refuses the update; use a
+manual reviewed install so dependency changes are explicit.
 
-The current boundaries are deliberately small:
+#### First update from a pre-hardening installation
 
-- `sillytavern_telegram_bridge.py` bootstraps the environment and starts the app.
-- `bridge.main` constructs validated immutable `AppSettings` and explicitly binds
-  required services and ports. `bridge.config` contains fixed limits/defaults only.
-- Application services own conversation, jobs, groups, memory, Persona, sync,
-  pending input, and Director policy behavior.
-- Provider routing/transport and Telegram delivery sit behind explicit ports.
-- SQLite schema/persistence, RAG, Help, and Telegram ingress each have focused
-  owners rather than a shared runtime namespace.
+If your old `live` directory is a nonempty code copy without
+`.bridge-deployment.json`, `/update` returns `unmanaged_target`. Stop the service,
+archive **only that old live code mirror**, create an empty private live directory,
+and leave the `.env` and SQLite database in place:
 
-`tools/static_analysis.py` enforces two repository invariants in CI:
+```bash
+systemctl --user stop sillytavern-telegram.service
+mv ~/.local/share/sillytavern-telegram/live    ~/.local/share/sillytavern-telegram/prehardening-live-backup
+mkdir ~/.local/share/sillytavern-telegram/live
+chmod 700 ~/.local/share/sillytavern-telegram/live
+chmod go-w ~/sillytavern-telegram-bridge ~/.local/share/sillytavern-telegram
+systemctl --user start sillytavern-telegram.service
+```
 
-1. the complete `bridge` import graph must stay acyclic;
-2. stabilized service/port modules may import only the named pure contract and
-   request-value modules, not concrete application adapters;
-3. the contract/value layer has its own explicit dependency allowlist, so it
-   cannot introduce a hidden dependency back into Telegram or composition.
+Do not move/delete:
 
+```text
+~/.local/share/sillytavern-telegram/.env
+~/.local/share/sillytavern-telegram/scripts/sillytavern_telegram.sqlite3
+```
 
-CI also measures all `bridge/` modules with statement and branch coverage,
-including subprocess workers. The initial measured result is **68.70% combined**
-(72.77% statements and 55.91% branches); the enforced combined floor is **68%**.
-`tools/coverage_baseline.json` records the measured commit and denominator. The
-floor is a regression guard, not evidence that every security path is covered.
-Coverage JSON/XML reports are uploaded as the `application-coverage` CI artifact
-for 14 days. Increase the measured baseline as tests are added; do not exclude
-production modules to make the percentage pass.
+### Manual update
 
-Historical migration plans are intentionally not kept in the product tree. Git
-history and the changelog preserve that development history without presenting
-retired architecture as current documentation.
+For a Git installation:
+
+```bash
+systemctl --user stop sillytavern-telegram.service
+cd ~/sillytavern-telegram-bridge
+git fetch origin --tags --prune
+git switch main
+git pull --ff-only origin main
+./.venv/bin/python -m pip install --require-hashes -r requirements.lock
+./.venv/bin/python sillytavern_telegram_bridge.py --check
+systemctl --user start sillytavern-telegram.service
+```
+
+For a release ZIP installation, download the latest ZIP and `.sha256`, verify the
+checksum, extract to a fresh directory, install the locked dependencies, run
+`--check`, then point your service at the new directory. Do not overlay a new ZIP
+onto an old source tree.
+
+### Pre-production database compatibility
+
+This project is still preproduction. SQLite starts from the current
+`initial_schema`; older development databases are not guaranteed upgrade paths.
+Before using a revision that explicitly requires a fresh database, stop the
+bridge and archive the existing SQLite file if you need it for inspection. The
+bridge never silently deletes or converts an unsupported old database.
+
+## 🧰 Troubleshooting
+
+Start with the built-in check:
+
+```bash
+cd ~/sillytavern-telegram-bridge
+./.venv/bin/python sillytavern_telegram_bridge.py --check
+```
+
+For a systemd installation:
+
+```bash
+systemctl --user status sillytavern-telegram.service
+journalctl --user -u sillytavern-telegram.service -n 100 --no-pager
+```
+
+Common configuration/update failures:
+
+| Symptom / updater code | What to check |
+|---|---|
+| Provider is refused before a request | Add the exact external host to `SILLYTAVERN_PROVIDER_ALLOWED_HOSTS`; private/LAN hosts also need `SILLYTAVERN_PROVIDER_PRIVATE_HOSTS`. |
+| RAG/Hindsight external endpoint refused | Configure the matching `*_ALLOWED_HOSTS` and, for private networks, `*_PRIVATE_HOSTS`. |
+| `.env` permission error | On POSIX, ensure the file is owned by the bridge user and `chmod 600`. |
+| Changed `.env` appears ignored | Restart the service; settings are captured at application startup. |
+| `SILLYTAVERN_ENV_FILE` appears ignored | Set it in systemd/process environment, not only inside the alternate file. |
+| `/update` → `trust` or `signature` | Check `SILLYTAVERN_UPDATE_ALLOWED_SIGNERS`, file ownership/mode, and that the GitHub tag displays **Verified**. |
+| `/update` → `target` | Source/live paths must be real, non-overlapping, user-owned, and not group/other-writable. |
+| `/update` → `unmanaged_target` | Archive the old pre-hardening live code mirror and create an empty managed `live` directory. |
+| `/update` → `dirty` / `branch` | Restore a clean source checkout and switch to `main`. |
+| `/update` → `dependencies` | `requirements.lock` changed; perform a manual locked-dependency update. |
+| TTS says voice is missing | Set `SILLYTAVERN_TTS_VOICE` and ensure `SILLYTAVERN_TTS_BIN` points to a working `edge-tts`. |
+
+Never paste real bot/provider passwords or private signing keys into issues,
+README files, release assets, or Telegram messages.
 
 ---
 
@@ -1037,24 +1155,9 @@ retired architecture as current documentation.
 GNU General Public License v3.0. See [LICENSE](LICENSE).
 
 
-## Maintenance and contribution policy
+## Contributing and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for branch-first work, isolated Python 3.11
-setup, verification commands and runtime lock regeneration. See
-[SECURITY.md](SECURITY.md) for vulnerability reporting and deployment boundaries.
-The project remains preproduction; merging changes does not deploy them or create
-a signed release.
-
-Dependabot is configured for weekly pip and GitHub Actions update proposals with
-bounded open requests. No automatic merging is configured. Do not assume those
-proposals regenerate the custom `requirements.lock`; maintainers must review and
-regenerate the hashed runtime lock when required. CI runs
-`python tools/check_dependency_lock.py` to check exact pins, SHA-256 metadata,
-and active direct-requirement compatibility. This offline guard does not replace
-hash-enforced installation, dependency resolution, `pip check`, or `pip-audit`.
-
-`tools/public_examples.json` protects the three intentional System Prompt
-examples against accidental changes. The test suite also rejects unexpected
-non-loopback Python socket connections during test cases; external transports
-must be mocked. This is a test safeguard, not a subprocess or operating-system
-network sandbox.
+README scope is installation, configuration and normal user operation. Developer
+architecture, branch workflow, test commands and dependency-lock maintenance live
+in [CONTRIBUTING.md](CONTRIBUTING.md). Security reporting and deployment trust
+boundaries live in [SECURITY.md](SECURITY.md).

@@ -32,7 +32,6 @@ providers:
 #    image_endpoint: https://api.openai.com/v1/images/generations # Image request URL.
 #    image_models: # Image model IDs; chat-only models are not used here.
 #      - gpt-image-2.5-sunburst
-#    image_default_size: 1024x1024 # Default WIDTHxHEIGHT output size.
 
 # Optional Anthropic Messages provider.
 # Uncomment and configure ANTHROPIC_API_KEY to enable it.

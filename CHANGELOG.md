@@ -4,6 +4,11 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Documentation
+
+- Refocus README on installation, complete environment/provider configuration, signed updates, release downloads, and user troubleshooting; keep developer internals in CONTRIBUTING/SECURITY.
+- Expand `.env.example` to cover every supported user setting and remove the unused `image_default_size` provider example.
+
 ## [0.2.027] - 2026-09-25
 
 ### Maintenance

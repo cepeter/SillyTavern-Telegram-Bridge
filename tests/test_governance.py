@@ -78,3 +78,92 @@ def test_repository_explicitly_ignores_python_tool_caches():
         if line.strip() and not line.lstrip().startswith("#")
     }
     assert {".pytest_cache/", ".mypy_cache/", ".ruff_cache/"} <= ignored
+
+
+USER_ENVIRONMENT_VARIABLES = {
+    "SILLYTAVERN_TELEGRAM_BOT_TOKEN",
+    "SILLYTAVERN_TELEGRAM_ALLOWED_USERS",
+    "SILLYTAVERN_DIR",
+    "SILLYTAVERN_DEFAULT_CHARACTER",
+    "SILLYTAVERN_MODEL",
+    "SILLYTAVERN_DEFAULT_USER_NAME",
+    "LLM_API_KEY",
+    "SILLYTAVERN_ENV_FILE",
+    "SILLYTAVERN_BRIDGE_HOME",
+    "SILLYTAVERN_BRIDGE_SOURCE_DIR",
+    "SILLYTAVERN_LIVE_BRIDGE_DIR",
+    "SILLYTAVERN_PROVIDER_CONFIG",
+    "SILLYTAVERN_MODEL_CACHE",
+    "SILLYTAVERN_MODEL_REFRESH_SECONDS",
+    "SILLYTAVERN_PROVIDER_ALLOWED_HOSTS",
+    "SILLYTAVERN_PROVIDER_PRIVATE_HOSTS",
+    "SILLYTAVERN_CONTEXT_WINDOW_TOKENS",
+    "SILLYTAVERN_CONTEXT_OUTPUT_RESERVE_TOKENS",
+    "SILLYTAVERN_CONTEXT_HISTORY_CANDIDATES",
+    "SILLYTAVERN_CHARACTER_DIR",
+    "SILLYTAVERN_CHARACTER_BACKUP_DIR",
+    "SILLYTAVERN_WORLD_DIR",
+    "SILLYTAVERN_SYSTEM_PROMPTS_DIR",
+    "SILLYTAVERN_NATIVE_SETTINGS_FILE",
+    "SILLYTAVERN_NATIVE_AVATAR_DIR",
+    "SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS",
+    "SILLYTAVERN_PERF_LOG",
+    "HINDSIGHT_API_URL",
+    "HINDSIGHT_API_KEY",
+    "SILLYTAVERN_HINDSIGHT_ALLOWED_HOSTS",
+    "SILLYTAVERN_HINDSIGHT_PRIVATE_HOSTS",
+    "SILLYTAVERN_RAG_EMBEDDING_URL",
+    "SILLYTAVERN_RAG_EMBEDDING_API_KEY",
+    "SILLYTAVERN_RAG_ALLOWED_HOSTS",
+    "SILLYTAVERN_RAG_PRIVATE_HOSTS",
+    "SILLYTAVERN_RAG_EMBEDDING_MODEL",
+    "SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS",
+    "SILLYTAVERN_RAG_EMBEDDING_REVISION",
+    "SILLYTAVERN_RAG_MAX_EXTRACTED_CHARS",
+    "SILLYTAVERN_RAG_MAX_PDF_PAGES",
+    "SILLYTAVERN_RAG_PDF_PARSE_TIMEOUT_SECONDS",
+    "SILLYTAVERN_RAG_SEMANTIC_CANDIDATES",
+    "SILLYTAVERN_SYNC_API_URL",
+    "SILLYTAVERN_SYNC_API_HANDLE",
+    "SILLYTAVERN_SYNC_API_PASSWORD",
+    "SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS",
+    "SILLYTAVERN_SYNC_API_INTERVAL_SECONDS",
+    "SILLYTAVERN_STT_MODEL",
+    "SILLYTAVERN_TTS_BIN",
+    "SILLYTAVERN_TTS_VOICE",
+    "OPENCODE_CLIENT_VERSION",
+    "SILLYTAVERN_UPDATE_ALLOWED_SIGNERS",
+    "SILLYTAVERN_UPDATE_SERVICE",
+}
+
+
+def test_user_readme_and_env_example_cover_supported_environment_variables():
+    readme = (ROOT / "README.md").read_text()
+    example = (ROOT / ".env.example").read_text()
+    missing_readme = sorted(name for name in USER_ENVIRONMENT_VARIABLES if name not in readme)
+    missing_example = sorted(name for name in USER_ENVIRONMENT_VARIABLES if name not in example)
+    assert missing_readme == []
+    assert missing_example == []
+
+
+def test_user_readme_documents_provider_catalog_controls():
+    readme = (ROOT / "README.md").read_text()
+    for field in (
+        "name",
+        "api_endpoint",
+        "api_key_env",
+        "transport",
+        "adapter",
+        "streaming",
+        "models",
+        "discover_models",
+        "health_check",
+        "extra_headers",
+        "anthropic_version",
+        "image_enabled",
+        "image_endpoint",
+        "image_models",
+    ):
+        assert f"`{field}`" in readme, field
+    provider_example = (ROOT / "config/providers.example.yaml").read_text()
+    assert "image_default_size" not in provider_example
