@@ -272,7 +272,7 @@ class AuditRegressionTests(SettingsTestCase):
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
-        self.assertEqual(sent, ["Unknown /providers action. Use /providers, /providers health, or /providers refresh."])
+        self.assertEqual(sent, ["Use /providers and choose an action from the panel."])
 
     def test_stscript_reset_opens_confirmation_panel(self):
         session = _m_telegram.ensure_session(

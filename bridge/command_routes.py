@@ -278,7 +278,7 @@ def _handle_entities(
     if command == "/world" or command.startswith("/world "):
         send_world_menu(token, chat_id, session["world_file"], request_context=request_context)
         return True
-    if command in {"/providers", "/providers health", "/providers refresh"}:
+    if command == "/providers":
         send_model_target_menu(
             token,
             chat_id,
@@ -288,9 +288,7 @@ def _handle_entities(
         )
         return True
     if command.startswith("/providers "):
-        send_text(
-            token, chat_id, "Unknown /providers action. Use /providers, /providers health, or /providers refresh."
-        )
+        send_text(token, chat_id, "Use /providers and choose an action from the panel.")
         return True
     return False
 

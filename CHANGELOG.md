@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Make provider health and model refresh panel-only actions; remove misleading text aliases and their queue classification.
+
 ### Documentation
 
 - Refocus README on installation, complete environment/provider configuration, signed updates, release downloads, and user troubleshooting; keep developer internals in CONTRIBUTING/SECURITY.
