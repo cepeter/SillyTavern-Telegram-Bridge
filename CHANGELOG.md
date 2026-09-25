@@ -4,6 +4,12 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.027] - 2026-09-25
+
+### Maintenance
+
+- Publish the first SSH-signed release under the hardened updater trust policy. Runtime code is unchanged from v0.2.026.
+
 ## [0.2.026] - 2026-09-25
 
 ### Maintenance
