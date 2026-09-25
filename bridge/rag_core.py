@@ -20,17 +20,18 @@ from pathlib import Path
 
 from defusedxml import ElementTree as ET
 
-from bridge.config import (
+from bridge.database import get_meta
+from bridge.limits import (
     RAG_CHUNK_CHARS,
     RAG_CHUNK_OVERLAP,
     RAG_MAX_CONTEXT_CHARS,
     RAG_MAX_FILE_BYTES,
     RAG_SUPPORTED_SUFFIXES,
 )
-from bridge.database import get_meta, optimize_database, write_transaction
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
 from bridge.rag_retrieval import cosine_similarity, embedding_signature, semantic_candidate_chunk_ids
 from bridge.settings import AppSettings
+from bridge.sqlite_store import optimize_database, write_transaction
 
 
 def extract_pdf_data_bank_text(raw: bytes, *, app_settings: AppSettings) -> str:

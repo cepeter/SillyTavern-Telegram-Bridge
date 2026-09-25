@@ -7,6 +7,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.command_panels as _command_panels
+
 ensure_application_extensions()
 
 import tempfile
@@ -190,13 +192,13 @@ class PanelificationTests(SettingsTestCase):
         memory_calls = []
         group_calls = []
         macro_calls = []
-        old_memory = _m_command_routes.handle_memory_command
-        old_group = _m_command_routes.handle_group_command
+        old_memory = _command_panels.handle_memory_command
+        old_group = _command_panels.handle_group_command
         old_macro = _m_input_flows.handle_macro_command
-        _m_command_routes.handle_memory_command = lambda *args, app_settings=None, **_kwargs: memory_calls.append(
+        _command_panels.handle_memory_command = lambda *args, app_settings=None, **_kwargs: memory_calls.append(
             args[-1]
         )
-        _m_command_routes.handle_group_command = lambda *args, **_kwargs: group_calls.append(args[4])
+        _command_panels.handle_group_command = lambda *args, **_kwargs: group_calls.append(args[4])
         _m_input_flows.handle_macro_command = lambda *args, **_kwargs: macro_calls.append(args[-1])
         try:
             self.assertTrue(self._route("/memory search hidden fact"))
@@ -218,8 +220,8 @@ class PanelificationTests(SettingsTestCase):
             self.assertTrue(self._route("/macro {{char}} waves"))
             self.assertEqual(macro_calls, ["/macro {{char}} waves"])
         finally:
-            _m_command_routes.handle_memory_command = old_memory
-            _m_command_routes.handle_group_command = old_group
+            _command_panels.handle_memory_command = old_memory
+            _command_panels.handle_group_command = old_group
             _m_input_flows.handle_macro_command = old_macro
 
     def test_world_menu_keeps_bot_token_for_telegram_request(self):

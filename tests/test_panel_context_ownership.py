@@ -11,11 +11,12 @@ from unittest.mock import patch
 from application_test_setup import ensure_application_extensions, make_test_application_services
 from settings_test_support import SettingsTestCase
 
+import bridge.sqlite_store as _sqlite_store
+
 ensure_application_extensions()
 
 import bridge.callback_dispatch as callback_dispatch
 import bridge.callbacks as callbacks
-import bridge.database as database
 import bridge.request_types as request_types
 import bridge.telegram as telegram
 import bridge.update as update
@@ -24,7 +25,7 @@ import bridge.update as update
 class PanelContextOwnershipTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = database.db_connect(
+        self.db = _sqlite_store.db_connect(
             Path(self.tmp.name) / "panel.sqlite3", app_settings=self.app_settings_builder.build()
         )
         self.db.execute(

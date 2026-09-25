@@ -6,7 +6,8 @@ import sqlite3
 import time
 
 from bridge.composition import BridgeServices
-from bridge.database import run_write_txn, set_meta
+from bridge.database import set_meta
+from bridge.sqlite_store import run_write_txn
 from bridge.update_callback_routing import route_callback_update
 from bridge.update_message_routing import route_edited_message_update, route_message_update
 

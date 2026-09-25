@@ -11,7 +11,7 @@ from pathlib import Path
 from bridge.callback_tokens import dynamic_callback_token
 from bridge.card_content import active_world_files, safe_world_path, world_file_paths
 from bridge.cards import send_panel_message
-from bridge.common import MODEL_CHOICES
+from bridge.config import MODEL_CHOICES
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
 from bridge.panel_utils import panel_label, panel_navigation, panel_page
 from bridge.provider_catalog import load_provider_catalog

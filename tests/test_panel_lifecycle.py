@@ -6,6 +6,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.command_panels as _command_panels
+
 ensure_application_extensions()
 
 import json
@@ -17,7 +19,6 @@ from pathlib import Path
 import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.callbacks as _m_callbacks
 import bridge.cards as _m_cards
-import bridge.command_routes as _m_command_routes
 import bridge.database as _m_database
 import bridge.help as _m_help
 import bridge.input_flows as _m_input_flows
@@ -88,7 +89,7 @@ class PanelLifecycleTests(SettingsTestCase):
         original_card = _m_message_commands.card_fields_from_file
         original_menu = _m_input_flows.send_settings_menu
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
-        _m_command_routes.send_settings_menu = lambda *_args, **_kwargs: opened.append(True)
+        _command_panels.send_settings_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
             make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
@@ -167,7 +168,7 @@ class PanelLifecycleTests(SettingsTestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_settings_menu(
+            _command_panels.send_settings_menu(
                 "token",
                 "chat",
                 self.db,
@@ -216,7 +217,7 @@ class PanelLifecycleTests(SettingsTestCase):
             "post_history_instructions": "",
         }
         original_card = _m_message_commands.card_fields_from_file
-        original_menu = _m_command_routes.send_settings_menu
+        original_menu = _command_panels.send_settings_menu
         original_send = _m_message_commands.send_text
         original_request = _m_telegram.telegram_request
         deleted = []
@@ -247,7 +248,7 @@ class PanelLifecycleTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_command_routes.send_settings_menu = original_menu
+            _command_panels.send_settings_menu = original_menu
             _m_message_commands.send_text = original_send
             _m_telegram.telegram_request = original_request
         self.assertEqual(

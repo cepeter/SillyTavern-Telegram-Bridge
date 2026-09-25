@@ -11,8 +11,7 @@ import re
 import sqlite3
 import time
 
-from bridge.common import parse_topic_scope
-from bridge.database import task_model_for_session, write_transaction
+from bridge.database import task_model_for_session
 from bridge.delivery_port import DeliveryPort
 from bridge.director_goal_panel import director_goal_panel
 from bridge.extension_registry import extension_registry_snapshot as _extension_registry_snapshot
@@ -22,6 +21,8 @@ from bridge.repositories import delete_director_goal as _repo_delete_director_go
 from bridge.repositories import load_director_goal as _repo_load_director_goal
 from bridge.repositories import store_director_goal as _repo_store_director_goal
 from bridge.settings import AppSettings
+from bridge.sqlite_store import write_transaction
+from bridge.topic_scope import parse_topic_scope
 
 _DIRECTOR_GOAL_MAX_CHARS = 1200
 

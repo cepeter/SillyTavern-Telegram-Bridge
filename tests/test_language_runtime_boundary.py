@@ -5,6 +5,8 @@ from pathlib import Path
 
 from application_test_setup import make_test_delivery_port
 
+import bridge.command_panels as _command_panels
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -117,8 +119,6 @@ def test_language_command_uses_injected_delivery_and_update_session():
 def test_language_boundary_does_not_change_remember_inline_action(monkeypatch):
     from types import SimpleNamespace
 
-    import bridge.command_routes as routes
-
     calls = []
     provider = object()
     services = SimpleNamespace(
@@ -131,12 +131,12 @@ def test_language_boundary_does_not_change_remember_inline_action(monkeypatch):
     )
 
     monkeypatch.setattr(
-        routes,
+        _command_panels,
         "handle_inline_text_action",
         lambda *args, **kwargs: calls.append((args, kwargs)) or True,
     )
 
-    handled = routes._handle_memory_media(
+    handled = _command_panels._handle_memory_media(
         object(),
         "token",
         "api-key",

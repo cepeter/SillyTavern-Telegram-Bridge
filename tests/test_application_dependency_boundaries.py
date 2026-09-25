@@ -6,6 +6,8 @@ from pathlib import Path
 from application_test_setup import make_native_test_persona_service, make_test_provider_port
 from settings_test_support import SettingsBuilder, make_test_settings
 
+from bridge.limits import IMAGE_MAX_BYTES
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -111,7 +113,6 @@ def _image_services(download_file, sent):
 
 def test_image_worker_rejects_oversize_before_transport(monkeypatch):
     import bridge.worker_orchestration as workers
-    from bridge.common import IMAGE_MAX_BYTES
 
     delegated = []
     downloads = []

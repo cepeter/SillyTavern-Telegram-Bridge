@@ -1,12 +1,12 @@
 import pytest
 
-import bridge.common as common
+import bridge.background as _background
 
 
 def pytest_sessionfinish(session, exitstatus):
     """Do not let async utility work leak past the pytest process lifetime."""
-    common.begin_background_shutdown()
-    if not common.drain_background_jobs(timeout=15.0):
+    _background.begin_background_shutdown()
+    if not _background.drain_background_jobs(timeout=15.0):
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 

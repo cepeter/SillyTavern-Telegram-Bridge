@@ -14,7 +14,6 @@ from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.card_content import card_fields_from_file, safe_character_path
 from bridge.cards import send_panel_message, send_persona_menu
 from bridge.commands import edit_last_user, handle_macro_command, send_note_menu
-from bridge.config import PENDING_SETTINGS_TTL_SECONDS
 from bridge.database import (
     get_generation_settings,
     get_meta,
@@ -36,6 +35,7 @@ from bridge.help import (
 )
 from bridge.image_generation import handle_imagine_prompt
 from bridge.language import normalize_stt_language, stt_language_label
+from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.media import remove_inline_keyboard
 from bridge.memory import handle_memory_command
 from bridge.memory_backend import remember_fact

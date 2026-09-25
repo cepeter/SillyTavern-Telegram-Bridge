@@ -9,8 +9,8 @@ import time
 import urllib.parse
 import urllib.request
 
-from bridge.common import DEFAULT_PROVIDER_URL
-from bridge.config import DEFAULT_MAX_TOKENS, GENERATION_DEFAULTS
+from bridge.config import DEFAULT_PROVIDER_URL, GENERATION_DEFAULTS
+from bridge.limits import DEFAULT_MAX_TOKENS
 from bridge.model_router import ModelRouter
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
 from bridge.settings import AppSettings

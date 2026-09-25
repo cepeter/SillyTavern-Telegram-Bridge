@@ -1,119 +1,45 @@
-#!/usr/bin/env python3
-"""Telegram bridge for SillyTavern character cards.
-
-This keeps the configured character card data and per-Telegram-user chat
-history locally, then sends the assembled conversation to an
-OpenAI-compatible backend.
-"""
+"""Bounded process-wide job scheduling, admission, and executor lifecycle."""
 
 from __future__ import annotations
 
-import base64 as base64
 import concurrent.futures
-import hashlib as hashlib
-import io as io
-import json as json
 import logging
-import re as re
-import signal as signal
-import sqlite3 as sqlite3
 import threading
 import time
-import urllib.error
-import urllib.parse
-import urllib.request  # noqa: F401 -- public module namespace used by consumers
 from collections import deque
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
-from bridge.config import DEFAULT_MAX_TOKENS as DEFAULT_MAX_TOKENS
-from bridge.config import GENERATION_DEFAULTS as GENERATION_DEFAULTS
-from bridge.config import PENDING_SETTINGS_TTL_SECONDS as PENDING_SETTINGS_TTL_SECONDS
-from bridge.config import REASONING_LEVELS as REASONING_LEVELS
-from bridge.environment import environment_file
-from bridge.settings import AppSettings
+import bridge.limits as _limits
 
-TOPIC_SCOPE_SEPARATOR = "|topic:"
-
-
-def topic_scope_id(chat_id: str, message_thread_id: int | str | None = None) -> str:
-    chat_id = str(chat_id)
-    if message_thread_id in (None, ""):
-        return chat_id
-    return f"{chat_id}{TOPIC_SCOPE_SEPARATOR}{int(message_thread_id)}"
-
-
-def parse_topic_scope(scope_id: str) -> tuple[str, int | None]:
-    value = str(scope_id)
-    if TOPIC_SCOPE_SEPARATOR not in value:
-        return value, None
-    chat_id, thread_id = value.rsplit(TOPIC_SCOPE_SEPARATOR, 1)
-    try:
-        return chat_id, int(thread_id)
-    except ValueError:
-        return value, None
-
-
-def topic_scope_from_message(chat_id: str, message: dict | None) -> str:
-    return topic_scope_id(chat_id, (message or {}).get("message_thread_id"))
-
-
-IMAGE_MAX_BYTES = 8 * 1024 * 1024
-TTS_MAX_CHARS = 4000
-STT_MAX_BYTES = 20 * 1024 * 1024
-STT_DEFAULT_MODEL = "base"
-DEFAULT_PROVIDER_URL = ""
-MAX_HISTORY_MESSAGES = 24
-MAX_TELEGRAM_LENGTH = 4000
-MODEL_CHOICES = []
-
-
-def configure_logging(log_file: Path | None = None, *, app_settings: AppSettings) -> None:
-    """Install the bridge rotating file handler and set root logging to INFO."""
-    if log_file is None:
-        log_file = app_settings.log_file
-    target = Path(log_file).expanduser().resolve()
-    root = logging.getLogger()
-
-    if any(
-        isinstance(handler, RotatingFileHandler) and Path(handler.baseFilename).resolve() == target
-        for handler in root.handlers
-    ):
-        return
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(
-        str(target),
-        maxBytes=10 * 1024 * 1024,
-        backupCount=5,
-    )
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    root.addHandler(handler)
-    root.setLevel(logging.INFO)
-
-    try:
-        target.chmod(0o600)
-    except OSError:
-        logging.warning(
-            "Could not protect runtime log file %s",
-            target,
-            exc_info=True,
-        )
-
-
-_BACKGROUND_MAX_QUEUED_PER_CHAT = 256
-_BACKGROUND_MAX_SCOPED_QUEUES = 1024
-BACKGROUND_MAX_JOBS = 8
 _GENERATION_SLOTS = threading.BoundedSemaphore(6)
+
+
 _UTILITY_SLOTS = threading.BoundedSemaphore(4)
+
+
 _GENERATION_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = None
+
+
 _UTILITY_EXECUTOR: concurrent.futures.ThreadPoolExecutor | None = None
+
+
 _GENERATION_LABELS = {"generation", "command", "retry", "regen", "continue", "edit", "summarize"}
+
+
 _CHAT_LOCKS: dict[str, threading.Lock] = {}
+
+
 _CHAT_LOCKS_GUARD = threading.Lock()
+
+
 _BACKGROUND_STATE_LOCK = threading.Lock()
+
+
 _EXECUTOR_LOCK = threading.Lock()
+
+
 _BACKGROUND_FUTURES: set[concurrent.futures.Future] = set()
+
+
 _BACKGROUND_ACCEPTING = True
 
 
@@ -246,7 +172,11 @@ def shutdown_background_executors(timeout: float = 20.0) -> bool:
 
 
 _CHAT_QUEUES: dict[str, deque[tuple[str, object, tuple, dict]]] = {}
+
+
 _CHAT_ACTIVE: set[str] = set()
+
+
 _CHAT_IN_FLIGHT: set[str] = set()
 
 
@@ -310,11 +240,11 @@ def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) 
         return False
     chat_id = str(chat_id)
     with _CHAT_LOCKS_GUARD:
-        if chat_id not in _CHAT_QUEUES and len(_CHAT_QUEUES) >= _BACKGROUND_MAX_SCOPED_QUEUES:
+        if chat_id not in _CHAT_QUEUES and len(_CHAT_QUEUES) >= _limits._BACKGROUND_MAX_SCOPED_QUEUES:
             logging.warning("Global ordered queue limit reached; durable job remains in SQLite")
             return False
         queue = _CHAT_QUEUES.setdefault(chat_id, deque())
-        if len(queue) >= _BACKGROUND_MAX_QUEUED_PER_CHAT:
+        if len(queue) >= _limits._BACKGROUND_MAX_QUEUED_PER_CHAT:
             logging.warning("Ordered queue full for %s; durable job remains in SQLite", chat_id)
             return False
         queue.append((label, function, args, kwargs))
@@ -324,44 +254,3 @@ def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) 
     if should_start:
         _start_next_chat_job(chat_id)
     return True
-
-
-def enforce_runtime_permissions(*, app_settings: AppSettings) -> None:
-    private_dirs = {
-        app_settings.db_file.parent,
-        app_settings.log_file.parent,
-        app_settings.bridge_home / "backups",
-        app_settings.character_backup_dir,
-    }
-    enforce_prompt_permissions = (
-        app_settings.environ.get("SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS", "false").casefold() == "true"
-    )
-    if app_settings.system_prompts_dir.exists() and (
-        enforce_prompt_permissions or app_settings.system_prompts_dir.is_relative_to(app_settings.bridge_home.parent)
-    ):
-        private_dirs.add(app_settings.system_prompts_dir)
-    for directory in private_dirs:
-        try:
-            directory.mkdir(parents=True, exist_ok=True)
-            directory.chmod(0o700)
-        except OSError:
-            logging.warning("Could not protect runtime directory %s", directory, exc_info=True)
-    private_files = {
-        environment_file(),
-        app_settings.db_file,
-        app_settings.log_file,
-        app_settings.provider_config_file,
-        app_settings.model_cache_file,
-    }
-    if app_settings.system_prompts_dir.exists() and (
-        enforce_prompt_permissions or app_settings.system_prompts_dir.is_relative_to(app_settings.bridge_home.parent)
-    ):
-        private_files.update(app_settings.system_prompts_dir.glob("*.txt"))
-        private_files.update(app_settings.system_prompts_dir.glob("*.json"))
-    private_files.update(app_settings.db_file.parent.glob(app_settings.db_file.name + "-*"))
-    for path in private_files:
-        try:
-            if path.is_file() and not path.is_symlink():
-                path.chmod(0o600)
-        except OSError:
-            logging.warning("Could not protect runtime file %s", path, exc_info=True)

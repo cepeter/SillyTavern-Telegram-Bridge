@@ -891,7 +891,7 @@ and never replaces the original conversation history.
 - **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
   reverse imports from the isolated service/port layer. Ruff linting, security
   rules, and formatting cover the complete Python tree. Mypy currently checks
-  20 explicitly listed modules, including the network and callback-token policy.
+  23 explicitly listed modules, including the network and callback-token policy.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---
@@ -971,6 +971,21 @@ The bridge uses ordinary imports, explicit composition, and an acyclic internal
 dependency graph. Startup enters through `sillytavern_telegram_bridge.py`
 and composes required services/ports in `bridge.main`; there is no runtime
 loader, module override chain, or shared execution namespace.
+
+Shared responsibilities have explicit owners: `topic_scope.py` parses chat/topic
+identifiers; `background.py` owns bounded process-wide executors and scheduling;
+`runtime_logging.py` handles logging and configured private-path permissions;
+`limits.py` owns fixed resource budgets. `sqlite_store.py` owns connection gates,
+transactions and maintenance, while `database.py` owns SQL operations.
+`command_panels.py` handles grouped panel commands and `command_routes.py` keeps
+root dispatch, onboarding and retry orchestration. The old `common.py` umbrella
+is removed; callers import the actual owner or standard library directly.
+
+CI rejects application imports from the low-level owners, reverse dependencies
+from SQLite mechanics into SQL operations, and imports from panel commands back
+into root command dispatch. Resource limits are preserved by this decomposition.
+Permission setup uses the environment-file path and validated boolean settings
+from its immutable application settings, not another process environment.
 
 Core provider, delivery, Telegram, conversation, group and memory callbacks use
 named `Protocol` signatures; negative type-check fixtures verify rejected

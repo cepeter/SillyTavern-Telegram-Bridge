@@ -10,6 +10,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.sqlite_store as _sqlite_store
+
 ensure_application_extensions()
 
 import sqlite3
@@ -22,7 +24,6 @@ from unittest.mock import patch
 
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
-import bridge.database as _m_database
 import bridge.help as _m_help
 import bridge.memory as _m_memory
 import bridge.memory_backend as _m_memory_backend
@@ -829,7 +830,7 @@ class MemoryServiceBoundaryTests(SettingsTestCase):
                     side_effect=AssertionError("raw purge must not run"),
                 ),
                 patch.object(
-                    _m_database,
+                    _sqlite_store,
                     "optimize_database",
                 ),
             ):

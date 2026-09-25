@@ -15,7 +15,7 @@ from bridge.card_content import (
     safe_character_path,
     safe_world_path,
 )
-from bridge.config import GENERATION_DEFAULTS, SYNC_MAX_BYTES
+from bridge.config import GENERATION_DEFAULTS
 from bridge.database import (
     ensure_sync_binding,
     get_generation_settings,
@@ -25,6 +25,7 @@ from bridge.database import (
 )
 from bridge.generation import save_response_variant
 from bridge.language import normalize_response_language
+from bridge.limits import SYNC_MAX_BYTES
 from bridge.memory import get_session_summary
 from bridge.persona_sync import get_persona, persona_name
 from bridge.port_contracts import RetainSessionMemory

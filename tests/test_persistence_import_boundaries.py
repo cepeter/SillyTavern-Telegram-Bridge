@@ -9,15 +9,12 @@ from unittest.mock import patch
 
 from settings_test_support import SettingsTestCase
 
+import bridge.sqlite_store as _sqlite_store
+
 REPO_ROOT = Path(__file__).parents[1]
 
 
 DATABASE_PUBLIC_FUNCTIONS = (
-    "run_write_txn",
-    "write_transaction",
-    "optimize_database",
-    "run_database_maintenance",
-    "db_connect",
     "get_meta",
     "set_meta",
     "record_failed_turn",
@@ -72,11 +69,12 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
         completed = self._run_python(
             "import sys\n"
             "import bridge.config as config\n"
+            "import bridge.limits as limits\n"
             "assert 'bridge.runtime' not in sys.modules\n"
             "assert 'bridge.common' not in sys.modules\n"
             "assert 'bridge.database' not in sys.modules\n"
-            "assert config.DEFAULT_MAX_TOKENS == 1800\n"
-            "assert config.PENDING_SETTINGS_TTL_SECONDS == 600\n"
+            "assert limits.DEFAULT_MAX_TOKENS == 1800\n"
+            "assert limits.PENDING_SETTINGS_TTL_SECONDS == 600\n"
             "assert config.REASONING_LEVELS == {"
             "'none': 0, 'low': 1024, 'medium': 4096, "
             "'high': 8192, 'max': 16384}\n"
@@ -88,33 +86,25 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
             completed.stdout + completed.stderr,
         )
 
-    def test_common_reexports_canonical_mutable_defaults(self):
-        completed = self._run_python(
-            "import bridge.config as config\n"
-            "import bridge.common as common\n"
-            "assert not hasattr(common, 'BRIDGE_HOME')\n"
-            "assert not hasattr(common, 'DB_FILE')\n"
-            "assert not hasattr(common, 'DEFAULT_MODEL')\n"
-            "assert common.DEFAULT_MAX_TOKENS == config.DEFAULT_MAX_TOKENS\n"
-            "assert common.PENDING_SETTINGS_TTL_SECONDS == "
-            "config.PENDING_SETTINGS_TTL_SECONDS\n"
-            "assert common.GENERATION_DEFAULTS is config.GENERATION_DEFAULTS\n"
-            "assert common.REASONING_LEVELS is config.REASONING_LEVELS\n"
-        )
-        self.assertEqual(
-            completed.returncode,
-            0,
-            completed.stdout + completed.stderr,
-        )
+    def test_defaults_have_canonical_data_owners_without_common_facade(self):
+        import bridge.config as config
+        import bridge.limits as limits
+
+        self.assertFalse((REPO_ROOT / "bridge/common.py").exists())
+        self.assertEqual(limits.DEFAULT_MAX_TOKENS, 1800)
+        self.assertEqual(limits.PENDING_SETTINGS_TTL_SECONDS, 600)
+        self.assertEqual(config.GENERATION_DEFAULTS["max_tokens"], limits.DEFAULT_MAX_TOKENS)
+        self.assertEqual(config.REASONING_LEVELS["high"], 8192)
 
     def test_database_imports_without_runtime_or_common(self):
         completed = self._run_python(
             "import sys\n"
             "import bridge.database as database\n"
+            "import bridge.sqlite_store as store\n"
             "assert 'bridge.runtime' not in sys.modules\n"
             "assert 'bridge.common' not in sys.modules\n"
-            "assert database._DB_WRITE_LOCK is not None\n"
-            "assert database._DB_CONNECTION_GATE is not None\n"
+            "assert store._DB_WRITE_LOCK is not None\n"
+            "assert store._DB_CONNECTION_GATE is not None\n"
         )
         self.assertEqual(
             completed.returncode,
@@ -139,12 +129,11 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
         self.assertNotIn("from bridge.common import", source)
 
     def test_database_default_path_follows_canonical_config(self):
-        import bridge.database as database
 
         with tempfile.TemporaryDirectory() as directory:
             expected = Path(directory) / "default.sqlite3"
             with patch.object(self.app_settings_builder, "db_file", expected):
-                db = database.db_connect(app_settings=self.app_settings_builder.build())
+                db = _sqlite_store.db_connect(app_settings=self.app_settings_builder.build())
                 try:
                     self.assertEqual(
                         Path(db.execute("PRAGMA database_list").fetchone()[2]).resolve(),
@@ -154,13 +143,12 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
                     db.close()
 
     def test_database_explicit_path_overrides_canonical_default(self):
-        import bridge.database as database
 
         with tempfile.TemporaryDirectory() as directory:
             configured = Path(directory) / "configured.sqlite3"
             explicit = Path(directory) / "explicit.sqlite3"
             with patch.object(self.app_settings_builder, "db_file", configured):
-                db = database.db_connect(explicit, app_settings=self.app_settings_builder.build())
+                db = _sqlite_store.db_connect(explicit, app_settings=self.app_settings_builder.build())
                 try:
                     self.assertEqual(
                         Path(db.execute("PRAGMA database_list").fetchone()[2]).resolve(),
@@ -190,12 +178,11 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
             )
 
     def test_database_maintenance_uses_current_canonical_default_path(self):
-        import bridge.database as database
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "maintenance.sqlite3"
             with patch.object(self.app_settings_builder, "db_file", path):
-                db = database.db_connect(app_settings=self.app_settings_builder.build())
+                db = _sqlite_store.db_connect(app_settings=self.app_settings_builder.build())
                 try:
                     db.execute("CREATE TABLE persistence_churn(id INTEGER PRIMARY KEY, payload TEXT)")
                     db.executemany(
@@ -208,7 +195,7 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
                 finally:
                     db.close()
 
-                database.run_database_maintenance(
+                _sqlite_store.run_database_maintenance(
                     vacuum_freelist_threshold=1, app_settings=self.app_settings_builder.build()
                 )
                 self.assertTrue(path.is_file())
@@ -226,12 +213,12 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
         }
         self.assertEqual(actual_public_functions, set(DATABASE_PUBLIC_FUNCTIONS))
         self.assertIs(
-            database.run_write_txn.__globals__["_DB_WRITE_LOCK"],
-            database._DB_WRITE_LOCK,
+            _sqlite_store.run_write_txn.__globals__["_DB_WRITE_LOCK"],
+            _sqlite_store._DB_WRITE_LOCK,
         )
         self.assertIs(
-            database.db_connect.__globals__["_DB_CONNECTION_GATE"],
-            database._DB_CONNECTION_GATE,
+            _sqlite_store.db_connect.__globals__["_DB_CONNECTION_GATE"],
+            _sqlite_store._DB_CONNECTION_GATE,
         )
         self.assertIs(sync_core.GENERATION_DEFAULTS, config.GENERATION_DEFAULTS)
         self.assertIs(help_module.REASONING_LEVELS, config.REASONING_LEVELS)

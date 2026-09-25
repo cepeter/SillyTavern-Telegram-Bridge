@@ -1,6 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
+import re
+import sqlite3
+import time
+import urllib
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Callable
+from pathlib import Path
 
 from bridge.callback_tokens import dynamic_callback_token
 from bridge.card_content import (
@@ -11,33 +22,24 @@ from bridge.card_content import (
     parse_png_chara_bytes,
     safe_world_path,
 )
-from bridge.common import (
-    MAX_TELEGRAM_LENGTH,
-    Path,
-    hashlib,
-    json,
-    logging,
-    parse_topic_scope,
-    re,
-    sqlite3,
-    time,
-    urllib,
-)
-from bridge.config import CATALOG_MAX_ITEMS, RAG_MAX_FILE_BYTES, RAG_SUPPORTED_SUFFIXES, SYNC_MAX_BYTES
 from bridge.database import (
     begin_operation,
     bind_panel_session,
     get_generation_settings,
     get_meta,
-    optimize_database,
     record_operation,
-    run_write_txn,
     set_meta,
 )
-from bridge.database import db_connect as db_connect
 from bridge.expressions import expression_last_key, expression_mode_key
 from bridge.generation import swipe_state_key
 from bridge.group_director_service import GroupDirectorService
+from bridge.limits import (
+    CATALOG_MAX_ITEMS,
+    MAX_TELEGRAM_LENGTH,
+    RAG_MAX_FILE_BYTES,
+    RAG_SUPPORTED_SUFFIXES,
+    SYNC_MAX_BYTES,
+)
 from bridge.memory_backend import hindsight_session_lock
 from bridge.memory_service import MemoryService
 from bridge.panel_utils import panel_label, panel_message_request, panel_navigation, panel_page
@@ -47,6 +49,8 @@ from bridge.rag_core import add_data_bank_document, data_bank_document_versions,
 from bridge.request_types import RequestContext
 from bridge.session_titles import normalize_session_title
 from bridge.settings import AppSettings
+from bridge.sqlite_store import optimize_database, run_write_txn
+from bridge.topic_scope import parse_topic_scope
 from bridge.world_storage import install_world_info_document
 
 _SESSION_COLUMNS = (
@@ -441,7 +445,7 @@ def telegram_request(token: str, method: str, payload: dict | None = None) -> di
     req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
     for attempt in range(3 if method == "sendMessage" else 1):
         try:
-            with urllib.request.urlopen(req, timeout=65) as response:
+            with urllib.request.urlopen(req, timeout=65) as response:  # noqa: S310 -- fixed Telegram HTTPS endpoint; token is not a URL
                 result = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             try:

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from settings_test_support import SettingsTestCase
 
+import bridge.background as _background
 from bridge.composition import BridgeServices
 
 REPO_ROOT = Path(__file__).parents[1]
@@ -180,7 +181,6 @@ class RuntimeArchitectureGuardTests(SettingsTestCase):
         self.assertEqual(offenders, {})
 
     def test_startup_paths_belong_to_immutable_settings_not_modules(self):
-        import bridge.common as common
         import bridge.config as config
         from bridge.settings import AppSettings
 
@@ -188,8 +188,8 @@ class RuntimeArchitectureGuardTests(SettingsTestCase):
         for field in fields:
             self.assertIn(field, AppSettings.__dataclass_fields__)
             self.assertFalse(hasattr(config, field.upper()), field)
-            self.assertFalse(hasattr(common, field.upper()), field)
-        self.assertFalse(hasattr(common, "ENV_FILE"))
+            self.assertFalse(hasattr(_background, field.upper()), field)
+        self.assertFalse(hasattr(_background, "ENV_FILE"))
 
     def test_single_file_system_prompt_fallback_is_deleted(self):
         offenders = {}
@@ -200,13 +200,13 @@ class RuntimeArchitectureGuardTests(SettingsTestCase):
         self.assertEqual(offenders, {})
 
     def test_late_environment_loader_is_deleted(self):
-        common_source = (BRIDGE_DIR / "common.py").read_text(encoding="utf-8")
+        common_source = (BRIDGE_DIR / "background.py").read_text(encoding="utf-8")
         main_source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
         self.assertNotIn("def load_env_file(", common_source)
         self.assertNotIn("load_env_file", main_source)
 
     def test_common_has_no_import_time_process_resource_construction(self):
-        source = (BRIDGE_DIR / "common.py").read_text(encoding="utf-8")
+        source = (BRIDGE_DIR / "background.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
 
         top_level_calls = []

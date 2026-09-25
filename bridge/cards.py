@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bridge import config as _config
+import bridge.limits as _limits
 from bridge.callback_tokens import dynamic_callback_token
 from bridge.callback_tokens import resolve_dynamic_callback_token as resolve_dynamic_callback_token
 from bridge.card_content import active_world_files as active_world_files
@@ -62,7 +62,7 @@ def send_persona_menu(
     personas = persona_service.list()
     options = [
         (persona_id, str(persona.get("name") or persona_id))
-        for persona_id, persona in list(personas.items())[: _config.CATALOG_MAX_ITEMS]
+        for persona_id, persona in list(personas.items())[: _limits.CATALOG_MAX_ITEMS]
     ]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []

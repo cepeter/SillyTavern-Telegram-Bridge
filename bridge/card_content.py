@@ -10,7 +10,7 @@ import struct
 import time
 from pathlib import Path
 
-from bridge import config as _config
+import bridge.limits as _limits
 from bridge.native_cache import cached_json, cached_png_metadata, cached_text
 from bridge.panel_utils import panel_label
 from bridge.settings import AppSettings
@@ -57,10 +57,10 @@ def card_fields(card: dict, *, app_settings: AppSettings) -> dict[str, str]:
         "post_history_instructions",
     ):
         value = str(data.get(key) or card.get(key) or "")
-        fields[key] = value[:120] if key == "name" else value[: _config.CARD_FIELD_MAX_CHARS]
+        fields[key] = value[:120] if key == "name" else value[: _limits.CARD_FIELD_MAX_CHARS]
     total = sum(len(value) for key, value in fields.items() if key != "name")
-    if total > _config.CARD_TOTAL_MAX_CHARS:
-        remaining = _config.CARD_TOTAL_MAX_CHARS
+    if total > _limits.CARD_TOTAL_MAX_CHARS:
+        remaining = _limits.CARD_TOTAL_MAX_CHARS
         for key in (
             "description",
             "personality",
@@ -77,7 +77,7 @@ def card_fields(card: dict, *, app_settings: AppSettings) -> dict[str, str]:
     if not isinstance(alternate, list):
         alternate = []
     fields["alternate_greetings"] = json.dumps(
-        [str(value)[: _config.CARD_FIELD_MAX_CHARS] for value in alternate[:20]], ensure_ascii=False
+        [str(value)[: _limits.CARD_FIELD_MAX_CHARS] for value in alternate[:20]], ensure_ascii=False
     )
     return fields
 
@@ -85,7 +85,7 @@ def card_fields(card: dict, *, app_settings: AppSettings) -> dict[str, str]:
 def character_card_paths(*, app_settings: AppSettings) -> list[Path]:
     if not app_settings.character_dir.exists():
         return []
-    return sorted(p for p in app_settings.character_dir.glob("*.png") if p.is_file())[: _config.CATALOG_MAX_ITEMS]
+    return sorted(p for p in app_settings.character_dir.glob("*.png") if p.is_file())[: _limits.CATALOG_MAX_ITEMS]
 
 
 def safe_character_path(name: str, *, app_settings: AppSettings) -> Path | None:
@@ -104,7 +104,7 @@ def card_fields_from_file(name: str, *, app_settings: AppSettings) -> dict[str, 
 def world_file_paths(*, app_settings: AppSettings) -> list[Path]:
     if not app_settings.world_dir.exists():
         return []
-    return sorted(p for p in app_settings.world_dir.glob("*.json") if p.is_file())[: _config.CATALOG_MAX_ITEMS]
+    return sorted(p for p in app_settings.world_dir.glob("*.json") if p.is_file())[: _limits.CATALOG_MAX_ITEMS]
 
 
 def safe_world_path(name: str, *, app_settings: AppSettings) -> Path | None:
@@ -254,7 +254,7 @@ def load_system_prompts(*, app_settings: AppSettings) -> dict[str, dict[str, str
             list(app_settings.system_prompts_dir.glob("*.json")) + list(app_settings.system_prompts_dir.glob("*.txt"))
         ):
             _merge_system_prompt_file(result, path)
-    return dict(list(result.items())[: _config.CATALOG_MAX_ITEMS])
+    return dict(list(result.items())[: _limits.CATALOG_MAX_ITEMS])
 
 
 def get_system_prompt_choice(name: str, *, app_settings: AppSettings) -> str | None:

@@ -11,6 +11,9 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Architecture
 
+- Retire the shared common module in favor of canonical topic, logging, scheduling and fixed-limit owners; extract SQLite mechanics and grouped panel commands with enforced dependency direction.
+- Keep the relocated function bodies and resource budgets unchanged; correct runtime permission setup to use the configured environment file and validated permission boolean.
+
 - Define exact core port call contracts and canonical request values, remove the redundant composition factory, and bind conversation and leaf-command dependencies explicitly.
 - Route Live Sync snapshot retention through the configured memory service rather than an unbound memory backend; add regression coverage for the retention/provider binding.
 

@@ -10,6 +10,9 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.command_panels as _command_panels
+import bridge.sqlite_store as _sqlite_store
+
 ensure_application_extensions()
 
 import json
@@ -180,7 +183,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.db.commit()
         job_id = int(self.db.execute("SELECT job_id FROM jobs WHERE update_id=999").fetchone()[0])
 
-        guarded = _m_main._DurableWorkerGuard(_m_main._database._lightweight_db_connect).prepare(
+        guarded = _m_main._DurableWorkerGuard(_sqlite_store._lightweight_db_connect).prepare(
             self.db,
             job_id,
             lambda: (_ for _ in ()).throw(sqlite3.OperationalError("database is locked")),
@@ -212,12 +215,12 @@ class AuditRegressionTests(SettingsTestCase):
         originals = {
             "card": _m_message_commands.card_fields_from_file,
             "persona": _m_command_routes.send_persona_menu,
-            "preset": _m_command_routes.send_preset_menu,
+            "preset": _command_panels.send_preset_menu,
             "branch": _m_command_routes.send_swipe_menu,
         }
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_command_routes.send_persona_menu = lambda *_args, **_kwargs: opened.append("persona")
-        _m_command_routes.send_preset_menu = lambda *_args, **_kwargs: opened.append("preset")
+        _command_panels.send_preset_menu = lambda *_args, **_kwargs: opened.append("preset")
         _m_command_routes.send_swipe_menu = lambda *_args, **_kwargs: opened.append("branch")
         try:
             for command in ("/persona user", "/preset use creative", "/branch 2"):
@@ -233,7 +236,7 @@ class AuditRegressionTests(SettingsTestCase):
         finally:
             _m_message_commands.card_fields_from_file = originals["card"]
             _m_command_routes.send_persona_menu = originals["persona"]
-            _m_command_routes.send_preset_menu = originals["preset"]
+            _command_panels.send_preset_menu = originals["preset"]
             _m_command_routes.send_swipe_menu = originals["branch"]
         self.assertEqual(opened, ["persona", "preset", "branch"])
         self.assertFalse(hasattr(_m_commands, "handle_preset_command"))
@@ -290,9 +293,9 @@ class AuditRegressionTests(SettingsTestCase):
         }
         opened = []
         original_card = _m_message_commands.card_fields_from_file
-        original_panel = _m_command_routes.send_stscript_menu
+        original_panel = _command_panels.send_stscript_menu
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
-        _m_command_routes.send_stscript_menu = lambda *_args, **_kwargs: opened.append(True)
+        _command_panels.send_stscript_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
             make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
@@ -305,7 +308,7 @@ class AuditRegressionTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_command_routes.send_stscript_menu = original_panel
+            _command_panels.send_stscript_menu = original_panel
         self.assertEqual(opened, [True])
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
 
@@ -314,7 +317,7 @@ class AuditRegressionTests(SettingsTestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_stt_language_menu(
+            _command_panels.send_stt_language_menu(
                 "token",
                 "chat",
                 self.db,
@@ -376,19 +379,19 @@ class AuditRegressionTests(SettingsTestCase):
         _m_cards.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         _m_commands.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
-            _m_command_routes.send_memory_menu(
+            _command_panels.send_memory_menu(
                 "token",
                 "chat",
                 self.db,
                 request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
-            _m_command_routes.send_databank_menu(
+            _command_panels.send_databank_menu(
                 "token",
                 "chat",
                 self.db,
                 request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
-            _m_command_routes.send_stscript_menu(
+            _command_panels.send_stscript_menu(
                 "token",
                 "chat",
                 request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
@@ -497,7 +500,7 @@ class AuditRegressionTests(SettingsTestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_preset_menu(
+            _command_panels.send_preset_menu(
                 "token",
                 "chat",
                 self.db,
@@ -730,7 +733,7 @@ class AuditRegressionTests(SettingsTestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_memory_menu(
+            _command_panels.send_memory_menu(
                 "token",
                 "chat",
                 self.db,
@@ -752,7 +755,7 @@ class AuditRegressionTests(SettingsTestCase):
             type("Result", (), {"text": "session fact"})()
         ]
         try:
-            _m_command_routes.handle_memory_command(
+            _command_panels.handle_memory_command(
                 self.db,
                 "token",
                 "chat",

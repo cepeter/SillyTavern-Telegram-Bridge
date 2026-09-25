@@ -6,10 +6,10 @@ import json
 import logging
 import sqlite3
 
+from bridge.background import chat_job_lock
 from bridge.callback_dispatch import process_callback
 from bridge.card_content import card_fields_from_file
 from bridge.commands import edit_telegram_user_message, process_image_message
-from bridge.common import IMAGE_MAX_BYTES, chat_job_lock
 from bridge.composition import BridgeServices
 from bridge.database import (
     clear_failed_turn,
@@ -18,11 +18,12 @@ from bridge.database import (
     operation_was_applied,
     record_failed_turn,
     record_operation,
-    run_write_txn,
 )
 from bridge.help import process_document_job
 from bridge.job_service import DurableJob, JobSubmission
+from bridge.limits import IMAGE_MAX_BYTES
 from bridge.media import process_voice_job, send_reply
+from bridge.sqlite_store import run_write_txn
 from bridge.telegram import ensure_session, load_session
 
 

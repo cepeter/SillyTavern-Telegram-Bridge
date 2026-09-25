@@ -12,6 +12,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase, make_test_settings
 
+import bridge.command_panels as _command_panels
 from bridge.config_values import ConfigurationError
 from bridge.settings import validate_app_settings
 
@@ -513,7 +514,7 @@ class WorkerInjectionTests(SettingsTestCase):
                 db, "chat", "injected::model", app_settings=self.app_settings_builder.build()
             )
             with patch.object(
-                _m_command_routes,
+                _command_panels,
                 "send_sync_menu",
                 side_effect=lambda *_args, **kwargs: captured.update(kwargs),
             ):

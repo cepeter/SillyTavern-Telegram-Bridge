@@ -33,7 +33,8 @@ from pathlib import Path
 root = Path({str(root)!r})
 os.environ["SILLYTAVERN_BRIDGE_HOME"] = str(root)
 
-import bridge.common as common
+import bridge.background as common
+import bridge.runtime_logging as runtime_logging
 import os
 from bridge.settings import load_app_settings
 settings = load_app_settings(dict(os.environ), home=Path.home())
@@ -64,15 +65,16 @@ import os
 from pathlib import Path
 import stat
 
-import bridge.common as common
+import bridge.background as common
+import bridge.runtime_logging as runtime_logging
 import os
 from bridge.settings import load_app_settings
 settings = load_app_settings(dict(os.environ), home=Path.home())
 
-assert hasattr(common, "configure_logging")
+assert hasattr(runtime_logging, "configure_logging")
 target = Path({str(log_file)!r})
-common.configure_logging(target, app_settings=settings)
-common.configure_logging(target, app_settings=settings)
+runtime_logging.configure_logging(target, app_settings=settings)
+runtime_logging.configure_logging(target, app_settings=settings)
 
 matching = [
     handler
@@ -99,12 +101,13 @@ if os.name == "posix":
             log_file = Path(directory) / "bridge.log"
             source = f"""
 from pathlib import Path
-import bridge.common as common
+import bridge.background as common
+import bridge.runtime_logging as runtime_logging
 import os
 from bridge.settings import load_app_settings
 settings = load_app_settings(dict(os.environ), home=Path.home())
 
-common.configure_logging(Path({str(log_file)!r}), app_settings=settings)
+runtime_logging.configure_logging(Path({str(log_file)!r}), app_settings=settings)
 assert common._GENERATION_EXECUTOR is None
 assert common._UTILITY_EXECUTOR is None
 """
@@ -124,16 +127,17 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-import bridge.common as common
+import bridge.background as common
+import bridge.runtime_logging as runtime_logging
 import os
 from bridge.settings import load_app_settings
 settings = load_app_settings(dict(os.environ), home=Path.home())
 
-assert hasattr(common, "configure_logging")
+assert hasattr(runtime_logging, "configure_logging")
 target = Path({str(log_file)!r})
-common.configure_logging(target, app_settings=settings)
+runtime_logging.configure_logging(target, app_settings=settings)
 before = tuple(logging.getLogger().handlers)
-common.configure_logging(target, app_settings=settings)
+runtime_logging.configure_logging(target, app_settings=settings)
 after = tuple(logging.getLogger().handlers)
 
 assert before == after

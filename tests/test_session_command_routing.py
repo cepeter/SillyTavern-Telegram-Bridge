@@ -1,7 +1,4 @@
-from application_test_setup import (
-    ensure_application_extensions,
-    make_test_conversation_service,
-)
+from application_test_setup import ensure_application_extensions, make_test_conversation_service
 from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()

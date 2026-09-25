@@ -10,6 +10,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.command_panels as _command_panels
+
 ensure_application_extensions()
 
 import json
@@ -187,8 +189,8 @@ class GroupTurnGatingTests(SettingsTestCase):
 
     def test_group_command_is_rejected_in_direct_chat(self):
         sent = []
-        original_send = _m_command_routes.send_text
-        _m_command_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
+        original_send = _command_panels.send_text
+        _command_panels.send_text = lambda _token, _chat, text: sent.append(text) or []
         session = {
             "session_id": "session",
             "persona_id": "",
@@ -227,7 +229,7 @@ class GroupTurnGatingTests(SettingsTestCase):
                 sync_service=make_test_application_services(app_settings=self.app_settings_builder.build()).sync,
             )
         finally:
-            _m_command_routes.send_text = original_send
+            _command_panels.send_text = original_send
         self.assertTrue(handled)
         self.assertEqual(sent, ["Group sessions are available only inside a Telegram Forum Topic."])
 

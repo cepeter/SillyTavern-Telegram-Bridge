@@ -14,12 +14,13 @@ from bridge.card_content import (
     read_png_chara,
     safe_character_path,
 )
-from bridge.database import get_meta, set_meta, write_transaction
+from bridge.database import get_meta, set_meta
 from bridge.repositories import load_group_state_row as _repo_load_group_state_row
 from bridge.repositories import mark_group_operation_applied as _repo_mark_group_operation_applied
 from bridge.repositories import store_group_state_row as _repo_store_group_state_row
 from bridge.repositories import try_claim_group_operation as _repo_try_claim_group_operation
 from bridge.settings import AppSettings
+from bridge.sqlite_store import write_transaction
 
 
 def group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:

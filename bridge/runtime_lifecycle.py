@@ -8,9 +8,10 @@ import sqlite3
 import threading
 import urllib.error
 
-from bridge.common import shutdown_background_executors
+from bridge.background import shutdown_background_executors
 from bridge.composition import BridgeServices
-from bridge.database import get_meta, run_database_maintenance
+from bridge.database import get_meta
+from bridge.sqlite_store import run_database_maintenance
 from bridge.sync_api import start_live_sync_worker, stop_live_sync_worker
 from bridge.update_routing import route_update
 from bridge.worker_orchestration import make_durable_backlog_dispatcher, resolve_recovered_job_submission

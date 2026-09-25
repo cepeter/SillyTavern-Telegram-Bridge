@@ -6,6 +6,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.command_panels as _command_panels
+
 ensure_application_extensions()
 
 import json
@@ -79,9 +81,9 @@ class NotePanelTests(SettingsTestCase):
         fields = self._fields()
         opened = []
         original_card = _m_message_commands.card_fields_from_file
-        original_menu = _m_command_routes.send_note_menu
+        original_menu = _command_panels.send_note_menu
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
-        _m_command_routes.send_note_menu = lambda *_args, **_kwargs: opened.append(True)
+        _command_panels.send_note_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
             make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
@@ -94,7 +96,7 @@ class NotePanelTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_command_routes.send_note_menu = original_menu
+            _command_panels.send_note_menu = original_menu
         self.assertEqual(opened, [True])
         self.assertEqual(
             _m_memory_curator.load_session(

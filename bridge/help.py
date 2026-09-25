@@ -6,17 +6,18 @@ import sqlite3
 import time
 from functools import partial
 
+from bridge.background import chat_job_lock
 from bridge.callback_tokens import dynamic_callback_token, resolve_dynamic_callback_token
 from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.card_content import get_system_prompt_choice, system_prompt_callback_token, system_prompt_choices
 from bridge.cards import send_panel_message
 from bridge.commands import apply_preset_action, process_image_message
-from bridge.common import STT_DEFAULT_MODEL, chat_job_lock
 from bridge.composition import BridgeServices as _BridgeServices
-from bridge.config import GENERATION_DEFAULTS, PENDING_SETTINGS_TTL_SECONDS, REASONING_LEVELS
+from bridge.config import GENERATION_DEFAULTS, REASONING_LEVELS, STT_DEFAULT_MODEL
 from bridge.database import get_generation_settings, get_meta, preset_names, set_meta, update_generation_settings
 from bridge.input_flow_service import InputFlowService
 from bridge.language import RESPONSE_LANGUAGES, normalize_stt_language, stt_language_label
+from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.memory_backend import memory_mode
 from bridge.panel_utils import panel_label, panel_navigation, panel_page
 from bridge.rag import handle_data_bank_command

@@ -10,7 +10,7 @@ from http.cookiejar import CookieJar
 from pathlib import Path
 from urllib.parse import urlparse
 
-from bridge.config import SYNC_MAX_BYTES
+from bridge.limits import SYNC_MAX_BYTES
 from bridge.settings import AppSettings
 
 _ALLOWED_PATHS = {

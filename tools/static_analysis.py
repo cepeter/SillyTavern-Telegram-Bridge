@@ -34,6 +34,9 @@ TYPE_TARGETS: tuple[str, ...] = (
     "bridge/port_contracts.py",
     "bridge/request_types.py",
     "bridge/composition.py",
+    "bridge/topic_scope.py",
+    "bridge/runtime_logging.py",
+    "bridge/limits.py",
 )
 
 
@@ -44,6 +47,17 @@ PURE_CONTRACT_IMPORTS = {
     "bridge.config_values": frozenset(),
 }
 SERVICE_CONTRACT_IMPORTS = frozenset({"bridge.port_contracts", "bridge.request_types"})
+
+
+LOW_LEVEL_IMPORTS = {
+    "bridge.topic_scope": frozenset(),
+    "bridge.limits": frozenset(),
+    "bridge.config": frozenset({"bridge.limits"}),
+    "bridge.background": frozenset({"bridge.limits"}),
+    "bridge.runtime_logging": frozenset({"bridge.settings"}),
+    "bridge.sqlite_store": frozenset({"bridge.limits", "bridge.settings", "bridge.schema", "bridge.scheduler_safety"}),
+}
+FORBIDDEN_OWNER_IMPORTS = {"bridge.command_panels": frozenset({"bridge.command_routes"})}
 
 
 class DependencyReport(NamedTuple):
@@ -236,6 +250,13 @@ def check_dependency_direction(
     for module, allowed in PURE_CONTRACT_IMPORTS.items():
         for imported in sorted(graph.get(module, set()) - allowed):
             errors.append(f"Pure contract layer {module} imports {imported}")
+
+    for module, allowed in LOW_LEVEL_IMPORTS.items():
+        for imported in sorted(graph.get(module, set()) - allowed):
+            errors.append(f"Low-level owner {module} imports {imported}")
+    for module, forbidden in FORBIDDEN_OWNER_IMPORTS.items():
+        for imported in sorted(graph.get(module, set()) & forbidden):
+            errors.append(f"Owner direction violation: {module} imports {imported}")
 
     return DependencyReport(
         modules=len(graph),

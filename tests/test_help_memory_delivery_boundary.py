@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 from application_test_setup import make_test_delivery_port, make_test_request_context
 
+import bridge.command_panels as _command_panels
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -296,17 +298,16 @@ def test_memory_command_requires_text_delivery_and_preserves_message(*, app_sett
 
 
 def test_command_routes_memory_search_forwards_delivery_send_text(monkeypatch):
-    import bridge.command_routes as routes
 
     calls = []
     send_text_fn = object()
     monkeypatch.setattr(
-        routes,
+        _command_panels,
         "handle_memory_command",
         lambda *args, app_settings=None, **kwargs: calls.append((args, kwargs)),
     )
 
-    handled = routes._handle_memory_media(
+    handled = _command_panels._handle_memory_media(
         object(),
         "token",
         "key",

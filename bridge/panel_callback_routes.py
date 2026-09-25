@@ -34,7 +34,6 @@ from bridge.catalog import (
     send_world_menu,
 )
 from bridge.commands import send_note_menu
-from bridge.config import PENDING_SETTINGS_TTL_SECONDS
 from bridge.database import (
     begin_operation,
     clear_model_target_selection,
@@ -61,6 +60,7 @@ from bridge.help import send_system_prompt_menu
 from bridge.help_details import handle_help_callback
 from bridge.input_flows import handle_persona_callback, pending_character_for_session
 from bridge.language import response_language_label, send_language_menu, set_response_language
+from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.media import delete_outgoing_messages, remove_inline_keyboard
 from bridge.message_commands import reset_session
 from bridge.provider_port import ProviderPort

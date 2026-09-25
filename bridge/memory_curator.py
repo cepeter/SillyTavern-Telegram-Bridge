@@ -16,9 +16,9 @@ import sqlite3
 import time
 from functools import partial as _partial
 
-from bridge.common import submit_background
+from bridge.background import submit_background
 from bridge.curated_memory_panel import curated_memory_panel
-from bridge.database import db_connect, get_generation_settings, task_model_for_session, write_transaction
+from bridge.database import get_generation_settings, task_model_for_session
 from bridge.delivery_port import DeliveryPort
 from bridge.extension_registry import extension_registry_snapshot as _extension_registry_snapshot
 from bridge.extension_registry import register_command_route as _register_command_route
@@ -28,6 +28,7 @@ from bridge.provider_port import ProviderPort
 from bridge.repositories import load_meta_value as _repo_load_meta_value
 from bridge.repositories import store_meta_value as _repo_store_meta_value
 from bridge.settings import AppSettings
+from bridge.sqlite_store import db_connect, write_transaction
 from bridge.telegram import load_session
 
 _MEMORY_CURATOR_MAX_ITEMS = 24
