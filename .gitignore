@@ -19,3 +19,10 @@ systemprompt/
 characters/
 worlds/
 personas.json
+
+# Local quality reports
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/

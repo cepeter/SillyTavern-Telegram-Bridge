@@ -6,6 +6,8 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Quality
 
+- Measure full-package statement and branch coverage including subprocesses, enforce a measured 68% combined baseline, publish JSON/XML reports, and retain explicit security-regression contracts.
+
 - Enforce whole-tree Ruff linting, security rules and formatting; separate incremental type coverage from graph isolation and include both security policy modules.
 
 ### Security

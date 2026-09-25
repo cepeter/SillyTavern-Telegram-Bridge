@@ -1,0 +1,21 @@
+{
+  "source_commit": "f58cc3d3845d26427334b2030eb0aff2175c188e",
+  "python": "3.11",
+  "pytest_cov": "7.1.0",
+  "coverage_py": "7.15.4",
+  "source": [
+    "bridge"
+  ],
+  "branch": true,
+  "subprocess_included": true,
+  "combined_percent": 68.6993006993007,
+  "minimum_combined_percent": 68,
+  "totals": {
+    "covered_lines": 7893,
+    "num_statements": 10846,
+    "covered_branches": 1931,
+    "num_branches": 3454
+  },
+  "command": "python -m pytest -q -n 2 --dist=loadfile --cov --cov-report=json:coverage.json --cov-report=xml:coverage.xml",
+  "note": "Coverage.py combines statement and branch opportunities. This floor is the measured whole-number floor, not a claim of exhaustive security coverage."
+}

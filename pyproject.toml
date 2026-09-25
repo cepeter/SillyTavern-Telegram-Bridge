@@ -20,3 +20,15 @@ check_untyped_defs = true
 disallow_untyped_defs = true
 no_implicit_optional = true
 warn_unused_ignores = true
+
+[tool.coverage.run]
+source = ["bridge"]
+branch = true
+relative_files = true
+patch = ["subprocess"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+# Measured statement+branch baseline 68.70%; whole-number floor (tools/coverage_baseline.json).
+fail_under = 68

@@ -975,6 +975,16 @@ The current boundaries are deliberately small:
 1. the complete `bridge` import graph must stay acyclic;
 2. the stabilized service/port modules may not import back into `bridge.*`.
 
+
+CI also measures all `bridge/` modules with statement and branch coverage,
+including subprocess workers. The initial measured result is **68.70% combined**
+(72.77% statements and 55.91% branches); the enforced combined floor is **68%**.
+`tools/coverage_baseline.json` records the measured commit and denominator. The
+floor is a regression guard, not evidence that every security path is covered.
+Coverage JSON/XML reports are uploaded as the `application-coverage` CI artifact
+for 14 days. Increase the measured baseline as tests are added; do not exclude
+production modules to make the percentage pass.
+
 Historical migration plans are intentionally not kept in the product tree. Git
 history and the changelog preserve that development history without presenting
 retired architecture as current documentation.
