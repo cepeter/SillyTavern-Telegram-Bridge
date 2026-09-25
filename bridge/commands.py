@@ -15,6 +15,7 @@ from bridge.database import (
     get_generation_settings,
     get_meta,
     load_generation_preset,
+    native_edit_target,
     operation_phase,
     record_operation,
     set_operation_phase,
@@ -462,13 +463,7 @@ def edit_telegram_user_message(
     persona_service: PersonaService,
     app_settings: AppSettings,
 ) -> None:
-    row = db.execute(
-        (
-            "SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND "
-            "telegram_message_id=? ORDER BY rowid DESC LIMIT 1"
-        ),
-        (chat_id, str(message_id)),
-    ).fetchone()
+    row = native_edit_target(db, chat_id, message_id)
     if row is None or row[2] != "user":
         send_text(token, chat_id, "Edited message was not found.")
         return

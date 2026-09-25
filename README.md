@@ -917,6 +917,11 @@ expose Live Sync credentials in Telegram.
 
 ### Forum Topic groups
 
+In manual mode, native Telegram message edits obey the same user-turn rule as
+new text. The rule is checked before enqueue and again before regeneration,
+including recovered jobs. An edit targets the session containing its original
+message, not whichever session is currently active.
+
 `/group` only works inside a Telegram Forum Topic. Each topic gets its own
 isolated session and group state. The setup wizard lets you create a group
 session, pick characters and World Info, and choose a turn mode:

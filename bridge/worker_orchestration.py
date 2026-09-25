@@ -14,6 +14,7 @@ from bridge.composition import BridgeServices
 from bridge.database import (
     clear_failed_turn,
     committed_assistant_for_message,
+    native_edit_target,
     operation_phase,
     operation_was_applied,
     record_failed_turn,
@@ -278,6 +279,16 @@ def process_edit_job(
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
+            target = native_edit_target(db, chat_id, message_id)
+            if target is not None and target[2] == "user":
+                # Ownership can change after enqueue or during a restart.
+                # Read the durable actor again, including recovered edit jobs.
+                actor_id = jobs.actor_id(db, job_id)
+                if not services.group.user_turn_allowed(db, chat_id, str(target[1]), actor_id):
+                    if job_id is not None:
+                        jobs.complete(db, job_id)
+                    services.telegram.send_text(token, chat_id, "It is not your turn in manual group mode.")
+                    return
             edit_telegram_user_message(
                 db,
                 token,

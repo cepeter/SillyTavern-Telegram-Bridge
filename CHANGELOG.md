@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Enforce manual group-turn ownership on native Telegram edits at ingress and execution, including recovered jobs and edits to a message in another session.
+
 ### Security
 
 - Pin declared CI actions to verified full commit SHAs and lock development/audit tooling with hashes; audit both complete locks without re-resolving dependencies.
