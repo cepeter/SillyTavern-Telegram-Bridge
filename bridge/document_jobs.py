@@ -46,6 +46,7 @@ def process_document_job(
                 group_director_service=services.group_director,
                 app_settings=services.config,
                 rag_service=services.rag,
+                provider_port=services.provider,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)

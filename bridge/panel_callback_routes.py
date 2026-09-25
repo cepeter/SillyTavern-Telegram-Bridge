@@ -211,6 +211,7 @@ def handle_entity_panel_callback(
     group_service: GroupService,
     memory_service,
     persona_service,
+    provider_port: ProviderPort,
     request_context,
 ):
     """Dispatch character, session, persona, and World Info callbacks."""
@@ -226,6 +227,7 @@ def handle_entity_panel_callback(
         session_id,
         operation_id,
         group_service=group_service,
+        provider_port=provider_port,
         request_context=request_context,
     ):
         return True

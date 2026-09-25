@@ -26,6 +26,7 @@ from bridge.card_content import system_prompt_callback_token as system_prompt_ca
 from bridge.card_content import system_prompt_choices as system_prompt_choices
 from bridge.card_content import system_prompt_label as system_prompt_label
 from bridge.card_content import world_file_paths as world_file_paths
+from bridge.character_quality import character_rank, rank_badge
 from bridge.panel_utils import panel_label, panel_message_request, panel_navigation, panel_page
 from bridge.persona_service import PersonaService
 from bridge.telegram import send_panel_request
@@ -118,7 +119,10 @@ def send_character_menu(
         )
         rows.append(
             [
-                {"text": mark + panel_label(label), "callback_data": "character:" + callback_token},
+                {
+                    "text": mark + rank_badge(character_rank(request_context.db, filename)) + panel_label(label),
+                    "callback_data": "character:" + callback_token,
+                },
                 action,
             ]
         )
@@ -131,6 +135,7 @@ def send_character_menu(
             {"text": "🔄 Refresh", "callback_data": "character:menu"},
         ]
     )
+    rows.append([{"text": "⚡ Optimizer", "callback_data": "character:optimize"}])
     rows.append([{"text": "📤 Upload character card", "callback_data": "character:upload"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "character:cancel"}])
     current_label = current_character
@@ -157,7 +162,7 @@ def send_character_info_menu(
     rows = [
         [
             {
-                "text": label,
+                "text": rank_badge(character_rank(request_context.db, filename)) + label,
                 "callback_data": "characterinfo:"
                 + dynamic_callback_token("character", filename, chat_id, db=request_context.db),
             }
@@ -227,6 +232,81 @@ def send_character_delete_confirm(
     }
     send_panel_message(
         token, chat_id, payload["text"], payload["reply_markup"], message_id, request_context=request_context
+    )
+
+
+def send_character_optimize_menu(
+    token: str, chat_id: str, message_id: int | None = None, page: int = 0, *, request_context
+) -> None:
+    options = [
+        (path.name, character_display_name(path, app_settings=request_context.app_settings))
+        for path in character_card_paths(app_settings=request_context.app_settings)
+    ]
+    page_options, current_page, total_pages = panel_page(options, page)
+    rows = [
+        [
+            {
+                "text": rank_badge(character_rank(request_context.db, filename)) + label,
+                "callback_data": "characteroptimize:"
+                + dynamic_callback_token("character", filename, chat_id, db=request_context.db),
+            }
+        ]
+        for filename, label in page_options
+    ]
+    navigation = panel_navigation("characteroptimize", current_page, total_pages)
+    if navigation:
+        rows.append(navigation)
+    rows.append(
+        [
+            {"text": "⬅️ Back", "callback_data": "character:menu"},
+            {"text": "❌ Close", "callback_data": "character:cancel"},
+        ]
+    )
+    text = f"Choose a character to optimize with the utility model (page {current_page + 1}/{total_pages}):"
+    send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id, request_context=request_context)
+
+
+_OPTIMIZE_PREVIEW_FIELDS = (
+    ("description", "Description"),
+    ("personality", "Personality"),
+    ("scenario", "Scenario"),
+    ("first_mes", "First message"),
+    ("mes_example", "Example dialogue"),
+    ("system_prompt", "System prompt"),
+)
+
+
+def _optimize_preview_text(fields: dict[str, str]) -> str:
+    lines = ["Optimization result:"]
+    for key, label in _OPTIMIZE_PREVIEW_FIELDS:
+        value = str(fields.get(key) or "").strip()
+        if not value:
+            continue
+        if len(value) > 600:
+            value = value[:600] + "…"
+        lines.append(f"\n{label}:\n{value}")
+    return "\n".join(lines)
+
+
+def send_character_optimize_result(
+    token: str, chat_id: str, filename: str, fields: dict[str, str], message_id: int | None = None, *, request_context
+) -> None:
+    token_value = dynamic_callback_token("character", filename, chat_id, db=request_context.db)
+    reply_markup = {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Apply", "callback_data": "characteroptimizeapply:" + token_value},
+                {"text": "❌ Cancel", "callback_data": "characteroptimizecancel"},
+            ]
+        ]
+    }
+    send_panel_message(
+        token,
+        chat_id,
+        _optimize_preview_text(fields),
+        reply_markup,
+        message_id,
+        request_context=request_context,
     )
 
 

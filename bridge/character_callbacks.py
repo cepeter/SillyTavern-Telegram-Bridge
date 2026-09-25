@@ -15,22 +15,31 @@ from bridge.cards import (
     send_character_delete_menu,
     send_character_info_menu,
     send_character_menu,
+    send_character_optimize_menu,
+    send_character_optimize_result,
     send_session_menu,
 )
+from bridge.character_quality import character_rank, optimize_character, rank_badge
 from bridge.group_service import GroupService
 from bridge.group_setup import apply_group_setup_character
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.metadata import get_meta, set_meta
-from bridge.native_imports import character_delete_references, verify_character_card_backup
+from bridge.native_imports import (
+    apply_optimized_character_card,
+    character_delete_references,
+    verify_character_card_backup,
+)
 from bridge.operations import begin_operation, record_operation
 from bridge.session_core import list_sessions
 from bridge.telegram import send_panel_photo, send_panel_request
 
+_OPTIMIZE_PENDING_META = "character_optimize_pending:"
 
-def _character_info_text(info: dict, filename: str) -> str:
+
+def _character_info_text(info: dict, filename: str, rank: str = "") -> str:
     return (
         "Character: "
-        f"{info['name']}"
+        f"{rank_badge(rank)}{info['name']}"
         "\nFile: "
         f"{filename}"
         "\nDescription: "
@@ -43,6 +52,21 @@ def _character_info_text(info: dict, filename: str) -> str:
         f"{len(info['first_mes'])}"
         " chars"
     )
+
+
+def _load_optimize_pending(db, chat_id: str) -> dict | None:
+    raw = get_meta(db, _OPTIMIZE_PENDING_META + chat_id, "")
+    if not raw:
+        return None
+    try:
+        pending = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(pending, dict) or not isinstance(pending.get("fields"), dict):
+        return None
+    if time.time() >= float(pending.get("expires_at", 0)):
+        return None
+    return pending
 
 
 def handle_character_callback(
@@ -58,6 +82,7 @@ def handle_character_callback(
     operation_id,
     *,
     group_service: GroupService,
+    provider_port=None,
     request_context,
 ):
     """Handle character selection, info, upload, and deletion callbacks."""
@@ -106,6 +131,97 @@ def handle_character_callback(
             request_context=request_context,
         )
         return True
+    if data == "character:optimize":
+        answer_callback(token, str(callback.get("id", "")), "Optimizer")
+        send_character_optimize_menu(token, chat_id, message.get("message_id"), request_context=request_context)
+        return True
+    if data.startswith("characteroptimizeapply:"):
+        filename = resolve_dynamic_callback_token(data.split(":", 1)[1], "character", chat_id, db=db) or ""
+        pending = _load_optimize_pending(db, chat_id)
+        if not pending or pending.get("filename") != filename:
+            answer_callback(token, str(callback.get("id", "")), "Optimization expired; retry")
+            send_character_optimize_menu(token, chat_id, message.get("message_id"), request_context=request_context)
+            return True
+        path = safe_character_path(filename, app_settings=request_context.app_settings)
+        if not path:
+            answer_callback(token, str(callback.get("id", "")), "Character not found")
+            return True
+        try:
+            apply_optimized_character_card(path, pending["fields"], app_settings=request_context.app_settings)
+        except (OSError, ValueError) as exc:
+            logging.warning("Optimized card apply failed for %s: %s", filename, exc)
+            answer_callback(token, str(callback.get("id", "")), "Apply failed")
+            return True
+        set_meta(db, _OPTIMIZE_PENDING_META + chat_id, "")
+        db.commit()
+        answer_callback(token, str(callback.get("id", "")), "Optimization applied")
+        send_character_menu(
+            token, chat_id, session["character_file"], message.get("message_id"), request_context=request_context
+        )
+        return True
+    if data == "characteroptimizecancel":
+        set_meta(db, _OPTIMIZE_PENDING_META + chat_id, "")
+        db.commit()
+        answer_callback(token, str(callback.get("id", "")), "Cancelled")
+        send_character_optimize_menu(token, chat_id, message.get("message_id"), request_context=request_context)
+        return True
+    if data.startswith("characteroptimize:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            send_character_optimize_menu(
+                token,
+                chat_id,
+                message.get("message_id"),
+                int(value.split(":", 1)[1]),
+                request_context=request_context,
+            )
+            return True
+        filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
+        path = safe_character_path(filename, app_settings=request_context.app_settings)
+        if not path:
+            answer_callback(token, str(callback.get("id", "")), "Character choice expired")
+            return True
+        info = card_fields_from_file(filename, app_settings=request_context.app_settings)
+        answer_callback(token, str(callback.get("id", "")), "Optimizing…")
+        optimized = optimize_character(
+            db, chat_id, session, info, provider_port=provider_port, app_settings=request_context.app_settings
+        )
+        if not optimized:
+            send_panel_request(
+                token,
+                "editMessageText",
+                {
+                    "chat_id": chat_id,
+                    "message_id": message.get("message_id"),
+                    "text": "Optimization failed. Ensure a utility model is configured, then retry.",
+                    "reply_markup": {
+                        "inline_keyboard": [
+                            [
+                                {"text": "⬅️ Back", "callback_data": "character:optimize"},
+                                {"text": "❌ Close", "callback_data": "character:cancel"},
+                            ]
+                        ]
+                    },
+                },
+                request_context=request_context,
+            )
+            return True
+        set_meta(
+            db,
+            _OPTIMIZE_PENDING_META + chat_id,
+            json.dumps(
+                {
+                    "filename": filename,
+                    "fields": optimized,
+                    "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS,
+                }
+            ),
+        )
+        db.commit()
+        send_character_optimize_result(
+            token, chat_id, filename, optimized, message.get("message_id"), request_context=request_context
+        )
+        return True
     if data.startswith("characterinfo:"):
         value = data.split(":", 1)[1]
         if value == "back":
@@ -125,7 +241,7 @@ def handle_character_callback(
             return True
         info = card_fields_from_file(filename, app_settings=request_context.app_settings)
         answer_callback(token, str(callback.get("id", "")), "Info")
-        text = _character_info_text(info, filename)
+        text = _character_info_text(info, filename, character_rank(db, filename))
         reply_markup = {
             "inline_keyboard": [
                 [

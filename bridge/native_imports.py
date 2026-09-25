@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from bridge.card_content import card_fields, card_fields_from_file, parse_png_chara_bytes
+from bridge.character_quality import merge_optimized_fields, rank_character, write_png_chara_bytes
 from bridge.group_director_service import GroupDirectorService
 from bridge.limits import CATALOG_MAX_ITEMS, RAG_MAX_FILE_BYTES, RAG_SUPPORTED_SUFFIXES
 from bridge.memory_service import MemoryService
@@ -71,8 +72,32 @@ def prune_character_backups(name: str, keep: int = 10, *, app_settings: AppSetti
             logging.warning("Could not prune character backup %s", stale, exc_info=True)
 
 
+def apply_optimized_character_card(path: Path, optimized: dict[str, str], *, app_settings: AppSettings) -> Path:
+    """Write optimized text fields back into a card, with a verified backup."""
+    original = path.read_bytes()
+    card = merge_optimized_fields(parse_png_chara_bytes(original), optimized)
+    new_bytes = write_png_chara_bytes(original, card)
+    backup = verify_character_card_backup(path, original, app_settings=app_settings)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(new_bytes)
+    if hashlib.sha256(temporary.read_bytes()).digest() != hashlib.sha256(new_bytes).digest():
+        temporary.unlink(missing_ok=True)
+        raise OSError("optimized character card checksum verification failed")
+    temporary.replace(path)
+    prune_character_backups(path.name, app_settings=app_settings)
+    return backup
+
+
 def import_character_card(
-    db: sqlite3.Connection, token: str, chat_id: str, filename: str, raw: bytes, *, app_settings: AppSettings
+    db: sqlite3.Connection,
+    token: str,
+    chat_id: str,
+    filename: str,
+    raw: bytes,
+    *,
+    app_settings: AppSettings,
+    default_model: str = "",
+    provider_port=None,
 ) -> None:
     if len(raw) > RAG_MAX_FILE_BYTES:
         send_text(token, chat_id, "Character card is too large. The limit is 10 MB.")
@@ -138,6 +163,20 @@ def import_character_card(
     except OSError:
         send_text(token, chat_id, "Character card backup verification failed; card was not installed.")
         return
+    if provider_port is not None:
+        try:
+            session = ensure_session(db, chat_id, default_model, app_settings=app_settings)
+            rank_character(
+                db,
+                chat_id,
+                session,
+                fields,
+                target.name,
+                provider_port=provider_port,
+                app_settings=app_settings,
+            )
+        except Exception:
+            logging.warning("Character rank skipped for %s", target.name, exc_info=True)
     if is_new_version:
         send_text(
             token,
@@ -206,6 +245,7 @@ def import_telegram_document(
     group_director_service: GroupDirectorService,
     app_settings: AppSettings,
     rag_service: RagService,
+    provider_port=None,
 ) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
@@ -243,7 +283,16 @@ def import_telegram_document(
                 group_director_service=group_director_service,
             )
         else:
-            import_character_card(db, token, chat_id, filename, raw, app_settings=app_settings)
+            import_character_card(
+                db,
+                token,
+                chat_id,
+                filename,
+                raw,
+                app_settings=app_settings,
+                default_model=default_model,
+                provider_port=provider_port,
+            )
         return
     if suffix not in RAG_SUPPORTED_SUFFIXES:
         send_text(

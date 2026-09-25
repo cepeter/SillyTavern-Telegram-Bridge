@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Rank uploaded character cards S–D with the utility model and show the tier badge beside each character name in the selection, info, and optimizer menus. A new ⚡ Optimizer menu rewrites a card's text fields with the utility model and shows a preview before applying (with a verified backup) or discarding.
+
 ### Architecture
 
 - Add an explicitly composed RAG service and embedding port; separate bounded document extraction, embedding transport, indexing/query use cases and SQL-only Data Bank repositories. Retire the old RAG aggregation/re-export modules and extend dependency/type guards across the new boundaries.
