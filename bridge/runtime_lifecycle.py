@@ -1,4 +1,5 @@
 """Process lifecycle and Telegram polling for the composed bridge runtime."""
+
 from __future__ import annotations
 
 import logging
@@ -16,7 +17,6 @@ from bridge.worker_orchestration import (
     make_durable_backlog_dispatcher,
     resolve_recovered_job_submission,
 )
-
 
 _SHUTDOWN_EVENT = threading.Event()
 
@@ -61,9 +61,7 @@ def run_bridge_runtime(services: BridgeServices, fields: dict) -> int:
     install_bridge_signal_handlers(services.background.begin_shutdown)
     db = services.db_factory()
     start_live_sync_worker(sync_service=services.sync)
-    services.background.register_backlog_dispatcher(
-        make_durable_backlog_dispatcher(services, fields)
-    )
+    services.background.register_backlog_dispatcher(make_durable_backlog_dispatcher(services, fields))
     services.jobs.recover(
         db,
         lambda job: resolve_recovered_job_submission(
@@ -123,12 +121,8 @@ def run_bridge_runtime(services: BridgeServices, fields: dict) -> int:
     # VACUUM never competes with durable job transitions on the live handle.
     run_database_maintenance()
     if not sync_stopped:
-        logging.warning(
-            "Realtime sync worker did not stop before shutdown deadline"
-        )
+        logging.warning("Realtime sync worker did not stop before shutdown deadline")
     if not drained:
-        logging.warning(
-            "Background jobs exceeded the graceful shutdown deadline"
-        )
+        logging.warning("Background jobs exceeded the graceful shutdown deadline")
     logging.info("Bridge stopped")
     return 0

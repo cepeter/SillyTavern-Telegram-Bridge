@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from application_test_setup import make_test_group_service
-
 import ast
 import json
-from pathlib import Path
 import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
+
+from application_test_setup import make_test_group_service
 
 import bridge.database as database
 import bridge.input_flows as input_flows
@@ -133,17 +133,16 @@ class PendingPromptOwnershipTests(unittest.TestCase):
                 "expires_at": time.time() + 600,
                 "prompt_message_ids": [77, 78],
             }
-            session_naming.set_meta(
-                db, "settings_input:chat", json.dumps(state)
-            )
+            session_naming.set_meta(db, "settings_input:chat", json.dumps(state))
             seen = []
-            with patch.object(
-                session_naming,
-                "delete_pending_input_prompts",
-                side_effect=lambda token, chat_id, value: seen.append(
-                    (token, chat_id, value)
+            with (
+                patch.object(
+                    session_naming,
+                    "delete_pending_input_prompts",
+                    side_effect=lambda token, chat_id, value: seen.append((token, chat_id, value)),
                 ),
-            ), patch.object(session_naming, "send_text", return_value=[99]):
+                patch.object(session_naming, "send_text", return_value=[99]),
+            ):
                 session_naming.start_session_name_input(
                     db,
                     "token",
@@ -157,7 +156,6 @@ class PendingPromptOwnershipTests(unittest.TestCase):
                 "",
             )
             db.close()
-
 
     def test_pending_state_rejects_retired_raw_setting_key_format(self):
         self.assertEqual(

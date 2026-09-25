@@ -3,6 +3,7 @@
 Importing this module is side-effect free. Extension registry mutation happens
 only when :func:`initialize_extensions` is called by application startup.
 """
+
 from __future__ import annotations
 
 from bridge.extension_registry import reset_extension_registry

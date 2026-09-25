@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
-import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,32 +25,27 @@ def imported_modules(filename: str) -> set[str]:
 
 def top_level_functions(filename: str) -> set[str]:
     tree = ast.parse((BRIDGE / filename).read_text(encoding="utf-8"))
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
 def top_level_classes(filename: str) -> set[str]:
     tree = ast.parse((BRIDGE / filename).read_text(encoding="utf-8"))
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, ast.ClassDef)
-    }
+    return {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
 
 
 def test_sillytavern_api_module_is_canonical_and_lower_level():
     path = BRIDGE / "sillytavern_api.py"
     assert path.is_file()
     imports = imported_modules("sillytavern_api.py")
-    assert not ({
-        "bridge.sync_api",
-        "bridge.sync_core",
-        "bridge.persona_sync",
-        "bridge.telegram",
-    } & imports)
+    assert not (
+        {
+            "bridge.sync_api",
+            "bridge.sync_core",
+            "bridge.persona_sync",
+            "bridge.telegram",
+        }
+        & imports
+    )
 
     module = importlib.import_module("bridge.sillytavern_api")
     assert hasattr(module, "SillyTavernApiError")
@@ -94,16 +88,11 @@ def test_native_api_config_refresh_owns_api_credentials_and_timeout(monkeypatch)
 def test_scene_panel_is_pure_and_exact():
     path = BRIDGE / "scene_panel.py"
     assert path.is_file()
-    assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("scene_panel.py")
-    )
+    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("scene_panel.py"))
     module = importlib.import_module("bridge.scene_panel")
 
     text, markup = module.scene_panel({"location": "dock"}, 17)
-    assert text == (
-        'Scene state (through message row 17)\n\n{\n  "location": "dock"\n}'
-    )
+    assert text == ('Scene state (through message row 17)\n\n{\n  "location": "dock"\n}')
     assert markup == {
         "inline_keyboard": [
             [
@@ -118,19 +107,14 @@ def test_scene_panel_is_pure_and_exact():
     }
 
     empty, _ = module.scene_panel(None, 0)
-    assert empty == (
-        "Scene state (through message row 0)\n\n"
-        "No structured scene state has been established yet."
-    )
+    assert empty == ("Scene state (through message row 0)\n\nNo structured scene state has been established yet.")
 
 
 def test_scene_state_has_no_status_panels_import_and_requires_delivery_port():
     assert "bridge.status_panels" not in imported_modules("scene_state.py")
     import bridge.scene_state as scene_state
 
-    param = inspect.signature(scene_state.handle_scene_command).parameters.get(
-        "delivery_port"
-    )
+    param = inspect.signature(scene_state.handle_scene_command).parameters.get("delivery_port")
     assert param is not None
     assert param.default is inspect.Parameter.empty
 

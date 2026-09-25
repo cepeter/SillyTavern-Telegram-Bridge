@@ -1,4 +1,5 @@
 """Canonical Hindsight memory backend and session-scoped memory state."""
+
 from __future__ import annotations
 
 import asyncio
@@ -34,6 +35,7 @@ def hindsight_tags(chat_id: str, session_id: str, character_name: str) -> list[s
 
 def hindsight_client():
     from hindsight_client import Hindsight
+
     base_url = os.environ.get("HINDSIGHT_API_URL", HINDSIGHT_DEFAULT_URL).rstrip("/")
     validate_provider_endpoint(base_url, "SILLYTAVERN_HINDSIGHT_ALLOWED_HOSTS")
     api_key = os.environ.get("HINDSIGHT_API_KEY") or None
@@ -98,12 +100,17 @@ def hindsight_explicit_document_id(session_id: str, fact: str) -> str:
 def _record_hindsight_document(chat_id: str, session_id: str, document_id: str, kind: str) -> None:
     mapping_db = db_connect()
     try:
+
         def write_mapping():
             mapping_db.execute(
-                "INSERT OR REPLACE INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
+                (
+                    "INSERT OR REPLACE INTO hindsight_documents(chat_id,session_id,document_i"
+                    "d,kind,created_at) VALUES(?,?,?,?,?)"
+                ),
                 (str(chat_id), str(session_id), str(document_id), str(kind), time.time()),
             )
             mapping_db.commit()
+
         run_write_txn(mapping_db, write_mapping)
     finally:
         mapping_db.close()
@@ -150,16 +157,17 @@ async def _delete_hindsight_session_documents(client, bank_id: str, session_id: 
         except Exception as exc:
             if not _hindsight_not_found(exc):
                 raise
-    remaining = (
-        await _listed_hindsight_document_ids(api, bank_id, tags=[tag], tags_match="any_strict")
-        | await _listed_hindsight_document_ids(api, bank_id, q=prefix)
-    )
+    remaining = await _listed_hindsight_document_ids(
+        api, bank_id, tags=[tag], tags_match="any_strict"
+    ) | await _listed_hindsight_document_ids(api, bank_id, q=prefix)
     if remaining:
         raise RuntimeError("Hindsight session documents remain after deletion")
     return deleted
 
 
-async def _delete_hindsight_session_documents_and_close(client, bank_id: str, session_id: str, mapped_ids: set[str]) -> int:
+async def _delete_hindsight_session_documents_and_close(
+    client, bank_id: str, session_id: str, mapped_ids: set[str]
+) -> int:
     try:
         return await _delete_hindsight_session_documents(client, bank_id, session_id, mapped_ids)
     finally:
@@ -170,15 +178,21 @@ def _purge_hindsight_session_backend(db: sqlite3.Connection, chat_id: str, sessi
     """Delete only documents attributable to one session, failing closed."""
     with hindsight_session_lock(chat_id, session_id):
         mapped_ids = {
-            str(row[0]) for row in db.execute(
+            str(row[0])
+            for row in db.execute(
                 "SELECT document_id FROM hindsight_documents WHERE chat_id=? AND session_id=?",
                 (str(chat_id), str(session_id)),
             ).fetchall()
         }
         try:
-            return asyncio.run(_delete_hindsight_session_documents_and_close(
-                hindsight_client(), hindsight_bank_id(chat_id), str(session_id), mapped_ids,
-            ))
+            return asyncio.run(
+                _delete_hindsight_session_documents_and_close(
+                    hindsight_client(),
+                    hindsight_bank_id(chat_id),
+                    str(session_id),
+                    mapped_ids,
+                )
+            )
         except Exception as exc:
             logging.error("Hindsight session purge failed for %s/%s", chat_id, session_id, exc_info=True)
             raise RuntimeError("Hindsight session memory cleanup failed") from exc
@@ -192,12 +206,21 @@ def memory_scope(db: sqlite3.Connection, chat_id: str) -> str:
     return "session"
 
 
-def memory_recall_filter(db: sqlite3.Connection, chat_id: str, session: dict[str, str], character_name: str) -> list[str]:
+def memory_recall_filter(
+    db: sqlite3.Connection, chat_id: str, session: dict[str, str], character_name: str
+) -> list[str]:
     tags = hindsight_tags(chat_id, session["session_id"], character_name)
     return [tags[1]]
 
 
-def recall_memory_results(db: sqlite3.Connection, chat_id: str, session: dict[str, str], query: str, character_name: str = "", max_tokens: int = HINDSIGHT_RECALL_MAX_TOKENS):
+def recall_memory_results(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    query: str,
+    character_name: str = "",
+    max_tokens: int = HINDSIGHT_RECALL_MAX_TOKENS,
+):
     if memory_mode(db, chat_id) != "on" or not query.strip():
         return []
     client = None
@@ -219,7 +242,9 @@ def recall_memory_results(db: sqlite3.Connection, chat_id: str, session: dict[st
         close_hindsight_client(client)
 
 
-def recall_memory_context(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], query: str) -> str:
+def recall_memory_context(
+    db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], query: str
+) -> str:
     results = recall_memory_results(db, chat_id, session, query, fields["name"])
     sections = []
     for result in results:
@@ -229,8 +254,16 @@ def recall_memory_context(db: sqlite3.Connection, chat_id: str, session: dict[st
     return "\n".join(sections)[:HINDSIGHT_CONTEXT_MAX_CHARS]
 
 
-def _retain_with_client(chat_id: str, session_id: str, document_id: str, character_name: str,
-                        content: str, context: str, kind: str, log_message: str) -> bool:
+def _retain_with_client(
+    chat_id: str,
+    session_id: str,
+    document_id: str,
+    character_name: str,
+    content: str,
+    context: str,
+    kind: str,
+    log_message: str,
+) -> bool:
     """Retain one document via a short-lived Hindsight client; failures are logged, not raised."""
     client = None
     try:
@@ -291,8 +324,7 @@ def _memory_hindsight_session_exists(
 ) -> bool:
     return bool(
         db.execute(
-            "SELECT 1 FROM sessions "
-            "WHERE chat_id=? AND session_id=?",
+            "SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?",
             (str(chat_id), str(session_id)),
         ).fetchone()
     )
@@ -333,10 +365,7 @@ def _memory_hindsight_conversation_snapshot(
     )
     fingerprint = hashlib.sha256(
         json.dumps(
-            [
-                [str(role), str(content)]
-                for role, content, _created_at in rows
-            ],
+            [[str(role), str(content)] for role, content, _created_at in rows],
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
@@ -351,8 +380,7 @@ def _write_hindsight_successful_purge_state(
 ) -> None:
     def write_purge_state():
         db.execute(
-            "DELETE FROM hindsight_documents "
-            "WHERE chat_id=? AND session_id=?",
+            "DELETE FROM hindsight_documents WHERE chat_id=? AND session_id=?",
             (str(chat_id), str(session_id)),
         )
         next_epoch = (
@@ -364,8 +392,7 @@ def _write_hindsight_successful_purge_state(
             + 1
         )
         db.execute(
-            "INSERT OR REPLACE INTO meta(key,value) "
-            "VALUES(?,?)",
+            "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
             (
                 _memory_hindsight_epoch_key(
                     chat_id,
@@ -379,7 +406,9 @@ def _write_hindsight_successful_purge_state(
     run_write_txn(db, write_purge_state)
 
 
-def _retain_session_memory_backend(chat_id: str, session: dict[str, str], character_name: str, conversation: str) -> None:
+def _retain_session_memory_backend(
+    chat_id: str, session: dict[str, str], character_name: str, conversation: str
+) -> None:
     session_id = str(session["session_id"])
     with hindsight_session_lock(chat_id, session_id):
         session_db = db_connect()
@@ -405,12 +434,16 @@ def _retain_session_memory_backend(chat_id: str, session: dict[str, str], charac
         )
 
 
-def remember_fact(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], fact: str) -> bool:
+def remember_fact(
+    db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], fact: str
+) -> bool:
     if not fact.strip():
         return False
     session_id = str(session["session_id"])
     with hindsight_session_lock(chat_id, session_id):
-        if not db.execute("SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (str(chat_id), session_id)).fetchone():
+        if not db.execute(
+            "SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", (str(chat_id), session_id)
+        ).fetchone():
             return False
         document_id = hindsight_explicit_document_id(session_id, fact)
         return _retain_with_client(

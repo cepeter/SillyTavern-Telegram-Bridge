@@ -1,18 +1,21 @@
-from application_test_setup import make_test_conversation_service
-from application_test_setup import ensure_application_extensions, make_test_application_services
+from application_test_setup import (
+    ensure_application_extensions,
+    make_test_application_services,
+    make_test_conversation_service,
+)
 
 ensure_application_extensions()
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import bridge.config as config
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
-import bridge.sync_api as _m_sync_api
+
+
 class SessionCommandRoutingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -31,10 +34,24 @@ class SessionCommandRoutingTests(unittest.TestCase):
         calls = []
         old_menu = _m_message_commands.send_session_menu
         old_loader = _m_message_commands.card_fields_from_file
-        _m_message_commands.send_session_menu = lambda _token, chat_id, sessions, active_id, *_args, **_kwargs: calls.append((chat_id, sessions, active_id))
-        _m_message_commands.card_fields_from_file = lambda _name: (_ for _ in ()).throw(AssertionError("character loader must not run"))
+        _m_message_commands.send_session_menu = lambda _token, chat_id, sessions, active_id, *_args, **_kwargs: (
+            calls.append((chat_id, sessions, active_id))
+        )
+        _m_message_commands.card_fields_from_file = lambda _name: (_ for _ in ()).throw(
+            AssertionError("character loader must not run")
+        )
         try:
-            make_test_conversation_service().process_message(self.db, "token", "key", "provider/model", {}, "chat", "/session", telegram_message_id=1, services=make_test_application_services())
+            make_test_conversation_service().process_message(
+                self.db,
+                "token",
+                "key",
+                "provider/model",
+                {},
+                "chat",
+                "/session",
+                telegram_message_id=1,
+                services=make_test_application_services(),
+            )
         finally:
             _m_message_commands.send_session_menu = old_menu
             _m_message_commands.card_fields_from_file = old_loader

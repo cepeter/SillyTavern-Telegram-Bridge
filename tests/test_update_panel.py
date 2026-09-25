@@ -2,23 +2,22 @@ from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-import subprocess
 import bridge.update as _m_update
-class UpdatePanelTests(unittest.TestCase):
 
+
+class UpdatePanelTests(unittest.TestCase):
     def test_update_live_dir_defaults_under_bridge_home(self):
         self.assertEqual(
             _m_update._resolve_update_live_dir({}),
             Path.home() / ".local/share/sillytavern-telegram/live",
         )
         self.assertEqual(
-            _m_update._resolve_update_live_dir(
-                {"SILLYTAVERN_BRIDGE_HOME": "/tmp/bridge-home"}
-            ),
+            _m_update._resolve_update_live_dir({"SILLYTAVERN_BRIDGE_HOME": "/tmp/bridge-home"}),
             Path("/tmp/bridge-home/live"),
         )
         self.assertEqual(
@@ -31,12 +30,9 @@ class UpdatePanelTests(unittest.TestCase):
             Path("/tmp/custom-live"),
         )
 
-
     def test_user_systemd_template_uses_writable_update_staging(self):
         root = Path(__file__).parents[1]
-        unit = (
-            root / "systemd" / "sillytavern-telegram.service.example"
-        ).read_text(encoding="utf-8")
+        unit = (root / "systemd" / "sillytavern-telegram.service.example").read_text(encoding="utf-8")
         self.assertIn(
             "Environment=SILLYTAVERN_LIVE_BRIDGE_DIR=%h/.local/share/sillytavern-telegram/live",
             unit,
@@ -45,7 +41,6 @@ class UpdatePanelTests(unittest.TestCase):
             "ReadWritePaths=%h/sillytavern-telegram-bridge %h/.local/share/sillytavern-telegram",
             unit,
         )
-
 
     def test_empty_unreleased_section_is_not_local_change(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -177,7 +172,6 @@ class UpdatePanelTests(unittest.TestCase):
                 _m_update.UPDATE_REPO_DIR = old_repo
         self.assertIn("remote unavailable", result)
 
-
     def test_update_fetches_and_merges_exact_release_tag(self):
         old_repo = _m_update.UPDATE_REPO_DIR
         old_live = _m_update.UPDATE_LIVE_DIR
@@ -225,7 +219,9 @@ class UpdatePanelTests(unittest.TestCase):
         )
         self.assertIn([git_bin, "merge", "--ff-only", fetched_ref], calls)
         self.assertIn([rsync_bin, "-a", "--delete", f"{repo}/bridge/", f"{live}/bridge/"], calls)
-        self.assertIn([cp_bin, str(repo / "sillytavern_telegram_bridge.py"), str(live / "sillytavern_telegram_bridge.py")], calls)
+        self.assertIn(
+            [cp_bin, str(repo / "sillytavern_telegram_bridge.py"), str(live / "sillytavern_telegram_bridge.py")], calls
+        )
         self.assertIn([cp_bin, str(repo / "CHANGELOG.md"), str(live / "CHANGELOG.md")], calls)
         self.assertIn([systemctl_bin, "--user", "restart", "sillytavern-telegram.service"], calls)
         self.assertNotIn(["git", "fetch", "origin", "main"], calls)

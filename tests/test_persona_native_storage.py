@@ -3,14 +3,16 @@ from application_test_setup import ensure_application_extensions, make_native_te
 ensure_application_extensions()
 
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import bridge.memory_curator as _m_memory_curator
 import bridge.persona_sync as _m_persona_sync
-import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.session_naming as _m_session_naming
+import bridge.sillytavern_api as _m_sillytavern_api
+
+
 class NativePersonaStorageTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -26,9 +28,7 @@ class NativePersonaStorageTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.root / "avatars"
         _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR = self.root / "backups"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR.mkdir()
-        (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / "source.webp").write_bytes(
-            b"webp-source-bytes"
-        )
+        (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / "source.webp").write_bytes(b"webp-source-bytes")
         self.settings = {
             "user_avatar": "source.webp",
             "power_user": {
@@ -61,11 +61,7 @@ class NativePersonaStorageTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def _settings(self):
-        return json.loads(
-            _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.read_text(
-                encoding="utf-8"
-            )
-        )
+        return json.loads(_m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.read_text(encoding="utf-8"))
 
     def test_explicit_persona_store_preserves_source_extension_and_bytes(self):
         avatar = _m_persona_sync._PERSONA_STORE.upsert(
@@ -115,9 +111,7 @@ class NativePersonaStorageTests(unittest.TestCase):
         )
         path = _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / avatar
 
-        self.assertTrue(
-            _m_persona_sync._PERSONA_STORE.delete(avatar)
-        )
+        self.assertTrue(_m_persona_sync._PERSONA_STORE.delete(avatar))
 
         self.assertTrue(path.is_file())
         self.assertNotIn(
@@ -131,22 +125,14 @@ class NativePersonaStorageTests(unittest.TestCase):
             "Public",
             "Public description",
         )
-        self.assertTrue(
-            Path(avatar).stem.startswith("bridge-public")
-        )
+        self.assertTrue(Path(avatar).stem.startswith("bridge-public"))
 
-        self.assertTrue(
-            _m_persona_sync.delete_native_persona(avatar)
-        )
-        self.assertTrue(
-            (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / avatar).is_file()
-        )
+        self.assertTrue(_m_persona_sync.delete_native_persona(avatar))
+        self.assertTrue((_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / avatar).is_file())
 
     def test_persona_service_lock_can_nest_into_integrity_store(self):
         service = make_native_test_persona_service()
-        db = _m_memory_curator.db_connect(
-            self.root / "persona-service.sqlite3"
-        )
+        db = _m_memory_curator.db_connect(self.root / "persona-service.sqlite3")
         try:
             session = _m_session_naming.create_session(
                 db,
@@ -164,18 +150,12 @@ class NativePersonaStorageTests(unittest.TestCase):
         finally:
             db.close()
 
-        self.assertTrue(
-            Path(avatar).stem.startswith("bridge-nested")
-        )
+        self.assertTrue(Path(avatar).stem.startswith("bridge-nested"))
 
 
 class NativePersonaSourceBoundaryTests(unittest.TestCase):
     def test_persona_sync_owns_avatar_allocator_and_explicit_store(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "persona_sync.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "persona_sync.py").read_text(encoding="utf-8")
 
         self.assertIn("def _choose_native_avatar(", source)
         self.assertIn(
@@ -191,15 +171,10 @@ class NativePersonaSourceBoundaryTests(unittest.TestCase):
             source,
         )
 
-
     def test_persona_sync_is_the_only_runtime_load_personas_definition(self):
         root = Path(__file__).parents[1] / "bridge"
-        cards = (root / "cards.py").read_text(
-            encoding="utf-8"
-        )
-        persona_sync = (
-            root / "persona_sync.py"
-        ).read_text(encoding="utf-8")
+        cards = (root / "cards.py").read_text(encoding="utf-8")
+        persona_sync = (root / "persona_sync.py").read_text(encoding="utf-8")
 
         self.assertNotIn(
             "def load_personas(",
@@ -214,13 +189,8 @@ class NativePersonaSourceBoundaryTests(unittest.TestCase):
             persona_sync,
         )
 
-
     def test_state_integrity_no_longer_owns_persona_storage(self):
-        path = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "state_integrity.py"
-        )
+        path = Path(__file__).parents[1] / "bridge" / "state_integrity.py"
         self.assertFalse(path.exists())
 
 

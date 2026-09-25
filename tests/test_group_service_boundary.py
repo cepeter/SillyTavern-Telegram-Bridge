@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import MISSING
 import importlib
 import inspect
+from dataclasses import MISSING
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -29,10 +29,7 @@ def group_service_module():
 
 def test_group_service_is_pure_and_has_expected_methods():
     module = group_service_module()
-    assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("group_service.py")
-    )
+    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("group_service.py"))
     for name in (
         "state",
         "save",
@@ -57,6 +54,7 @@ def test_group_service_delegates_without_rewriting_arguments(tmp_path):
         def invoke(*args, **kwargs):
             calls.append((name, args, kwargs))
             return result
+
         return invoke
 
     service = module.GroupService(
@@ -113,6 +111,7 @@ def test_startup_composes_group_before_director_and_director_uses_service():
 
 def test_conversation_forwards_group_service_to_generation():
     from types import SimpleNamespace
+
     from bridge.conversation_service import ConversationService, PreparedMessage
 
     group = object()
@@ -142,7 +141,14 @@ def test_conversation_forwards_group_service_to_generation():
     services = SimpleNamespace(group=group, provider=object(), memory=memory, persona=persona)
 
     service.process_message(
-        object(), "token", "key", "queue-model", {}, "chat", "hello", 11,
+        object(),
+        "token",
+        "key",
+        "queue-model",
+        {},
+        "chat",
+        "hello",
+        11,
         services=services,
     )
 
@@ -173,6 +179,7 @@ def test_application_paths_do_not_import_group_core_after_service_migration():
 def test_committed_recovery_uses_group_service_for_advance(monkeypatch):
     import sqlite3
     from types import SimpleNamespace
+
     import bridge.worker_orchestration as workers
 
     calls = []

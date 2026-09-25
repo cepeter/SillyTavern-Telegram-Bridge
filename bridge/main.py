@@ -1,15 +1,13 @@
 """Ordinary production startup composition for the Telegram bridge."""
+
 from __future__ import annotations
 
-from functools import partial as _partial
 import argparse
 import os
+from functools import partial as _partial
 
+import bridge.sillytavern_api as _st_api
 from bridge import database as _database
-from bridge.conversation_service import ConversationService as _ConversationService
-from bridge.delivery_port import DeliveryPort as _DeliveryPort
-from bridge.command_routes import handle_command_route
-from bridge.message_commands import prepare_message, generate_and_store_reply
 from bridge.application_composition import initialize_extensions as _initialize_extensions
 from bridge.card_content import (
     card_fields,
@@ -17,6 +15,7 @@ from bridge.card_content import (
     read_png_chara,
     safe_character_path,
 )
+from bridge.command_routes import handle_command_route
 from bridge.common import (
     begin_background_shutdown,
     configure_logging,
@@ -26,11 +25,23 @@ from bridge.common import (
 )
 from bridge.composition import (
     BackgroundRuntime as _BackgroundRuntime,
+)
+from bridge.composition import (
     BridgeConfig as _BridgeConfig,
+)
+from bridge.composition import (
     BridgeServices as _BridgeServices,
+)
+from bridge.composition import (
     TelegramRuntime as _TelegramRuntime,
+)
+from bridge.composition import (
     build_bridge_services as _build_bridge_services_value,
+)
+from bridge.composition import (
     load_bridge_config as _load_bridge_config_value,
+)
+from bridge.composition import (
     validate_bridge_config as _validate_bridge_config_value,
 )
 from bridge.config import (
@@ -39,6 +50,7 @@ from bridge.config import (
     DB_FILE,
     DEFAULT_CHARACTER_FILE,
 )
+from bridge.conversation_service import ConversationService as _ConversationService
 from bridge.database import (
     db_connect,
     enqueue_job,
@@ -49,6 +61,8 @@ from bridge.database import (
     mark_job_scheduled,
     recover_jobs,
 )
+from bridge.delivery_port import DeliveryPort as _DeliveryPort
+from bridge.director_goals import director_goal_policy
 from bridge.group_core import (
     advance_group_turn,
     claim_group_user_turn,
@@ -62,13 +76,11 @@ from bridge.group_core import (
     resolve_character_file,
     save_group_state,
 )
-from bridge.director_goals import director_goal_policy
 from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
 from bridge.group_service import GroupService as _GroupService
-from bridge.input_flow_service import InputFlowService as _InputFlowService
 from bridge.help import set_bot_commands
+from bridge.input_flow_service import InputFlowService as _InputFlowService
 from bridge.input_flows import handle_pending_input, start_text_action_input
-from bridge.session_naming import handle_session_name_input, start_session_name_input
 from bridge.job_service import JobService as _JobService
 from bridge.media import (
     delete_outgoing_message_row,
@@ -83,10 +95,8 @@ from bridge.memory import (
 )
 from bridge.memory_backend import recall_memory_context
 from bridge.memory_service import MemoryService as _MemoryService
+from bridge.message_commands import generate_and_store_reply, prepare_message
 from bridge.model_router import ModelRouter as _ModelRouter
-from bridge.provider_catalog import load_provider_catalog
-from bridge.provider_port import ProviderPort as _ProviderPort
-from bridge.provider_transport import generate_provider_text
 from bridge.persona_service import PersonaService as _PersonaService
 from bridge.persona_sync import (
     PERSONA_EDIT_LOCK,
@@ -95,13 +105,18 @@ from bridge.persona_sync import (
     load_personas,
     upsert_native_persona,
 )
+from bridge.provider_catalog import load_provider_catalog
+from bridge.provider_port import ProviderPort as _ProviderPort
+from bridge.provider_transport import generate_provider_text
 from bridge.repositories import (
     count_persona_references as _count_persona_references,
+)
+from bridge.repositories import (
     count_session_messages as _count_session_messages,
 )
 from bridge.runtime_lifecycle import run_bridge_runtime
 from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
-import bridge.sillytavern_api as _st_api
+from bridge.session_naming import handle_session_name_input, start_session_name_input
 from bridge.sync_api import (
     _live_sync_disable,
     live_sync_now,
@@ -119,9 +134,8 @@ from bridge.telegram import (
     update_session,
 )
 
-_DURABLE_WORKER_GUARD = _DurableWorkerGuard(
-    _database._lightweight_db_connect
-)
+_DURABLE_WORKER_GUARD = _DurableWorkerGuard(_database._lightweight_db_connect)
+
 
 def validate_startup_credential(model: str, model_router: _ModelRouter) -> None:
     route = model_router.route(model)
@@ -138,16 +152,6 @@ def validate_startup_credential(model: str, model_router: _ModelRouter) -> None:
         key_envs = ["LLM_API_KEY"]
     if not any(os.environ.get(key_env) for key_env in key_envs):
         raise RuntimeError(f"required provider credential is missing; set one of: {', '.join(key_envs)}")
-
-
-
-
-
-
-
-
-
-
 
 
 def _require_runtime_configuration(model: str) -> None:
@@ -177,9 +181,7 @@ def _build_startup_services(
     *,
     model_router: _ModelRouter,
 ) -> _BridgeServices:
-    provider = _ProviderPort(
-        generate_backend=_partial(generate_provider_text, model_router)
-    )
+    provider = _ProviderPort(generate_backend=_partial(generate_provider_text, model_router))
     delivery = _DeliveryPort(
         request=telegram_request,
         send_text=send_text,
@@ -220,8 +222,7 @@ def _build_startup_services(
     memory = _MemoryService(
         recall_context=recall_memory_context,
         summary_for_prompt=(
-            lambda db, chat_id, session:
-            session_summary_for_prompt(
+            lambda db, chat_id, session: session_summary_for_prompt(
                 db,
                 chat_id,
                 session,
@@ -230,8 +231,7 @@ def _build_startup_services(
         ),
         summary_state=get_session_summary,
         retain_session=(
-            lambda db, chat_id, session, fields:
-            retain_session_memory(
+            lambda db, chat_id, session, fields: retain_session_memory(
                 db,
                 chat_id,
                 session,
@@ -314,12 +314,7 @@ def run_check(services: _BridgeServices) -> int:
         config.bot_token,
         "getMe",
     )
-    print(
-        f"card={fields['name']}; "
-        f"telegram=@{me.get('username')}; "
-        f"model={config.default_model}; "
-        f"db={config.db_file}"
-    )
+    print(f"card={fields['name']}; telegram=@{me.get('username')}; model={config.default_model}; db={config.db_file}")
     print("check=ok")
     return 0
 
@@ -351,7 +346,6 @@ def main() -> int:
         model_router=model_router,
     )
     token = config.bot_token
-    model = config.default_model
     set_bot_commands(token)
 
     if args.check:

@@ -1,9 +1,10 @@
 """Application service for conversation-memory orchestration."""
+
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
-import sqlite3
 
 
 @dataclass(frozen=True)

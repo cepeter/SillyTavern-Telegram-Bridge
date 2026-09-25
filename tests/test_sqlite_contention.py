@@ -3,27 +3,28 @@ from application_test_setup import ensure_application_extensions, make_test_requ
 ensure_application_extensions()
 
 import json
-from pathlib import Path
+import sqlite3
 import tempfile
 import threading
 import time
 import unittest
+import urllib
+from pathlib import Path
 
 import bridge.config as config
 import bridge.database as database
-import sqlite3
-import time
-import urllib
 import bridge.main as _m_main
-import bridge.runtime_lifecycle as _m_runtime
-import bridge.worker_orchestration as _m_workers
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.runtime_lifecycle as _m_runtime
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 import bridge.telegram as _m_telegram
+import bridge.worker_orchestration as _m_workers
+
+
 class _FakeTelegramResponse:
     def __enter__(self):
         return self
@@ -123,7 +124,9 @@ class SqliteContentionTests(unittest.TestCase):
             db = old_connect()
             try:
                 barrier.wait()
-                job_id = _m_main.enqueue_job(db, 100 + index, "chat", "session", 100 + index, "generation", {"text": "x"})
+                job_id = _m_main.enqueue_job(
+                    db, 100 + index, "chat", "session", 100 + index, "generation", {"text": "x"}
+                )
                 _m_main.finish_job(db, job_id, "done")
             except Exception as exc:
                 errors.append(exc)
@@ -145,41 +148,61 @@ class SqliteContentionTests(unittest.TestCase):
         _m_memory_curator.db_connect = lambda: (_ for _ in ()).throw(AssertionError("opened nested SQLite connection"))
         urllib.request.urlopen = lambda *_args, **_kwargs: _FakeTelegramResponse()
         try:
-            result = _m_telegram.send_panel_request("token", "sendMessage", {
-                "chat_id": "chat",
-                "text": "panel",
-                "reply_markup": {"inline_keyboard": []},
-            }, request_context=make_test_request_context(self.db, "session", "user"))
+            result = _m_telegram.send_panel_request(
+                "token",
+                "sendMessage",
+                {
+                    "chat_id": "chat",
+                    "text": "panel",
+                    "reply_markup": {"inline_keyboard": []},
+                },
+                request_context=make_test_request_context(self.db, "session", "user"),
+            )
             calls.append(result)
         finally:
             urllib.request.urlopen = original_urlopen
             _m_memory_curator.db_connect = original_connect
         self.assertEqual(calls, [{"message_id": 900}])
-        self.assertIsNotNone(self.db.execute(
-            "SELECT 1 FROM panel_sessions WHERE chat_id=? AND message_id=? AND session_id=?",
-            ("chat", "900", "session"),
-        ).fetchone())
+        self.assertIsNotNone(
+            self.db.execute(
+                "SELECT 1 FROM panel_sessions WHERE chat_id=? AND message_id=? AND session_id=?",
+                ("chat", "900", "session"),
+            ).fetchone()
+        )
 
     def test_send_message_retries_transient_not_found(self):
         calls = []
         original_urlopen = urllib.request.urlopen
         original_sleep = time.sleep
+
         class Response:
             def __enter__(self):
                 return self
+
             def __exit__(self, *_args):
                 return False
+
             def read(self):
                 return b'{"ok": true, "result": {"message_id": 901}}'
+
         def fake_urlopen(*_args, **_kwargs):
             calls.append(True)
             if len(calls) <= 2:
-                raise urllib.error.HTTPError("https://api.telegram.org", 404, "Not Found", {}, __import__("io").BytesIO(b'{"ok": false, "description": "Not Found"}'))
+                raise urllib.error.HTTPError(
+                    "https://api.telegram.org",
+                    404,
+                    "Not Found",
+                    {},
+                    __import__("io").BytesIO(b'{"ok": false, "description": "Not Found"}'),
+                )
             return Response()
+
         urllib.request.urlopen = fake_urlopen
         time.sleep = lambda _seconds: None
         try:
-            result = _m_panel_callback_routes.telegram_request("token", "sendMessage", {"chat_id": "chat", "text": "panel"})
+            result = _m_panel_callback_routes.telegram_request(
+                "token", "sendMessage", {"chat_id": "chat", "text": "panel"}
+            )
         finally:
             urllib.request.urlopen = original_urlopen
             time.sleep = original_sleep
@@ -206,8 +229,14 @@ class SqliteContentionTests(unittest.TestCase):
         operation_id = "edit-test"
         self.assertTrue(_m_panel_callback_routes.begin_operation(self.db, operation_id, "edit"))
         _m_message_commands.set_operation_phase(self.db, operation_id, "edit", "local_committed")
-        self.assertTrue(_m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked")))
-        self.assertFalse(_m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("Telegram sendMessage failed: Not Found")))
+        self.assertTrue(
+            _m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked"))
+        )
+        self.assertFalse(
+            _m_workers.native_edit_committed_after_failure(
+                self.db, operation_id, RuntimeError("Telegram sendMessage failed: Not Found")
+            )
+        )
 
         class LockedDb:
             def __init__(self):
@@ -227,24 +256,35 @@ class SqliteContentionTests(unittest.TestCase):
     def test_enqueue_job_does_not_retry_after_full_timeout(self):
         """Regression: enqueue_job should not catch every OperationalError and retry after 30s busy timeout."""
         import inspect
+
         source = inspect.getsource(_m_main.enqueue_job)
         # Should not have BEGIN IMMEDIATE which would wait 30s on lock before retry
-        self.assertNotIn("BEGIN IMMEDIATE", source, "enqueue_job should not use BEGIN IMMEDIATE to avoid 30s busy timeout retry")
+        self.assertNotIn(
+            "BEGIN IMMEDIATE", source, "enqueue_job should not use BEGIN IMMEDIATE to avoid 30s busy timeout retry"
+        )
         # Should not catch every OperationalError and retry with duplicate inserts
-        has_catch_all_retry = "except sqlite3.OperationalError" in source and source.count("INSERT OR IGNORE INTO jobs") > 1
+        has_catch_all_retry = (
+            "except sqlite3.OperationalError" in source and source.count("INSERT OR IGNORE INTO jobs") > 1
+        )
         self.assertFalse(has_catch_all_retry, "enqueue_job should not have catch-all OperationalError retry")
 
     def test_generate_and_store_reply_does_not_use_unbounded_fallback(self):
         """Regression: generate_and_store_reply should not catch every OperationalError with unbounded retry."""
         # Check that the function does not contain BEGIN IMMEDIATE + catch-all OperationalError pattern
         import inspect
+
         source = inspect.getsource(_m_message_commands.generate_and_store_reply)
         # Should not have BEGIN IMMEDIATE that would wait 30s
-        self.assertNotIn("BEGIN IMMEDIATE", source, "generate_and_store_reply should not use BEGIN IMMEDIATE to avoid 30s timeout")
+        self.assertNotIn(
+            "BEGIN IMMEDIATE", source, "generate_and_store_reply should not use BEGIN IMMEDIATE to avoid 30s timeout"
+        )
         # Should not catch every OperationalError and retry
         # The fixed version should have simple inserts without try/except OperationalError retry loop
         has_catch_all_retry = "except sqlite3.OperationalError" in source and source.count("INSERT INTO messages") > 2
-        self.assertFalse(has_catch_all_retry, "generate_and_store_reply should not have catch-all OperationalError retry with duplicate inserts")
+        self.assertFalse(
+            has_catch_all_retry,
+            "generate_and_store_reply should not have catch-all OperationalError retry with duplicate inserts",
+        )
 
     def test_explicit_path_workers_still_use_serialized_connection(self):
         path = Path(self.tmp.name) / "explicit-worker.sqlite3"

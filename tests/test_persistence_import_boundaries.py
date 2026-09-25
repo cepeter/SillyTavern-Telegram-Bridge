@@ -1,12 +1,11 @@
 """Persistence import-boundary regression tests."""
 
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 REPO_ROOT = Path(__file__).parents[1]
 
@@ -55,6 +54,7 @@ DATABASE_PUBLIC_FUNCTIONS = (
     "sync_transcript_hash",
     "ensure_sync_binding",
 )
+
 
 class PersistenceImportBoundaryTests(unittest.TestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
@@ -105,7 +105,6 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
             completed.stdout + completed.stderr,
         )
 
-
     def test_database_imports_without_runtime_or_common(self):
         completed = self._run_python(
             "import sys\n"
@@ -129,16 +128,13 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
         self.assertFalse(hasattr(database, "_DB_SCHEMA_READY_PATHS"))
 
     def test_database_source_has_no_exec_state_preservation_or_runtime_dependency(self):
-        source = (
-            REPO_ROOT / "bridge" / "database.py"
-        ).read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "database.py").read_text(encoding="utf-8")
 
         self.assertNotIn('globals().get("_DB_WRITE_LOCK")', source)
         self.assertNotIn("import bridge.runtime", source)
         self.assertNotIn("from bridge.runtime import", source)
         self.assertNotIn("import bridge.common", source)
         self.assertNotIn("from bridge.common import", source)
-
 
     def test_database_default_path_follows_canonical_config(self):
         import bridge.config as config
@@ -150,9 +146,7 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                 db = database.db_connect()
                 try:
                     self.assertEqual(
-                        Path(
-                            db.execute("PRAGMA database_list").fetchone()[2]
-                        ).resolve(),
+                        Path(db.execute("PRAGMA database_list").fetchone()[2]).resolve(),
                         expected.resolve(),
                     )
                 finally:
@@ -169,9 +163,7 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                 db = database.db_connect(explicit)
                 try:
                     self.assertEqual(
-                        Path(
-                            db.execute("PRAGMA database_list").fetchone()[2]
-                        ).resolve(),
+                        Path(db.execute("PRAGMA database_list").fetchone()[2]).resolve(),
                         explicit.resolve(),
                     )
                 finally:
@@ -186,6 +178,7 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                 class Cursor:
                     def fetchone(self):
                         return None
+
                 return Cursor()
 
         session = {"session_id": "s", "model_id": ""}
@@ -200,7 +193,6 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                 "patched::model",
             )
 
-
     def test_database_maintenance_uses_current_canonical_default_path(self):
         import bridge.config as config
         import bridge.database as database
@@ -210,10 +202,7 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
             with patch.object(config, "DB_FILE", path):
                 db = database.db_connect()
                 try:
-                    db.execute(
-                        "CREATE TABLE persistence_churn("
-                        "id INTEGER PRIMARY KEY, payload TEXT)"
-                    )
+                    db.execute("CREATE TABLE persistence_churn(id INTEGER PRIMARY KEY, payload TEXT)")
                     db.executemany(
                         "INSERT INTO persistence_churn(payload) VALUES(?)",
                         [("x" * 2000,) for _ in range(200)],
@@ -229,9 +218,7 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                 )
                 self.assertTrue(path.is_file())
 
-
     def test_database_and_config_have_direct_canonical_ownership(self):
-        import bridge.main  # completes transitional ordinary dependency bindings
         import bridge.config as config
         import bridge.database as database
         import bridge.help as help_module
@@ -240,9 +227,7 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
         actual_public_functions = {
             name
             for name, value in vars(database).items()
-            if not name.startswith("_")
-            and callable(value)
-            and getattr(value, "__module__", None) == "bridge.database"
+            if not name.startswith("_") and callable(value) and getattr(value, "__module__", None) == "bridge.database"
         }
         self.assertEqual(actual_public_functions, set(DATABASE_PUBLIC_FUNCTIONS))
         self.assertIs(
@@ -255,6 +240,7 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
         )
         self.assertIs(sync_core.GENERATION_DEFAULTS, config.GENERATION_DEFAULTS)
         self.assertIs(help_module.REASONING_LEVELS, config.REASONING_LEVELS)
+
 
 if __name__ == "__main__":
     unittest.main()

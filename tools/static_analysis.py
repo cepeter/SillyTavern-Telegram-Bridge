@@ -1,11 +1,11 @@
 """Static architecture policy for the bridge repository."""
+
 from __future__ import annotations
 
 import argparse
 import ast
 from pathlib import Path
 from typing import NamedTuple, Sequence
-
 
 STATIC_TARGETS: tuple[str, ...] = (
     "bridge/conversation_service.py",
@@ -20,6 +20,10 @@ STATIC_TARGETS: tuple[str, ...] = (
     "bridge/provider_port.py",
     "bridge/sync_service.py",
 )
+
+
+# Type coverage grows independently of the deliberately isolated service layer.
+TYPE_TARGETS: tuple[str, ...] = (*STATIC_TARGETS, "bridge/network_security.py", "bridge/callback_tokens.py")
 
 
 class DependencyReport(NamedTuple):
@@ -60,9 +64,7 @@ def _absolute_import_targets(
 
     if isinstance(node, ast.Import):
         for alias in node.names:
-            if alias.name == package_name or alias.name.startswith(
-                package_name + "."
-            ):
+            if alias.name == package_name or alias.name.startswith(package_name + "."):
                 targets.add(alias.name)
         return targets
 
@@ -89,9 +91,7 @@ def _absolute_import_targets(
     else:
         for alias in node.names:
             if alias.name != "*":
-                targets.add(
-                    ".".join([*package_parts, alias.name])
-                )
+                targets.add(".".join([*package_parts, alias.name]))
     return targets
 
 
@@ -99,10 +99,7 @@ def _graph(bridge_root: Path) -> dict[str, set[str]]:
     modules = _discover_modules(bridge_root)
     module_names = set(modules)
     package_name = bridge_root.name
-    graph: dict[str, set[str]] = {
-        module: set()
-        for module in module_names
-    }
+    graph: dict[str, set[str]] = {module: set() for module in module_names}
 
     for module, path in modules.items():
         tree = ast.parse(
@@ -191,49 +188,30 @@ def check_dependency_direction(
     bridge_root = Path(bridge_root)
     graph = _graph(bridge_root)
     components = _strongly_connected_components(graph)
-    cyclic_components = tuple(
-        component
-        for component in components
-        if len(component) > 1
-    )
-    cyclic_modules = sum(
-        len(component)
-        for component in cyclic_components
-    )
+    cyclic_components = tuple(component for component in components if len(component) > 1)
+    cyclic_modules = sum(len(component) for component in cyclic_components)
     reciprocal_pairs = sum(
-        1
-        for left in graph
-        for right in graph[left]
-        if left < right and left in graph.get(right, set())
+        1 for left in graph for right in graph[left] if left < right and left in graph.get(right, set())
     )
     errors: list[str] = []
 
     for component in cyclic_components:
-        errors.append(
-            "Dependency cycle: " + " -> ".join(component)
-        )
+        errors.append("Dependency cycle: " + " -> ".join(component))
 
     repo_root = bridge_root.parent
     for target in static_targets:
         target_path = repo_root / target
         if not target_path.is_file():
-            errors.append(
-                f"Missing static target: {target}"
-            )
+            errors.append(f"Missing static target: {target}")
             continue
 
         module = _target_module(target)
         if module not in graph:
-            errors.append(
-                f"Missing static target module: {target}"
-            )
+            errors.append(f"Missing static target module: {target}")
             continue
 
         for imported in sorted(graph[module]):
-            errors.append(
-                "Isolated static target "
-                f"{module} imports {imported}"
-            )
+            errors.append(f"Isolated static target {module} imports {imported}")
 
     return DependencyReport(
         modules=len(graph),
@@ -260,9 +238,7 @@ def _print_report(report: DependencyReport) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Check bridge dependency direction policy."
-    )
+    parser = argparse.ArgumentParser(description="Check bridge dependency direction policy.")
     parser.add_argument(
         "--bridge-root",
         type=Path,
@@ -273,8 +249,12 @@ def main() -> int:
         action="store_true",
         help="Print the incremental static target paths and exit.",
     )
+    parser.add_argument("--print-type-targets", action="store_true", help="Print progressively typed module paths.")
     args = parser.parse_args()
 
+    if args.print_type_targets:
+        print("\n".join(TYPE_TARGETS))
+        return 0
     if args.print_targets:
         print("\n".join(STATIC_TARGETS))
         return 0

@@ -1,4 +1,5 @@
 """Pure presentation data for the Scene State panel."""
+
 from __future__ import annotations
 
 import json
@@ -18,10 +19,7 @@ def scene_panel(
         if state
         else "No structured scene state has been established yet."
     )
-    text = (
-        f"Scene state (through message row {covered_until_rowid})\n\n"
-        + body
-    )
+    text = f"Scene state (through message row {covered_until_rowid})\n\n" + body
     markup = {
         "inline_keyboard": [
             [

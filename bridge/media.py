@@ -1,13 +1,52 @@
 """Resolve a configured media tool to an existing executable."""
+
 from __future__ import annotations
 
-import threading
-
+import hashlib
+import json
+import logging
 import os
-from pathlib import Path
+import re
 import shutil
-import subprocess  # nosec B404 - fixed local media tools, never shell-executed
+import sqlite3
+import subprocess
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+from bridge.callbacks import close_panel_message
+from bridge.common import (
+    STT_DEFAULT_MODEL,
+    STT_MAX_BYTES,
+    TTS_MAX_CHARS,
+    chat_job_lock,
+    parse_topic_scope,
+    submit_background,
+)
+from bridge.config import BRIDGE_HOME
+from bridge.config import PROVIDER_CONFIG_FILE as PROVIDER_CONFIG_FILE
+from bridge.database import (
+    begin_operation,
+    clear_failed_turn,
+    committed_assistant_for_message,
+    db_connect,
+    get_meta,
+    operation_was_applied,
+    record_operation,
+    run_write_txn,
+)
+from bridge.expressions import deliver_expression
+from bridge.telegram import (
+    download_telegram_file,
+    ensure_session,
+    send_text,
+    telegram_request,
+)
 
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices as _BridgeServices
@@ -20,6 +59,7 @@ def _resolve_media_command(configured: str, label: str) -> str:
         raise OSError(f"required {label} executable is unavailable: {configured}")
     return resolved
 
+
 def remove_inline_keyboard(db: sqlite3.Connection, token: str, callback: dict) -> None:
     message = callback.get("message") or callback
     chat_id = str((message.get("chat") or {}).get("id", ""))
@@ -31,14 +71,23 @@ def remove_inline_keyboard(db: sqlite3.Connection, token: str, callback: dict) -
 def send_voice(token: str, chat_id: str, path: Path, caption: str = "") -> bool:
     boundary = f"----BridgeVoice{int(time.time() * 1000000)}"
     real_chat_id, thread_id = parse_topic_scope(chat_id)
-    chunks = [f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{real_chat_id}\r\n".encode()]
+    chunks = [f'--{boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n{real_chat_id}\r\n'.encode()]
     if thread_id is not None:
-        chunks.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"message_thread_id\"\r\n\r\n{thread_id}\r\n".encode())
+        chunks.append(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="message_thread_id"\r\n\r\n{thread_id}\r\n'.encode()
+        )
     if caption:
-        chunks.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n{caption}\r\n".encode())
+        chunks.append(f'--{boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n{caption}\r\n'.encode())
     chunks.append(
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"voice\"; filename=\"{path.name}\"\r\nContent-Type: audio/ogg\r\n\r\n".encode()
-        + path.read_bytes() + b"\r\n"
+        (
+            "--"
+            f"""{boundary}"""
+            '\r\nContent-Disposition: form-data; name="voice"; filename="'
+            f"""{path.name}"""
+            '"\r\nContent-Type: audio/ogg\r\n\r\n'
+        ).encode()
+        + path.read_bytes()
+        + b"\r\n"
     )
     chunks.append(f"--{boundary}--\r\n".encode())
     request = urllib.request.Request(
@@ -48,7 +97,7 @@ def send_voice(token: str, chat_id: str, path: Path, caption: str = "") -> bool:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:  # nosec B310 - fixed HTTPS Telegram endpoint
+        with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310 -- fixed Telegram HTTPS endpoint; token is not a URL
             result = json.loads(response.read().decode("utf-8"))
         return bool(result.get("ok"))
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
@@ -69,9 +118,33 @@ def synthesize_voice(text: str, output_path: Path) -> None:
         raise ValueError("SILLYTAVERN_TTS_VOICE is required for voice output")
     with tempfile.TemporaryDirectory(prefix="st-tts-") as temp_dir:
         mp3 = Path(temp_dir) / "speech.mp3"
-        subprocess.run([tts_bin, "--voice", voice, "--text", text, "--write-media", str(mp3)], check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)  # nosec B603 - absolute configured executable, fixed argv, no shell
+        subprocess.run(  # noqa: S603 -- fixed argv, no shell; executable is operator configured
+            [tts_bin, "--voice", voice, "--text", text, "--write-media", str(mp3)],
+            check=True,
+            timeout=120,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
         ffmpeg_bin = _resolve_media_command("ffmpeg", "ffmpeg")
-        subprocess.run([ffmpeg_bin, "-y", "-loglevel", "error", "-i", str(mp3), "-c:a", "libopus", "-b:a", "48k", str(output_path)], check=True, timeout=120, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)  # nosec B603 - absolute executable, fixed argv, no shell
+        subprocess.run(  # noqa: S603 -- fixed argv, no shell; executable is operator configured
+            [
+                ffmpeg_bin,
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(mp3),
+                "-c:a",
+                "libopus",
+                "-b:a",
+                "48k",
+                str(output_path),
+            ],
+            check=True,
+            timeout=120,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
 
 
 def send_tts(token: str, chat_id: str, text: str, operation_id: int | str | None = None) -> bool:
@@ -99,7 +172,9 @@ def send_tts(token: str, chat_id: str, text: str, operation_id: int | str | None
             operation_db.close()
 
 
-def delete_outgoing_messages(db: sqlite3.Connection, token: str, chat_id: str, session_id: str, after_rowid: int | None = None) -> None:
+def delete_outgoing_messages(
+    db: sqlite3.Connection, token: str, chat_id: str, session_id: str, after_rowid: int | None = None
+) -> None:
     query = "SELECT telegram_message_ids FROM messages WHERE chat_id=? AND session_id=? AND role='assistant'"
     params = [chat_id, session_id]
     if after_rowid is not None:
@@ -118,7 +193,9 @@ def delete_outgoing_messages(db: sqlite3.Connection, token: str, chat_id: str, s
 
 
 def delete_outgoing_message_row(db: sqlite3.Connection, token: str, chat_id: str, rowid: int) -> None:
-    row = db.execute("SELECT telegram_message_ids FROM messages WHERE rowid=? AND chat_id=? AND role='assistant'", (rowid, chat_id)).fetchone()
+    row = db.execute(
+        "SELECT telegram_message_ids FROM messages WHERE rowid=? AND chat_id=? AND role='assistant'", (rowid, chat_id)
+    ).fetchone()
     if not row:
         return
     try:
@@ -140,14 +217,20 @@ def quoted_speech_from_reply(text: str) -> str:
     return re.sub(r"\s+", " ", " ".join(quoted)).strip()
 
 
-def queue_user_quote_tts(token: str, chat_id: str, text: str, db: sqlite3.Connection, session_id: str, message_id: int | None = None) -> bool:
+def queue_user_quote_tts(
+    token: str, chat_id: str, text: str, db: sqlite3.Connection, session_id: str, message_id: int | None = None
+) -> bool:
     """Queue quoted user dialogue for TTS without changing the transcript."""
     if get_meta(db, f"voice_mode:{chat_id}", "off") != "tts":
         return False
     speech = quoted_speech_from_reply(text)
     if not speech:
         return False
-    stable_id = str(message_id) if message_id is not None else hashlib.sha256(f"{session_id}\0{text}".encode("utf-8")).hexdigest()[:24]
+    stable_id = (
+        str(message_id)
+        if message_id is not None
+        else hashlib.sha256(f"{session_id}\0{text}".encode("utf-8")).hexdigest()[:24]
+    )
     operation_id = f"user-tts:{chat_id}:{session_id}:{stable_id}"
     if not submit_background("tts", send_tts, token, chat_id, speech, operation_id):
         logging.warning("Automatic user-quote TTS dropped for chat %s", chat_id)
@@ -158,10 +241,14 @@ def queue_user_quote_tts(token: str, chat_id: str, text: str, db: sqlite3.Connec
 def persist_assistant_delivery_ids(db: sqlite3.Connection, assistant_rowid: int, message_ids: list[int]) -> bool:
     """Persist Telegram delivery metadata without misreporting a sent reply as generation failure."""
     try:
+
         def write():
-            db.execute("UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid))
+            db.execute(
+                "UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid)
+            )
             db.commit()
             return True
+
         return run_write_txn(db, write)
     except sqlite3.OperationalError as exc:
         if "locked" not in str(exc).casefold() and "busy" not in str(exc).casefold():
@@ -174,7 +261,14 @@ def persist_assistant_delivery_ids(db: sqlite3.Connection, assistant_rowid: int,
         return False
 
 
-def send_reply(token: str, chat_id: str, text: str, db: sqlite3.Connection | None = None, session_id: str | None = None, assistant_rowid: int | None = None) -> None:
+def send_reply(
+    token: str,
+    chat_id: str,
+    text: str,
+    db: sqlite3.Connection | None = None,
+    session_id: str | None = None,
+    assistant_rowid: int | None = None,
+) -> None:
     if db is not None and session_id:
         deliver_expression(token, chat_id, text, db, session_id)
     message_ids = send_text(token, chat_id, text)
@@ -195,10 +289,13 @@ _STT_MODEL_CACHE = {}
 _STT_MODEL_LOCK = threading.Lock()
 
 
-def transcribe_audio_bytes(raw: bytes, suffix: str = ".ogg", model_name: str | None = None, language: str | None = None) -> str:
+def transcribe_audio_bytes(
+    raw: bytes, suffix: str = ".ogg", model_name: str | None = None, language: str | None = None
+) -> str:
     if len(raw) > STT_MAX_BYTES:
         raise ValueError("voice message exceeds 20 MB")
     from faster_whisper import WhisperModel
+
     model_name = model_name or os.environ.get("SILLYTAVERN_STT_MODEL", STT_DEFAULT_MODEL)
     model = _STT_MODEL_CACHE.get(model_name)
     if model is None:
@@ -220,7 +317,20 @@ def transcribe_audio_bytes(raw: bytes, suffix: str = ".ogg", model_name: str | N
     return text[:12000]
 
 
-def process_voice_message(db: sqlite3.Connection, token: str, api_key: str, model: str, fields: dict, chat_id: str, voice: dict, message_id: int, queued_session_id: str | None = None, *, actor_id: str = "", services: _BridgeServices) -> None:
+def process_voice_message(
+    db: sqlite3.Connection,
+    token: str,
+    api_key: str,
+    model: str,
+    fields: dict,
+    chat_id: str,
+    voice: dict,
+    message_id: int,
+    queued_session_id: str | None = None,
+    *,
+    actor_id: str = "",
+    services: _BridgeServices,
+) -> None:
     if get_meta(db, f"stt_mode:{chat_id}", "on") != "on":
         send_text(token, chat_id, "Voice input is disabled. Use /voice_input on to enable it.")
         return
@@ -300,7 +410,9 @@ def process_voice_job(
             logging.error("Voice job failed: %s", exc, exc_info=True)
             if job_id is not None:
                 jobs.fail(db, job_id, exc)
-            services.telegram.send_text(token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings.")
+            services.telegram.send_text(
+                token, chat_id, "Voice processing failed. Use /voice_input status to check transcription settings."
+            )
         finally:
             db.close()
 
@@ -310,43 +422,3 @@ def send_typing(token: str, chat_id: str) -> None:
         telegram_request(token, "sendChatAction", {"chat_id": chat_id, "action": "typing"})
     except Exception:
         logging.debug("typing indicator failed", exc_info=True)
-
-
-# Explicit late imports replace transitional dependency injection.
-import hashlib
-import json
-import logging
-import re
-import sqlite3
-import tempfile
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-from bridge.callbacks import close_panel_message
-from bridge.common import (
-    chat_job_lock,
-    parse_topic_scope,
-    STT_DEFAULT_MODEL,
-    STT_MAX_BYTES,
-    submit_background,
-    TTS_MAX_CHARS,
-)
-from bridge.config import BRIDGE_HOME, PROVIDER_CONFIG_FILE
-from bridge.database import (
-    begin_operation,
-    clear_failed_turn,
-    committed_assistant_for_message,
-    db_connect,
-    get_meta,
-    operation_was_applied,
-    record_operation,
-    run_write_txn,
-)
-from bridge.expressions import deliver_expression
-from bridge.telegram import (
-    download_telegram_file,
-    ensure_session,
-    send_text,
-    telegram_request,
-)

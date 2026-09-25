@@ -1,13 +1,14 @@
 """Persona lifecycle application service."""
+
 from __future__ import annotations
 
+import logging
+import re
+import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-import re
-import sqlite3
-
 
 _PERSONA_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -58,9 +59,7 @@ class PersonaService:
     ) -> str:
         logical_id = str(logical_id)
         if not _PERSONA_ID_RE.fullmatch(logical_id):
-            raise ValueError(
-                "Persona ID must contain only letters, numbers, hyphens, or underscores"
-            )
+            raise ValueError("Persona ID must contain only letters, numbers, hyphens, or underscores")
         name, description = _validated_text(name, description)
         with self.persona_edit_lock():
             personas = self.list()
@@ -69,18 +68,14 @@ class PersonaService:
                 (
                     str(persona_id)
                     for persona_id, persona in personas.items()
-                    if str(persona_id) == logical_id
-                    or Path(str(persona_id)).stem == expected_stem
+                    if str(persona_id) == logical_id or Path(str(persona_id)).stem == expected_stem
                 ),
                 "",
             )
             created = not bool(existing_avatar)
             if existing_avatar:
                 existing = personas.get(existing_avatar) or {}
-                if (
-                    str(existing.get("name") or "") != name
-                    or str(existing.get("description") or "") != description
-                ):
+                if str(existing.get("name") or "") != name or str(existing.get("description") or "") != description:
                     raise ValueError("Persona ID already exists")
                 avatar = existing_avatar
             else:
@@ -106,7 +101,7 @@ class PersonaService:
                         ):
                             self.delete_persona(avatar)
                     except Exception:
-                        pass
+                        logging.warning("Could not clean up unreferenced Persona after failed selection", exc_info=True)
                 raise
             return avatar
 

@@ -5,12 +5,12 @@ functions after load. Named registrations are deterministic and introspectable,
 which makes extension order visible to production composition, tests, and
 diagnostics.
 """
+
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
+from collections.abc import Callable
 from typing import Any
-
 
 CommandRoute = Callable[..., bool]
 PostRetainHook = Callable[[Any, str, dict[str, str], dict[str, str], Any], None]

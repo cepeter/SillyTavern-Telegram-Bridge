@@ -1,8 +1,7 @@
 """Canonical startup defaults shared by ordinary bridge modules."""
 
-from pathlib import Path
 import os
-
+from pathlib import Path
 
 BRIDGE_HOME = Path(
     os.environ.get(
@@ -111,18 +110,10 @@ RAG_EMBEDDING_MODEL = os.environ.get(
     "SILLYTAVERN_RAG_EMBEDDING_MODEL",
     "text-embedding-3-small",
 )
-RAG_EMBEDDING_DIMENSIONS = int(
-    os.environ.get("SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS", "1536")
-)
-RAG_MAX_EXTRACTED_CHARS = int(
-    os.environ.get("SILLYTAVERN_RAG_MAX_EXTRACTED_CHARS", "1000000")
-)
-RAG_MAX_PDF_PAGES = int(
-    os.environ.get("SILLYTAVERN_RAG_MAX_PDF_PAGES", "200")
-)
-RAG_PDF_PARSE_TIMEOUT_SECONDS = int(
-    os.environ.get("SILLYTAVERN_RAG_PDF_PARSE_TIMEOUT_SECONDS", "45")
-)
+RAG_EMBEDDING_DIMENSIONS = int(os.environ.get("SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS", "1536"))
+RAG_MAX_EXTRACTED_CHARS = int(os.environ.get("SILLYTAVERN_RAG_MAX_EXTRACTED_CHARS", "1000000"))
+RAG_MAX_PDF_PAGES = int(os.environ.get("SILLYTAVERN_RAG_MAX_PDF_PAGES", "200"))
+RAG_PDF_PARSE_TIMEOUT_SECONDS = int(os.environ.get("SILLYTAVERN_RAG_PDF_PARSE_TIMEOUT_SECONDS", "45"))
 
 REASONING_LEVELS = {
     "none": 0,

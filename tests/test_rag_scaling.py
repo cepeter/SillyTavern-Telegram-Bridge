@@ -2,19 +2,21 @@ from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
 
-from pathlib import Path
+import json
 import sqlite3
 import tempfile
+import time
 import unittest
+from pathlib import Path
 
 import bridge.config as config
-import bridge.rag_core as rag_core
-import json
-import time
 import bridge.help as _m_help
 import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
+import bridge.rag_core as rag_core
 import bridge.telegram as _m_telegram
+
+
 class RagScalingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -85,17 +87,13 @@ class RagScalingTests(unittest.TestCase):
             ("chat", "strict-doc", "strict.txt", 1, 1, now, now),
         )
         chunk_id = self.db.execute(
-            "INSERT INTO data_bank_chunks("
-            "chat_id,document_id,chunk_index,content"
-            ") VALUES(?,?,?,?)",
+            "INSERT INTO data_bank_chunks(chat_id,document_id,chunk_index,content) VALUES(?,?,?,?)",
             ("chat", "strict-doc", 0, "strict"),
         ).lastrowid
 
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute(
-                "INSERT INTO data_bank_embeddings("
-                "chunk_id,embedding_namespace,dimensions,vector_json"
-                ") VALUES(?,?,?,?)",
+                "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json) VALUES(?,?,?,?)",
                 (chunk_id, self.namespace, 2, "[1.0,0.0]"),
             )
 
@@ -113,17 +111,13 @@ class RagScalingTests(unittest.TestCase):
 
     def test_small_corpus_keeps_exact_semantic_candidate_set(self):
         ids = self._insert_chunks(20)
-        candidates = _m_rag.semantic_candidate_chunk_ids(
-            self.db, "chat", self.namespace, [], candidate_limit=64
-        )
+        candidates = _m_rag.semantic_candidate_chunk_ids(self.db, "chat", self.namespace, [], candidate_limit=64)
         self.assertEqual(candidates, tuple(ids))
 
     def test_large_corpus_is_bounded_and_keeps_lexical_neighborhood(self):
         ids = self._insert_chunks(500)
         hit = ids[250]
-        candidates = _m_rag.semantic_candidate_chunk_ids(
-            self.db, "chat", self.namespace, [hit], candidate_limit=64
-        )
+        candidates = _m_rag.semantic_candidate_chunk_ids(self.db, "chat", self.namespace, [hit], candidate_limit=64)
         self.assertLessEqual(len(candidates), 64)
         for expected in ids[248:253]:
             self.assertIn(expected, candidates)
@@ -153,7 +147,6 @@ class RagScalingTests(unittest.TestCase):
         self.assertGreater(len(cosine_calls), 0)
         self.assertLessEqual(len(cosine_calls), 32)
 
-
     def test_signature_shortlist_finds_nonlexical_semantic_target(self):
         self._insert_chunks(500, semantic_target_index=251)
         original_cached = rag_core.cached_rag_embedding
@@ -181,9 +174,7 @@ class RagScalingTests(unittest.TestCase):
         transaction_states = []
 
         rag_core.extract_data_bank_text = lambda _filename, _raw: "content"
-        rag_core.split_data_bank_chunks = lambda _text: [
-            f"chunk {index}" for index in range(65)
-        ]
+        rag_core.split_data_bank_chunks = lambda _text: [f"chunk {index}" for index in range(65)]
 
         def fake_embed(texts):
             transaction_states.append(self.db.in_transaction)
@@ -206,22 +197,17 @@ class RagScalingTests(unittest.TestCase):
         self.assertEqual(transaction_states, [False, False, False])
         self.assertFalse(self.db.in_transaction)
         self.assertEqual(
-            self.db.execute(
-                "SELECT COUNT(*) FROM data_bank_embeddings"
-            ).fetchone()[0],
+            self.db.execute("SELECT COUNT(*) FROM data_bank_embeddings").fetchone()[0],
             65,
         )
 
         rows = self.db.execute(
-            "SELECT embedding_namespace,vector_signature,vector_norm "
-            "FROM data_bank_embeddings"
+            "SELECT embedding_namespace,vector_signature,vector_norm FROM data_bank_embeddings"
         ).fetchall()
         self.assertEqual(len(rows), 65)
         self.assertTrue(
             all(
-                namespace == self.namespace
-                and signature is not None
-                and norm is not None
+                namespace == self.namespace and signature is not None and norm is not None
                 for namespace, signature, norm in rows
             )
         )
@@ -236,9 +222,7 @@ class RagScalingTests(unittest.TestCase):
         )
         for index in range(65):
             self.db.execute(
-                "INSERT INTO data_bank_chunks("
-                "chat_id,document_id,chunk_index,content"
-                ") VALUES(?,?,?,?)",
+                "INSERT INTO data_bank_chunks(chat_id,document_id,chunk_index,content) VALUES(?,?,?,?)",
                 ("chat", "reindex-doc", index, f"chunk {index}"),
             )
         self.db.commit()
@@ -265,26 +249,18 @@ class RagScalingTests(unittest.TestCase):
         self.assertFalse(self.db.in_transaction)
 
         rows = self.db.execute(
-            "SELECT embedding_namespace,vector_signature,vector_norm "
-            "FROM data_bank_embeddings"
+            "SELECT embedding_namespace,vector_signature,vector_norm FROM data_bank_embeddings"
         ).fetchall()
         self.assertEqual(len(rows), 65)
         self.assertTrue(
             all(
-                namespace == self.namespace
-                and signature is not None
-                and norm is not None
+                namespace == self.namespace and signature is not None and norm is not None
                 for namespace, signature, norm in rows
             )
         )
 
     def test_rag_embedding_schema_is_canonical_without_legacy_backfill(self):
-        columns = {
-            row[1]: row
-            for row in self.db.execute(
-                "PRAGMA table_info(data_bank_embeddings)"
-            ).fetchall()
-        }
+        columns = {row[1]: row for row in self.db.execute("PRAGMA table_info(data_bank_embeddings)").fetchall()}
         self.assertEqual(columns["embedding_namespace"][3], 1)
         self.assertIsNone(columns["embedding_namespace"][4])
         self.assertEqual(columns["vector_signature"][3], 1)
@@ -292,17 +268,10 @@ class RagScalingTests(unittest.TestCase):
         self.assertEqual(columns["vector_norm"][3], 1)
         self.assertIsNone(columns["vector_norm"][4])
 
-        cache_columns = {
-            row[1]: row
-            for row in self.db.execute(
-                "PRAGMA table_info(rag_embedding_cache)"
-            ).fetchall()
-        }
+        cache_columns = {row[1]: row for row in self.db.execute("PRAGMA table_info(rag_embedding_cache)").fetchall()}
         self.assertEqual(cache_columns["vector_norm"][3], 1)
         self.assertIsNone(cache_columns["vector_norm"][4])
-        self.assertFalse(
-            hasattr(rag_core, "backfill_rag_embedding_signatures")
-        )
+        self.assertFalse(hasattr(rag_core, "backfill_rag_embedding_signatures"))
 
 
 if __name__ == "__main__":

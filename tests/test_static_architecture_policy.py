@@ -57,9 +57,7 @@ def test_function_local_import_participates_in_cycle_detection(tmp_path):
     write_module(
         bridge,
         "a",
-        "def load():\n"
-        "    import bridge.b\n"
-        "    return bridge.b\n",
+        "def load():\n    import bridge.b\n    return bridge.b\n",
     )
     write_module(bridge, "b", "import bridge.a\n")
 
@@ -85,9 +83,7 @@ def test_isolated_static_target_cannot_import_bridge_module(tmp_path):
     )
 
     assert any(
-        "isolated" in error.casefold()
-        and "bridge.service" in error
-        and "bridge.adapter" in error
+        "isolated" in error.casefold() and "bridge.service" in error and "bridge.adapter" in error
         for error in report.errors
     )
 
@@ -103,11 +99,7 @@ def test_missing_static_target_is_rejected(tmp_path):
         static_targets=("bridge/missing.py",),
     )
 
-    assert any(
-        "missing" in error.casefold()
-        and "bridge/missing.py" in error
-        for error in report.errors
-    )
+    assert any("missing" in error.casefold() and "bridge/missing.py" in error for error in report.errors)
 
 
 def test_static_target_manifest_is_expected_service_port_surface():
@@ -129,17 +121,10 @@ def test_static_target_manifest_is_expected_service_port_surface():
 
 
 def test_ci_requires_static_architecture_gates():
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert "  static-analysis:" in workflow
     assert "python tools/static_analysis.py" in workflow
-    assert (
-        "python tools/static_analysis.py --print-targets "
-        "| xargs python -m ruff check"
-    ) in workflow
-    assert (
-        "python tools/static_analysis.py --print-targets "
-        "| xargs python -m mypy"
-    ) in workflow
+    assert "python -m ruff check ." in workflow
+    assert "python -m ruff format --check ." in workflow
+    assert ("python tools/static_analysis.py --print-type-targets | xargs python -m mypy") in workflow

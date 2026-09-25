@@ -1,21 +1,25 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_request_context
+from application_test_setup import (
+    ensure_application_extensions,
+    make_test_application_services,
+    make_test_request_context,
+)
 
 ensure_application_extensions()
 
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
-import bridge.config as config
-import random
 import bridge.callbacks as _m_callbacks
-import bridge.telegram as _m_telegram
-import bridge.command_routes as _m_command_routes
+import bridge.config as config
 import bridge.greetings as _m_greetings
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.telegram as _m_telegram
+
+
 class AlternateGreetingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -28,13 +32,15 @@ class AlternateGreetingTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_card_parser_preserves_native_alternate_greetings(self):
-        fields = _m_main.card_fields({
-            "data": {
-                "name": "Test",
-                "first_mes": "Primary {{user}}",
-                "alternate_greetings": ["Alt one", "Alt two"],
+        fields = _m_main.card_fields(
+            {
+                "data": {
+                    "name": "Test",
+                    "first_mes": "Primary {{user}}",
+                    "alternate_greetings": ["Alt one", "Alt two"],
+                }
             }
-        })
+        )
         self.assertEqual(_m_greetings.greeting_options(fields), ["Primary {{user}}", "Alt one", "Alt two"])
 
     def test_first_greeting_can_choose_a_random_alternate(self):
@@ -45,7 +51,11 @@ class AlternateGreetingTests(unittest.TestCase):
         _m_greetings.random.randrange = lambda _length: 1
         try:
             fields = {"name": "Character", "first_mes": "Primary", "alternate_greetings": json.dumps(["Alt {{user}}"])}
-            self.assertTrue(_m_greetings.send_character_greeting(self.db, "token", "chat", fields, self.session["session_id"], "User", None))
+            self.assertTrue(
+                _m_greetings.send_character_greeting(
+                    self.db, "token", "chat", fields, self.session["session_id"], "User", None
+                )
+            )
         finally:
             _m_greetings.send_text = original_send
             _m_greetings.random.randrange = original_randrange
@@ -56,14 +66,24 @@ class AlternateGreetingTests(unittest.TestCase):
     def test_greeting_menu_lists_default_alternates_and_preview(self):
         calls = []
         original_request = getattr(_m_greetings, "send_panel_request", None)
-        _m_greetings.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {"message_id": 55}
+        _m_greetings.send_panel_request = lambda _token, method, payload, **_kwargs: (
+            calls.append((method, payload)) or {"message_id": 55}
+        )
         fields = {
             "name": "Character",
             "first_mes": "Primary {{user}}",
             "alternate_greetings": json.dumps(["Alt one", "Alt two"]),
         }
         try:
-            self.assertTrue(_m_greetings.send_greeting_menu("token", "chat", fields, "User", request_context=make_test_request_context(self.db, self.session["session_id"])))
+            self.assertTrue(
+                _m_greetings.send_greeting_menu(
+                    "token",
+                    "chat",
+                    fields,
+                    "User",
+                    request_context=make_test_request_context(self.db, self.session["session_id"]),
+                )
+            )
         finally:
             if original_request is None:
                 delattr(_m_greetings, "send_panel_request")
@@ -73,11 +93,7 @@ class AlternateGreetingTests(unittest.TestCase):
         payload = calls[0][1]
         self.assertIn("Selected: Default", payload["text"])
         self.assertIn("Primary User", payload["text"])
-        callbacks = [
-            button["callback_data"]
-            for row in payload["reply_markup"]["inline_keyboard"]
-            for button in row
-        ]
+        callbacks = [button["callback_data"] for row in payload["reply_markup"]["inline_keyboard"] for button in row]
         self.assertIn("greeting:preview:0", callbacks)
         self.assertIn("greeting:preview:1", callbacks)
         self.assertIn("greeting:preview:2", callbacks)
@@ -94,7 +110,15 @@ class AlternateGreetingTests(unittest.TestCase):
             "alternate_greetings": json.dumps(["Alt"]),
         }
         try:
-            self.assertTrue(_m_greetings.send_greeting_menu("token", "chat", fields, "User", request_context=make_test_request_context(self.db, self.session["session_id"])))
+            self.assertTrue(
+                _m_greetings.send_greeting_menu(
+                    "token",
+                    "chat",
+                    fields,
+                    "User",
+                    request_context=make_test_request_context(self.db, self.session["session_id"]),
+                )
+            )
         finally:
             if original_request is None:
                 delattr(_m_greetings, "send_panel_request")

@@ -6,6 +6,8 @@ import unittest
 
 import bridge.generation as _m_generation
 import bridge.message_commands as _m_message_commands
+
+
 class UserDialogueActionTests(unittest.TestCase):
     def test_dialogue_and_action_are_labeled(self):
         result = _m_generation.format_user_dialogue_action("I am coming *walking toward the door*")
@@ -19,11 +21,34 @@ class UserDialogueActionTests(unittest.TestCase):
         self.assertEqual(_m_generation.format_user_dialogue_action("I am **ready**"), "I am **ready**")
 
     def test_builder_formats_current_and_historical_user_messages(self):
-        session = {"persona_id": "", "system_prompt": "", "author_note": "", "world_file": "", "response_language": "auto"}
-        fields = {"name": "Character", "description": "", "personality": "", "scenario": "", "first_mes": "", "mes_example": "", "system_prompt": "", "post_history_instructions": ""}
-        messages = _m_message_commands.build_chat_messages(session, fields, "I am coming *walking toward the door*", [("user", "*waits quietly* Ready?")], persona_service=make_test_persona_service())
+        session = {
+            "persona_id": "",
+            "system_prompt": "",
+            "author_note": "",
+            "world_file": "",
+            "response_language": "auto",
+        }
+        fields = {
+            "name": "Character",
+            "description": "",
+            "personality": "",
+            "scenario": "",
+            "first_mes": "",
+            "mes_example": "",
+            "system_prompt": "",
+            "post_history_instructions": "",
+        }
+        messages = _m_message_commands.build_chat_messages(
+            session,
+            fields,
+            "I am coming *walking toward the door*",
+            [("user", "*waits quietly* Ready?")],
+            persona_service=make_test_persona_service(),
+        )
         self.assertEqual(messages[-2]["content"], "User dialogue:\nReady?\n\nUser action:\nwaits quietly")
-        self.assertEqual(messages[-1]["content"], "User dialogue:\nI am coming\n\nUser action:\nwalking toward the door")
+        self.assertEqual(
+            messages[-1]["content"], "User dialogue:\nI am coming\n\nUser action:\nwalking toward the door"
+        )
 
 
 if __name__ == "__main__":

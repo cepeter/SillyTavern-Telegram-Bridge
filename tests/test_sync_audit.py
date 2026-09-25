@@ -2,24 +2,21 @@ from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
 
+import tempfile
+import time
+import unittest
 from pathlib import Path
 from types import SimpleNamespace
-import sqlite3
-import tempfile
-import unittest
 
 import bridge.config as config
-import time
-import bridge.callbacks as _m_callbacks
-import bridge.telegram as _m_telegram
-import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.schema as _m_schema
+import bridge.schema as schema
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
-import bridge.schema as schema
+import bridge.telegram as _m_telegram
 
 
 class SyncAuditHardeningTests(unittest.TestCase):
@@ -77,18 +74,12 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
         self.db.commit()
 
-
     def test_direct_poll_adapter_uses_final_runtime_sync_now(self):
         self._binding()
         calls = []
 
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = (
-            lambda _db, chat_id, session_id:
-            calls.append(
-                (chat_id, session_id)
-            )
-        )
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
         try:
             _m_sync_api._SYNC_POLL_SAFETY.poll(
                 self.db,
@@ -105,9 +96,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self._binding()
         calls = []
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = (
-            lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
-        )
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
         lock = _m_sync_api.chat_job_lock("chat")
         lock.acquire()
         try:
@@ -121,9 +110,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self._many_bindings()
         calls = []
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = (
-            lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
-        )
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
         locks = [_m_sync_api.chat_job_lock(f"a{index:02d}") for index in range(32)]
         for lock in locks:
             lock.acquire()
@@ -159,8 +146,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         def fake_sync(db, chat_id, session_id):
             seen.append(session_id)
             db.execute(
-                "UPDATE sync_bindings SET last_checked_at=? "
-                "WHERE chat_id=? AND session_id=?",
+                "UPDATE sync_bindings SET last_checked_at=? WHERE chat_id=? AND session_id=?",
                 (time.time(), chat_id, session_id),
             )
             db.commit()
@@ -176,15 +162,10 @@ class SyncAuditHardeningTests(unittest.TestCase):
 
     def test_live_sync_unexpected_failures_disable_after_five_attempts(self):
         self._binding()
-        self.db.execute(
-            "UPDATE sync_bindings SET realtime_failures=4 "
-            "WHERE chat_id='chat' AND session_id='session'"
-        )
+        self.db.execute("UPDATE sync_bindings SET realtime_failures=4 WHERE chat_id='chat' AND session_id='session'")
         self.db.commit()
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = (
-            lambda *_args: (_ for _ in ()).throw(RuntimeError("boom"))
-        )
+        _m_sync_api.live_sync_now = lambda *_args: (_ for _ in ()).throw(RuntimeError("boom"))
         try:
             _m_sync_api.live_sync_poll(self.db)
         finally:
@@ -202,18 +183,8 @@ class SyncAuditHardeningTests(unittest.TestCase):
         calls = []
         original = _m_sync_api.live_sync_now
 
-        _m_sync_api.live_sync_now = (
-            lambda _db, chat_id, session_id:
-            calls.append(
-                (chat_id, session_id)
-            )
-        )
-        locks = [
-            _m_sync_api.chat_job_lock(
-                f"a{index:02d}"
-            )
-            for index in range(32)
-        ]
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
+        locks = [_m_sync_api.chat_job_lock(f"a{index:02d}") for index in range(32)]
         for lock in locks:
             lock.acquire()
         try:
@@ -235,10 +206,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
         _m_session_naming.set_meta(self.db, "active_session:chat", active["session_id"])
         _m_sync_core.ensure_sync_binding(self.db, "chat", inactive["session_id"])
-        self.db.execute(
-            "UPDATE sync_bindings SET realtime_enabled=1 "
-            "WHERE chat_id='chat' AND session_id='inactive'"
-        )
+        self.db.execute("UPDATE sync_bindings SET realtime_enabled=1 WHERE chat_id='chat' AND session_id='inactive'")
         self.db.commit()
 
         deleted, reason = _m_panel_callback_routes.delete_session_data(
@@ -252,12 +220,8 @@ class SyncAuditHardeningTests(unittest.TestCase):
 
         self.assertTrue(deleted, reason)
         self.assertIsNone(
-            self.db.execute(
-                "SELECT 1 FROM sync_bindings "
-                "WHERE chat_id='chat' AND session_id='inactive'"
-            ).fetchone()
+            self.db.execute("SELECT 1 FROM sync_bindings WHERE chat_id='chat' AND session_id='inactive'").fetchone()
         )
-
 
     def test_canonical_startup_cleanup_removes_orphan_sync_binding(self):
         valid = _m_session_naming.create_session(
@@ -272,9 +236,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
             valid["session_id"],
         )
         self.db.execute(
-            "INSERT INTO sync_bindings("
-            "chat_id,session_id,sync_id"
-            ") VALUES(?,?,?)",
+            "INSERT INTO sync_bindings(chat_id,session_id,sync_id) VALUES(?,?,?)",
             (
                 "orphan-chat",
                 "missing-session",
@@ -290,23 +252,18 @@ class SyncAuditHardeningTests(unittest.TestCase):
 
         self.assertIsNone(
             self.db.execute(
-                "SELECT 1 FROM sync_bindings "
-                "WHERE chat_id='orphan-chat' "
-                "AND session_id='missing-session'"
+                "SELECT 1 FROM sync_bindings WHERE chat_id='orphan-chat' AND session_id='missing-session'"
             ).fetchone()
         )
         self.assertIsNotNone(
             self.db.execute(
-                "SELECT 1 FROM sync_bindings "
-                "WHERE chat_id='valid-chat' "
-                "AND session_id='valid-session'"
+                "SELECT 1 FROM sync_bindings WHERE chat_id='valid-chat' AND session_id='valid-session'"
             ).fetchone()
         )
 
     def test_sync_startup_cleanup_removes_orphan_without_structural_ddl(self):
         self.db.execute(
-            "INSERT INTO sync_bindings(chat_id,session_id,sync_id) "
-            "VALUES('orphan-chat','missing-session','stb-orphan')"
+            "INSERT INTO sync_bindings(chat_id,session_id,sync_id) VALUES('orphan-chat','missing-session','stb-orphan')"
         )
         self.db.commit()
 
@@ -319,14 +276,15 @@ class SyncAuditHardeningTests(unittest.TestCase):
 
         self.assertIsNone(
             self.db.execute(
-                "SELECT 1 FROM sync_bindings "
-                "WHERE chat_id='orphan-chat' AND session_id='missing-session'"
+                "SELECT 1 FROM sync_bindings WHERE chat_id='orphan-chat' AND session_id='missing-session'"
             ).fetchone()
         )
         sync_structural = [
             sql
             for sql in traced
-            if sql.lstrip().upper().startswith(
+            if sql.lstrip()
+            .upper()
+            .startswith(
                 (
                     "CREATE ",
                     "ALTER ",
@@ -343,10 +301,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
 
     def test_phase6e_does_not_add_schema_migration(self):
         self.assertEqual(
-            tuple(
-                migration.version
-                for migration in _m_schema.SCHEMA_MIGRATIONS
-            ),
+            tuple(migration.version for migration in _m_schema.SCHEMA_MIGRATIONS),
             (1,),
         )
 

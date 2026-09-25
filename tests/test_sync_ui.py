@@ -2,17 +2,16 @@ from application_test_setup import ensure_application_extensions, make_test_requ
 
 ensure_application_extensions()
 
+import time
+import unittest
 from pathlib import Path
 from types import SimpleNamespace
-import unittest
 from unittest.mock import Mock, patch
 
-import time
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.status_panels as _m_status_panels
-import bridge.callbacks as _m_callbacks
-import bridge.cards as _m_cards
-import bridge.sync_api as _m_sync_api
+
+
 class SyncUiBehaviorTests(unittest.TestCase):
     def setUp(self):
         self.db = object()
@@ -35,7 +34,6 @@ class SyncUiBehaviorTests(unittest.TestCase):
             "chat",
             self.session,
             sync_service=self.service,
-
         )
 
         self.service.status.assert_called_once_with(
@@ -65,21 +63,23 @@ class SyncUiBehaviorTests(unittest.TestCase):
             api_configured=True,
         )
 
-        with patch.object(
-            time,
-            "localtime",
-            return_value="LOCAL",
-        ) as localtime, patch.object(
-            time,
-            "strftime",
-            return_value="2026-09-21 09:00:00 WIB",
-        ) as strftime:
+        with (
+            patch.object(
+                time,
+                "localtime",
+                return_value="LOCAL",
+            ) as localtime,
+            patch.object(
+                time,
+                "strftime",
+                return_value="2026-09-21 09:00:00 WIB",
+            ) as strftime,
+        ):
             text = _m_status_panels.sync_status_text(
                 self.db,
                 "chat",
                 self.session,
                 sync_service=self.service,
-
             )
 
         localtime.assert_called_once_with(123.0)
@@ -88,8 +88,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             "LOCAL",
         )
         self.assertIn(
-            "Last sync: bridge_to_sillytavern_api "
-            "at 2026-09-21 09:00:00 WIB",
+            "Last sync: bridge_to_sillytavern_api at 2026-09-21 09:00:00 WIB",
             text,
         )
         self.assertIn(
@@ -117,11 +116,12 @@ class SyncUiBehaviorTests(unittest.TestCase):
                 "chat",
                 self.session,
                 sync_service=self.service,
-
             )
 
     def test_send_sync_menu_preserves_keyboard_and_message_id(self):
-        with patch.object(_m_status_panels, "send_panel_message",
+        with patch.object(
+            _m_status_panels,
+            "send_panel_message",
         ) as send_panel:
             _m_panel_callback_routes.send_sync_menu(
                 "token",
@@ -134,9 +134,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
             )
 
         send_panel.assert_called_once()
-        token, chat_id, text, markup, message_id = (
-            send_panel.call_args.args
-        )
+        token, chat_id, text, markup, message_id = send_panel.call_args.args
         self.assertEqual(token, "token")
         self.assertEqual(chat_id, "chat")
         self.assertEqual(message_id, 91)
@@ -203,7 +201,9 @@ class SyncUiBehaviorTests(unittest.TestCase):
         callback = {"id": "cb"}
         message = {"message_id": 91}
 
-        with patch.object(_m_panel_callback_routes, "close_panel_message",
+        with patch.object(
+            _m_panel_callback_routes,
+            "close_panel_message",
         ) as close:
             handled = _m_panel_callback_routes.handle_sync_callback(
                 self.db,
@@ -239,7 +239,9 @@ class SyncUiBehaviorTests(unittest.TestCase):
         for data in ("sync:menu", "sync:status"):
             with self.subTest(data=data):
                 answer = Mock()
-                with patch.object(_m_panel_callback_routes, "send_sync_menu",
+                with patch.object(
+                    _m_panel_callback_routes,
+                    "send_sync_menu",
                 ) as send_menu:
                     handled = _m_panel_callback_routes.handle_sync_callback(
                         self.db,
@@ -276,7 +278,9 @@ class SyncUiBehaviorTests(unittest.TestCase):
         self.service.toggle_realtime.return_value = "x" * 250
         answer = Mock()
 
-        with patch.object(_m_panel_callback_routes, "send_sync_menu",
+        with patch.object(
+            _m_panel_callback_routes,
+            "send_sync_menu",
         ) as send_menu:
             handled = _m_panel_callback_routes.handle_sync_callback(
                 self.db,
@@ -318,7 +322,9 @@ class SyncUiBehaviorTests(unittest.TestCase):
         self.service.sync_now.return_value = "y" * 250
         answer = Mock()
 
-        with patch.object(_m_panel_callback_routes, "send_sync_menu",
+        with patch.object(
+            _m_panel_callback_routes,
+            "send_sync_menu",
         ) as send_menu:
             handled = _m_panel_callback_routes.handle_sync_callback(
                 self.db,
@@ -386,11 +392,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
 
 class SyncUiOwnershipTests(unittest.TestCase):
     def test_status_panels_owns_sync_status_and_menu(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "status_panels.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "status_panels.py").read_text(encoding="utf-8")
         self.assertIn(
             "\ndef sync_status_text(",
             source,
@@ -401,20 +403,11 @@ class SyncUiOwnershipTests(unittest.TestCase):
         )
 
     def test_recovery_compatibility_file_is_absent(self):
-        recovery = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "recovery.py"
-        )
+        recovery = Path(__file__).parents[1] / "bridge" / "recovery.py"
         self.assertFalse(recovery.exists())
 
-
     def test_panel_callback_routes_owns_sync_callback(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "panel_callback_routes.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "panel_callback_routes.py").read_text(encoding="utf-8")
         self.assertIn(
             "\ndef handle_sync_callback(",
             source,

@@ -21,11 +21,7 @@ def imported_modules(filename: str) -> set[str]:
 
 def top_level_functions(filename: str) -> set[str]:
     tree = ast.parse((BRIDGE / filename).read_text(encoding="utf-8"))
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
 def test_persona_sync_is_canonical_identity_owner(monkeypatch):
@@ -62,11 +58,14 @@ def test_persona_sync_is_canonical_identity_owner(monkeypatch):
 
 def test_cards_no_longer_owns_or_imports_persona_identity():
     owned = top_level_functions("cards.py")
-    assert not ({
-        "get_persona",
-        "default_persona_id",
-        "persona_name",
-    } & owned)
+    assert not (
+        {
+            "get_persona",
+            "default_persona_id",
+            "persona_name",
+        }
+        & owned
+    )
     assert "bridge.persona_sync" not in imported_modules("cards.py")
 
 
@@ -82,10 +81,7 @@ def test_telegram_has_no_cards_import():
 
 def test_pure_panel_message_request_builds_exact_send_and_edit_payloads():
     panel_utils = importlib.import_module("bridge.panel_utils")
-    assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("panel_utils.py")
-    )
+    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("panel_utils.py"))
     assert hasattr(panel_utils, "panel_message_request")
 
     method, payload = panel_utils.panel_message_request(
@@ -97,11 +93,7 @@ def test_pure_panel_message_request_builds_exact_send_and_edit_payloads():
     assert payload == {
         "chat_id": "chat",
         "text": "Body",
-        "reply_markup": {
-            "inline_keyboard": [
-                [{"text": "OK", "callback_data": "ok"}]
-            ]
-        },
+        "reply_markup": {"inline_keyboard": [[{"text": "OK", "callback_data": "ok"}]]},
     }
 
     method, payload = panel_utils.panel_message_request(
@@ -117,7 +109,6 @@ def test_pure_panel_message_request_builds_exact_send_and_edit_payloads():
         "reply_markup": {"inline_keyboard": []},
         "message_id": 41,
     }
-
 
     method, payload = panel_utils.panel_message_request(
         "chat",

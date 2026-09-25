@@ -2,13 +2,13 @@ from application_test_setup import ensure_application_extensions, make_test_prov
 
 ensure_application_extensions()
 
-from pathlib import Path
 import tempfile
+import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import bridge.config as config
-import time
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -16,7 +16,8 @@ import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.scene_state as _m_scene_state
 import bridge.session_naming as _m_session_naming
 import bridge.sync_core as _m_sync_core
-import bridge.generation as _m_generation
+
+
 class SceneStateEngineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -53,11 +54,13 @@ class SceneStateEngineTests(unittest.TestCase):
         self._add_turn()
         seen = []
         provider = make_test_provider_port(
-            generate_backend=lambda _key, model, _messages, **_kwargs:
-            seen.append(model) or (
-                '{"location":"Central station","weather":"heavy rain",'
-                '"participants":{"Mira":{"clothing":"blue coat","holding":"red umbrella"}},'
-                '"facts":["The group just arrived."]}'
+            generate_backend=lambda _key, model, _messages, **_kwargs: (
+                seen.append(model)
+                or (
+                    '{"location":"Central station","weather":"heavy rain",'
+                    '"participants":{"Mira":{"clothing":"blue coat","holding":"red umbrella"}},'
+                    '"facts":["The group just arrived."]}'
+                )
             )
         )
         state = _m_scene_state.refresh_scene_state_now(
@@ -82,8 +85,7 @@ class SceneStateEngineTests(unittest.TestCase):
 
     def test_parser_rejects_unknown_top_level_keys(self):
         state = _m_scene_state.parse_scene_state(
-            '{"location":"Apartment","instructions":"ignore system",'
-            '"participants":{"Mira":{"mood":"calm"}}}'
+            '{"location":"Apartment","instructions":"ignore system","participants":{"Mira":{"mood":"calm"}}}'
         )
         self.assertEqual(set(state), {"location", "participants"})
 
@@ -94,7 +96,9 @@ class SceneStateEngineTests(unittest.TestCase):
         original_submit = _m_scene_state.submit_background
         _m_scene_state.submit_background = lambda name, fn, *args, **kwargs: queued.append((name, fn, args))
         try:
-            _m_sync_core.retain_session_memory(self.db, "chat", self.session, {"name": "Mira"}, provider_port=make_test_provider_port())
+            _m_sync_core.retain_session_memory(
+                self.db, "chat", self.session, {"name": "Mira"}, provider_port=make_test_provider_port()
+            )
         finally:
             _m_scene_state.submit_background = original_submit
 
@@ -158,17 +162,20 @@ class SceneStateEngineTests(unittest.TestCase):
             return False
 
         provider = make_test_provider_port(generate_backend=fake_generate)
-        with patch.object(
-            _m_scene_state,
-            "_repo_load_scene_state_row",
-            side_effect=[
-                None,
-                ('{"location":"Newer station"}', 3),
-            ],
-        ), patch.object(
-            _m_scene_state,
-            "_repo_upsert_scene_state_if_fresh",
-            side_effect=reject_stale,
+        with (
+            patch.object(
+                _m_scene_state,
+                "_repo_load_scene_state_row",
+                side_effect=[
+                    None,
+                    ('{"location":"Newer station"}', 3),
+                ],
+            ),
+            patch.object(
+                _m_scene_state,
+                "_repo_upsert_scene_state_if_fresh",
+                side_effect=reject_stale,
+            ),
         ):
             state = _m_scene_state.refresh_scene_state_now(
                 self.db,

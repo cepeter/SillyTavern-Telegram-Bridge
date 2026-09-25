@@ -1,29 +1,33 @@
-from application_test_setup import ensure_application_extensions, make_native_test_persona_service, make_test_request_context
+from application_test_setup import (
+    ensure_application_extensions,
+    make_native_test_persona_service,
+    make_test_request_context,
+)
 
 ensure_application_extensions()
 
 import json
-from pathlib import Path
 import tempfile
-import unittest
-
-import bridge.config as config
 import time
-import bridge.callbacks as _m_callbacks
+import unittest
+from pathlib import Path
+
 import bridge.cards as _m_cards
 import bridge.catalog as _m_catalog
 import bridge.character_identity as _m_character_identity
 import bridge.command_routes as _m_command_routes
 import bridge.common as _m_common
+import bridge.config as config
 import bridge.input_flows as _m_input_flows
 import bridge.main as _m_main
-import bridge.message_commands as _m_message_commands
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.message_commands as _m_message_commands
 import bridge.persona_sync as _m_persona_sync
 import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.status_panels as _m_status_panels
 import bridge.telegram as _m_telegram
+
+
 class CatalogLimitTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -50,7 +54,9 @@ class CatalogLimitTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = root / "avatars"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR.mkdir()
         (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / "user-default.png").write_bytes(b"avatar")
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps({"power_user": {"personas": {}, "persona_descriptions": {}}}), encoding="utf-8")
+        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(
+            json.dumps({"power_user": {"personas": {}, "persona_descriptions": {}}}), encoding="utf-8"
+        )
         _m_persona_sync._NATIVE_PERSONA_CACHE = {}
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
         _m_sillytavern_api.live_sync_api_configured = lambda: False
@@ -104,7 +110,10 @@ class CatalogLimitTests(unittest.TestCase):
 
     def test_native_system_prompt_json_uses_content_and_name(self):
         native = _m_common.SYSTEM_PROMPTS_DIR / "Native Prompt.json"
-        native.write_text(json.dumps({"name": "Native Prompt", "content": "native content", "post_history": "ignored by bridge"}), encoding="utf-8")
+        native.write_text(
+            json.dumps({"name": "Native Prompt", "content": "native content", "post_history": "ignored by bridge"}),
+            encoding="utf-8",
+        )
         prompts = _m_cards.load_system_prompts()
         self.assertEqual(prompts["Native Prompt"]["name"], "Native Prompt")
         self.assertEqual(prompts["Native Prompt"]["prompt"], "native content")
@@ -117,28 +126,68 @@ class CatalogLimitTests(unittest.TestCase):
 
     def test_persona_panel_shows_at_most_40(self):
         personas = {f"p{index:02}.png": f"Persona {index}" for index in range(41)}
-        settings = {"power_user": {"personas": personas, "persona_descriptions": {key: {"description": "d"} for key in personas}}}
+        settings = {
+            "power_user": {
+                "personas": personas,
+                "persona_descriptions": {key: {"description": "d"} for key in personas},
+            }
+        }
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(settings), encoding="utf-8")
         calls = []
         original = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_command_routes.send_persona_menu("token", "chat", "", persona_service=make_native_test_persona_service(), request_context=make_test_request_context(self.db))
+            _m_command_routes.send_persona_menu(
+                "token",
+                "chat",
+                "",
+                persona_service=make_native_test_persona_service(),
+                request_context=make_test_request_context(self.db),
+            )
         finally:
             _m_cards.send_panel_request = original
-        callbacks = [button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row]
+        callbacks = [
+            button["callback_data"] for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row
+        ]
         self.assertEqual(sum(value.startswith("persona:t") for value in callbacks), 8)
         self.assertIn("page 1/5", calls[-1][1]["text"])
 
     def test_persona_create_rejects_item_41(self):
         personas = {f"p{index:02}.png": f"Persona {index}" for index in range(40)}
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps({"power_user": {"personas": personas, "persona_descriptions": {key: {"description": "d"} for key in personas}}}), encoding="utf-8")
+        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(
+            json.dumps(
+                {
+                    "power_user": {
+                        "personas": personas,
+                        "persona_descriptions": {key: {"description": "d"} for key in personas},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
         sent = []
         original = _m_message_commands.send_text
         _m_message_commands.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
-            state = {"session_id": self.session["session_id"], "mode": "create", "persona_id": "", "expires_at": time.time() + 60}
-            self.assertTrue(_m_input_flows._handle_persona_input(self.db, "token", "chat", self.session, "p40 | Persona 40 | description", state, None, persona_service=make_native_test_persona_service(), request_context=make_test_request_context(self.db, self.session["session_id"])))
+            state = {
+                "session_id": self.session["session_id"],
+                "mode": "create",
+                "persona_id": "",
+                "expires_at": time.time() + 60,
+            }
+            self.assertTrue(
+                _m_input_flows._handle_persona_input(
+                    self.db,
+                    "token",
+                    "chat",
+                    self.session,
+                    "p40 | Persona 40 | description",
+                    state,
+                    None,
+                    persona_service=make_native_test_persona_service(),
+                    request_context=make_test_request_context(self.db, self.session["session_id"]),
+                )
+            )
         finally:
             _m_message_commands.send_text = original
         self.assertTrue(any("40 maximum" in text for text in sent))
@@ -147,14 +196,22 @@ class CatalogLimitTests(unittest.TestCase):
         for index in range(40):
             (_m_main.CHARACTER_DIR / f"{index:02}.png").write_bytes(b"existing")
         sent = []
-        old_parse, old_fields, old_send = _m_telegram.parse_png_chara_bytes, _m_telegram.card_fields, _m_telegram.send_text
+        old_parse, old_fields, old_send = (
+            _m_telegram.parse_png_chara_bytes,
+            _m_telegram.card_fields,
+            _m_telegram.send_text,
+        )
         _m_telegram.parse_png_chara_bytes = lambda _raw: {"name": "Forty One"}
         _m_telegram.card_fields = lambda _card: {"name": "Forty One"}
         _m_telegram.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             _m_telegram.import_character_card(self.db, "token", "chat", "new.png", b"new")
         finally:
-            _m_telegram.parse_png_chara_bytes, _m_telegram.card_fields, _m_telegram.send_text = old_parse, old_fields, old_send
+            _m_telegram.parse_png_chara_bytes, _m_telegram.card_fields, _m_telegram.send_text = (
+                old_parse,
+                old_fields,
+                old_send,
+            )
         self.assertEqual(len(list(_m_main.CHARACTER_DIR.glob("*.png"))), 40)
         self.assertTrue(any("40 maximum" in text for text in sent))
 

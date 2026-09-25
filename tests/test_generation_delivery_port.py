@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import MISSING
 import importlib
 import inspect
+from dataclasses import MISSING
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -25,10 +25,7 @@ def test_delivery_port_is_pure_and_declares_required_callables():
     path = BRIDGE / "delivery_port.py"
     assert path.is_file(), "DeliveryPort module is missing"
     module = importlib.import_module("bridge.delivery_port")
-    assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("delivery_port.py")
-    )
+    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("delivery_port.py"))
     assert set(module.DeliveryPort.__dataclass_fields__) == {
         "request",
         "send_text",
@@ -91,11 +88,16 @@ def test_regen_and_continue_require_delivery_port():
 
 
 def test_recovery_factory_binds_exact_delivery_collaborators():
-    import bridge.generation as generation
     from application_test_setup import make_test_delivery_port
 
-    request = lambda *_args, **_kwargs: {}
-    delete = lambda *_args, **_kwargs: None
+    import bridge.generation as generation
+
+    def request(*_args, **_kwargs):
+        return {}
+
+    def delete(*_args, **_kwargs):
+        return None
+
     port = make_test_delivery_port(
         request=request,
         delete_outgoing_message_row=delete,

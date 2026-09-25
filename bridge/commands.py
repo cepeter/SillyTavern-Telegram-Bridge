@@ -1,9 +1,67 @@
 from __future__ import annotations
 
+import base64
+import logging
+import re
+import sqlite3
+import time
+
+from bridge.card_content import (
+    card_fields_from_file,
+    replace_macros,
+)
+from bridge.common import MAX_HISTORY_MESSAGES
+from bridge.context_compaction import (
+    context_history_candidate_limit,
+    context_input_budget_tokens,
+)
+from bridge.database import (
+    begin_operation,
+    delete_generation_preset,
+    format_generation_settings,
+    get_generation_settings,
+    get_meta,
+    load_generation_preset,
+    operation_phase,
+    record_operation,
+    run_write_txn,
+    set_operation_phase,
+    update_generation_settings,
+    write_transaction,
+)
+from bridge.generation import (
+    build_chat_messages,
+    render_session_response,
+    save_response_variant,
+)
+from bridge.group_director_service import GroupDirectorService
+from bridge.group_service import GroupService
+from bridge.media import (
+    delete_outgoing_message_row,
+    send_reply,
+    send_typing,
+)
+from bridge.memory_backend import (
+    memory_mode,
+    memory_scope,
+)
+from bridge.memory_service import MemoryService
 from bridge.operation_recovery import (
     OperationRecovery as _OperationRecovery,
 )
-
+from bridge.persona_service import PersonaService
+from bridge.persona_sync import persona_name
+from bridge.provider_port import ProviderPort
+from bridge.rag_core import (
+    data_bank_documents,
+    rag_citation_footer,
+    rag_context_for_prompt,
+    rag_mode,
+    rag_retrieval_bundle,
+)
+from bridge.reset_panel import reset_confirmation_request
+from bridge.telegram import ensure_session as ensure_session
+from bridge.telegram import load_session, send_panel_request, send_text, telegram_request
 
 _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
     operation_phase=lambda db, operation_id: operation_phase(
@@ -35,8 +93,7 @@ _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
         payload,
     ),
     delete_outgoing_message_row=(
-        lambda db, token, chat_id, rowid:
-        delete_outgoing_message_row(
+        lambda db, token, chat_id, rowid: delete_outgoing_message_row(
             db,
             token,
             chat_id,
@@ -51,8 +108,24 @@ _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
 )
 
 
-
-def process_image_message(db: sqlite3.Connection, token: str, api_key: str, session: dict, fields: dict, chat_id: str, caption: str, image_bytes: bytes, mime_type: str = "image/jpeg", telegram_message_id: int | None = None, *, group_service: GroupService, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService, group_director_service: GroupDirectorService) -> None:
+def process_image_message(
+    db: sqlite3.Connection,
+    token: str,
+    api_key: str,
+    session: dict,
+    fields: dict,
+    chat_id: str,
+    caption: str,
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+    telegram_message_id: int | None = None,
+    *,
+    group_service: GroupService,
+    provider_port: ProviderPort,
+    memory_service: MemoryService,
+    persona_service: PersonaService,
+    group_director_service: GroupDirectorService,
+) -> None:
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_service.current_speaker(db, chat_id, session, caption)
     group_context = ""
@@ -65,7 +138,10 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
             group_turn[0],
         )
     image_data_uri = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
-    rows = db.execute("SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session["session_id"])).fetchall()
+    rows = db.execute(
+        "SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
+        (chat_id, session["session_id"]),
+    ).fetchall()
     history_rows = [(row[0], row[1]) for row in rows[-MAX_HISTORY_MESSAGES:]]
     rag_bundle = rag_retrieval_bundle(db, chat_id, caption)
     memory_prompt = memory_service.prompt_context(
@@ -77,16 +153,57 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
     )
     memory_context = memory_prompt.recall
     session_summary = memory_prompt.summary
-    messages = build_chat_messages(session, fields, caption, history_rows, image_data_uri=image_data_uri, memory_context=memory_context, session_summary=session_summary, rag_context=rag_context_for_prompt(db, chat_id, caption, rag_bundle), group_context=group_context, persona_service=persona_service)
+    messages = build_chat_messages(
+        session,
+        fields,
+        caption,
+        history_rows,
+        image_data_uri=image_data_uri,
+        memory_context=memory_context,
+        session_summary=session_summary,
+        rag_context=rag_context_for_prompt(db, chat_id, caption, rag_bundle),
+        group_context=group_context,
+        persona_service=persona_service,
+    )
     send_typing(token, chat_id)
-    reply = provider_port.generate(api_key, session["model_id"], messages, session_id=f"telegram:{chat_id}:{session['session_id']}", settings=get_generation_settings(db, chat_id, session["session_id"]))
+    reply = provider_port.generate(
+        api_key,
+        session["model_id"],
+        messages,
+        session_id=f"telegram:{chat_id}:{session['session_id']}",
+        settings=get_generation_settings(db, chat_id, session["session_id"]),
+    )
     reply += rag_citation_footer(db, chat_id, caption, rag_bundle)
-    reply = render_session_response(api_key, session, reply, chat_id, get_generation_settings(db, chat_id, session["session_id"]), provider_port=provider_port)
-    stored_reply = reply if group_turn and group_turn[1].get("mode") == "autonomous" else (f"{fields['name']}: {reply}" if group_turn else reply)
+    reply = render_session_response(
+        api_key,
+        session,
+        reply,
+        chat_id,
+        get_generation_settings(db, chat_id, session["session_id"]),
+        provider_port=provider_port,
+    )
+    stored_reply = (
+        reply
+        if group_turn and group_turn[1].get("mode") == "autonomous"
+        else (f"{fields['name']}: {reply}" if group_turn else reply)
+    )
     stored_text = f"[Image input] {caption}"
     with write_transaction(db):
-        db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session["session_id"], "user", stored_text, str(telegram_message_id) if telegram_message_id is not None else None, time.time()))
-        assistant_cursor = db.execute("INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)", (chat_id, session["session_id"], "assistant", stored_reply, time.time()))
+        db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)",
+            (
+                chat_id,
+                session["session_id"],
+                "user",
+                stored_text,
+                str(telegram_message_id) if telegram_message_id is not None else None,
+                time.time(),
+            ),
+        )
+        assistant_cursor = db.execute(
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
+            (chat_id, session["session_id"], "assistant", stored_reply, time.time()),
+        )
         assistant_rowid = assistant_cursor.lastrowid
         save_response_variant(
             db,
@@ -100,7 +217,6 @@ def process_image_message(db: sqlite3.Connection, token: str, api_key: str, sess
             group_service.advance_turn(db, chat_id, session["session_id"])
     memory_service.retain(db, chat_id, session, fields)
     send_reply(token, chat_id, stored_reply, db, session["session_id"], assistant_rowid)
-
 
 
 def regenerate_edited_turn(
@@ -126,12 +242,10 @@ def regenerate_edited_turn(
             chat_id,
             session_id,
         )
-        assistant_row = (
-            _COMMAND_OPERATION_RECOVERY.latest_assistant_row(
-                db,
-                chat_id,
-                session_id,
-            )
+        assistant_row = _COMMAND_OPERATION_RECOVERY.latest_assistant_row(
+            db,
+            chat_id,
+            session_id,
         )
         if not user_row or not assistant_row:
             raise RuntimeError("edit recovery state is incomplete")
@@ -165,28 +279,17 @@ def regenerate_edited_turn(
         return
 
     rows = db.execute(
-        "SELECT rowid,role,content FROM messages "
-        "WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
+        "SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
         (chat_id, session_id),
     ).fetchall()
     target_index = next(
-        (
-            i
-            for i, row in enumerate(rows)
-            if int(row[0]) == int(user_rowid)
-            and row[1] == "user"
-        ),
+        (i for i, row in enumerate(rows) if int(row[0]) == int(user_rowid) and row[1] == "user"),
         None,
     )
     if target_index is None:
-        raise ValueError(
-            "Telegram message is not a user turn in the active session"
-        )
+        raise ValueError("Telegram message is not a user turn in the active session")
 
-    history_rows = [
-        (row[1], row[2])
-        for row in rows[:target_index]
-    ]
+    history_rows = [(row[1], row[2]) for row in rows[:target_index]]
     memory_prompt = memory_service.prompt_context(
         db,
         chat_id,
@@ -242,13 +345,11 @@ def regenerate_edited_turn(
         generation_settings,
         provider_port=provider_port,
     )
-    old_message_ids = (
-        _COMMAND_OPERATION_RECOVERY.outgoing_ids_after(
-            db,
-            chat_id,
-            session_id,
-            int(user_rowid),
-        )
+    old_message_ids = _COMMAND_OPERATION_RECOVERY.outgoing_ids_after(
+        db,
+        chat_id,
+        session_id,
+        int(user_rowid),
     )
     _COMMAND_OPERATION_RECOVERY.set_payload(
         db,
@@ -261,8 +362,7 @@ def regenerate_edited_turn(
 
     def persist_edit():
         db.execute(
-            "DELETE FROM session_summaries "
-            "WHERE chat_id=? AND session_id=?",
+            "DELETE FROM session_summaries WHERE chat_id=? AND session_id=?",
             (chat_id, session_id),
         )
         db.execute(
@@ -270,14 +370,11 @@ def regenerate_edited_turn(
             (new_text, int(user_rowid)),
         )
         db.execute(
-            "DELETE FROM messages "
-            "WHERE chat_id=? AND session_id=? AND rowid>?",
+            "DELETE FROM messages WHERE chat_id=? AND session_id=? AND rowid>?",
             (chat_id, session_id, int(user_rowid)),
         )
         assistant_cursor = db.execute(
-            "INSERT INTO messages("
-            "chat_id,session_id,role,content,created_at"
-            ") VALUES(?,?,?,?,?)",
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             (
                 chat_id,
                 session_id,
@@ -336,18 +433,66 @@ def regenerate_edited_turn(
     )
 
 
-def edit_last_user(db: sqlite3.Connection, token: str, api_key: str, session: dict[str, str], fields: dict[str, str], chat_id: str, new_text: str, operation_id: int | str | None = None, *, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService) -> None:
+def edit_last_user(
+    db: sqlite3.Connection,
+    token: str,
+    api_key: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+    chat_id: str,
+    new_text: str,
+    operation_id: int | str | None = None,
+    *,
+    provider_port: ProviderPort,
+    memory_service: MemoryService,
+    persona_service: PersonaService,
+) -> None:
     session_id = session["session_id"]
-    rows = db.execute("SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid", (chat_id, session_id)).fetchall()
+    rows = db.execute(
+        "SELECT rowid,role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
+        (chat_id, session_id),
+    ).fetchall()
     last_user = next((row for row in reversed(rows) if row[1] == "user"), None)
     if last_user is None:
         send_text(token, chat_id, "Belum ada pesan user untuk diedit.")
         return
-    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(last_user[0]), new_text, operation_id=operation_id, provider_port=provider_port, memory_service=memory_service, persona_service=persona_service)
+    regenerate_edited_turn(
+        db,
+        token,
+        api_key,
+        session,
+        fields,
+        chat_id,
+        int(last_user[0]),
+        new_text,
+        operation_id=operation_id,
+        provider_port=provider_port,
+        memory_service=memory_service,
+        persona_service=persona_service,
+    )
 
 
-def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str, chat_id: str, message_id: int, new_text: str, default_model: str, operation_id: int | str | None = None, *, provider_port: ProviderPort, memory_service: MemoryService, persona_service: PersonaService) -> None:
-    row = db.execute("SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND telegram_message_id=? ORDER BY rowid DESC LIMIT 1", (chat_id, str(message_id))).fetchone()
+def edit_telegram_user_message(
+    db: sqlite3.Connection,
+    token: str,
+    api_key: str,
+    chat_id: str,
+    message_id: int,
+    new_text: str,
+    default_model: str,
+    operation_id: int | str | None = None,
+    *,
+    provider_port: ProviderPort,
+    memory_service: MemoryService,
+    persona_service: PersonaService,
+) -> None:
+    row = db.execute(
+        (
+            "SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND "
+            "telegram_message_id=? ORDER BY rowid DESC LIMIT 1"
+        ),
+        (chat_id, str(message_id)),
+    ).fetchone()
     if row is None or row[2] != "user":
         send_text(token, chat_id, "Edited message was not found.")
         return
@@ -356,39 +501,87 @@ def edit_telegram_user_message(db: sqlite3.Connection, token: str, api_key: str,
         return
     session = load_session(db, chat_id, str(row[1]), default_model)
     fields = card_fields_from_file(session["character_file"])
-    regenerate_edited_turn(db, token, api_key, session, fields, chat_id, int(row[0]), new_text.strip()[:12000], operation_id=operation_id, provider_port=provider_port, memory_service=memory_service, persona_service=persona_service)
+    regenerate_edited_turn(
+        db,
+        token,
+        api_key,
+        session,
+        fields,
+        chat_id,
+        int(row[0]),
+        new_text.strip()[:12000],
+        operation_id=operation_id,
+        provider_port=provider_port,
+        memory_service=memory_service,
+        persona_service=persona_service,
+    )
 
 
 def send_stscript_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
     """Show the allowlisted STscript actions without accepting arbitrary scripts."""
-    payload = {"chat_id": chat_id, "text": "Safe STscript actions:\n\nReset clears only the active session after confirmation.", "reply_markup": {"inline_keyboard": [[{"text": "♻️ Reset", "callback_data": "enum:stscript:reset"}], [{"text": "❌ Close", "callback_data": "enum:stscript:cancel"}]]}}
+    payload = {
+        "chat_id": chat_id,
+        "text": "Safe STscript actions:\n\nReset clears only the active session after confirmation.",
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": "♻️ Reset", "callback_data": "enum:stscript:reset"}],
+                [{"text": "❌ Close", "callback_data": "enum:stscript:cancel"}],
+            ]
+        },
+    }
     method = "editMessageText" if message_id else "sendMessage"
     if message_id:
         payload["message_id"] = message_id
     send_panel_request(token, method, payload, request_context=request_context)
 
 
-def send_note_menu(token: str, chat_id: str, current_note: str, message_id: int | None = None, *, request_context) -> None:
+def send_note_menu(
+    token: str, chat_id: str, current_note: str, message_id: int | None = None, *, request_context
+) -> None:
     state = "on" if str(current_note or "").strip() else "off"
-    text = f"Author's Note — {state}\nCurrent length: {len(str(current_note or '').strip())} characters\nChoose an action:"
+    text = (
+        f"Author's Note — {state}\nCurrent length: {len(str(current_note or '').strip())} characters\nChoose an action:"
+    )
     method = "editMessageText" if message_id else "sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": [
-        [{"text": "🚫 Off", "callback_data": "note:off"}, {"text": "✏️ User input", "callback_data": "note:input"}],
-        [{"text": "❌ Close", "callback_data": "note:cancel"}],
-    ]}}
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": {
+            "inline_keyboard": [
+                [
+                    {"text": "🚫 Off", "callback_data": "note:off"},
+                    {"text": "✏️ User input", "callback_data": "note:input"},
+                ],
+                [{"text": "❌ Close", "callback_data": "note:cancel"}],
+            ]
+        },
+    }
     if message_id:
         payload["message_id"] = message_id
     send_panel_request(token, method, payload, request_context=request_context)
 
 
-def handle_macro_command(db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], fields: dict, command_text: str, *, request_context) -> None:
+def handle_macro_command(
+    db: sqlite3.Connection,
+    token: str,
+    chat_id: str,
+    session: dict[str, str],
+    fields: dict,
+    command_text: str,
+    *,
+    request_context,
+) -> None:
     parts = command_text.split(None, 1)
     if parts[0].casefold() == "/macro":
         raw = parts[1] if len(parts) > 1 else ""
-        send_text(token, chat_id, replace_macros(raw, fields, persona_name(session["persona_id"]) if session["persona_id"] else "user"))
+        send_text(
+            token,
+            chat_id,
+            replace_macros(raw, fields, persona_name(session["persona_id"]) if session["persona_id"] else "user"),
+        )
         return
     script = parts[1].strip() if len(parts) > 1 else ""
-    action, _, argument = script.partition(" ")
+    action, _, _argument = script.partition(" ")
     if action.casefold() == "reset":
         method, payload = reset_confirmation_request(chat_id)
         send_panel_request(
@@ -401,7 +594,9 @@ def handle_macro_command(db: sqlite3.Connection, token: str, chat_id: str, sessi
         send_text(token, chat_id, "Use /stscript to open the safe Reset action panel.")
 
 
-def apply_preset_action(db: sqlite3.Connection, token: str, chat_id: str, session_id: str, action: str, name: str) -> None:
+def apply_preset_action(
+    db: sqlite3.Connection, token: str, chat_id: str, session_id: str, action: str, name: str
+) -> None:
     name = str(name).strip()
     if action not in {"use", "delete"} or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name):
         send_text(token, chat_id, "Invalid preset panel action.")
@@ -412,85 +607,66 @@ def apply_preset_action(db: sqlite3.Connection, token: str, chat_id: str, sessio
             send_text(token, chat_id, f"Preset not found: {name}")
             return
         update_generation_settings(db, chat_id, session_id, **settings)
-        send_text(token, chat_id, f"Preset applied to this session: {name}\n{format_generation_settings(get_generation_settings(db, chat_id, session_id))}")
+        send_text(
+            token,
+            chat_id,
+            (
+                "Preset applied to this session: "
+                f"""{name}"""
+                "\n"
+                f"""{format_generation_settings(get_generation_settings(db, chat_id, session_id))}"""
+            ),
+        )
         return
-    send_text(token, chat_id, f"Preset deleted: {name}" if delete_generation_preset(db, chat_id, name) else f"Preset not found: {name}")
+    send_text(
+        token,
+        chat_id,
+        f"Preset deleted: {name}" if delete_generation_preset(db, chat_id, name) else f"Preset not found: {name}",
+    )
 
 
-def prompt_diagnostics(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], *, group_service: GroupService, memory_service: MemoryService) -> str:
-    message_count = db.execute("SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])).fetchone()[0]
+def prompt_diagnostics(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+    *,
+    group_service: GroupService,
+    memory_service: MemoryService,
+) -> str:
+    message_count = db.execute(
+        "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])
+    ).fetchone()[0]
     summary, covered_until = memory_service.summary_status(db, chat_id, session["session_id"])
     docs = data_bank_documents(db, chat_id)
     group = group_service.state(db, chat_id, session["session_id"])
-    return (f"Prompt inspector\nCharacter: {fields['name']}\nMessages: {message_count}\n"
-            f"Context input budget: ~{context_input_budget_tokens()} tokens\nHistory candidates: {context_history_candidate_limit()} messages\nSession summary: {len(summary)} chars (through row {covered_until})\n"
-            f"Hindsight: {memory_mode(db, chat_id)} / {memory_scope(db, chat_id)}\n"
-            f"Data Bank: {rag_mode(db, chat_id)} / {len(docs)} documents\n"
-            f"Group: {'on' if group['enabled'] else 'off'} / mode={group['mode']} / members={len(group['members'])}\n"
-            "Macro support: char, user, random, pick, time, date, weekday\nWorld Info recursion: maximum 3 passes")
-
-
-# Explicit late imports replace transitional dependency injection.
-import base64
-import logging
-import re
-import sqlite3
-import time
-from bridge.card_content import (
-    card_fields_from_file,
-    replace_macros,
-)
-from bridge.persona_sync import persona_name
-from bridge.common import MAX_HISTORY_MESSAGES
-from bridge.context_compaction import (
-    context_history_candidate_limit,
-    context_input_budget_tokens,
-)
-from bridge.database import (
-    begin_operation,
-    delete_generation_preset,
-    format_generation_settings,
-    get_generation_settings,
-    get_meta,
-    load_generation_preset,
-    operation_phase,
-    record_operation,
-    run_write_txn,
-    set_operation_phase,
-    update_generation_settings,
-    write_transaction,
-)
-from bridge.generation import (
-    build_chat_messages,
-    render_session_response,
-    save_response_variant,
-)
-from bridge.group_director_service import GroupDirectorService
-from bridge.group_service import GroupService
-from bridge.media import (
-    delete_outgoing_message_row,
-    send_reply,
-    send_typing,
-)
-from bridge.memory_service import MemoryService
-from bridge.persona_service import PersonaService
-from bridge.provider_port import ProviderPort
-from bridge.memory_backend import (
-    memory_mode,
-    memory_scope,
-)
-from bridge.reset_panel import reset_confirmation_request
-from bridge.rag_core import (
-    data_bank_documents,
-    rag_citation_footer,
-    rag_context_for_prompt,
-    rag_mode,
-    rag_retrieval_bundle,
-)
-from bridge.telegram import (
-    send_panel_request,
-    ensure_session,
-    load_session,
-    send_text,
-    telegram_request,
-)
+    return (
+        "Prompt inspector\nCharacter: "
+        f"""{fields["name"]}"""
+        "\nMessages: "
+        f"""{message_count}"""
+        "\nContext input budget: ~"
+        f"""{context_input_budget_tokens()}"""
+        " tokens\nHistory candidates: "
+        f"""{context_history_candidate_limit()}"""
+        " messages\nSession summary: "
+        f"""{len(summary)}"""
+        " chars (through row "
+        f"""{covered_until}"""
+        ")\nHindsight: "
+        f"""{memory_mode(db, chat_id)}"""
+        " / "
+        f"""{memory_scope(db, chat_id)}"""
+        "\nData Bank: "
+        f"""{rag_mode(db, chat_id)}"""
+        " / "
+        f"""{len(docs)}"""
+        " documents\nGroup: "
+        f"""{("on" if group["enabled"] else "off")}"""
+        " / mode="
+        f"""{group["mode"]}"""
+        " / members="
+        f"""{len(group["members"])}"""
+        "\nMacro support: char, user, random, pick, time, date, weekday\nWorld Info "
+        "recursion: maximum 3 passes"
+    )

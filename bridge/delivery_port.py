@@ -1,4 +1,5 @@
 """Pure application port for generated-response delivery operations."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

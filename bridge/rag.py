@@ -1,43 +1,40 @@
 from __future__ import annotations
 
 from bridge.common import (
+    MAX_TELEGRAM_LENGTH,
     sqlite3,
 )
-
 from bridge.database import (
     set_meta,
 )
-
 from bridge.rag_core import (
-    _embedding_row,
-    extract_pdf_data_bank_text,
-    extract_data_bank_text,
-    split_data_bank_chunks,
-    rag_embedding_namespace,
-    embedding_norm,
-    rag_embedding_headers,
-    embed_rag_text,
-    embed_rag_batch,
-    rag_semantic_candidate_limit,
-    add_data_bank_document,
-    cached_rag_embedding,
-    retrieve_data_bank,
-    rag_mode,
-    rag_retrieval_bundle,
-    rag_context_for_prompt,
-    rag_citation_footer,
-    data_bank_documents,
-    data_bank_document_versions,
     activate_data_bank_version,
+    data_bank_document_versions,
+    data_bank_documents,
     delete_data_bank_documents,
-    rag_embedding_coverage,
+    rag_mode,
     reindex_data_bank_documents,
-    DEFAULT_SEMANTIC_CANDIDATE_LIMIT,
-    MAX_SEMANTIC_CANDIDATE_LIMIT,
-    cosine_similarity,
-    embedding_signature,
-    semantic_candidate_chunk_ids,
+    retrieve_data_bank,
 )
+from bridge.rag_core import add_data_bank_document as add_data_bank_document
+from bridge.rag_core import cached_rag_embedding as cached_rag_embedding
+from bridge.rag_core import embed_rag_batch as embed_rag_batch
+from bridge.rag_core import embed_rag_text as embed_rag_text
+from bridge.rag_core import embedding_norm as embedding_norm
+from bridge.rag_core import embedding_signature as embedding_signature
+from bridge.rag_core import extract_data_bank_text as extract_data_bank_text
+from bridge.rag_core import extract_pdf_data_bank_text as extract_pdf_data_bank_text
+from bridge.rag_core import rag_citation_footer as rag_citation_footer
+from bridge.rag_core import rag_context_for_prompt as rag_context_for_prompt
+from bridge.rag_core import rag_embedding_coverage as rag_embedding_coverage
+from bridge.rag_core import rag_embedding_headers as rag_embedding_headers
+from bridge.rag_core import rag_embedding_namespace as rag_embedding_namespace
+from bridge.rag_core import rag_retrieval_bundle as rag_retrieval_bundle
+from bridge.rag_core import rag_semantic_candidate_limit as rag_semantic_candidate_limit
+from bridge.rag_core import semantic_candidate_chunk_ids as semantic_candidate_chunk_ids
+from bridge.rag_core import split_data_bank_chunks as split_data_bank_chunks
+from bridge.telegram import send_text
+
 
 def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, command_text: str) -> None:
     parts = command_text.split(None, 3)
@@ -46,12 +43,27 @@ def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, c
         set_meta(db, f"rag_mode:{chat_id}", argument)
     if argument in {"status", "on", "off"}:
         docs = data_bank_documents(db, chat_id)
-        send_text(token, chat_id, f"Data Bank RAG: {rag_mode(db, chat_id)}\nDocuments: {len(docs)}\nChunks: {sum(int(row[3]) for row in docs)}")
+        send_text(
+            token,
+            chat_id,
+            (
+                "Data Bank RAG: "
+                f"""{rag_mode(db, chat_id)}"""
+                "\nDocuments: "
+                f"""{len(docs)}"""
+                "\nChunks: "
+                f"""{sum((int(row[3]) for row in docs))}"""
+            ),
+        )
         return
     if argument == "reindex":
         filename = parts[2].strip() if len(parts) > 2 else None
         total, indexed = reindex_data_bank_documents(db, chat_id, filename)
-        send_text(token, chat_id, f"Data Bank reindex complete: {indexed}/{total} chunks indexed for the current embedding namespace.")
+        send_text(
+            token,
+            chat_id,
+            f"Data Bank reindex complete: {indexed}/{total} chunks indexed for the current embedding namespace.",
+        )
         return
     if argument == "versions":
         filename = parts[2].strip() if len(parts) > 2 else ""
@@ -87,7 +99,11 @@ def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, c
         if not filename:
             send_text(token, chat_id, "Use /databank remove <filename> confirm.")
         elif not confirmed:
-            send_text(token, chat_id, f"This deletes every Data Bank copy named {filename}. Repeat: /databank remove {filename} confirm")
+            send_text(
+                token,
+                chat_id,
+                f"This deletes every Data Bank copy named {filename}. Repeat: /databank remove {filename} confirm",
+            )
         else:
             removed = delete_data_bank_documents(db, chat_id, filename)
             send_text(token, chat_id, f"Removed {removed} Data Bank document(s) named {filename}.")
@@ -101,11 +117,18 @@ def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, c
         query = parts[2].strip() if len(parts) > 2 else ""
         results = retrieve_data_bank(db, chat_id, query)
         text = "\n\n".join(f"[{filename}]\n{content}" for filename, content, _ in results)
-        send_text(token, chat_id, "Data Bank search:\n" + (text[:MAX_TELEGRAM_LENGTH] if text else "No matching chunks found."))
+        send_text(
+            token,
+            chat_id,
+            "Data Bank search:\n" + (text[:MAX_TELEGRAM_LENGTH] if text else "No matching chunks found."),
+        )
         return
-    send_text(token, chat_id, "Use /databank on, /databank off, /databank list, /databank search <query>, /databank versions <filename>, /databank activate <filename> <version>, or /databank remove <filename> confirm.")
-
-
-# Explicit late imports replace transitional dependency injection.
-from bridge.common import MAX_TELEGRAM_LENGTH
-from bridge.telegram import send_text
+    send_text(
+        token,
+        chat_id,
+        (
+            "Use /databank on, /databank off, /databank list, /databank search "
+            "<query>, /databank versions <filename>, /databank activate <filename> "
+            "<version>, or /databank remove <filename> confirm."
+        ),
+    )

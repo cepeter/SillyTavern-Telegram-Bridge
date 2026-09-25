@@ -1,4 +1,5 @@
 """Low-risk caches for unchanged native SillyTavern files."""
+
 from __future__ import annotations
 
 import copy

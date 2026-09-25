@@ -1,4 +1,5 @@
 """Optional low-overhead timing instrumentation for bridge hot paths."""
+
 from __future__ import annotations
 
 import logging

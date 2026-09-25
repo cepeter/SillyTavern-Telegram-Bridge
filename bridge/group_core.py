@@ -1,10 +1,11 @@
 """Canonical group persistence, turn ownership, and character selection."""
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sqlite3
 import time
+from pathlib import Path
 
 from bridge.card_content import (
     card_fields,
@@ -16,8 +17,14 @@ from bridge.card_content import (
 from bridge.database import get_meta, set_meta, write_transaction
 from bridge.repositories import (
     load_group_state_row as _repo_load_group_state_row,
+)
+from bridge.repositories import (
     mark_group_operation_applied as _repo_mark_group_operation_applied,
+)
+from bridge.repositories import (
     store_group_state_row as _repo_store_group_state_row,
+)
+from bridge.repositories import (
     try_claim_group_operation as _repo_try_claim_group_operation,
 )
 
@@ -25,7 +32,16 @@ from bridge.repositories import (
 def group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
     row = _repo_load_group_state_row(db, chat_id, session_id)
     if not row:
-        return {"title": "Group chat", "enabled": False, "turn_index": 0, "mode": "round_robin", "forced_speaker": "", "members": [], "turn_user_id": "", "turn_users": []}
+        return {
+            "title": "Group chat",
+            "enabled": False,
+            "turn_index": 0,
+            "mode": "round_robin",
+            "forced_speaker": "",
+            "members": [],
+            "turn_user_id": "",
+            "turn_users": [],
+        }
     try:
         members = json.loads(row[5])
     except (TypeError, json.JSONDecodeError):
@@ -34,7 +50,16 @@ def group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[s
         turn_users = json.loads(row[7])
     except (TypeError, json.JSONDecodeError):
         turn_users = []
-    return {"title": row[0], "enabled": bool(row[1]), "turn_index": int(row[2]), "mode": str(row[3] or "round_robin"), "forced_speaker": str(row[4] or ""), "members": [str(item) for item in members if isinstance(item, str)], "turn_user_id": str(row[6] or ""), "turn_users": [str(item) for item in turn_users if isinstance(item, str)]}
+    return {
+        "title": row[0],
+        "enabled": bool(row[1]),
+        "turn_index": int(row[2]),
+        "mode": str(row[3] or "round_robin"),
+        "forced_speaker": str(row[4] or ""),
+        "members": [str(item) for item in members if isinstance(item, str)],
+        "turn_user_id": str(row[6] or ""),
+        "turn_users": [str(item) for item in turn_users if isinstance(item, str)],
+    }
 
 
 def group_user_turn_allowed(db: sqlite3.Connection, chat_id: str, session_id: str, sender_id: str) -> bool:
@@ -174,7 +199,9 @@ def group_member_labels(member_files: list[str]) -> list[str]:
     return labels
 
 
-def group_current_speaker(db: sqlite3.Connection, chat_id: str, session: dict[str, str], user_text: str = "") -> tuple[str, dict[str, object]] | None:
+def group_current_speaker(
+    db: sqlite3.Connection, chat_id: str, session: dict[str, str], user_text: str = ""
+) -> tuple[str, dict[str, object]] | None:
     state = group_state(db, chat_id, session["session_id"])
     members = [name for name in state["members"] if safe_character_path(name)]
     if not state["enabled"] or len(members) < 2:

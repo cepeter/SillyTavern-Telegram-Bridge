@@ -1,5 +1,5 @@
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from bridge.sync_integrity import SyncSnapshotIntegrityAdapter
 
@@ -47,9 +47,7 @@ class SyncSnapshotIntegrityAdapterTests(unittest.TestCase):
             session_id,
             **updates,
         ):
-            self.events.append(
-                ("update", db, chat_id, session_id, updates)
-            )
+            self.events.append(("update", db, chat_id, session_id, updates))
             self.updates.append(updates)
 
         def load_session(
@@ -74,12 +72,8 @@ class SyncSnapshotIntegrityAdapterTests(unittest.TestCase):
             return {"name": f"card:{character_file}"}
 
         def retain_memory(db, chat_id, session, fields):
-            self.events.append(
-                ("retain", db, chat_id, session, fields)
-            )
-            self.retained.append(
-                (db, chat_id, session, fields)
-            )
+            self.events.append(("retain", db, chat_id, session, fields))
+            self.retained.append((db, chat_id, session, fields))
 
         def log_warning(message, *, exc_info):
             self.warnings.append((message, exc_info))
@@ -429,11 +423,7 @@ class SyncSnapshotIntegrityAdapterTests(unittest.TestCase):
 
 class SyncIntegritySourceBoundaryTests(unittest.TestCase):
     def test_sync_integrity_has_no_runtime_sync_or_ui_imports(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "sync_integrity.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "sync_integrity.py").read_text(encoding="utf-8")
 
         for forbidden in (
             "bridge.runtime",

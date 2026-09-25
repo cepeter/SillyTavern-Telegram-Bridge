@@ -1,5 +1,11 @@
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_memory_service, make_test_persona_service, make_test_group_service, make_test_provider_port
-
+from application_test_setup import (
+    ensure_application_extensions,
+    make_test_application_services,
+    make_test_group_service,
+    make_test_memory_service,
+    make_test_persona_service,
+    make_test_provider_port,
+)
 
 ensure_application_extensions()
 
@@ -7,25 +13,20 @@ import inspect
 import sqlite3
 import tempfile
 import unittest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
-import bridge.config as config
-import bridge.group_core as group_core
 import bridge.commands as _m_commands
-import bridge.groups as _m_groups
+import bridge.config as config
+import bridge.group_core as _m_group_core
+import bridge.group_core as group_core
+import bridge.memory as _m_memory
+import bridge.memory_backend as _m_memory_backend
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
-import bridge.card_content as _m_card_content
-import bridge.generation as _m_generation
-import bridge.group_core as _m_group_core
-import bridge.media as _m_media
-import bridge.memory as _m_memory
-import bridge.memory_backend as _m_memory_backend
-import bridge.rag_core as _m_rag_core
 from bridge import repositories
 
 
@@ -97,9 +98,7 @@ class WriteTransactionTests(unittest.TestCase):
 
         self.assertTrue(self.db.in_transaction)
         self.assertEqual(
-            self.db.execute(
-                "SELECT value FROM values_table ORDER BY rowid"
-            ).fetchall(),
+            self.db.execute("SELECT value FROM values_table ORDER BY rowid").fetchall(),
             [("outer",), ("inner",)],
         )
         self.db.rollback()
@@ -107,9 +106,7 @@ class WriteTransactionTests(unittest.TestCase):
 
 class RepositorySourceInvariantTests(unittest.TestCase):
     def test_repository_module_contains_no_transaction_ownership_calls(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "repositories.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "repositories.py").read_text(encoding="utf-8")
         for forbidden in (
             ".commit(",
             ".rollback(",
@@ -190,23 +187,24 @@ class RepositoryPrimitiveTests(unittest.TestCase):
                 repositories.load_director_goal(self.db, "chat", "session"),
                 "",
             )
-            self.assertIsNone(
-                repositories.load_scene_state_row(self.db, "chat", "session")
-            )
+            self.assertIsNone(repositories.load_scene_state_row(self.db, "chat", "session"))
             self.assertEqual(
                 repositories.load_meta_value(self.db, "missing", "fallback"),
                 "fallback",
             )
-            self.assertIsNone(
-                repositories.load_group_state_row(self.db, "chat", "session")
-            )
+            self.assertIsNone(repositories.load_group_state_row(self.db, "chat", "session"))
         finally:
             self.db.set_trace_callback(None)
 
         self.assertFalse(self.db.in_transaction)
         forbidden = (
-            "INSERT", "UPDATE", "DELETE", "REPLACE",
-            "CREATE", "ALTER", "DROP",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "REPLACE",
+            "CREATE",
+            "ALTER",
+            "DROP",
         )
         self.assertFalse(
             any(sql.lstrip().upper().startswith(forbidden) for sql in traced),
@@ -214,9 +212,7 @@ class RepositoryPrimitiveTests(unittest.TestCase):
         )
 
     def test_repository_write_does_not_commit(self):
-        repositories.store_director_goal(
-            self.db, "chat", "session", "goal", 1.0
-        )
+        repositories.store_director_goal(self.db, "chat", "session", "goal", 1.0)
         self.assertTrue(self.db.in_transaction)
         self.db.rollback()
         self.assertEqual(
@@ -225,14 +221,10 @@ class RepositoryPrimitiveTests(unittest.TestCase):
         )
 
     def test_scene_state_upsert_rejects_stale_candidate(self):
-        repositories.upsert_scene_state_if_fresh(
-            self.db, "chat", "session", '{"v":10}', 10, 1.0
-        )
+        repositories.upsert_scene_state_if_fresh(self.db, "chat", "session", '{"v":10}', 10, 1.0)
         self.db.commit()
 
-        accepted = repositories.upsert_scene_state_if_fresh(
-            self.db, "chat", "session", '{"v":9}', 9, 2.0
-        )
+        accepted = repositories.upsert_scene_state_if_fresh(self.db, "chat", "session", '{"v":9}', 9, 2.0)
         self.assertFalse(accepted)
         row = repositories.load_scene_state_row(self.db, "chat", "session")
         self.assertEqual(row, ('{"v":10}', 10))
@@ -258,7 +250,9 @@ class RepositoryPrimitiveTests(unittest.TestCase):
         self.assertFalse(self.db.in_transaction)
         self.assertFalse(
             any(
-                sql.lstrip().upper().startswith(
+                sql.lstrip()
+                .upper()
+                .startswith(
                     (
                         "INSERT",
                         "UPDATE",
@@ -276,13 +270,11 @@ class RepositoryPrimitiveTests(unittest.TestCase):
 
     def test_count_session_messages_is_read_only(self):
         self.db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
-            "VALUES(?,?,?,?,?)",
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", "session", "user", "one", 1.0),
         )
         self.db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
-            "VALUES(?,?,?,?,?)",
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", "session", "assistant", "two", 2.0),
         )
         self.db.commit()
@@ -304,7 +296,9 @@ class RepositoryPrimitiveTests(unittest.TestCase):
         self.assertFalse(self.db.in_transaction)
         self.assertFalse(
             any(
-                sql.lstrip().upper().startswith(
+                sql.lstrip()
+                .upper()
+                .startswith(
                     (
                         "INSERT",
                         "UPDATE",
@@ -321,24 +315,10 @@ class RepositoryPrimitiveTests(unittest.TestCase):
         )
 
     def test_group_operation_claim_allows_retry_but_rejects_applied(self):
-        self.assertTrue(
-            repositories.try_claim_group_operation(
-                self.db, "op-1", "group_state", 1.0
-            )
-        )
-        self.assertTrue(
-            repositories.try_claim_group_operation(
-                self.db, "op-1", "group_state", 2.0
-            )
-        )
-        repositories.mark_group_operation_applied(
-            self.db, "op-1", "group_state", 3.0
-        )
-        self.assertFalse(
-            repositories.try_claim_group_operation(
-                self.db, "op-1", "group_state", 4.0
-            )
-        )
+        self.assertTrue(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 1.0))
+        self.assertTrue(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 2.0))
+        repositories.mark_group_operation_applied(self.db, "op-1", "group_state", 3.0)
+        self.assertFalse(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 4.0))
 
 
 class GenerationSettingsTransactionTests(unittest.TestCase):
@@ -371,19 +351,13 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
         self.assertEqual(settings, dict(_m_sync_core.GENERATION_DEFAULTS))
         self.assertIsNone(
             self.db.execute(
-                "SELECT 1 FROM generation_settings "
-                "WHERE chat_id=? AND session_id=?",
+                "SELECT 1 FROM generation_settings WHERE chat_id=? AND session_id=?",
                 (chat_id, session_id),
             ).fetchone()
         )
         self.assertFalse(self.db.in_transaction)
         self.assertFalse(
-            any(
-                sql.lstrip().upper().startswith(
-                    ("INSERT", "UPDATE", "DELETE", "REPLACE")
-                )
-                for sql in traced
-            ),
+            any(sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")) for sql in traced),
             traced,
         )
 
@@ -396,8 +370,7 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
         )
         self.assertEqual(updated["temperature"], 0.25)
         row = self.db.execute(
-            "SELECT temperature FROM generation_settings "
-            "WHERE chat_id=? AND session_id=?",
+            "SELECT temperature FROM generation_settings WHERE chat_id=? AND session_id=?",
             ("settings-write", "session"),
         ).fetchone()
         self.assertEqual(row, (0.25,))
@@ -505,24 +478,21 @@ class GroupTransactionTests(unittest.TestCase):
         try:
             self.assertEqual(
                 observer.execute(
-                    "SELECT COUNT(*) FROM messages "
-                    "WHERE chat_id=? AND session_id=?",
+                    "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?",
                     (self.chat_id, self.session_id),
                 ).fetchone()[0],
                 2,
             )
             self.assertEqual(
                 observer.execute(
-                    "SELECT COUNT(*) FROM response_variants "
-                    "WHERE chat_id=? AND session_id=?",
+                    "SELECT COUNT(*) FROM response_variants WHERE chat_id=? AND session_id=?",
                     (self.chat_id, self.session_id),
                 ).fetchone()[0],
                 1,
             )
             self.assertEqual(
                 observer.execute(
-                    "SELECT turn_index FROM group_sessions "
-                    "WHERE chat_id=? AND session_id=?",
+                    "SELECT turn_index FROM group_sessions WHERE chat_id=? AND session_id=?",
                     (self.chat_id, self.session_id),
                 ).fetchone(),
                 (1,),
@@ -546,28 +516,18 @@ class GroupTransactionTests(unittest.TestCase):
         }
         fields = {"name": "One"}
 
-        with patch.object(
-            _m_message_commands, "rag_retrieval_bundle", return_value={}
-        ), patch.object(
-            _m_message_commands, "build_chat_messages", return_value=[]
-        ), patch.object(
-            _m_memory_backend, "recall_memory_context", return_value=""
-        ), patch.object(
-            _m_memory, "session_summary_for_prompt", return_value=""
-        ), patch.object(
-            _m_message_commands, "rag_context_for_prompt", return_value=""
-        ), patch.object(
-            _m_message_commands, "send_typing", return_value=None
-        ), patch.object(
-            _m_message_commands, "rag_citation_footer", return_value=""
-        ), patch.object(
-            _m_message_commands, "render_response_language", return_value="Reply"
-        ), patch.object(
-            _m_memory, "retain_session_memory", return_value=None
-        ), patch.object(
-            _m_message_commands, "queue_user_quote_tts", return_value=None
-        ), patch.object(
-            _m_message_commands, "send_reply", return_value=None
+        with (
+            patch.object(_m_message_commands, "rag_retrieval_bundle", return_value={}),
+            patch.object(_m_message_commands, "build_chat_messages", return_value=[]),
+            patch.object(_m_memory_backend, "recall_memory_context", return_value=""),
+            patch.object(_m_memory, "session_summary_for_prompt", return_value=""),
+            patch.object(_m_message_commands, "rag_context_for_prompt", return_value=""),
+            patch.object(_m_message_commands, "send_typing", return_value=None),
+            patch.object(_m_message_commands, "rag_citation_footer", return_value=""),
+            patch.object(_m_message_commands, "render_response_language", return_value="Reply"),
+            patch.object(_m_memory, "retain_session_memory", return_value=None),
+            patch.object(_m_message_commands, "queue_user_quote_tts", return_value=None),
+            patch.object(_m_message_commands, "send_reply", return_value=None),
         ):
             _m_message_commands.generate_and_store_reply(
                 self.db,
@@ -583,9 +543,11 @@ class GroupTransactionTests(unittest.TestCase):
                 "",
                 None,
                 None,
-             group_service=make_test_group_service(),
-             provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: 'Reply'),
-             memory_service=make_test_memory_service(), persona_service=make_test_persona_service())
+                group_service=make_test_group_service(),
+                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "Reply"),
+                memory_service=make_test_memory_service(),
+                persona_service=make_test_persona_service(),
+            )
 
         self._assert_group_reply_transaction_committed()
 
@@ -599,24 +561,16 @@ class GroupTransactionTests(unittest.TestCase):
             "model_id": "primary::main",
         }
 
-        with patch.object(
-            _m_group_core, "group_current_speaker", return_value=group_turn
-        ), patch.object(
-            _m_commands, "card_fields_from_file", return_value={"name": "One"}
-        ), patch.object(
-            _m_commands, "rag_retrieval_bundle", return_value={}
-        ), patch.object(
-            _m_commands, "build_chat_messages", return_value=[]
-        ), patch.object(
-            _m_commands, "rag_context_for_prompt", return_value=""
-        ), patch.object(
-            _m_commands, "send_typing", return_value=None
-        ), patch.object(
-            _m_commands, "rag_citation_footer", return_value=""
-        ), patch.object(
-            _m_commands, "render_session_response", return_value="Reply"
-        ), patch.object(
-            _m_commands, "send_reply", return_value=None
+        with (
+            patch.object(_m_group_core, "group_current_speaker", return_value=group_turn),
+            patch.object(_m_commands, "card_fields_from_file", return_value={"name": "One"}),
+            patch.object(_m_commands, "rag_retrieval_bundle", return_value={}),
+            patch.object(_m_commands, "build_chat_messages", return_value=[]),
+            patch.object(_m_commands, "rag_context_for_prompt", return_value=""),
+            patch.object(_m_commands, "send_typing", return_value=None),
+            patch.object(_m_commands, "rag_citation_footer", return_value=""),
+            patch.object(_m_commands, "render_session_response", return_value="Reply"),
+            patch.object(_m_commands, "send_reply", return_value=None),
         ):
             _m_commands.process_image_message(
                 self.db,
@@ -627,11 +581,12 @@ class GroupTransactionTests(unittest.TestCase):
                 self.chat_id,
                 "caption",
                 b"image",
-             group_service=make_test_group_service(),
-             provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: 'Reply'),
-             memory_service=make_test_memory_service(),
-             persona_service=make_test_persona_service(),
-             group_director_service=make_test_application_services().group_director)
+                group_service=make_test_group_service(),
+                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "Reply"),
+                memory_service=make_test_memory_service(),
+                persona_service=make_test_persona_service(),
+                group_director_service=make_test_application_services().group_director,
+            )
 
         self._assert_group_reply_transaction_committed()
 

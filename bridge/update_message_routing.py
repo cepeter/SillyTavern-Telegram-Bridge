@@ -1,9 +1,10 @@
 """Telegram edited-message and ordinary-message ingress routing."""
+
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 
 from bridge.common import topic_scope_from_message
 from bridge.composition import BridgeServices, RequestContext
@@ -18,7 +19,6 @@ from bridge.worker_orchestration import (
     process_message_job,
 )
 
-
 LONG_RUNNING_COMMANDS = (
     "/retry",
     "/regen",
@@ -32,10 +32,7 @@ LONG_RUNNING_COMMANDS = (
 
 def is_long_running_command(text: str) -> bool:
     normalized = str(text).strip().casefold()
-    return any(
-        normalized == name or normalized.startswith(name + " ")
-        for name in LONG_RUNNING_COMMANDS
-    )
+    return any(normalized == name or normalized.startswith(name + " ") for name in LONG_RUNNING_COMMANDS)
 
 
 def route_edited_message_update(
@@ -47,28 +44,18 @@ def route_edited_message_update(
 ) -> None:
     token = services.config.bot_token
     model = services.config.default_model
-    edited_sender = str(
-        (edited_message.get("from") or {}).get("id", "")
-    )
-    edited_real_chat_id = str(
-        (edited_message.get("chat") or {}).get("id", "")
-    )
+    edited_sender = str((edited_message.get("from") or {}).get("id", ""))
+    edited_real_chat_id = str((edited_message.get("chat") or {}).get("id", ""))
     edited_chat_id = topic_scope_from_message(
         edited_real_chat_id,
         edited_message,
     )
     edited_text = edited_message.get("text")
 
-    if (
-        edited_sender not in permitted
-        or not edited_chat_id
-        or not edited_text
-    ):
+    if edited_sender not in permitted or not edited_chat_id or not edited_text:
         return
 
-    edited_message_id = int(
-        edited_message.get("message_id") or 0
-    )
+    edited_message_id = int(edited_message.get("message_id") or 0)
     edited_session_id = ensure_session(
         db,
         edited_chat_id,
@@ -184,11 +171,7 @@ def route_message_update(
         services.telegram.send_text(
             token,
             chat_id,
-            (
-                "🎙️ Voice queued for transcription."
-                if queued
-                else "🎙️ Voice saved for processing after restart."
-            ),
+            ("🎙️ Voice queued for transcription." if queued else "🎙️ Voice saved for processing after restart."),
         )
         return True
 
@@ -238,20 +221,13 @@ def route_message_update(
         services.telegram.send_text(
             token,
             chat_id,
-            (
-                "🖼️ Image queued for analysis."
-                if queued
-                else "🖼️ Image saved for processing after restart."
-            ),
+            ("🖼️ Image queued for analysis." if queued else "🖼️ Image saved for processing after restart."),
         )
         return True
 
     if (
         document
-        and Path(
-            str(document.get("file_name") or "")
-        ).suffix.casefold()
-        != ".png"
+        and Path(str(document.get("file_name") or "")).suffix.casefold() != ".png"
         and str(document.get("mime_type") or "").startswith("image/")
     ):
         message_id = int(message.get("message_id"))
@@ -298,11 +274,7 @@ def route_message_update(
         services.telegram.send_text(
             token,
             chat_id,
-            (
-                "🖼️ Image queued for analysis."
-                if queued
-                else "🖼️ Image saved for processing after restart."
-            ),
+            ("🖼️ Image queued for analysis." if queued else "🖼️ Image saved for processing after restart."),
         )
         return True
 
@@ -433,11 +405,7 @@ def route_message_update(
         services.telegram.send_text(
             token,
             chat_id,
-            (
-                "⏳ Command queued."
-                if queued
-                else "⏳ Command saved for execution after restart."
-            ),
+            ("⏳ Command queued." if queued else "⏳ Command saved for execution after restart."),
         )
         return True
 
@@ -516,10 +484,6 @@ def route_message_update(
     services.telegram.send_text(
         token,
         chat_id,
-        (
-            "⏳ Message queued for generation."
-            if queued
-            else "⏳ Message saved for generation after restart."
-        ),
+        ("⏳ Message queued for generation." if queued else "⏳ Message saved for generation after restart."),
     )
     return True

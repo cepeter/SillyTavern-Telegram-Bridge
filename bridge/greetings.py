@@ -1,34 +1,34 @@
 """Character-card opening greeting helpers."""
+
 from __future__ import annotations
+
+import logging
+import random
 
 from bridge.card_content import (
     replace_macros,
 )
-
 from bridge.common import (
     json,
     sqlite3,
     time,
 )
-
 from bridge.config import (
     CARD_FIELD_MAX_CHARS,
 )
-
 from bridge.database import (
     begin_operation,
     operation_was_applied,
     record_operation,
 )
-
 from bridge.panel_utils import (
     PANEL_PAGE_SIZE,
     panel_page,
 )
-
-import logging
-import random
-
+from bridge.telegram import (
+    send_panel_request,
+    send_text,
+)
 
 _GREETING_PREVIEW_MAX_CHARS = 3200
 
@@ -86,39 +86,49 @@ def send_greeting_menu(
     for index, _greeting in page_options:
         label = greeting_choice_label(index)
         mark = "✅ " if index == selected_index else ""
-        rows.append([
-            {
-                "text": mark + label,
-                "callback_data": f"greeting:preview:{index}",
-            }
-        ])
+        rows.append(
+            [
+                {
+                    "text": mark + label,
+                    "callback_data": f"greeting:preview:{index}",
+                }
+            ]
+        )
 
     navigation = []
     if current_page > 0:
-        navigation.append({
-            "text": "⬅️ Previous",
-            "callback_data": f"greeting:page:{current_page - 1}:{selected_index}",
-        })
+        navigation.append(
+            {
+                "text": "⬅️ Previous",
+                "callback_data": f"greeting:page:{current_page - 1}:{selected_index}",
+            }
+        )
     if current_page < total_pages - 1:
-        navigation.append({
-            "text": "Next ➡️",
-            "callback_data": f"greeting:page:{current_page + 1}:{selected_index}",
-        })
+        navigation.append(
+            {
+                "text": "Next ➡️",
+                "callback_data": f"greeting:page:{current_page + 1}:{selected_index}",
+            }
+        )
     if navigation:
         rows.append(navigation)
 
-    rows.append([
-        {
-            "text": "▶️ Start with this greeting",
-            "callback_data": f"greeting:use:{selected_index}",
-        }
-    ])
-    rows.append([
-        {
-            "text": "❌ Cancel",
-            "callback_data": "greeting:cancel",
-        }
-    ])
+    rows.append(
+        [
+            {
+                "text": "▶️ Start with this greeting",
+                "callback_data": f"greeting:use:{selected_index}",
+            }
+        ]
+    )
+    rows.append(
+        [
+            {
+                "text": "❌ Cancel",
+                "callback_data": "greeting:cancel",
+            }
+        ]
+    )
 
     preview = render_greeting(fields, user_name, selected_index)
     if len(preview) > _GREETING_PREVIEW_MAX_CHARS:
@@ -147,26 +157,34 @@ def send_greeting_menu(
     return True
 
 
-def send_character_greeting(db: sqlite3.Connection, token: str, chat_id: str, fields: dict, session_id: str, user_name: str, index: int | None = 0, operation_id=None, operation_kind: str = "greeting") -> bool:
-    if operation_id is not None and (operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, operation_kind)):
+def send_character_greeting(
+    db: sqlite3.Connection,
+    token: str,
+    chat_id: str,
+    fields: dict,
+    session_id: str,
+    user_name: str,
+    index: int | None = 0,
+    operation_id=None,
+    operation_kind: str = "greeting",
+) -> bool:
+    if operation_id is not None and (
+        operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, operation_kind)
+    ):
         return False
     options = greeting_options(fields)
     if not options:
         return False
-    selected_index = random.randrange(len(options)) if index is None else int(index)  # nosec B311 - greeting choice is not security-sensitive
+    selected_index = random.randrange(len(options)) if index is None else int(index)  # noqa: S311 -- character text selection, not a security token
     greeting = render_greeting(fields, user_name, selected_index)
     if not greeting:
         return False
     message_ids = send_text(token, chat_id, greeting)
-    db.execute("INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,created_at) VALUES(?,?,?,?,?,?)", (chat_id, session_id, "assistant", greeting, json.dumps(message_ids), time.time()))
+    db.execute(
+        "INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,created_at) VALUES(?,?,?,?,?,?)",
+        (chat_id, session_id, "assistant", greeting, json.dumps(message_ids), time.time()),
+    )
     if operation_id is not None:
         record_operation(db, operation_id, operation_kind)
     db.commit()
     return True
-
-
-# Explicit late imports replace transitional dependency injection.
-from bridge.telegram import (
-    send_panel_request,
-    send_text,
-)

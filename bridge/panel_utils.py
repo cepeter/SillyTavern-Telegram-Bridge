@@ -13,8 +13,7 @@ def panel_label(value: str, limit: int = 48) -> str:
 def panel_page(items: list, page: int) -> tuple[list, int, int]:
     total_pages = max(
         1,
-        (len(items) + PANEL_PAGE_SIZE - 1)
-        // PANEL_PAGE_SIZE,
+        (len(items) + PANEL_PAGE_SIZE - 1) // PANEL_PAGE_SIZE,
     )
     current_page = min(
         max(int(page), 0),
@@ -22,7 +21,7 @@ def panel_page(items: list, page: int) -> tuple[list, int, int]:
     )
     start = current_page * PANEL_PAGE_SIZE
     return (
-        items[start:start + PANEL_PAGE_SIZE],
+        items[start : start + PANEL_PAGE_SIZE],
         current_page,
         total_pages,
     )

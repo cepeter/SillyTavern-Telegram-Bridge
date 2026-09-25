@@ -1,7 +1,7 @@
-from pathlib import Path
 import sqlite3
 import threading
 import unittest
+from pathlib import Path
 
 from bridge.sync_poll_safety import SyncPollSafetyAdapter
 
@@ -50,20 +50,14 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             )
 
         self.lock_for = lock_for
-        self.sync_now = lambda _db, chat_id, session_id: self.calls.append(
-            (chat_id, session_id)
-        )
+        self.sync_now = lambda _db, chat_id, session_id: self.calls.append((chat_id, session_id))
 
         def disable(db, chat_id, session_id, error):
             persisted = db.execute(
-                "SELECT realtime_failures,last_error "
-                "FROM sync_bindings "
-                "WHERE chat_id=? AND session_id=?",
+                "SELECT realtime_failures,last_error FROM sync_bindings WHERE chat_id=? AND session_id=?",
                 (chat_id, session_id),
             ).fetchone()
-            self.disabled.append(
-                (chat_id, session_id, error, persisted)
-            )
+            self.disabled.append((chat_id, session_id, error, persisted))
             db.execute(
                 "UPDATE sync_bindings "
                 "SET realtime_enabled=0,realtime_next_retry_at=0,"
@@ -76,9 +70,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
         self.disable = disable
 
         def warning(message, *args, **kwargs):
-            self.warnings.append(
-                (message, args, kwargs)
-            )
+            self.warnings.append((message, args, kwargs))
 
         self.adapter = SyncPollSafetyAdapter(
             sync_now=self.sync_now,
@@ -161,9 +153,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
                 f"s{index}",
                 checked_at=float(index),
             )
-            self.lock_for(
-                f"locked-{index}"
-            ).acquire()
+            self.lock_for(f"locked-{index}").acquire()
         self.add_binding(
             "eligible",
             "s3",
@@ -184,9 +174,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             self.adapter.poll(self.db)
         finally:
             for index in range(3):
-                self.lock_for(
-                    f"locked-{index}"
-                ).release()
+                self.lock_for(f"locked-{index}").release()
 
         self.assertEqual(
             self.calls,
@@ -212,9 +200,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             self.adapter.poll(self.db)
         finally:
             for index in range(32):
-                self.lock_for(
-                    f"a{index:02d}"
-                ).release()
+                self.lock_for(f"a{index:02d}").release()
 
         self.assertEqual(
             self.calls,
@@ -260,8 +246,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
                 session_id = f"s-{state}"
                 self.add_binding(chat_id, session_id)
                 self.db.execute(
-                    "INSERT INTO jobs(chat_id,state) "
-                    "VALUES(?,?)",
+                    "INSERT INTO jobs(chat_id,state) VALUES(?,?)",
                     (chat_id, state),
                 )
                 self.db.commit()
@@ -274,20 +259,13 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             "scheduled",
             "running",
         ):
-            lock = self.lock_for(
-                f"chat-{state}"
-            )
-            self.assertTrue(
-                lock.acquire(blocking=False)
-            )
+            lock = self.lock_for(f"chat-{state}")
+            self.assertTrue(lock.acquire(blocking=False))
             lock.release()
 
     def test_done_job_does_not_block_sync(self):
         self.add_binding("chat", "session")
-        self.db.execute(
-            "INSERT INTO jobs(chat_id,state) "
-            "VALUES('chat','done')"
-        )
+        self.db.execute("INSERT INTO jobs(chat_id,state) VALUES('chat','done')")
         self.db.commit()
 
         self.adapter.poll(self.db)
@@ -305,9 +283,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
                         sql,
                         params,
                     )
-                raise sqlite3.OperationalError(
-                    "database is locked"
-                )
+                raise sqlite3.OperationalError("database is locked")
 
         self.add_binding("chat", "session")
         broken = BrokenDb()
@@ -324,13 +300,9 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             self.warnings[0][1],
             ("chat",),
         )
-        self.assertTrue(
-            self.warnings[0][2]["exc_info"]
-        )
+        self.assertTrue(self.warnings[0][2]["exc_info"])
         lock = self.lock_for("chat")
-        self.assertTrue(
-            lock.acquire(blocking=False)
-        )
+        self.assertTrue(lock.acquire(blocking=False))
         lock.release()
 
     def test_success_releases_chat_lock(self):
@@ -339,9 +311,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
         self.adapter.poll(self.db)
 
         lock = self.lock_for("chat")
-        self.assertTrue(
-            lock.acquire(blocking=False)
-        )
+        self.assertTrue(lock.acquire(blocking=False))
         lock.release()
 
     def test_expected_non_transient_error_disables_immediately(self):
@@ -446,9 +416,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
         self.adapter.poll(self.db)
 
         retry_at = self.db.execute(
-            "SELECT realtime_next_retry_at "
-            "FROM sync_bindings "
-            "WHERE chat_id='chat' AND session_id='session'"
+            "SELECT realtime_next_retry_at FROM sync_bindings WHERE chat_id='chat' AND session_id='session'"
         ).fetchone()[0]
         self.assertEqual(
             retry_at,
@@ -515,9 +483,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
         self.adapter.poll(self.db)
 
         stored = self.db.execute(
-            "SELECT last_error "
-            "FROM sync_bindings "
-            "WHERE chat_id='chat' AND session_id='session'"
+            "SELECT last_error FROM sync_bindings WHERE chat_id='chat' AND session_id='session'"
         ).fetchone()[0]
         self.assertEqual(
             stored,
@@ -601,10 +567,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             expected_errors=(ExpectedSyncError, ValueError),
             sync_interval=lambda: self.interval,
             now=lambda: self.now_value,
-            log_warning=lambda message, *args, **kwargs:
-                self.warnings.append(
-                    (message, args, kwargs)
-                ),
+            log_warning=lambda message, *args, **kwargs: self.warnings.append((message, args, kwargs)),
         )
 
         self.adapter.poll(self.db)
@@ -617,9 +580,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
             self.warnings[0][1],
             ("session",),
         )
-        self.assertTrue(
-            self.warnings[0][2]["exc_info"]
-        )
+        self.assertTrue(self.warnings[0][2]["exc_info"])
 
     def test_unexpected_fifth_failure_is_persisted_before_disable(self):
         self.add_binding(
@@ -677,9 +638,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
         self.adapter.poll(self.db)
 
         lock = self.lock_for("chat")
-        self.assertTrue(
-            lock.acquire(blocking=False)
-        )
+        self.assertTrue(lock.acquire(blocking=False))
         lock.release()
 
     def test_error_path_releases_chat_lock(self):
@@ -701,19 +660,13 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
         self.adapter.poll(self.db)
 
         lock = self.lock_for("chat")
-        self.assertTrue(
-            lock.acquire(blocking=False)
-        )
+        self.assertTrue(lock.acquire(blocking=False))
         lock.release()
 
 
 class SyncPollSafetySourceBoundaryTests(unittest.TestCase):
     def test_sync_poll_safety_has_no_runtime_sync_or_ui_imports(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "sync_poll_safety.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "sync_poll_safety.py").read_text(encoding="utf-8")
 
         for forbidden in (
             "bridge.runtime",
@@ -729,11 +682,7 @@ class SyncPollSafetySourceBoundaryTests(unittest.TestCase):
                 )
 
     def test_hardened_query_has_no_sql_limit_32(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "sync_poll_safety.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "sync_poll_safety.py").read_text(encoding="utf-8")
 
         self.assertNotIn("LIMIT 32", source)
         self.assertIn(

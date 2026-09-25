@@ -4,6 +4,7 @@ This helper exists only because both unittest discovery and pytest import test
 modules independently. It performs no patch propagation, module mutation, or
 dependency binding.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -14,10 +15,9 @@ from bridge.delivery_port import DeliveryPort
 from bridge.input_flow_service import InputFlowService
 from bridge.memory_service import MemoryService
 from bridge.model_router import ModelRouter
-from bridge.provider_port import ProviderPort
 from bridge.persona_service import PersonaService
+from bridge.provider_port import ProviderPort
 from bridge.sync_service import SyncService
-
 
 _INITIALIZED = False
 
@@ -48,15 +48,18 @@ def make_test_input_flow_service(
 ) -> InputFlowService:
     if handle_pending_backend is None:
         from bridge.input_flows import handle_pending_input
+
         handle_pending_backend = handle_pending_input
     if start_text_action_backend is None:
         from bridge.input_flows import start_text_action_input
+
         start_text_action_backend = start_text_action_input
     if start_session_name_backend is None or handle_session_name_backend is None:
         from bridge.session_naming import (
             handle_session_name_input,
             start_session_name_input,
         )
+
         if start_session_name_backend is None:
             start_session_name_backend = start_session_name_input
         if handle_session_name_backend is None:
@@ -83,14 +86,8 @@ def make_test_delivery_port(
         send_text=send_text or (lambda *_args, **_kwargs: []),
         send_reply=send_reply or (lambda *_args, **_kwargs: None),
         send_typing=send_typing or (lambda *_args, **_kwargs: None),
-        send_panel_request=(
-            send_panel_request
-            or (lambda *_args, **_kwargs: {})
-        ),
-        delete_outgoing_message_row=(
-            delete_outgoing_message_row
-            or (lambda *_args, **_kwargs: None)
-        ),
+        send_panel_request=(send_panel_request or (lambda *_args, **_kwargs: {})),
+        delete_outgoing_message_row=(delete_outgoing_message_row or (lambda *_args, **_kwargs: None)),
     )
 
 
@@ -99,10 +96,7 @@ def make_test_model_router(*, catalog=None) -> ModelRouter:
 
 
 def make_test_provider_port(*, generate_backend=None) -> ProviderPort:
-    return ProviderPort(
-        generate_backend=generate_backend
-        or (lambda *_args, **_kwargs: "test provider response")
-    )
+    return ProviderPort(generate_backend=generate_backend or (lambda *_args, **_kwargs: "test provider response"))
 
 
 def make_test_memory_service(*, purge_session_memory=None) -> MemoryService:
@@ -113,9 +107,7 @@ def make_test_memory_service(*, purge_session_memory=None) -> MemoryService:
         summary_state=lambda *_args, **_kwargs: ("", 0),
         retain_session=lambda *_args, **_kwargs: None,
         purge_session_memory=(
-            purge_session_memory
-            if purge_session_memory is not None
-            else (lambda *_args, **_kwargs: 0)
+            purge_session_memory if purge_session_memory is not None else (lambda *_args, **_kwargs: 0)
         ),
     )
 
@@ -236,7 +228,7 @@ def make_test_conversation_service():
     """Compose the canonical conversation collaborators explicitly for tests."""
     from bridge.command_routes import handle_command_route
     from bridge.conversation_service import ConversationService
-    from bridge.message_commands import prepare_message, generate_and_store_reply
+    from bridge.message_commands import generate_and_store_reply, prepare_message
 
     return ConversationService(
         prepare_message=prepare_message,

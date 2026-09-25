@@ -1,4 +1,5 @@
 """Canonical Data Bank extraction, indexing, embedding, and retrieval."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,15 +9,15 @@ import json
 import logging
 import math
 import os
-from pathlib import Path
 import re
 import sqlite3
-import subprocess  # nosec B404 - PDF worker uses sys.executable and fixed arguments
+import subprocess
 import sys
 import time
 import urllib.parse
 import urllib.request
 import zipfile
+from pathlib import Path
 
 from defusedxml import ElementTree as ET
 
@@ -54,7 +55,7 @@ from bridge.rag_retrieval import (
 def extract_pdf_data_bank_text(raw: bytes) -> str:
     parser = Path(__file__).with_name("pdf_parser.py")
     try:
-        completed = subprocess.run(  # nosec B603 - sys.executable, fixed parser path, no shell
+        completed = subprocess.run(  # noqa: S603 -- fixed interpreter and parser; document passed on stdin
             [
                 sys.executable,
                 "-I",
@@ -93,7 +94,9 @@ def extract_data_bank_text(filename: str, raw: bytes) -> str:
         try:
             with zipfile.ZipFile(io.BytesIO(raw)) as archive:
                 info = archive.getinfo("word/document.xml")
-                if info.file_size > 50 * 1024 * 1024 or (info.compress_size and info.file_size / info.compress_size > 1000):
+                if info.file_size > 50 * 1024 * 1024 or (
+                    info.compress_size and info.file_size / info.compress_size > 1000
+                ):
                     raise ValueError("DOCX XML member is too large or highly compressed")
                 xml = archive.read(info)
             root = ET.fromstring(xml)
@@ -147,7 +150,13 @@ def embedding_norm(vector: list[float]) -> float:
 
 def _embedding_row(namespace: str, vector: list[float]) -> tuple:
     """Serialize a vector into the (namespace, dimensions, json, signature, norm) column tuple."""
-    return (namespace, len(vector), json.dumps(vector, separators=(",", ":")), embedding_signature(vector), embedding_norm(vector))
+    return (
+        namespace,
+        len(vector),
+        json.dumps(vector, separators=(",", ":")),
+        embedding_signature(vector),
+        embedding_norm(vector),
+    )
 
 
 def rag_embedding_headers() -> dict[str, str]:
@@ -165,7 +174,9 @@ def rag_embedding_headers() -> dict[str, str]:
 
 
 def _post_embedding_request(payload: dict, timeout: float):
-    request = urllib.request.Request(RAG_EMBEDDING_URL, data=json.dumps(payload).encode("utf-8"), headers=rag_embedding_headers(), method="POST")
+    request = urllib.request.Request(  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
+        RAG_EMBEDDING_URL, data=json.dumps(payload).encode("utf-8"), headers=rag_embedding_headers(), method="POST"
+    )
     with strict_urlopen(request, timeout=timeout, allowed_env="SILLYTAVERN_RAG_ALLOWED_HOSTS") as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -229,20 +240,27 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
     vector_cache = {}
     pending_cache_rows = []
     for offset in range(0, len(chunks), 32):
-        batch_keys = cache_keys[offset:offset + 32]
+        batch_keys = cache_keys[offset : offset + 32]
         placeholders = ",".join("?" for _ in batch_keys)
-        for cache_key, vector_json in db.execute(f"SELECT cache_key,vector_json FROM rag_embedding_cache WHERE cache_key IN ({placeholders})", batch_keys).fetchall():  # nosec B608 - placeholders are generated from parameter count
+        for cache_key, vector_json in db.execute(
+            f"SELECT cache_key,vector_json FROM rag_embedding_cache WHERE cache_key IN ({placeholders})",  # noqa: S608 -- SQL structure uses fixed columns/placeholders; all values are bound
+            batch_keys,
+        ).fetchall():
             try:
                 vector_cache[cache_key] = json.loads(vector_json)
             except json.JSONDecodeError:
                 continue
-        missing = [(index, chunks[index]) for index, cache_key in enumerate(cache_keys[offset:offset + 32], start=offset) if cache_key not in vector_cache]
+        missing = [
+            (index, chunks[index])
+            for index, cache_key in enumerate(cache_keys[offset : offset + 32], start=offset)
+            if cache_key not in vector_cache
+        ]
         for batch_start in range(0, len(missing), 32):
-            selected = missing[batch_start:batch_start + 32]
+            selected = missing[batch_start : batch_start + 32]
             # Embedding may involve external model/network work. Do it before
             # opening the short SQLite write transaction below.
             vectors = embed_rag_batch([item[1] for item in selected])
-            for (index, _), vector in zip(selected, vectors):
+            for (index, _), vector in zip(selected, vectors, strict=False):
                 if vector:
                     cache_key = cache_keys[index]
                     vector_cache[cache_key] = vector
@@ -267,8 +285,7 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
             return "duplicate", int(existing[0])
 
         version_row = db.execute(
-            "SELECT COALESCE(MAX(version_number),0) FROM data_bank_documents "
-            "WHERE chat_id=? AND filename=?",
+            "SELECT COALESCE(MAX(version_number),0) FROM data_bank_documents WHERE chat_id=? AND filename=?",
             (chat_id, filename[:255]),
         ).fetchone()
         version_number = int(version_row[0] or 0) + 1
@@ -297,14 +314,22 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
             ),
         )
         for index, content in enumerate(chunks):
-            cursor = db.execute("INSERT INTO data_bank_chunks(chat_id,document_id,chunk_index,content) VALUES(?,?,?,?)", (chat_id, document_id, index, content))
+            cursor = db.execute(
+                "INSERT INTO data_bank_chunks(chat_id,document_id,chunk_index,content) VALUES(?,?,?,?)",
+                (chat_id, document_id, index, content),
+            )
             chunk_id = cursor.lastrowid
-            db.execute("INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)", (content, chat_id, document_id, filename[:255], chunk_id))
+            db.execute(
+                "INSERT INTO data_bank_fts(content,chat_id,document_id,filename,chunk_id) VALUES(?,?,?,?,?)",
+                (content, chat_id, document_id, filename[:255], chunk_id),
+            )
             vector = vector_cache.get(cache_keys[index])
             if vector:
                 db.execute(
-                    "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions,vector_json,vector_signature,vector_norm) "
-                    "VALUES(?,?,?,?,?,?)",
+                    (
+                        "INSERT INTO data_bank_embeddings(chunk_id,embedding_namespace,dimensions"
+                        ",vector_json,vector_signature,vector_norm) VALUES(?,?,?,?,?,?)"
+                    ),
                     (chunk_id, *_embedding_row(namespace, vector)),
                 )
         db.execute(
@@ -317,7 +342,9 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
 
 def cached_rag_embedding(db: sqlite3.Connection, text: str) -> list[float] | None:
     cache_key = rag_embedding_namespace() + ":query:" + hashlib.sha256(text[:6000].encode("utf-8")).hexdigest()
-    row = db.execute("SELECT vector_json,vector_norm FROM rag_embedding_cache WHERE cache_key=?", (cache_key,)).fetchone()
+    row = db.execute(
+        "SELECT vector_json,vector_norm FROM rag_embedding_cache WHERE cache_key=?", (cache_key,)
+    ).fetchone()
     if row:
         try:
             vector = json.loads(row[0])
@@ -327,7 +354,13 @@ def cached_rag_embedding(db: sqlite3.Connection, text: str) -> list[float] | Non
             pass
     vector = embed_rag_text(text)
     if vector:
-        db.execute("INSERT OR REPLACE INTO rag_embedding_cache(cache_key,dimensions,vector_json,vector_norm,created_at) VALUES(?,?,?,?,?)", (cache_key, len(vector), json.dumps(vector, separators=(",", ":")), embedding_norm(vector), time.time()))
+        db.execute(
+            (
+                "INSERT OR REPLACE INTO rag_embedding_cache(cache_key,dimensions,vector_j"
+                "son,vector_norm,created_at) VALUES(?,?,?,?,?)"
+            ),
+            (cache_key, len(vector), json.dumps(vector, separators=(",", ":")), embedding_norm(vector), time.time()),
+        )
         db.commit()
     return vector
 
@@ -366,12 +399,12 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
         )
         if semantic_ids:
             placeholders = ",".join("?" for _ in semantic_ids)
-            vector_rows = db.execute(  # nosec B608 - query text is fixed; values remain bound parameters
-                "SELECT e.chunk_id,c.content,d.filename,c.document_id,e.vector_json,e.vector_norm "
+            vector_rows = db.execute(
+                "SELECT e.chunk_id,c.content,d.filename,c.document_id,e.vector_json,e.vector_norm "  # noqa: S608 -- SQL structure uses fixed columns/placeholders; all values are bound
                 "FROM data_bank_embeddings e "
                 "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
                 "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-                f"WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? AND e.chunk_id IN ({placeholders})",  # nosec B608 - placeholders are generated from parameter count
+                f"WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? AND e.chunk_id IN ({placeholders})",
                 (chat_id, namespace, *semantic_ids),
             ).fetchall()
         else:
@@ -416,11 +449,15 @@ def rag_retrieval_bundle(db: sqlite3.Connection, chat_id: str, query: str, limit
     return {"results": results, "context": context, "sources": sources}
 
 
-def rag_context_for_prompt(db: sqlite3.Connection, chat_id: str, query: str, bundle: dict[str, object] | None = None) -> str:
+def rag_context_for_prompt(
+    db: sqlite3.Connection, chat_id: str, query: str, bundle: dict[str, object] | None = None
+) -> str:
     return str((bundle or rag_retrieval_bundle(db, chat_id, query)).get("context") or "")
 
 
-def rag_citation_footer(db: sqlite3.Connection, chat_id: str, query: str, bundle: dict[str, object] | None = None) -> str:
+def rag_citation_footer(
+    db: sqlite3.Connection, chat_id: str, query: str, bundle: dict[str, object] | None = None
+) -> str:
     sources = list((bundle or rag_retrieval_bundle(db, chat_id, query)).get("sources") or [])
     return "\n\nSources: " + ", ".join(f"[{name}]" for name in sources) if sources else ""
 
@@ -454,21 +491,18 @@ def activate_data_bank_version(
     version_number: int,
 ) -> bool:
     target = db.execute(
-        "SELECT document_id FROM data_bank_documents "
-        "WHERE chat_id=? AND filename=? AND version_number=?",
+        "SELECT document_id FROM data_bank_documents WHERE chat_id=? AND filename=? AND version_number=?",
         (chat_id, filename, int(version_number)),
     ).fetchone()
     if not target:
         return False
     now = time.time()
     db.execute(
-        "UPDATE data_bank_documents SET active=0,updated_at=? "
-        "WHERE chat_id=? AND filename=?",
+        "UPDATE data_bank_documents SET active=0,updated_at=? WHERE chat_id=? AND filename=?",
         (now, chat_id, filename),
     )
     db.execute(
-        "UPDATE data_bank_documents SET active=1,updated_at=? "
-        "WHERE chat_id=? AND document_id=?",
+        "UPDATE data_bank_documents SET active=1,updated_at=? WHERE chat_id=? AND document_id=?",
         (now, chat_id, str(target[0])),
     )
     db.commit()
@@ -476,10 +510,18 @@ def activate_data_bank_version(
 
 
 def delete_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: str) -> int:
-    documents = db.execute("SELECT document_id FROM data_bank_documents WHERE chat_id=? AND filename=?", (chat_id, filename)).fetchall()
+    documents = db.execute(
+        "SELECT document_id FROM data_bank_documents WHERE chat_id=? AND filename=?", (chat_id, filename)
+    ).fetchall()
     for (document_id,) in documents:
         db.execute("DELETE FROM data_bank_fts WHERE chat_id=? AND document_id=?", (chat_id, document_id))
-        db.execute("DELETE FROM data_bank_embeddings WHERE chunk_id IN (SELECT chunk_id FROM data_bank_chunks WHERE chat_id=? AND document_id=?)", (chat_id, document_id))
+        db.execute(
+            (
+                "DELETE FROM data_bank_embeddings WHERE chunk_id IN (SELECT chunk_id FROM "
+                "data_bank_chunks WHERE chat_id=? AND document_id=?)"
+            ),
+            (chat_id, document_id),
+        )
         db.execute("DELETE FROM data_bank_chunks WHERE chat_id=? AND document_id=?", (chat_id, document_id))
         db.execute("DELETE FROM data_bank_documents WHERE chat_id=? AND document_id=?", (chat_id, document_id))
     db.commit()
@@ -488,17 +530,21 @@ def delete_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: s
 
 
 def rag_embedding_coverage(db: sqlite3.Connection, chat_id: str) -> tuple[int, int]:
-    total = int(db.execute(
-        "SELECT COALESCE(SUM(chunk_count),0) FROM data_bank_documents WHERE chat_id=? AND active=1",
-        (chat_id,),
-    ).fetchone()[0])
-    indexed = int(db.execute(
-        "SELECT COUNT(*) FROM data_bank_embeddings e "
-        "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-        "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=?",
-        (chat_id, rag_embedding_namespace()),
-    ).fetchone()[0])
+    total = int(
+        db.execute(
+            "SELECT COALESCE(SUM(chunk_count),0) FROM data_bank_documents WHERE chat_id=? AND active=1",
+            (chat_id,),
+        ).fetchone()[0]
+    )
+    indexed = int(
+        db.execute(
+            "SELECT COUNT(*) FROM data_bank_embeddings e "
+            "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
+            "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
+            "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=?",
+            (chat_id, rag_embedding_namespace()),
+        ).fetchone()[0]
+    )
     return total, indexed
 
 
@@ -512,20 +558,25 @@ def reindex_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: 
     documents = db.execute(query, params).fetchall()
     total = indexed = 0
     for document_id, _name in documents:
-        rows = db.execute("SELECT chunk_id,content FROM data_bank_chunks WHERE chat_id=? AND document_id=? ORDER BY chunk_index", (chat_id, document_id)).fetchall()
+        rows = db.execute(
+            "SELECT chunk_id,content FROM data_bank_chunks WHERE chat_id=? AND document_id=? ORDER BY chunk_index",
+            (chat_id, document_id),
+        ).fetchall()
         missing = []
         for chunk_id, content in rows:
             total += 1
-            exists = db.execute("SELECT 1 FROM data_bank_embeddings WHERE chunk_id=? AND embedding_namespace=?", (chunk_id, namespace)).fetchone()
+            exists = db.execute(
+                "SELECT 1 FROM data_bank_embeddings WHERE chunk_id=? AND embedding_namespace=?", (chunk_id, namespace)
+            ).fetchone()
             if not exists:
                 missing.append((int(chunk_id), str(content)))
         for offset in range(0, len(missing), 32):
-            batch = missing[offset:offset + 32]
+            batch = missing[offset : offset + 32]
             # Keep the potentially slow embedding call outside the write lock.
             vectors = embed_rag_batch([content for _, content in batch])
             rows_to_store = [
                 (chunk_id, *_embedding_row(namespace, vector))
-                for (chunk_id, _content), vector in zip(batch, vectors)
+                for (chunk_id, _content), vector in zip(batch, vectors, strict=False)
                 if vector
             ]
             if rows_to_store:

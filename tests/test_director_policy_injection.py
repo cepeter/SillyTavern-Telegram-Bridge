@@ -4,27 +4,18 @@ import ast
 from dataclasses import fields
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
 
 def top_level_functions(filename: str) -> set[str]:
     tree = ast.parse((BRIDGE / filename).read_text(encoding="utf-8"))
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
 def top_level_classes(filename: str) -> set[str]:
     tree = ast.parse((BRIDGE / filename).read_text(encoding="utf-8"))
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, ast.ClassDef)
-    }
+    return {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
 
 
 def imported_names(filename: str) -> set[str]:
@@ -43,9 +34,7 @@ def imported_names(filename: str) -> set[str]:
 def test_extension_registry_has_no_director_single_provider_slot():
     import bridge.extension_registry as registry
 
-    assert "DirectorCustomization" not in top_level_classes(
-        "extension_registry.py"
-    )
+    assert "DirectorCustomization" not in top_level_classes("extension_registry.py")
     functions = top_level_functions("extension_registry.py")
     assert "register_director_customization_provider" not in functions
     assert "get_director_customization" not in functions
@@ -61,10 +50,7 @@ def test_group_director_service_owns_typed_policy_contract():
     assert hasattr(service_module, "DirectorCustomization")
     assert hasattr(service_module, "DirectorPolicy")
 
-    field_names = {
-        field.name
-        for field in fields(service_module.GroupDirectorService)
-    }
+    field_names = {field.name for field in fields(service_module.GroupDirectorService)}
     assert "director_policy" in field_names
     assert "director_customization" not in field_names
 
@@ -85,9 +71,7 @@ def test_director_goals_exposes_direct_policy_without_registry_slot(monkeypatch)
     from bridge.group_director_service import DirectorCustomization
 
     assert "director_goal_policy" in top_level_functions("director_goals.py")
-    assert "_director_goal_customization" not in top_level_functions(
-        "director_goals.py"
-    )
+    assert "_director_goal_customization" not in top_level_functions("director_goals.py")
 
     source = (BRIDGE / "director_goals.py").read_text(encoding="utf-8")
     assert "register_director_customization_provider" not in source
@@ -137,9 +121,7 @@ def test_main_injects_director_goal_policy_directly():
 
 
 def test_group_director_service_stays_bridge_independent():
-    source = (BRIDGE / "group_director_service.py").read_text(
-        encoding="utf-8"
-    )
+    source = (BRIDGE / "group_director_service.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

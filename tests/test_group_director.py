@@ -2,20 +2,19 @@ from application_test_setup import ensure_application_extensions, make_test_prov
 
 ensure_application_extensions()
 
-from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from pathlib import Path
 
 import bridge.config as config
-import bridge.character_identity as _m_character_identity
-import bridge.groups as _m_groups
 import bridge.group_core as _m_group_core
+import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
-import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 from bridge.group_director_service import DirectorCustomization, GroupDirectorService
+
+
 class GroupDirectorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -45,7 +44,6 @@ class GroupDirectorTests(unittest.TestCase):
                 "turn_users": [],
             },
         )
-
 
     def _service(self, director_policy=None):
         return GroupDirectorService(
@@ -216,9 +214,7 @@ class GroupDirectorTests(unittest.TestCase):
 
         self._generate_text = fake_generate
         try:
-            plan = self._service(
-                lambda _db, _chat_id, _session: customization
-            ).plan(
+            plan = self._service(lambda _db, _chat_id, _session: customization).plan(
                 self.db,
                 "key",
                 "chat|topic:1",
@@ -256,9 +252,7 @@ class GroupDirectorTests(unittest.TestCase):
 
         self._generate_text = fake_generate
         try:
-            plan = self._service(
-                lambda _db, _chat_id, _session: customization
-            ).plan(
+            plan = self._service(lambda _db, _chat_id, _session: customization).plan(
                 self.db,
                 "key",
                 "chat|topic:1",
@@ -296,9 +290,7 @@ class GroupDirectorTests(unittest.TestCase):
                     max_tokens=supplied,
                 )
                 with self.subTest(max_tokens=supplied):
-                    plan = self._service(
-                        lambda _db, _chat_id, _session, value=customization: value
-                    ).plan(
+                    plan = self._service(lambda _db, _chat_id, _session, value=customization: value).plan(
                         self.db,
                         "key",
                         "chat|topic:1",
@@ -394,13 +386,9 @@ class GroupDirectorTests(unittest.TestCase):
         _m_groups.safe_character_path = lambda filename: Path(filename)
         _m_groups.card_fields_from_file = lambda filename: {"name": Path(filename).stem.title()}
 
-        customization = DirectorCustomization(
-            speaker_context="Hidden scene objective: keep the letter unopened."
-        )
+        customization = DirectorCustomization(speaker_context="Hidden scene objective: keep the letter unopened.")
         try:
-            context = self._service(
-                lambda _db, _chat_id, _session: customization
-            ).prompt_context(
+            context = self._service(lambda _db, _chat_id, _session: customization).prompt_context(
                 self.db,
                 "chat|topic:1",
                 self.session,
@@ -414,11 +402,8 @@ class GroupDirectorTests(unittest.TestCase):
         self.assertIn("Invisible director guidance: Keep the pace measured.", context)
         self.assertIn("keep the letter unopened", context)
 
-
     def test_groups_module_no_longer_owns_director_workflow(self):
-        source = (Path(__file__).parents[1] / "bridge" / "groups.py").read_text(
-            encoding="utf-8"
-        )
+        source = (Path(__file__).parents[1] / "bridge" / "groups.py").read_text(encoding="utf-8")
         for forbidden in (
             "GroupDirectorService",
             "_compat_group_director_service",

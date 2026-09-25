@@ -2,17 +2,19 @@ from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import bridge.config as config
-import bridge.rag_core as rag_core
 import bridge.help as _m_help
 import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
+import bridge.rag_core as rag_core
 import bridge.status_panels as _m_status_panels
 import bridge.telegram as _m_telegram
+
+
 class DocumentVersioningTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -32,12 +34,8 @@ class DocumentVersioningTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_same_filename_creates_new_active_version(self):
-        status1, chunks1 = _m_telegram.add_data_bank_document(
-            self.db, "chat", "notes.txt", b"alpha old version"
-        )
-        status2, chunks2 = _m_telegram.add_data_bank_document(
-            self.db, "chat", "notes.txt", b"beta new version"
-        )
+        status1, chunks1 = _m_telegram.add_data_bank_document(self.db, "chat", "notes.txt", b"alpha old version")
+        status2, chunks2 = _m_telegram.add_data_bank_document(self.db, "chat", "notes.txt", b"beta new version")
 
         self.assertEqual(status1, "added")
         self.assertEqual(status2, "versioned")
@@ -62,18 +60,12 @@ class DocumentVersioningTests(unittest.TestCase):
             _m_telegram.add_data_bank_document(self.db, "chat", "renamed.txt", payload)[0],
             "duplicate",
         )
-        count = self.db.execute(
-            "SELECT COUNT(*) FROM data_bank_documents WHERE chat_id='chat'"
-        ).fetchone()[0]
+        count = self.db.execute("SELECT COUNT(*) FROM data_bank_documents WHERE chat_id='chat'").fetchone()[0]
         self.assertEqual(count, 1)
 
     def test_retrieval_uses_only_active_version_and_rollback_is_atomic(self):
-        _m_telegram.add_data_bank_document(
-            self.db, "chat", "story.txt", b"ancient dragon sleeps beneath mountain"
-        )
-        _m_telegram.add_data_bank_document(
-            self.db, "chat", "story.txt", b"modern spaceship waits above city"
-        )
+        _m_telegram.add_data_bank_document(self.db, "chat", "story.txt", b"ancient dragon sleeps beneath mountain")
+        _m_telegram.add_data_bank_document(self.db, "chat", "story.txt", b"modern spaceship waits above city")
 
         current = _m_rag.retrieve_data_bank(self.db, "chat", "spaceship")
         old_hidden = _m_rag.retrieve_data_bank(self.db, "chat", "dragon")
@@ -87,8 +79,7 @@ class DocumentVersioningTests(unittest.TestCase):
         self.assertEqual(new_hidden, [])
 
         active_count = self.db.execute(
-            "SELECT COUNT(*) FROM data_bank_documents "
-            "WHERE chat_id='chat' AND filename='story.txt' AND active=1"
+            "SELECT COUNT(*) FROM data_bank_documents WHERE chat_id='chat' AND filename='story.txt' AND active=1"
         ).fetchone()[0]
         self.assertEqual(active_count, 1)
 

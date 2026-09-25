@@ -1,11 +1,12 @@
 """Ordinary stale-snapshot guard for Hindsight session memory."""
+
 from __future__ import annotations
 
+import logging
+import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-import logging
-import sqlite3
 
 
 @dataclass(frozen=True)
@@ -114,34 +115,22 @@ class HindsightStaleGuard:
             finally:
                 session_db.close()
 
-            if (
-                snapshot_epoch is not None
-                and current_epoch != int(snapshot_epoch)
-            ):
+            if snapshot_epoch is not None and current_epoch != int(snapshot_epoch):
                 logging.info(
-                    "Skipping stale Hindsight retain after "
-                    "session-memory purge for %s/%s",
+                    "Skipping stale Hindsight retain after session-memory purge for %s/%s",
                     chat_id,
                     session_id,
                 )
                 return
-            if (
-                snapshot_hash
-                and current_hash != snapshot_hash
-            ):
+            if snapshot_hash and current_hash != snapshot_hash:
                 logging.info(
-                    "Skipping stale Hindsight retain after "
-                    "transcript change for %s/%s",
+                    "Skipping stale Hindsight retain after transcript change for %s/%s",
                     chat_id,
                     session_id,
                 )
                 return
 
-            payload = (
-                current_conversation
-                if snapshot_hash
-                else conversation
-            )
+            payload = current_conversation if snapshot_hash else conversation
             if not payload:
                 return
 

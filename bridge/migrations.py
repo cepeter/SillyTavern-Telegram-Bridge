@@ -1,10 +1,11 @@
 """Ordered, transactional SQLite schema migrations."""
+
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 import sqlite3
 import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -41,11 +42,7 @@ def _validate_declarations(migrations: Sequence[Migration]) -> None:
     for migration in migrations:
         version = migration.version
         name = str(migration.name or "").strip()
-        if (
-            not isinstance(version, int)
-            or isinstance(version, bool)
-            or version <= 0
-        ):
+        if not isinstance(version, int) or isinstance(version, bool) or version <= 0:
             raise MigrationError(
                 None,
                 "declarations",
@@ -76,9 +73,7 @@ def _validate_declarations(migrations: Sequence[Migration]) -> None:
 def _load_applied(db: sqlite3.Connection) -> list[tuple[int, str]]:
     return [
         (int(version), str(name))
-        for version, name in db.execute(
-            "SELECT version,name FROM schema_migrations ORDER BY version"
-        ).fetchall()
+        for version, name in db.execute("SELECT version,name FROM schema_migrations ORDER BY version").fetchall()
     ]
 
 
@@ -96,24 +91,16 @@ def _validate_history(
                 f"database contains unknown migration version {version:03d}",
             )
 
-    expected_prefix = tuple(
-        (migration.version, migration.name)
-        for migration in migrations[: len(applied)]
-    )
+    expected_prefix = tuple((migration.version, migration.name) for migration in migrations[: len(applied)])
     actual = tuple(applied)
-    if tuple(version for version, _name in actual) != tuple(
-        version for version, _name in expected_prefix
-    ):
+    if tuple(version for version, _name in actual) != tuple(version for version, _name in expected_prefix):
         raise MigrationError(
             None,
             "history",
             "applied migration versions are not a valid prefix of declarations",
         )
 
-    for (version, actual_name), (_expected_version, expected_name) in zip(
-        actual,
-        expected_prefix,
-    ):
+    for (version, actual_name), (_expected_version, expected_name) in zip(actual, expected_prefix, strict=False):
         if actual_name != expected_name:
             raise MigrationError(
                 version,
@@ -147,8 +134,7 @@ def run_migrations(
             db.execute("BEGIN IMMEDIATE")
             migration.apply(db)
             db.execute(
-                "INSERT INTO schema_migrations(version,name,applied_at) "
-                "VALUES(?,?,?)",
+                "INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)",
                 (migration.version, migration.name, time.time()),
             )
             db.commit()

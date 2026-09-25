@@ -1,6 +1,6 @@
 """Pure presentation data for the active-session reset confirmation panel."""
-from __future__ import annotations
 
+from __future__ import annotations
 
 RESET_CONFIRMATION_TEXT = (
     "Reset active session and purge its memory?\n\n"

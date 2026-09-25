@@ -2,13 +2,12 @@ from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
 
-from pathlib import Path
 import sqlite3
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import bridge.sync_api as _m_sync_api
-import bridge.sync_core as _m_sync_core
 from bridge.sync_service import SyncService, SyncStatus
 
 
@@ -37,8 +36,7 @@ class SyncServiceTests(unittest.TestCase):
             sync_now_backend=self._sync_now,
             toggle_realtime_backend=lambda *_args: self.toggle_result,
             poll_backend=lambda db: self.polls.append(db),
-            disable_realtime=lambda _db, chat, session, error:
-                self.disabled.append((chat, session, error)),
+            disable_realtime=lambda _db, chat, session, error: self.disabled.append((chat, session, error)),
             api_configured=lambda: self.api_ready,
             expected_errors=(ExpectedSyncError, ValueError),
         )
@@ -137,14 +135,10 @@ class SyncSourceBoundaryTests(unittest.TestCase):
     def _function_chunk(self, source, marker):
         start = source.index(marker)
         next_def = source.find("\ndef ", start + len(marker))
-        return source[start: next_def if next_def >= 0 else None]
+        return source[start : next_def if next_def >= 0 else None]
 
     def test_sync_callback_does_not_call_raw_execution_backends(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "panel_callback_routes.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "panel_callback_routes.py").read_text(encoding="utf-8")
         chunk = self._function_chunk(
             source,
             "def handle_sync_callback",
@@ -158,9 +152,7 @@ class SyncSourceBoundaryTests(unittest.TestCase):
                 self.assertNotIn(forbidden, chunk)
 
     def test_realtime_worker_does_not_call_raw_poll_backend(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "sync_api.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "sync_api.py").read_text(encoding="utf-8")
         chunk = self._function_chunk(
             source,
             "def _live_sync_worker_loop",
@@ -184,23 +176,24 @@ class SyncSourceBoundaryTests(unittest.TestCase):
                 self.polls += 1
 
         service = FakeSyncService()
-        with patch.object(
-            _m_sync_api._LIVE_SYNC_STOP_EVENT,
-            "wait",
-            side_effect=[False, True],
-        ), patch.object(
-            _m_sync_api,
-            "db_connect",
-            return_value=FakeDb(),
+        with (
+            patch.object(
+                _m_sync_api._LIVE_SYNC_STOP_EVENT,
+                "wait",
+                side_effect=[False, True],
+            ),
+            patch.object(
+                _m_sync_api,
+                "db_connect",
+                return_value=FakeDb(),
+            ),
         ):
             _m_sync_api._live_sync_worker_loop(service)
 
         self.assertEqual(service.polls, 1)
 
     def test_sync_service_has_no_runtime_or_telegram_dependency(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "sync_service.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "sync_service.py").read_text(encoding="utf-8")
         self.assertNotIn("bridge.runtime", source)
         self.assertNotIn("bridge.telegram", source)
         self.assertNotIn("telegram_request", source)

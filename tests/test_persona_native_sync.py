@@ -1,21 +1,26 @@
-from application_test_setup import ensure_application_extensions, make_native_test_persona_service, make_test_request_context
+from application_test_setup import (
+    ensure_application_extensions,
+    make_native_test_persona_service,
+    make_test_request_context,
+)
 
 ensure_application_extensions()
 
 import json
-from pathlib import Path
+import logging
+import sqlite3
 import tempfile
 import unittest
-import sqlite3
+from pathlib import Path
 from unittest.mock import patch
 
-import logging
-import bridge.command_routes as _m_command_routes
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.cards as _m_cards
+import bridge.command_routes as _m_command_routes
 import bridge.persona_sync as _m_persona_sync
 import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.sync_core as _m_sync_core
+
+
 class NativePersonaSyncTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -31,14 +36,23 @@ class NativePersonaSyncTests(unittest.TestCase):
         _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR = root / "backups"
         _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR.mkdir()
         (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / "user-default.png").write_bytes(b"avatar")
-        self.settings = {"power_user": {"personas": {"native.png": "Native"}, "persona_descriptions": {"native.png": {"description": "Native desc", "title": "Keep"}}}, "default_persona": "native.png", "unrelated": {"keep": True}}
+        self.settings = {
+            "power_user": {
+                "personas": {"native.png": "Native"},
+                "persona_descriptions": {"native.png": {"description": "Native desc", "title": "Keep"}},
+            },
+            "default_persona": "native.png",
+            "unrelated": {"keep": True},
+        }
         _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(self.settings), encoding="utf-8")
         _m_persona_sync._NATIVE_PERSONA_CACHE = {}
         _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
         _m_sillytavern_api.live_sync_api_configured = lambda: False
         self.calls = []
         self.old_request = _m_cards.send_panel_request
-        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: self.calls.append((method, payload)) or {}
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: (
+            self.calls.append((method, payload)) or {}
+        )
 
     def tearDown(self):
         _m_cards.send_panel_request = self.old_request
@@ -59,16 +73,18 @@ class NativePersonaSyncTests(unittest.TestCase):
         self.assertEqual(personas["native.png"]["description"], "Native desc")
         self.assertEqual(personas["native.png"]["sillytavern_avatar"], "native.png")
 
-
     def test_loader_failure_returns_empty_and_logs_final_warning(self):
-        with patch.object(
-            _m_persona_sync,
-            "load_native_personas",
-            side_effect=RuntimeError("boom"),
-        ), patch.object(
-            logging,
-            "warning",
-        ) as warning:
+        with (
+            patch.object(
+                _m_persona_sync,
+                "load_native_personas",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch.object(
+                logging,
+                "warning",
+            ) as warning,
+        ):
             result = _m_persona_sync.load_personas()
 
         self.assertEqual(result, {})
@@ -86,16 +102,21 @@ class NativePersonaSyncTests(unittest.TestCase):
             }
         }
 
-        with patch.object(
-            _m_persona_sync, "load_personas",
-            return_value=personas,
-        ), patch.object(
-            _m_persona_sync, "_native_settings",
-            return_value={
-                "power_user": {
-                    "default_persona": "patched.png",
-                }
-            },
+        with (
+            patch.object(
+                _m_persona_sync,
+                "load_personas",
+                return_value=personas,
+            ),
+            patch.object(
+                _m_persona_sync,
+                "_native_settings",
+                return_value={
+                    "power_user": {
+                        "default_persona": "patched.png",
+                    }
+                },
+            ),
         ):
             self.assertEqual(
                 _m_sync_core.get_persona("patched.png"),
@@ -129,9 +150,19 @@ class NativePersonaSyncTests(unittest.TestCase):
     def test_persona_panel_has_no_bridge_import_export_actions(self):
         db = sqlite3.connect(":memory:")
         self.addCleanup(db.close)
-        db.execute("CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value TEXT, chat_id TEXT, expires_at REAL)")
-        _m_command_routes.send_persona_menu("token", "chat", "native.png", persona_service=make_native_test_persona_service(), request_context=make_test_request_context(db))
-        callbacks = {button["callback_data"] for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row}
+        db.execute(
+            "CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value TEXT, chat_id TEXT, expires_at REAL)"
+        )
+        _m_command_routes.send_persona_menu(
+            "token",
+            "chat",
+            "native.png",
+            persona_service=make_native_test_persona_service(),
+            request_context=make_test_request_context(db),
+        )
+        callbacks = {
+            button["callback_data"] for row in self.calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row
+        }
         self.assertNotIn("persona:native_import", callbacks)
         self.assertNotIn("persona:native_export", callbacks)
 

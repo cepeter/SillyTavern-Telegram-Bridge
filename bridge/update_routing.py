@@ -1,4 +1,5 @@
 """Telegram update coordinator and durable completion boundary."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -20,9 +21,7 @@ def complete_update(
 ) -> None:
     def write():
         db.execute(
-            "INSERT OR IGNORE INTO processed_updates("
-            "update_id,processed_at"
-            ") VALUES(?,?)",
+            "INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)",
             (update_id, time.time()),
         )
         set_meta(db, "telegram_offset", str(offset))

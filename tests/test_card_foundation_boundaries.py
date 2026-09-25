@@ -1,13 +1,13 @@
 """Card-foundation import-boundary regression tests."""
 
-from pathlib import Path
+import ast
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 REPO_ROOT = Path(__file__).parents[1]
 
@@ -83,9 +83,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             self.assertEqual(config.CARD_FILE, original_card)
 
     def test_common_no_longer_owns_extracted_context_state(self):
-        source = (
-            REPO_ROOT / "bridge" / "common.py"
-        ).read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "common.py").read_text(encoding="utf-8")
 
         self.assertNotIn(
             "_PANEL_SESSION_CONTEXT = threading.local()",
@@ -106,9 +104,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             self.assertNotIn(f"def {name}(", source)
 
     def test_common_no_longer_defines_extracted_card_config(self):
-        source = (
-            REPO_ROOT / "bridge" / "common.py"
-        ).read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "common.py").read_text(encoding="utf-8")
 
         for prefix in (
             "SILLYTAVERN_DIR = ",
@@ -125,7 +121,6 @@ class CardFoundationBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(prefix=prefix):
                 self.assertNotIn("\n" + prefix, source)
-
 
     def test_panel_utils_imports_without_runtime_or_common(self):
         completed = self._run_python(
@@ -159,23 +154,22 @@ class CardFoundationBoundaryTests(unittest.TestCase):
         )
 
     def test_cards_orchestration_does_not_redefine_content_or_panel_functions(self):
-        source = (
-            REPO_ROOT / "bridge" / "cards.py"
-        ).read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "cards.py").read_text(encoding="utf-8")
 
         for name in (*PANEL_UTIL_EXPORTS, *CARD_CONTENT_EXPORTS):
             with self.subTest(name=name):
                 self.assertNotIn(f"def {name}(", source)
 
     def test_character_identity_imports_character_display_name(self):
-        source = (
-            REPO_ROOT / "bridge" / "character_identity.py"
-        ).read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "character_identity.py").read_text(encoding="utf-8")
 
-        self.assertIn(
-            "from bridge.card_content import character_display_name",
-            source,
-        )
+        imports = {
+            (node.module, alias.name)
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+        }
+        self.assertIn(("bridge.card_content", "character_display_name"), imports)
         self.assertNotIn(
             "def character_display_name(",
             source,
@@ -190,9 +184,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             "DEFAULT_CHARACTER_FILE",
             "Seraphina.png",
         ):
-            fields = card_content.card_fields(
-                {"data": {"name": ""}}
-            )
+            fields = card_content.card_fields({"data": {"name": ""}})
         self.assertEqual(fields["name"], "Seraphina")
 
     def test_character_and_world_paths_follow_canonical_config(self):
@@ -286,7 +278,6 @@ class CardFoundationBoundaryTests(unittest.TestCase):
 
         self.assertRegex(result, r"^\d{2}:\d{2}$")
 
-
     def test_callback_tokens_imports_without_runtime_or_common(self):
         completed = self._run_python(
             "import sys\n"
@@ -306,7 +297,12 @@ class CardFoundationBoundaryTests(unittest.TestCase):
 
         db = sqlite3.connect(":memory:")
         try:
-            db.execute("CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value TEXT, chat_id TEXT, expires_at REAL)")
+            db.execute(
+                (
+                    "CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value "
+                    "TEXT, chat_id TEXT, expires_at REAL)"
+                )
+            )
             first = callback_tokens.dynamic_callback_token("character", "mira.png", "chat", db=db)
             second = callback_tokens.dynamic_callback_token("character", "mira.png", "chat", db=db)
             self.assertRegex(first, r"^t[A-Za-z0-9_-]{22}$")
@@ -320,11 +316,18 @@ class CardFoundationBoundaryTests(unittest.TestCase):
 
         db = sqlite3.connect(":memory:")
         try:
-            db.execute("CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value TEXT, chat_id TEXT, expires_at REAL)")
+            db.execute(
+                (
+                    "CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value "
+                    "TEXT, chat_id TEXT, expires_at REAL)"
+                )
+            )
             token = callback_tokens.dynamic_callback_token("world", "lore.json", "chat-a", db=db)
             self.assertIsNone(callback_tokens.resolve_dynamic_callback_token(token, "world", "chat-b", db=db))
             self.assertIsNotNone(db.execute("SELECT 1 FROM callback_tokens WHERE token=?", (token,)).fetchone())
-            self.assertEqual(callback_tokens.resolve_dynamic_callback_token(token, "world", "chat-a", db=db), "lore.json")
+            self.assertEqual(
+                callback_tokens.resolve_dynamic_callback_token(token, "world", "chat-a", db=db), "lore.json"
+            )
         finally:
             db.close()
 
@@ -334,12 +337,19 @@ class CardFoundationBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "tokens.sqlite3"
             db = sqlite3.connect(path)
-            db.execute("CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value TEXT, chat_id TEXT, expires_at REAL)")
+            db.execute(
+                (
+                    "CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value "
+                    "TEXT, chat_id TEXT, expires_at REAL)"
+                )
+            )
             token = callback_tokens.dynamic_callback_token("persona", "p1", "chat", db=db)
             db.close()
             reopened = sqlite3.connect(path)
             try:
-                self.assertEqual(callback_tokens.resolve_dynamic_callback_token(token, "persona", "chat", db=reopened), "p1")
+                self.assertEqual(
+                    callback_tokens.resolve_dynamic_callback_token(token, "persona", "chat", db=reopened), "p1"
+                )
             finally:
                 reopened.close()
 
@@ -348,7 +358,12 @@ class CardFoundationBoundaryTests(unittest.TestCase):
 
         db = sqlite3.connect(":memory:")
         try:
-            db.execute("CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value TEXT, chat_id TEXT, expires_at REAL)")
+            db.execute(
+                (
+                    "CREATE TABLE callback_tokens(token TEXT PRIMARY KEY, kind TEXT, value "
+                    "TEXT, chat_id TEXT, expires_at REAL)"
+                )
+            )
             db.execute("INSERT INTO callback_tokens VALUES ('expired','world','lore.json','chat',0.0)")
             db.commit()
             statements = []
@@ -360,9 +375,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             db.close()
 
     def test_cards_shell_does_not_define_callback_token_state_or_functions(self):
-        source = (
-            REPO_ROOT / "bridge" / "cards.py"
-        ).read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "cards.py").read_text(encoding="utf-8")
 
         self.assertNotIn("_CALLBACK_TOKEN_VALUES", source)
         self.assertNotIn("_CALLBACK_TOKEN_TTL_SECONDS", source)
@@ -371,7 +384,6 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             "def resolve_dynamic_callback_token(",
             source,
         )
-
 
     def test_callback_tokens_have_no_process_local_cache(self):
         import bridge.callback_tokens as callback_tokens
@@ -387,9 +399,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             "callback_tokens.py",
         ):
             with self.subTest(filename=filename):
-                source = (
-                    REPO_ROOT / "bridge" / filename
-                ).read_text(encoding="utf-8")
+                source = (REPO_ROOT / "bridge" / filename).read_text(encoding="utf-8")
                 self.assertNotIn("import bridge.runtime", source)
                 self.assertNotIn(
                     "from bridge.runtime import",
@@ -402,9 +412,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
                 )
 
     def test_card_content_has_no_database_telegram_or_persona_dependency(self):
-        source = (
-            REPO_ROOT / "bridge" / "card_content.py"
-        ).read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "card_content.py").read_text(encoding="utf-8")
 
         for forbidden in (
             "bridge.database",
@@ -415,9 +423,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
                 self.assertNotIn(forbidden, source)
 
     def test_cards_shell_declares_telegram_and_persona_collaborators_explicitly(self):
-        source = (
-            REPO_ROOT / "bridge" / "cards.py"
-        ).read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "cards.py").read_text(encoding="utf-8")
 
         self.assertIn("from bridge.telegram import send_panel_request", source)
         self.assertIn("from bridge.persona_service import PersonaService", source)
@@ -429,16 +435,13 @@ class CardFoundationBoundaryTests(unittest.TestCase):
         self.assertNotIn("ordinary_dependencies", source)
         self.assertNotIn("_bind_module_dependencies", source)
 
-
     def test_card_foundation_exports_are_canonical_without_facade(self):
-        import bridge.main
         import bridge.callback_tokens as callback_tokens
         import bridge.card_content as card_content
         import bridge.cards as cards
-        import bridge.panel_utils as panel_utils
-        import bridge.callbacks as callbacks
         import bridge.media as media
         import bridge.panel_callback_routes as panel_callback_routes
+        import bridge.panel_utils as panel_utils
         import bridge.session_naming as session_naming
         import bridge.telegram as telegram
 
@@ -463,6 +466,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
         )
         self.assertTrue(callable(cards.send_character_menu))
         self.assertTrue(callable(cards.send_session_menu))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,6 @@ import unittest
 from pathlib import Path
 
 import bridge.message_commands as _m_message_commands
-import bridge.cards as _m_cards
 from bridge.persona_service import PersonaService
 
 
@@ -39,11 +38,7 @@ class PersonaServiceTests(unittest.TestCase):
 
     def _upsert(self, persona_id, name, description):
         self.upserts.append((persona_id, name, description))
-        avatar = (
-            persona_id
-            if persona_id.endswith(".png")
-            else f"bridge-{persona_id}.png"
-        )
+        avatar = persona_id if persona_id.endswith(".png") else f"bridge-{persona_id}.png"
         self.personas[avatar] = {
             "name": name,
             "description": description,
@@ -232,9 +227,7 @@ class PersonaServiceTests(unittest.TestCase):
         )
 
     def test_delete_unused_persona_delegates_to_store(self):
-        self.assertTrue(
-            self.service.delete_if_unused(self.db, "native.png")
-        )
+        self.assertTrue(self.service.delete_if_unused(self.db, "native.png"))
         self.assertEqual(self.deletes, ["native.png"])
 
     def test_delete_refuses_referenced_persona(self):
@@ -278,9 +271,7 @@ class PersonaServiceTests(unittest.TestCase):
         ):
             self.service.delete_if_unused(self.db, "native.png")
         self.references = 0
-        self.assertTrue(
-            self.service.delete_if_unused(self.db, "native.png")
-        )
+        self.assertTrue(self.service.delete_if_unused(self.db, "native.png"))
         self.assertEqual(self.deletes, ["native.png"])
 
     def test_create_preserves_persona_if_select_failure_adopted_it(self):
@@ -337,8 +328,23 @@ class PersonaServiceTests(unittest.TestCase):
             def get(self, persona_id):
                 return {"description": "Injected persona description"}
 
-        session = {"persona_id": "native.png", "system_prompt": "", "author_note": "", "world_file": "", "response_language": "auto"}
-        fields = {"name": "Character", "description": "", "personality": "", "scenario": "", "first_mes": "", "mes_example": "", "system_prompt": "", "post_history_instructions": ""}
+        session = {
+            "persona_id": "native.png",
+            "system_prompt": "",
+            "author_note": "",
+            "world_file": "",
+            "response_language": "auto",
+        }
+        fields = {
+            "name": "Character",
+            "description": "",
+            "personality": "",
+            "scenario": "",
+            "first_mes": "",
+            "mes_example": "",
+            "system_prompt": "",
+            "post_history_instructions": "",
+        }
         messages = _m_message_commands.build_chat_messages(
             session,
             fields,
@@ -355,13 +361,11 @@ class PersonaSourceBoundaryTests(unittest.TestCase):
     def _function_chunk(self, source, marker):
         start = source.index(marker)
         next_def = source.find("\ndef ", start + len(marker))
-        return source[start: next_def if next_def >= 0 else None]
+        return source[start : next_def if next_def >= 0 else None]
 
     def test_migrated_persona_application_paths_do_not_call_raw_lifecycle(self):
         root = Path(__file__).parents[1] / "bridge"
-        input_source = (root / "input_flows.py").read_text(
-            encoding="utf-8"
-        )
+        input_source = (root / "input_flows.py").read_text(encoding="utf-8")
         for forbidden in (
             "upsert_native_persona(",
             "delete_native_persona(",
@@ -377,21 +381,16 @@ class PersonaSourceBoundaryTests(unittest.TestCase):
             self.assertNotIn("update_session(", chunk, marker)
 
     def test_persona_menu_reads_only_through_service_boundary(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "cards.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "cards.py").read_text(encoding="utf-8")
         chunk = self._function_chunk(source, "def send_persona_menu")
         self.assertNotIn("load_personas(", chunk)
         self.assertNotIn("persona_name(", chunk)
 
     def test_generation_prompt_reads_only_through_service_boundary(self):
-        source = (Path(__file__).parents[1] / "bridge" / "generation.py").read_text(
-            encoding="utf-8"
-        )
+        source = (Path(__file__).parents[1] / "bridge" / "generation.py").read_text(encoding="utf-8")
         chunk = self._function_chunk(source, "def build_chat_messages")
         self.assertNotIn("persona_name(", chunk)
         self.assertNotIn("get_persona(", chunk)
-
 
     def test_persona_application_paths_do_not_resolve_compatibility_service(self):
         root = Path(__file__).parents[1] / "bridge"

@@ -25,9 +25,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
         self.connection = sqlite3.connect(":memory:")
 
         def submit_background(name, fn, *args, **kwargs):
-            self.queued.append(
-                (name, fn, args, kwargs)
-            )
+            self.queued.append((name, fn, args, kwargs))
             return object()
 
         self.guard = HindsightStaleGuard(
@@ -38,31 +36,20 @@ class HindsightStaleGuardTests(unittest.TestCase):
             session_exists=lambda _db, _chat_id, _session_id: self.exists,
             read_epoch=lambda _db, _chat_id, _session_id: self.epoch,
             snapshot=lambda _db, _chat_id, _session_id: self.current_snapshot,
-            retain_backend=lambda chat_id, session, name, conversation: (
-                self.retained.append(
-                    (
-                        chat_id,
-                        session["session_id"],
-                        name,
-                        conversation,
-                    )
+            retain_backend=lambda chat_id, session, name, conversation: self.retained.append(
+                (
+                    chat_id,
+                    session["session_id"],
+                    name,
+                    conversation,
                 )
             ),
-            purge_backend=lambda _db, chat_id, session_id: (
-                self.purge_calls.append(
-                    (chat_id, session_id)
-                )
-                or 4
-            ),
+            purge_backend=lambda _db, chat_id, session_id: self.purge_calls.append((chat_id, session_id)) or 4,
             write_successful_purge_state=(
-                lambda _db, chat_id, session_id:
-                self.local_purge_writes.append(
-                    (chat_id, session_id)
-                )
+                lambda _db, chat_id, session_id: self.local_purge_writes.append((chat_id, session_id))
             ),
             run_post_retain_hooks=(
-                lambda _db, chat_id, session, fields, provider_port:
-                self.hooks.append(
+                lambda _db, chat_id, session, fields, provider_port: self.hooks.append(
                     (
                         chat_id,
                         session["session_id"],
@@ -199,12 +186,8 @@ class HindsightStaleGuardTests(unittest.TestCase):
             read_epoch=lambda *_args: 0,
             snapshot=lambda *_args: ("", ""),
             retain_backend=lambda *_args: None,
-            purge_backend=lambda *_args: (
-                order.append("remote") or 7
-            ),
-            write_successful_purge_state=lambda *_args: (
-                order.append("local")
-            ),
+            purge_backend=lambda *_args: order.append("remote") or 7,
+            write_successful_purge_state=lambda *_args: order.append("local"),
             run_post_retain_hooks=lambda *_args: None,
         )
 
@@ -218,9 +201,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
         self.assertEqual(order, ["remote", "local"])
 
     def test_failed_purge_does_not_write_local_state(self):
-        original = RuntimeError(
-            "Hindsight session memory cleanup failed"
-        )
+        original = RuntimeError("Hindsight session memory cleanup failed")
 
         guard = HindsightStaleGuard(
             open_db=lambda: sqlite3.connect(":memory:"),
@@ -231,12 +212,8 @@ class HindsightStaleGuardTests(unittest.TestCase):
             read_epoch=lambda *_args: 0,
             snapshot=lambda *_args: ("", ""),
             retain_backend=lambda *_args: None,
-            purge_backend=lambda *_args: (
-                (_ for _ in ()).throw(original)
-            ),
-            write_successful_purge_state=lambda *_args: (
-                self.local_purge_writes.append("unexpected")
-            ),
+            purge_backend=lambda *_args: (_ for _ in ()).throw(original),
+            write_successful_purge_state=lambda *_args: self.local_purge_writes.append("unexpected"),
             run_post_retain_hooks=lambda *_args: None,
         )
 
@@ -278,9 +255,7 @@ class HindsightStaleGuardTests(unittest.TestCase):
             read_epoch=lambda *_args: 1,
             snapshot=lambda *_args: ("payload", "hash"),
             retain_backend=lambda *_args: enter_backend(),
-            purge_backend=lambda *_args: (
-                enter_backend() or 1
-            ),
+            purge_backend=lambda *_args: enter_backend() or 1,
             write_successful_purge_state=lambda *_args: None,
             run_post_retain_hooks=lambda *_args: None,
         )

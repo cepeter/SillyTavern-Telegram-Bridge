@@ -111,13 +111,12 @@ def test_language_command_uses_injected_delivery_and_update_session():
     assert updates
     assert updates[0][0][1:3] == ("chat", "session")
     assert updates[0][1]["response_language"] == "id"
-    assert sent == [
-        ("token", "chat", "Model response language set to: Bahasa Indonesia.")
-    ]
+    assert sent == [("token", "chat", "Model response language set to: Bahasa Indonesia.")]
 
 
 def test_language_boundary_does_not_change_remember_inline_action(monkeypatch):
     from types import SimpleNamespace
+
     import bridge.command_routes as routes
 
     calls = []

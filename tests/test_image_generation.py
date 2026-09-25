@@ -4,14 +4,15 @@ ensure_application_extensions()
 
 import base64
 import json
+import os
 import tempfile
 import unittest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
-import os
-import bridge.generation as _m_generation
 import bridge.image_generation as _m_image_generation
+
+
 class _Response:
     def __init__(self, payload):
         self.payload = payload
@@ -34,7 +35,11 @@ class ImageGenerationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.catalog = Path(self.temp.name) / "providers.yaml"
         self.catalog.write_text(
-            "providers:\n  test-image:\n    name: Test Image\n    api_endpoint: https://images.example/v1\n    api_key_env: TEST_IMAGE_KEY\n    image_enabled: true\n    image_models: [test-model]\n",
+            (
+                "providers:\n  test-image:\n    name: Test Image\n    api_endpoint: "
+                "https://images.example/v1\n    api_key_env: TEST_IMAGE_KEY\n    "
+                "image_enabled: true\n    image_models: [test-model]\n"
+            ),
             encoding="utf-8",
         )
         self.old_catalog = _m_image_generation.PROVIDER_CONFIG_FILE

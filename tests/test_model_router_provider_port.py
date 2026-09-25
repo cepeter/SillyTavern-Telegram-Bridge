@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import MISSING
 import importlib
 import inspect
+from dataclasses import MISSING
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -27,10 +25,7 @@ def test_model_router_is_pure_and_routes_qualified_unqualified_and_slash_models(
     path = BRIDGE / "model_router.py"
     assert path.is_file(), "ModelRouter module is missing"
     module = importlib.import_module("bridge.model_router")
-    assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("model_router.py")
-    )
+    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("model_router.py"))
     catalog = {
         "alpha": {"models": ["alpha-one", "shared/model"]},
         "beta": {"models": ["beta-one", "model-x"]},
@@ -69,10 +64,7 @@ def test_provider_port_is_pure_and_delegates_exact_call_shape():
     path = BRIDGE / "provider_port.py"
     assert path.is_file(), "ProviderPort module is missing"
     module = importlib.import_module("bridge.provider_port")
-    assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("provider_port.py")
-    )
+    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("provider_port.py"))
     calls = []
 
     def backend(*args, **kwargs):
@@ -94,17 +86,19 @@ def test_provider_port_is_pure_and_delegates_exact_call_shape():
         request_timeout=12.5,
     )
     assert result == "visible"
-    assert calls == [(
-        ("key", "alpha::model", [{"role": "user", "content": "hello"}]),
-        {
-            "session_id": "session",
-            "settings": {"max_tokens": 3},
-            "stream_callback": callback,
-            "cancel_event": cancel,
-            "force_non_stream": True,
-            "request_timeout": 12.5,
-        },
-    )]
+    assert calls == [
+        (
+            ("key", "alpha::model", [{"role": "user", "content": "hello"}]),
+            {
+                "session_id": "session",
+                "settings": {"max_tokens": 3},
+                "stream_callback": callback,
+                "cancel_event": cancel,
+                "force_non_stream": True,
+                "request_timeout": 12.5,
+            },
+        )
+    ]
 
 
 def test_provider_catalog_returns_empty_mapping_on_read_failure(tmp_path):
@@ -141,25 +135,20 @@ def test_provider_transport_is_infrastructure_only():
 
 def test_generation_no_longer_owns_provider_transport_or_router_helpers():
     tree = ast.parse((BRIDGE / "generation.py").read_text(encoding="utf-8"))
-    owned = {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    assert not ({
-        "generate_text",
-        "resolve_provider_model",
-        "anthropic_generate",
-        "opencode_muse_headers",
-        "opencode_muse_generate",
-    } & owned)
+    owned = {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    assert not (
+        {
+            "generate_text",
+            "resolve_provider_model",
+            "anthropic_generate",
+            "opencode_muse_headers",
+            "opencode_muse_generate",
+        }
+        & owned
+    )
 
 
 def test_media_no_longer_owns_provider_spec_lookup():
     tree = ast.parse((BRIDGE / "media.py").read_text(encoding="utf-8"))
-    owned = {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    owned = {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     assert "get_provider_spec" not in owned

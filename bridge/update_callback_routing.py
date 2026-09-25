@@ -1,4 +1,5 @@
 """Telegram callback-query ingress routing."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -23,9 +24,7 @@ def route_callback_update(
     model = services.config.default_model
     sender = str((callback.get("from") or {}).get("id", ""))
     callback_message = callback.get("message") or {}
-    callback_real_chat_id = str(
-        (callback_message.get("chat") or {}).get("id", "")
-    )
+    callback_real_chat_id = str((callback_message.get("chat") or {}).get("id", ""))
     callback_chat_id = topic_scope_from_message(
         callback_real_chat_id,
         callback_message,
@@ -69,9 +68,7 @@ def route_callback_update(
         callback_chat_id,
         model,
     )["session_id"]
-    callback_message_id = int(
-        callback_message.get("message_id") or 0
-    )
+    callback_message_id = int(callback_message.get("message_id") or 0)
     job_id = services.jobs.enqueue(
         db,
         update_id,

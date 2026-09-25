@@ -1,9 +1,10 @@
 """Live Sync application service."""
+
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
-import sqlite3
 from typing import cast
 
 

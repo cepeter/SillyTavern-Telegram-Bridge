@@ -11,9 +11,10 @@ from pathlib import Path
 
 import bridge.config as config
 import bridge.database as database
-import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.sync_api as _m_sync_api
+
+
 class DatabaseOptimizationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -209,9 +210,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         second.set_trace_callback(traced.append)
         try:
             self.assertEqual(
-                second.execute(
-                    "SELECT COUNT(*) FROM schema_migrations"
-                ).fetchone()[0],
+                second.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
                 1,
             )
         finally:
@@ -220,13 +219,10 @@ class DatabaseOptimizationTests(unittest.TestCase):
 
         self.assertFalse(
             any(
-                sql.lstrip().upper().startswith(
-                    ("CREATE TABLE", "CREATE INDEX", "CREATE TRIGGER", "ALTER TABLE")
-                )
+                sql.lstrip().upper().startswith(("CREATE TABLE", "CREATE INDEX", "CREATE TRIGGER", "ALTER TABLE"))
                 for sql in traced
             )
         )
-
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 """Low-level storage adapter for native World Info documents."""
+
 from __future__ import annotations
 
 import json

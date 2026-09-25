@@ -1,8 +1,8 @@
-from dataclasses import replace
 import json
-from pathlib import Path
 import sqlite3
 import unittest
+from dataclasses import replace
+from pathlib import Path
 
 from bridge.job_service import DurableJob, JobService, JobSubmission
 
@@ -39,27 +39,18 @@ class JobServiceTests(unittest.TestCase):
             return 41
 
         def submit_chat(label, chat_id, worker, *args):
-            self.calls.append(
-                ("submit_chat", label, chat_id, worker, args)
-            )
+            self.calls.append(("submit_chat", label, chat_id, worker, args))
             return self.submit_result
 
         self.service = JobService(
             enqueue_backend=enqueue_backend,
-            actor_backend=lambda db, job_id:
-                self.calls.append(("actor", db, job_id)) or "100",
-            schedule_backend=lambda db, job_id:
-                self.calls.append(("scheduled", db, job_id)) or True,
-            start_backend=lambda db, job_id:
-                self.calls.append(("running", db, job_id))
-                or self.start_result,
-            finish_backend=lambda db, job_id, state, error="":
-                self.calls.append(
-                    ("finish", db, job_id, state, error)
-                )
-                or True,
-            recover_backend=lambda db, recover_running=True:
-                list(self.recovery_rows),
+            actor_backend=lambda db, job_id: self.calls.append(("actor", db, job_id)) or "100",
+            schedule_backend=lambda db, job_id: self.calls.append(("scheduled", db, job_id)) or True,
+            start_backend=lambda db, job_id: self.calls.append(("running", db, job_id)) or self.start_result,
+            finish_backend=lambda db, job_id, state, error="": (
+                self.calls.append(("finish", db, job_id, state, error)) or True
+            ),
+            recover_backend=lambda db, recover_running=True: list(self.recovery_rows),
             submit_chat=submit_chat,
         )
 
@@ -91,7 +82,9 @@ class JobServiceTests(unittest.TestCase):
         )
 
     def test_accepted_submit_appends_job_id_and_schedules_once(self):
-        worker = lambda *_args: None
+        def worker(*_args):
+            return None
+
         submission = JobSubmission(
             label="generation",
             chat_id="chat",
@@ -99,9 +92,7 @@ class JobServiceTests(unittest.TestCase):
             args=("services", "fields"),
         )
 
-        self.assertTrue(
-            self.service.submit(self.db, 41, submission)
-        )
+        self.assertTrue(self.service.submit(self.db, 41, submission))
 
         submit = self.calls[0]
         self.assertEqual(
@@ -120,7 +111,9 @@ class JobServiceTests(unittest.TestCase):
 
     def test_submit_can_prepare_worker_without_owning_business_logic(self):
         seen = []
-        worker = lambda *_args: None
+
+        def worker(*_args):
+            return None
 
         def prepare_worker(db, job_id, actual_worker):
             seen.append((db, job_id, actual_worker))
@@ -161,9 +154,7 @@ class JobServiceTests(unittest.TestCase):
             args=(),
         )
 
-        self.assertFalse(
-            self.service.submit(self.db, 41, submission)
-        )
+        self.assertFalse(self.service.submit(self.db, 41, submission))
 
         self.assertEqual(
             [call[0] for call in self.calls],
@@ -206,18 +197,22 @@ class JobServiceTests(unittest.TestCase):
         )
 
     def test_recover_decodes_and_submits_durable_job(self):
-        self.recovery_rows = [(
-            51,
-            "chat",
-            "stored-session",
-            "10",
-            "generation",
-            json.dumps({
-                "text": "hello",
-                "model": "stored::model",
-                "resolve_active": True,
-            }),
-        )]
+        self.recovery_rows = [
+            (
+                51,
+                "chat",
+                "stored-session",
+                "10",
+                "generation",
+                json.dumps(
+                    {
+                        "text": "hello",
+                        "model": "stored::model",
+                        "resolve_active": True,
+                    }
+                ),
+            )
+        ]
         seen = []
 
         def resolver(job):
@@ -237,18 +232,20 @@ class JobServiceTests(unittest.TestCase):
 
         self.assertEqual(
             seen,
-            [DurableJob(
-                job_id=51,
-                chat_id="chat",
-                session_id="stored-session",
-                telegram_message_id=10,
-                kind="generation",
-                payload={
-                    "text": "hello",
-                    "model": "stored::model",
-                    "resolve_active": True,
-                },
-            )],
+            [
+                DurableJob(
+                    job_id=51,
+                    chat_id="chat",
+                    session_id="stored-session",
+                    telegram_message_id=10,
+                    kind="generation",
+                    payload={
+                        "text": "hello",
+                        "model": "stored::model",
+                        "resolve_active": True,
+                    },
+                )
+            ],
         )
         self.assertIn(
             ("scheduled", self.db, 51),
@@ -256,14 +253,16 @@ class JobServiceTests(unittest.TestCase):
         )
 
     def test_recover_unsupported_kind_fails_exactly_once(self):
-        self.recovery_rows = [(
-            52,
-            "chat",
-            "session",
-            "11",
-            "unknown",
-            "{}",
-        )]
+        self.recovery_rows = [
+            (
+                52,
+                "chat",
+                "session",
+                "11",
+                "unknown",
+                "{}",
+            )
+        ]
 
         self.service.recover(
             self.db,
@@ -272,18 +271,16 @@ class JobServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(
+            [call for call in self.calls if call[0] == "finish"],
             [
-                call
-                for call in self.calls
-                if call[0] == "finish"
+                (
+                    "finish",
+                    self.db,
+                    52,
+                    "failed",
+                    "unsupported recovered job kind",
+                )
             ],
-            [(
-                "finish",
-                self.db,
-                52,
-                "failed",
-                "unsupported recovered job kind",
-            )],
         )
 
     def test_recover_bad_payload_fails_and_continues(self):
@@ -304,11 +301,7 @@ class JobServiceTests(unittest.TestCase):
 
         self.service.recover(self.db, resolver)
 
-        failures = [
-            call
-            for call in self.calls
-            if call[0] == "finish"
-        ]
+        failures = [call for call in self.calls if call[0] == "finish"]
         self.assertEqual(failures[0][2:4], (53, "failed"))
         self.assertEqual(seen, [54])
         self.assertIn(("scheduled", self.db, 54), self.calls)
@@ -372,13 +365,7 @@ class JobServiceTests(unittest.TestCase):
             ),
         )
 
-        self.assertFalse(
-            any(
-                call[0] in {"scheduled", "finish"}
-                for call in self.calls
-            )
-        )
-
+        self.assertFalse(any(call[0] in {"scheduled", "finish"} for call in self.calls))
 
     def test_recover_uses_prepare_worker_for_recovered_submission(self):
         prepared = []
@@ -401,7 +388,9 @@ class JobServiceTests(unittest.TestCase):
                 "{}",
             ),
         ]
-        worker = lambda *_args: None
+
+        def worker(*_args):
+            return None
 
         service.recover(
             self.db,
@@ -429,9 +418,7 @@ def function_chunk(source: str, function_name: str) -> str:
 
 class JobServiceSourceBoundaryTests(unittest.TestCase):
     def test_worker_orchestration_backlog_uses_injected_job_service(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "worker_orchestration.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "worker_orchestration.py").read_text(encoding="utf-8")
         chunk = function_chunk(
             source,
             "def make_durable_backlog_dispatcher",
@@ -441,9 +428,7 @@ class JobServiceSourceBoundaryTests(unittest.TestCase):
         self.assertIn("services.jobs.recover(", chunk)
 
     def test_job_service_is_ordinary_import_boundary(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "job_service.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "job_service.py").read_text(encoding="utf-8")
         self.assertNotIn("bridge.runtime", source)
         self.assertNotIn("bridge.main", source)
         self.assertNotIn("process_message_job", source)

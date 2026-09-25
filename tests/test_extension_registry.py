@@ -70,5 +70,6 @@ class ExtensionRegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "command failed"):
                 registry.dispatch_command_routes()
 
+
 if __name__ == "__main__":
     unittest.main()

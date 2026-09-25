@@ -2,19 +2,21 @@ from application_test_setup import ensure_application_extensions, make_test_prov
 
 ensure_application_extensions()
 
-from pathlib import Path
+import json
 import tempfile
+import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import bridge.config as config
-import json
-import time
-import bridge.memory_curator as _m_memory_curator
 import bridge.memory as _m_memory
+import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.sync_core as _m_sync_core
+
+
 class MemoryCuratorTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -39,7 +41,13 @@ class MemoryCuratorTests(unittest.TestCase):
         now = time.time()
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
-            ("chat", self.session["session_id"], "user", "My sister is named Hana and I promised to call her Sunday.", now),
+            (
+                "chat",
+                self.session["session_id"],
+                "user",
+                "My sister is named Hana and I promised to call her Sunday.",
+                now,
+            ),
         )
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
@@ -52,16 +60,14 @@ class MemoryCuratorTests(unittest.TestCase):
             '{"memories":['
             '{"key":"family.sister","text":"Sister is Hana.","kind":"relationship","confidence":0.8},'
             '{"key":"family.sister","text":"The user\'s sister is Hana.","kind":"relationship","confidence":0.9}'
-            ']}'
+            "]}"
         )
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0]["key"], "family.sister")
         self.assertEqual(parsed[0]["confidence"], 0.9)
 
     def test_parser_generates_key_when_model_omits_one(self):
-        parsed = _m_memory_curator.parse_curated_memories(
-            '{"memories":[{"text":"The user has a sister named Hana."}]}'
-        )
+        parsed = _m_memory_curator.parse_curated_memories('{"memories":[{"text":"The user has a sister named Hana."}]}')
         self.assertEqual(len(parsed), 1)
         self.assertRegex(parsed[0]["key"], r"^fact-[0-9a-f]{12}$")
 
@@ -70,6 +76,7 @@ class MemoryCuratorTests(unittest.TestCase):
         seen_models = []
         retained = []
         old_retain = _m_memory_curator._retain_with_client
+
         def fake_generate(_key, model, _messages, **_kwargs):
             self.assertFalse(self.db.in_transaction)
             seen_models.append(model)
@@ -156,23 +163,24 @@ class MemoryCuratorTests(unittest.TestCase):
 
         def fake_generate(_key, _model, _messages, **_kwargs):
             self.assertFalse(self.db.in_transaction)
-            return (
-                '{"memories":[{"kind":"fact","key":"older",'
-                '"text":"Older fact","confidence":1.0}]}'
-            )
+            return '{"memories":[{"kind":"fact","key":"older","text":"Older fact","confidence":1.0}]}'
 
         provider = make_test_provider_port(generate_backend=fake_generate)
-        with patch.object(
-            _m_memory_curator,
-            "_repo_load_meta_value",
-            side_effect=[initial_raw, newer_raw],
-        ), patch.object(
-            _m_memory_curator,
-            "_repo_store_meta_value",
-        ) as store_meta, patch.object(
-            _m_memory_curator,
-            "_retain_with_client",
-        ) as retain:
+        with (
+            patch.object(
+                _m_memory_curator,
+                "_repo_load_meta_value",
+                side_effect=[initial_raw, newer_raw],
+            ),
+            patch.object(
+                _m_memory_curator,
+                "_repo_store_meta_value",
+            ) as store_meta,
+            patch.object(
+                _m_memory_curator,
+                "_retain_with_client",
+            ) as retain,
+        ):
             items = _m_memory_curator.curate_memory_now(
                 self.db,
                 "",
@@ -200,8 +208,7 @@ class MemoryCuratorTests(unittest.TestCase):
         )
         calls = []
         provider = make_test_provider_port(
-            generate_backend=lambda *_args, **_kwargs:
-            calls.append(True) or '{"memories":[]}'
+            generate_backend=lambda *_args, **_kwargs: calls.append(True) or '{"memories":[]}'
         )
         items = _m_memory_curator.curate_memory_now(
             self.db,

@@ -1,10 +1,9 @@
 """Memory and group foundation boundary tests."""
 
-from pathlib import Path
 import subprocess
 import sys
 import unittest
-
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[1]
 
@@ -148,12 +147,8 @@ class FeatureFoundationBoundaryTests(unittest.TestCase):
                 )
 
     def test_network_security_is_canonical_owner(self):
-        transport = (REPO_ROOT / "bridge" / "provider_transport.py").read_text(
-            encoding="utf-8"
-        )
-        generation = (REPO_ROOT / "bridge" / "generation.py").read_text(
-            encoding="utf-8"
-        )
+        transport = (REPO_ROOT / "bridge" / "provider_transport.py").read_text(encoding="utf-8")
+        generation = (REPO_ROOT / "bridge" / "generation.py").read_text(encoding="utf-8")
         self.assertNotIn("def validate_provider_endpoint(", transport)
         self.assertNotIn("def strict_urlopen(", transport)
         self.assertIn("from bridge.network_security import", transport)
@@ -240,7 +235,6 @@ class FeatureFoundationBoundaryTests(unittest.TestCase):
             for name in names:
                 with self.subTest(module=module.__name__, name=name):
                     self.assertTrue(hasattr(module, name))
-
 
     def test_feature_shells_use_ordinary_imports(self):
         for module_name in ("bridge.memory", "bridge.rag", "bridge.groups"):

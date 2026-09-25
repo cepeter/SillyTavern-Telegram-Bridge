@@ -22,21 +22,14 @@ def imported_modules(filename: str) -> set[str]:
 
 def top_level_functions(filename: str) -> set[str]:
     tree = ast.parse((BRIDGE / filename).read_text(encoding="utf-8"))
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
 def test_reset_panel_module_is_pure_and_builds_exact_send_payload():
     path = BRIDGE / "reset_panel.py"
     assert path.is_file()
     module = importlib.import_module("bridge.reset_panel")
-    assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("reset_panel.py")
-    )
+    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("reset_panel.py"))
 
     method, payload = module.reset_confirmation_request("chat")
     assert method == "sendMessage"
@@ -91,9 +84,7 @@ def test_macro_reset_delivers_canonical_panel_with_request_context(monkeypatch):
     monkeypatch.setattr(
         commands,
         "send_panel_request",
-        lambda token, method, payload, **kwargs: (
-            calls.append((token, method, payload, kwargs)) or {}
-        ),
+        lambda token, method, payload, **kwargs: calls.append((token, method, payload, kwargs)) or {},
     )
 
     commands.handle_macro_command(

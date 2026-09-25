@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from bridge.environment import (
     DEFAULT_BRIDGE_HOME,

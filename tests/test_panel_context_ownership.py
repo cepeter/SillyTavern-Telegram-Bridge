@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
 import inspect
-from pathlib import Path
 import tempfile
 import time
 import unittest
+from dataclasses import FrozenInstanceError
+from pathlib import Path
 from unittest.mock import patch
 
 from application_test_setup import (
@@ -15,10 +15,10 @@ from application_test_setup import (
 
 ensure_application_extensions()
 
-import bridge.callbacks as callbacks
 import bridge.callback_dispatch as callback_dispatch
-import bridge.config as config
+import bridge.callbacks as callbacks
 import bridge.composition as composition
+import bridge.config as config
 import bridge.database as database
 import bridge.telegram as telegram
 import bridge.update as update
@@ -29,9 +29,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = database.db_connect(Path(self.tmp.name) / "panel.sqlite3")
         self.db.execute(
-            "INSERT INTO panel_sessions("
-            "chat_id,message_id,session_id,owner_user_id,expires_at"
-            ") VALUES(?,?,?,?,?)",
+            "INSERT INTO panel_sessions(chat_id,message_id,session_id,owner_user_id,expires_at) VALUES(?,?,?,?,?)",
             ("chat", "77", "session-a", "user-a", time.time() + 300),
         )
         self.db.commit()
@@ -42,15 +40,18 @@ class PanelContextOwnershipTests(unittest.TestCase):
 
     def test_close_panel_uses_explicit_database(self):
         callback = {"message": {"message_id": 77}}
-        with patch.object(
-            callbacks,
-            "telegram_request",
-            return_value={},
-        ), patch.object(
-            callbacks,
-            "db_connect",
-            side_effect=AssertionError("hidden database discovery must not run"),
-            create=True,
+        with (
+            patch.object(
+                callbacks,
+                "telegram_request",
+                return_value={},
+            ),
+            patch.object(
+                callbacks,
+                "db_connect",
+                side_effect=AssertionError("hidden database discovery must not run"),
+                create=True,
+            ),
         ):
             callbacks.close_panel_message(
                 self.db,
@@ -60,8 +61,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
             )
 
         row = self.db.execute(
-            "SELECT 1 FROM panel_sessions "
-            "WHERE chat_id=? AND message_id=?",
+            "SELECT 1 FROM panel_sessions WHERE chat_id=? AND message_id=?",
             ("chat", "77"),
         ).fetchone()
         self.assertIsNone(row)
@@ -89,14 +89,17 @@ class PanelContextOwnershipTests(unittest.TestCase):
             },
         }
 
-        with patch.object(
-            update,
-            "answer_callback",
-            return_value=None,
-        ), patch.object(
-            callbacks,
-            "telegram_request",
-            return_value={},
+        with (
+            patch.object(
+                update,
+                "answer_callback",
+                return_value=None,
+            ),
+            patch.object(
+                callbacks,
+                "telegram_request",
+                return_value={},
+            ),
         ):
             callback_dispatch.process_callback(
                 self.db,
@@ -106,8 +109,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
             )
 
         row = self.db.execute(
-            "SELECT 1 FROM panel_sessions "
-            "WHERE chat_id=? AND message_id=?",
+            "SELECT 1 FROM panel_sessions WHERE chat_id=? AND message_id=?",
             ("chat", "77"),
         ).fetchone()
         self.assertIsNone(row)
@@ -147,8 +149,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
             )
 
         row = self.db.execute(
-            "SELECT session_id,owner_user_id FROM panel_sessions "
-            "WHERE chat_id=? AND message_id=?",
+            "SELECT session_id,owner_user_id FROM panel_sessions WHERE chat_id=? AND message_id=?",
             ("chat", "79"),
         ).fetchone()
         self.assertEqual(

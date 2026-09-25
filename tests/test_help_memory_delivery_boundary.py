@@ -146,18 +146,8 @@ def test_command_route_help_detail_forwards_correct_arguments(monkeypatch):
 
 def _route_db() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
-    db.execute(
-        "CREATE TABLE processed_updates("
-        "update_id INTEGER PRIMARY KEY,"
-        "processed_at REAL NOT NULL"
-        ")"
-    )
-    db.execute(
-        "CREATE TABLE meta("
-        "key TEXT PRIMARY KEY,"
-        "value TEXT NOT NULL"
-        ")"
-    )
+    db.execute("CREATE TABLE processed_updates(update_id INTEGER PRIMARY KEY,processed_at REAL NOT NULL)")
+    db.execute("CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
     return db
 
 
@@ -286,9 +276,7 @@ def test_memory_command_requires_text_delivery_and_preserves_message():
         {"session_id": "session"},
         {"name": "Mira"},
         "/memory scope user",
-        send_text_fn=lambda token, chat_id, text: sent.append(
-            (token, chat_id, text)
-        ),
+        send_text_fn=lambda token, chat_id, text: sent.append((token, chat_id, text)),
     )
 
     assert sent == [

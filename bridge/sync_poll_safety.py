@@ -1,14 +1,12 @@
 """Explicit safety policy for realtime Live Sync polling."""
+
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
-import sqlite3
 
-
-_UNEXPECTED_SYNC_ERROR = (
-    "unexpected Live Sync polling failure"
-)
+_UNEXPECTED_SYNC_ERROR = "unexpected Live Sync polling failure"
 
 
 @dataclass(frozen=True)
@@ -38,9 +36,7 @@ class SyncPollSafetyAdapter:
             return None
         try:
             pending = db.execute(
-                "SELECT 1 FROM jobs WHERE chat_id=? "
-                "AND state IN ('queued','scheduled','running') "
-                "LIMIT 1",
+                "SELECT 1 FROM jobs WHERE chat_id=? AND state IN ('queued','scheduled','running') LIMIT 1",
                 (str(chat_id),),
             ).fetchone()
         except Exception:
@@ -59,8 +55,7 @@ class SyncPollSafetyAdapter:
     def _delay(self, count: int) -> float:
         return min(
             60.0,
-            self.sync_interval()
-            * (2 ** min(count, 5)),
+            self.sync_interval() * (2 ** min(count, 5)),
         )
 
     @staticmethod
@@ -71,8 +66,7 @@ class SyncPollSafetyAdapter:
         count: int,
     ) -> None:
         db.execute(
-            "UPDATE sync_bindings SET realtime_failures=? "
-            "WHERE chat_id=? AND session_id=?",
+            "UPDATE sync_bindings SET realtime_failures=? WHERE chat_id=? AND session_id=?",
             (count, chat_id, session_id),
         )
         db.commit()

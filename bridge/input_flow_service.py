@@ -1,4 +1,5 @@
 """Pure application service for pending-input dispatch."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
