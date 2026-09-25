@@ -1,4 +1,4 @@
-"""Pure retrieval helpers for Data Bank semantic search.
+"""Bounded semantic candidate selection and vector math for Data Bank search.
 
 Large corpora use a compact angular signature to shortlist candidates globally.
 Only the shortlisted JSON vectors are decoded for exact cosine scoring.
@@ -9,7 +9,11 @@ from __future__ import annotations
 import heapq
 import math
 import sqlite3
+from typing import Any
 
+from bridge import rag_repository as repository
+
+_numpy: Any
 try:
     import numpy as _numpy
 except ImportError:
@@ -90,15 +94,7 @@ def semantic_candidate_chunk_ids(
     candidate_limit = max(1, min(int(candidate_limit), MAX_SEMANTIC_CANDIDATE_LIMIT))
     neighbor_radius = max(0, min(int(neighbor_radius), 8))
 
-    probe = db.execute(
-        "SELECT e.chunk_id "
-        "FROM data_bank_embeddings e "
-        "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-        "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-        "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=? "
-        "ORDER BY e.chunk_id LIMIT ?",
-        (str(chat_id), str(embedding_namespace), candidate_limit + 1),
-    ).fetchall()
+    probe = repository.candidate_probe(db, chat_id, embedding_namespace, candidate_limit + 1)
     if len(probe) <= candidate_limit:
         return tuple(int(row[0]) for row in probe)
 
@@ -113,26 +109,9 @@ def semantic_candidate_chunk_ids(
 
     lexical = tuple(dict.fromkeys(int(value) for value in lexical_chunk_ids if value is not None))
     if lexical:
-        placeholders = ",".join("?" for _ in lexical)
-        rows = db.execute(
-            "SELECT DISTINCT n.chunk_id, ABS(n.chunk_index-hit.chunk_index) AS distance "  # noqa: S608 -- SQL structure uses fixed columns/placeholders; all values are bound
-            "FROM data_bank_chunks hit "
-            "JOIN data_bank_chunks n "
-            "  ON n.chat_id=hit.chat_id AND n.document_id=hit.document_id "
-            "JOIN data_bank_embeddings e "
-            "  ON e.chunk_id=n.chunk_id AND e.embedding_namespace=? "
-            f"WHERE hit.chat_id=? AND hit.chunk_id IN ({placeholders}) "
-            "  AND n.chunk_index BETWEEN hit.chunk_index-? AND hit.chunk_index+? "
-            "ORDER BY distance, n.chunk_id LIMIT ?",
-            (
-                str(embedding_namespace),
-                str(chat_id),
-                *lexical,
-                neighbor_radius,
-                neighbor_radius,
-                candidate_limit,
-            ),
-        ).fetchall()
+        rows = repository.candidate_neighbors(
+            db, chat_id, embedding_namespace, lexical, neighbor_radius, candidate_limit
+        )
         for chunk_id, _distance in rows:
             add(int(chunk_id))
 
@@ -142,15 +121,8 @@ def semantic_candidate_chunk_ids(
     if query_signature is not None:
         remaining = candidate_limit - len(selected)
         nearest: list[tuple[int, int, int]] = []
-        rows = db.execute(
-            "SELECT e.chunk_id,e.vector_signature "
-            "FROM data_bank_embeddings e "
-            "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
-            "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
-            "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=?",
-            (str(chat_id), str(embedding_namespace)),
-        )
-        for chunk_id, vector_signature in rows:
+        signatures = repository.signature_rows(db, chat_id, embedding_namespace)
+        for chunk_id, vector_signature in signatures:
             chunk_id = int(chunk_id)
             if chunk_id in seen:
                 continue

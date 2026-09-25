@@ -7,7 +7,8 @@ import sqlite3
 from bridge.callback_tokens import dynamic_callback_token
 from bridge.cards import send_panel_message
 from bridge.panel_utils import panel_label, panel_page
-from bridge.rag_core import data_bank_document_versions, data_bank_documents, rag_embedding_coverage, rag_mode
+from bridge.rag_query import rag_embedding_coverage, rag_mode
+from bridge.rag_repository import data_bank_document_versions, data_bank_documents
 
 
 def send_databank_menu(

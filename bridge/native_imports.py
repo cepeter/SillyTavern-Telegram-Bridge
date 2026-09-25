@@ -16,7 +16,9 @@ from bridge.limits import CATALOG_MAX_ITEMS, RAG_MAX_FILE_BYTES, RAG_SUPPORTED_S
 from bridge.memory_service import MemoryService
 from bridge.metadata import get_meta, set_meta
 from bridge.persona_service import PersonaService
-from bridge.rag_core import add_data_bank_document, data_bank_document_versions, rag_mode
+from bridge.rag_query import rag_mode
+from bridge.rag_repository import data_bank_document_versions
+from bridge.rag_service import RagService
 from bridge.session_core import ensure_session
 from bridge.settings import AppSettings
 from bridge.telegram import download_telegram_file, send_text
@@ -203,6 +205,7 @@ def import_telegram_document(
     persona_service: PersonaService,
     group_director_service: GroupDirectorService,
     app_settings: AppSettings,
+    rag_service: RagService,
 ) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
@@ -251,7 +254,7 @@ def import_telegram_document(
         send_text(token, chat_id, "Data Bank file is too large. The limit is 10 MB.")
         return
     raw = download_telegram_file(token, str(document.get("file_id")), RAG_MAX_FILE_BYTES)
-    status, chunks = add_data_bank_document(db, chat_id, filename, raw, app_settings=app_settings)
+    status, chunks = rag_service.add_document(db, chat_id, filename, raw)
     if status == "duplicate":
         send_text(token, chat_id, f"Data Bank already contains {filename} ({chunks} chunks).")
     elif status == "versioned":

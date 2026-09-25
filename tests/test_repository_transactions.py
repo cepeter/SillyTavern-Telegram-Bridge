@@ -5,6 +5,7 @@ from application_test_setup import (
     make_test_memory_service,
     make_test_persona_service,
     make_test_provider_port,
+    make_test_rag_service,
 )
 from settings_test_support import SettingsTestCase
 
@@ -15,6 +16,7 @@ import bridge.meta_repository as _owner_meta_repository
 import bridge.operation_repository as _owner_operation_repository
 import bridge.reference_repository as _owner_reference_repository
 import bridge.scene_repository as _owner_scene_repository
+from bridge.rag_service import RagService
 
 ensure_application_extensions()
 
@@ -526,13 +528,13 @@ class GroupTransactionTests(SettingsTestCase):
         fields = {"name": "One"}
 
         with (
-            patch.object(_m_message_commands, "rag_retrieval_bundle", return_value={}),
+            patch.object(RagService, "bundle", return_value={}),
             patch.object(_m_message_commands, "build_chat_messages", return_value=[]),
             patch.object(_m_memory_backend, "recall_memory_context", return_value=""),
             patch.object(_m_memory, "session_summary_for_prompt", return_value=""),
-            patch.object(_m_message_commands, "rag_context_for_prompt", return_value=""),
+            patch.object(RagService, "context_for_prompt", return_value=""),
             patch.object(_m_message_commands, "send_typing", return_value=None),
-            patch.object(_m_message_commands, "rag_citation_footer", return_value=""),
+            patch.object(RagService, "citation_footer", return_value=""),
             patch.object(_m_message_commands, "render_response_language", return_value="Reply"),
             patch.object(_m_memory, "retain_session_memory", return_value=None),
             patch.object(_m_message_commands, "queue_user_quote_tts", return_value=None),
@@ -557,6 +559,7 @@ class GroupTransactionTests(SettingsTestCase):
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self._assert_group_reply_transaction_committed()
@@ -574,11 +577,11 @@ class GroupTransactionTests(SettingsTestCase):
         with (
             patch.object(_m_group_core, "group_current_speaker", return_value=group_turn),
             patch.object(_owner_image_messages, "card_fields_from_file", return_value={"name": "One"}),
-            patch.object(_owner_image_messages, "rag_retrieval_bundle", return_value={}),
+            patch.object(RagService, "bundle", return_value={}),
             patch.object(_owner_image_messages, "build_chat_messages", return_value=[]),
-            patch.object(_owner_image_messages, "rag_context_for_prompt", return_value=""),
+            patch.object(RagService, "context_for_prompt", return_value=""),
             patch.object(_owner_image_messages, "send_typing", return_value=None),
-            patch.object(_owner_image_messages, "rag_citation_footer", return_value=""),
+            patch.object(RagService, "citation_footer", return_value=""),
             patch.object(_owner_image_messages, "render_session_response", return_value="Reply"),
             patch.object(_owner_image_messages, "send_reply", return_value=None),
         ):
@@ -599,6 +602,7 @@ class GroupTransactionTests(SettingsTestCase):
                     app_settings=self.app_settings_builder.build()
                 ).group_director,
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self._assert_group_reply_transaction_committed()

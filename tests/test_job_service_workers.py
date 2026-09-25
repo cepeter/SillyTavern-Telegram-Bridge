@@ -6,6 +6,7 @@ from application_test_setup import (
     make_test_input_flow_service,
     make_test_model_router,
     make_test_provider_port,
+    make_test_rag_service,
     make_test_session_service,
 )
 from settings_test_support import SettingsTestCase, make_test_settings
@@ -92,6 +93,7 @@ class JobWorkerServiceTests(SettingsTestCase):
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
             session=make_test_session_service(app_settings=config),
+            rag=make_test_rag_service(),
         )
 
     def tearDown(self):

@@ -110,6 +110,8 @@ def test_static_target_manifest_is_expected_service_port_surface():
     policy = load_policy()
 
     assert set(policy.STATIC_TARGETS) == {
+        "bridge/rag_service.py",
+        "bridge/embedding_port.py",
         "bridge/conversation_service.py",
         "bridge/delivery_port.py",
         "bridge/group_director_service.py",
@@ -310,3 +312,49 @@ def test_any_domain_repository_cannot_import_use_cases_or_commit(tmp_path):
     report = policy.check_dependency_direction(bridge, static_targets=())
     assert any("new_repository" in error and "metadata" in error for error in report.errors)
     assert any("new_repository" in error and "commit" in error for error in report.errors)
+
+
+def test_rag_contracts_cannot_import_concrete_transport(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "rag_contracts", "import bridge.telegram\n")
+    write_module(bridge, "telegram", "")
+    report = policy.check_dependency_direction(bridge, static_targets=())
+    assert any("contract" in error.casefold() and "bridge.telegram" in error for error in report.errors)
+
+
+def test_rag_query_cannot_construct_a_concrete_embedding_transport(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "rag_query", "from bridge.embedding_transport import embed_rag_text\n")
+    write_module(bridge, "embedding_transport", "def embed_rag_text(text): return None\n")
+    report = policy.check_dependency_direction(bridge, static_targets=())
+    assert any("rag_query" in error and "embedding_transport" in error for error in report.errors)
+
+
+def test_leaf_workflow_cannot_construct_rag_service(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "message_commands", "from bridge.rag_composition import build_rag_service\n")
+    write_module(bridge, "rag_composition", "def build_rag_service(): pass\n")
+    report = policy.check_dependency_direction(bridge, static_targets=())
+    assert any("message_commands" in error and "rag_composition" in error for error in report.errors)
+
+
+def test_rag_service_and_port_are_governed_typed_boundaries():
+    policy = load_policy()
+    assert {"bridge/rag_service.py", "bridge/embedding_port.py"} <= set(policy.STATIC_TARGETS)
+    assert {
+        "bridge/rag_contracts.py",
+        "bridge/rag_repository.py",
+        "bridge/rag_indexing.py",
+        "bridge/rag_query.py",
+        "bridge/document_extraction.py",
+        "bridge/embedding_transport.py",
+        "bridge/rag_retrieval.py",
+        "bridge/rag_composition.py",
+        "bridge/embedding_values.py",
+    } <= set(policy.TYPE_TARGETS)

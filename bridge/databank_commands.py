@@ -1,41 +1,26 @@
+"""Canonical databank commands owner."""
+
 from __future__ import annotations
 
 import sqlite3
 
 from bridge.limits import MAX_TELEGRAM_LENGTH
 from bridge.metadata import set_meta
-from bridge.rag_core import (
-    activate_data_bank_version,
-    data_bank_document_versions,
-    data_bank_documents,
-    delete_data_bank_documents,
-    rag_mode,
-    reindex_data_bank_documents,
-    retrieve_data_bank,
-)
-from bridge.rag_core import add_data_bank_document as add_data_bank_document
-from bridge.rag_core import cached_rag_embedding as cached_rag_embedding
-from bridge.rag_core import embed_rag_batch as embed_rag_batch
-from bridge.rag_core import embed_rag_text as embed_rag_text
-from bridge.rag_core import embedding_norm as embedding_norm
-from bridge.rag_core import embedding_signature as embedding_signature
-from bridge.rag_core import extract_data_bank_text as extract_data_bank_text
-from bridge.rag_core import extract_pdf_data_bank_text as extract_pdf_data_bank_text
-from bridge.rag_core import rag_citation_footer as rag_citation_footer
-from bridge.rag_core import rag_context_for_prompt as rag_context_for_prompt
-from bridge.rag_core import rag_embedding_coverage as rag_embedding_coverage
-from bridge.rag_core import rag_embedding_headers as rag_embedding_headers
-from bridge.rag_core import rag_embedding_namespace as rag_embedding_namespace
-from bridge.rag_core import rag_retrieval_bundle as rag_retrieval_bundle
-from bridge.rag_core import rag_semantic_candidate_limit as rag_semantic_candidate_limit
-from bridge.rag_core import semantic_candidate_chunk_ids as semantic_candidate_chunk_ids
-from bridge.rag_core import split_data_bank_chunks as split_data_bank_chunks
+from bridge.rag_query import rag_mode
+from bridge.rag_repository import data_bank_document_versions, data_bank_documents
+from bridge.rag_service import RagService
 from bridge.settings import AppSettings
 from bridge.telegram import send_text
 
 
 def handle_data_bank_command(
-    db: sqlite3.Connection, token: str, chat_id: str, command_text: str, *, app_settings: AppSettings
+    db: sqlite3.Connection,
+    token: str,
+    chat_id: str,
+    command_text: str,
+    *,
+    app_settings: AppSettings,
+    rag_service: RagService,
 ) -> None:
     parts = command_text.split(None, 3)
     argument = parts[1].casefold() if len(parts) > 1 else "status"
@@ -58,7 +43,7 @@ def handle_data_bank_command(
         return
     if argument == "reindex":
         filename = parts[2].strip() if len(parts) > 2 else None
-        total, indexed = reindex_data_bank_documents(db, chat_id, filename, app_settings=app_settings)
+        total, indexed = rag_service.reindex(db, chat_id, filename)
         send_text(
             token,
             chat_id,
@@ -88,7 +73,7 @@ def handle_data_bank_command(
         except ValueError:
             send_text(token, chat_id, "Use /databank activate <filename> <version>.")
             return
-        if activate_data_bank_version(db, chat_id, filename, version_number):
+        if rag_service.activate(db, chat_id, filename, version_number):
             send_text(token, chat_id, f"Activated {filename} v{version_number}.")
         else:
             send_text(token, chat_id, f"Version not found: {filename} v{version_number}.")
@@ -105,7 +90,7 @@ def handle_data_bank_command(
                 f"This deletes every Data Bank copy named {filename}. Repeat: /databank remove {filename} confirm",
             )
         else:
-            removed = delete_data_bank_documents(db, chat_id, filename)
+            removed = rag_service.remove(db, chat_id, filename)
             send_text(token, chat_id, f"Removed {removed} Data Bank document(s) named {filename}.")
         return
     if argument == "list":
@@ -115,7 +100,7 @@ def handle_data_bank_command(
         return
     if argument == "search":
         query = parts[2].strip() if len(parts) > 2 else ""
-        results = retrieve_data_bank(db, chat_id, query, app_settings=app_settings)
+        results = rag_service.retrieve(db, chat_id, query)
         text = "\n\n".join(f"[{filename}]\n{content}" for filename, content, _ in results)
         send_text(
             token,

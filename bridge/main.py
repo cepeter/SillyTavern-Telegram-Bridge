@@ -21,6 +21,8 @@ from bridge.config_values import ConfigurationError
 from bridge.conversation_service import ConversationService as _ConversationService
 from bridge.delivery_port import DeliveryPort as _DeliveryPort
 from bridge.director_goals import director_goal_policy
+from bridge.embedding_port import EmbeddingPort
+from bridge.embedding_transport import embed_rag_batch, embed_rag_text
 from bridge.environment import bootstrap_environment
 from bridge.generation_settings import get_generation_settings
 from bridge.group_core import (
@@ -64,6 +66,7 @@ from bridge.persona_sync import (
 from bridge.provider_catalog import load_routing_catalog
 from bridge.provider_port import ProviderPort as _ProviderPort
 from bridge.provider_transport import generate_provider_text
+from bridge.rag_composition import build_rag_service
 from bridge.reference_repository import count_persona_references as _count_persona_references
 from bridge.reference_repository import count_session_messages as _count_session_messages
 from bridge.response_delivery import delete_outgoing_message_row, send_reply
@@ -127,6 +130,11 @@ def _build_startup_services(
 ) -> _BridgeServices:
     durable_worker_guard = _DurableWorkerGuard(_sqlite_store._lightweight_db_connect)
     provider = _ProviderPort(generate_backend=_partial(generate_provider_text, model_router, app_settings=config))
+    embedding = EmbeddingPort(
+        embed_backend=_partial(embed_rag_text, app_settings=config),
+        batch_backend=_partial(embed_rag_batch, app_settings=config),
+    )
+    rag = build_rag_service(app_settings=config, embedding_port=embedding)
     delivery = _DeliveryPort(
         request=telegram_request,
         send_text=send_text,
@@ -263,6 +271,7 @@ def _build_startup_services(
             group_service=group,
             sync_service=sync,
             conversation_service=conversation,
+            rag_service=rag,
         )
 
     conversation = _ConversationService(
@@ -276,6 +285,7 @@ def _build_startup_services(
             group_service=group,
             input_flow_service=input_flow,
             group_director_service=group_director,
+            rag_service=rag,
         ),
         dispatch_command=dispatch,
         generate_reply=_partial(
@@ -285,6 +295,7 @@ def _build_startup_services(
             provider_port=provider,
             memory_service=memory,
             persona_service=persona,
+            rag_service=rag,
         ),
     )
     return _BridgeServices(
@@ -302,6 +313,7 @@ def _build_startup_services(
         input_flow=input_flow,
         model_router=model_router,
         provider=provider,
+        rag=rag,
         memory=memory,
         persona=persona,
         sync=sync,

@@ -9,12 +9,12 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, Generic, TypeVar
 
 T = TypeVar("T")
 
 
-class DatabaseConnectionGate:
+class DatabaseConnectionGate(Generic[T]):
     """Initialize each database path once, then use lightweight handles."""
 
     def __init__(
@@ -49,10 +49,10 @@ class DurableWorkerGuard:
 
     def __init__(
         self,
-        open_requeue_connection,
+        open_requeue_connection: Callable[..., sqlite3.Connection],
         *,
-        sleep=time.sleep,
-        delays=(0.0, 0.25, 1.0),
+        sleep: Callable[[float], object] = time.sleep,
+        delays: tuple[float, ...] = (0.0, 0.25, 1.0),
     ) -> None:
         self._open_requeue_connection = open_requeue_connection
         self._sleep = sleep
@@ -66,7 +66,7 @@ class DurableWorkerGuard:
         return "locked" in text or "busy" in text
 
     @staticmethod
-    def _database_path(db) -> Path | None:
+    def _database_path(db: sqlite3.Connection) -> Path | None:
         try:
             row = db.execute("PRAGMA database_list").fetchone()
         except sqlite3.Error:
@@ -120,11 +120,16 @@ class DurableWorkerGuard:
             job_id,
         )
 
-    def prepare(self, db, job_id: int, worker):
+    def prepare(
+        self,
+        db: sqlite3.Connection,
+        job_id: int,
+        worker: Callable[..., T],
+    ) -> Callable[..., T]:
         database_path = self._database_path(db)
 
         @functools.wraps(worker)
-        def guarded_worker(*worker_args):
+        def guarded_worker(*worker_args: Any) -> T:
             try:
                 return worker(*worker_args)
             except BaseException as exc:

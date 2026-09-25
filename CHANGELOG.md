@@ -4,6 +4,11 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Architecture
+
+- Add an explicitly composed RAG service and embedding port; separate bounded document extraction, embedding transport, indexing/query use cases and SQL-only Data Bank repositories. Retire the old RAG aggregation/re-export modules and extend dependency/type guards across the new boundaries.
+- Preserve caller-owned rollback for Data Bank version activation, removal and query-embedding cache updates; those helpers no longer commit an enclosing transaction.
+
 ### Maintenance
 
 - Separate settings, voice, Data Bank, group, persona, provider, media and generation workflows into canonical owners; retain panel routing and delivery behavior without compatibility re-export modules. Response-variant writes now preserve caller-owned transactions.

@@ -5,6 +5,7 @@ from application_test_setup import (
     make_test_application_services,
     make_test_delivery_port,
     make_test_memory_service,
+    make_test_rag_service,
     make_test_request_context,
 )
 from settings_test_support import SettingsTestCase
@@ -129,6 +130,7 @@ class PanelificationTests(SettingsTestCase):
                 ),
                 app_settings=self.app_settings_builder.build(),
             ).sync,
+            rag_service=make_test_rag_service(),
         )
 
     def test_character_panel_has_inline_delete_actions(self):

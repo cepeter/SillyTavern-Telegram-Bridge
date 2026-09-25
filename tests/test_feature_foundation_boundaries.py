@@ -132,7 +132,13 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
         modules = (
             "bridge.network_security",
             "bridge.memory_backend",
-            "bridge.rag_core",
+            "bridge.document_extraction",
+            "bridge.embedding_values",
+            "bridge.embedding_transport",
+            "bridge.rag_indexing",
+            "bridge.rag_query",
+            "bridge.rag_repository",
+            "bridge.rag_service",
             "bridge.group_core",
         )
         for module in modules:
@@ -196,7 +202,17 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
                 self.assertNotIn(f"async def {name}(", source)
 
     def test_rag_core_has_no_ui_or_shared_runtime_dependency(self):
-        source = (REPO_ROOT / "bridge" / "rag_core.py").read_text(encoding="utf-8")
+        source = "\n".join(
+            (REPO_ROOT / "bridge" / (name + ".py")).read_text(encoding="utf-8")
+            for name in (
+                "document_extraction",
+                "embedding_values",
+                "embedding_transport",
+                "rag_indexing",
+                "rag_query",
+                "rag_repository",
+            )
+        )
         for forbidden in (
             "bridge.runtime",
             "bridge.common",
@@ -207,7 +223,7 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
                 self.assertNotIn(forbidden, source)
 
     def test_rag_shell_does_not_redefine_core_api(self):
-        source = (REPO_ROOT / "bridge" / "rag.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "databank_commands.py").read_text(encoding="utf-8")
         for name in RAG_CORE_EXPORTS:
             with self.subTest(name=name):
                 self.assertNotIn(f"def {name}(", source)
@@ -240,15 +256,46 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
                 self.assertNotIn(f"def {name}(", source)
 
     def test_canonical_foundation_exports_are_directly_available(self):
+        import importlib
+
         import bridge.group_core as group_core
         import bridge.memory_backend as memory_backend
         import bridge.network_security as network_security
-        import bridge.rag_core as rag_core
+        from bridge.rag_service import RagService
 
         for module, names in (
             (network_security, NETWORK_EXPORTS),
             (memory_backend, MEMORY_BACKEND_EXPORTS),
-            (rag_core, RAG_CORE_EXPORTS),
+            (
+                importlib.import_module("bridge.document_extraction"),
+                ("extract_pdf_data_bank_text", "extract_data_bank_text", "split_data_bank_chunks"),
+            ),
+            (importlib.import_module("bridge.embedding_values"), ("rag_embedding_namespace", "embedding_norm")),
+            (
+                importlib.import_module("bridge.embedding_transport"),
+                ("rag_embedding_headers", "embed_rag_text", "embed_rag_batch"),
+            ),
+            (
+                importlib.import_module("bridge.rag_indexing"),
+                (
+                    "add_data_bank_document",
+                    "activate_data_bank_version",
+                    "delete_data_bank_documents",
+                    "reindex_data_bank_documents",
+                ),
+            ),
+            (
+                importlib.import_module("bridge.rag_query"),
+                (
+                    "rag_semantic_candidate_limit",
+                    "cached_rag_embedding",
+                    "retrieve_data_bank",
+                    "rag_mode",
+                    "rag_embedding_coverage",
+                ),
+            ),
+            (importlib.import_module("bridge.rag_repository"), ("data_bank_documents", "data_bank_document_versions")),
+            (RagService, ("bundle", "context_for_prompt", "citation_footer")),
             (group_core, GROUP_CORE_EXPORTS),
         ):
             for name in names:
@@ -256,7 +303,7 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
                     self.assertTrue(hasattr(module, name))
 
     def test_feature_shells_use_ordinary_imports(self):
-        for module_name in ("bridge.memory", "bridge.rag", "bridge.group_commands"):
+        for module_name in ("bridge.memory", "bridge.databank_commands", "bridge.group_commands"):
             with self.subTest(module=module_name):
                 __import__(module_name)
 

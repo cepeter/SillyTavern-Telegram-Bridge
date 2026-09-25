@@ -8,6 +8,7 @@ from application_test_setup import (
     make_test_memory_service,
     make_test_persona_service,
     make_test_provider_port,
+    make_test_rag_service,
     make_test_request_context,
 )
 from settings_test_support import SettingsTestCase
@@ -243,6 +244,7 @@ class GroupTurnGatingTests(SettingsTestCase):
                 persona_service=make_test_application_services(app_settings=self.app_settings_builder.build()).persona,
                 provider_port=make_test_application_services(app_settings=self.app_settings_builder.build()).provider,
                 sync_service=make_test_application_services(app_settings=self.app_settings_builder.build()).sync,
+                rag_service=make_test_rag_service(),
             )
         finally:
             _command_panels.send_text = original_send

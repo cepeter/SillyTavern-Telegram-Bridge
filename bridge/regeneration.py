@@ -12,7 +12,7 @@ from bridge.memory_service import MemoryService
 from bridge.operations import set_operation_phase
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
-from bridge.rag_core import rag_context_for_prompt, rag_retrieval_bundle
+from bridge.rag_service import RagService
 from bridge.response_variants import save_response_variant
 from bridge.settings import AppSettings
 from bridge.sqlite_store import write_transaction
@@ -32,6 +32,7 @@ def regenerate_last(
     memory_service: MemoryService,
     persona_service: PersonaService,
     app_settings: AppSettings,
+    rag_service: RagService,
 ) -> None:
     session_id = session["session_id"]
     recovery = _generation_operation_recovery(delivery_port)
@@ -102,7 +103,7 @@ def regenerate_last(
 
     user_text = rows[last_user_index][2]
     history_rows = [(row[1], row[2]) for row in rows[:last_user_index]]
-    rag_bundle = rag_retrieval_bundle(db, chat_id, user_text, app_settings=app_settings)
+    rag_bundle = rag_service.bundle(db, chat_id, user_text)
     memory_prompt = memory_service.prompt_context(
         db,
         chat_id,
@@ -118,7 +119,7 @@ def regenerate_last(
         memory_context=memory_prompt.recall,
         session_summary=memory_prompt.summary,
         persona_service=persona_service,
-        rag_context=rag_context_for_prompt(db, chat_id, user_text, rag_bundle, app_settings=app_settings),
+        rag_context=rag_service.context_for_prompt(db, chat_id, user_text, rag_bundle),
         app_settings=app_settings,
     )
     reply = _generation_generate_rendered_reply(
@@ -133,6 +134,7 @@ def regenerate_last(
         provider_port=provider_port,
         delivery_port=delivery_port,
         app_settings=app_settings,
+        rag_service=rag_service,
     )
     last_user_rowid = int(rows[last_user_index][0])
     old_message_ids = recovery.outgoing_ids_after(

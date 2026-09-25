@@ -8,7 +8,8 @@ from bridge.group_service import GroupService
 from bridge.memory import get_session_summary
 from bridge.memory_backend import memory_mode, memory_scope
 from bridge.prompt_diagnostics import prompt_diagnostics
-from bridge.rag_core import data_bank_documents, rag_mode
+from bridge.rag_query import rag_mode
+from bridge.rag_repository import data_bank_documents
 from bridge.settings import AppSettings
 
 

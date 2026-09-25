@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from application_test_setup import make_test_delivery_port
+from application_test_setup import make_test_delivery_port, make_test_rag_service
 
 import bridge.command_panels as _command_panels
 
@@ -153,6 +153,7 @@ def test_language_boundary_does_not_change_remember_inline_action(monkeypatch):
         persona_service=services.persona,
         provider_port=services.provider,
         sync_service=services.sync,
+        rag_service=make_test_rag_service(),
     )
 
     assert handled is True

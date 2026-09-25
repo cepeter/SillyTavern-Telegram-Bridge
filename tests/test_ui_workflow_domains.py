@@ -8,7 +8,7 @@ import inspect
 from pathlib import Path
 
 import pytest
-from application_test_setup import make_test_request_context
+from application_test_setup import make_test_rag_service, make_test_request_context
 
 import bridge.enum_callbacks as _owner_enum_callbacks
 from bridge.metadata import get_meta
@@ -92,6 +92,7 @@ def test_enum_feature_toggle_retains_scope_and_refreshes_its_own_panel(tmp_path,
             {"message_id": 17},
             input_flow_service=object(),
             request_context=context,
+            rag_service=make_test_rag_service(),
         )
         assert get_meta(db, key) == value
         assert get_meta(db, key.replace(":chat", ":other")) == ""

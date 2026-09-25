@@ -187,6 +187,7 @@ def process_image_job(
                 persona_service=services.persona,
                 group_director_service=services.group_director,
                 app_settings=services.config,
+                rag_service=services.rag,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)
@@ -293,6 +294,7 @@ def process_edit_job(
                 memory_service=services.memory,
                 persona_service=services.persona,
                 app_settings=services.config,
+                rag_service=services.rag,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)

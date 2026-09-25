@@ -6,7 +6,12 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
-from application_test_setup import make_test_delivery_port, make_test_request_context, make_test_session_service
+from application_test_setup import (
+    make_test_delivery_port,
+    make_test_rag_service,
+    make_test_request_context,
+    make_test_session_service,
+)
 
 import bridge.command_panels as _command_panels
 import bridge.text_action_input as _owner_text_action_input
@@ -390,6 +395,7 @@ def test_command_routes_memory_search_forwards_delivery_send_text(monkeypatch):
             provider=object(),
             delivery=SimpleNamespace(send_text=send_text_fn),
         ).sync,
+        rag_service=make_test_rag_service(),
     )
 
     assert handled is True
@@ -423,6 +429,7 @@ def test_pending_memory_search_forwards_existing_send_text(monkeypatch):
         memory_service=object(),
         persona_service=object(),
         request_context=make_test_request_context(),
+        rag_service=make_test_rag_service(),
     )
 
     assert result is True

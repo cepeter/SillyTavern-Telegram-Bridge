@@ -15,7 +15,7 @@ from bridge.operation_recovery import OperationRecovery as _OperationRecovery
 from bridge.operations import begin_operation, operation_phase, record_operation, set_operation_phase
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
-from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
+from bridge.rag_service import RagService
 from bridge.response_delivery import delete_outgoing_message_row, send_reply
 from bridge.response_variants import save_response_variant
 from bridge.session_core import load_session
@@ -81,6 +81,7 @@ def regenerate_edited_turn(
     memory_service: MemoryService,
     persona_service: PersonaService,
     app_settings: AppSettings,
+    rag_service: RagService,
 ) -> None:
     session_id = session["session_id"]
 
@@ -147,7 +148,7 @@ def regenerate_edited_turn(
         new_text,
         edited_user_rowid=int(user_rowid),
     )
-    rag_bundle = rag_retrieval_bundle(db, chat_id, new_text, app_settings=app_settings)
+    rag_bundle = rag_service.bundle(db, chat_id, new_text)
     messages = build_chat_messages(
         session,
         fields,
@@ -156,7 +157,7 @@ def regenerate_edited_turn(
         memory_context=memory_prompt.recall,
         session_summary=memory_prompt.summary,
         persona_service=persona_service,
-        rag_context=rag_context_for_prompt(db, chat_id, new_text, rag_bundle, app_settings=app_settings),
+        rag_context=rag_service.context_for_prompt(db, chat_id, new_text, rag_bundle),
         app_settings=app_settings,
     )
     send_typing(token, chat_id)
@@ -172,7 +173,7 @@ def regenerate_edited_turn(
         session_id=f"telegram:{chat_id}:{session_id}",
         settings=generation_settings,
     )
-    reply += rag_citation_footer(db, chat_id, new_text, rag_bundle, app_settings=app_settings)
+    reply += rag_service.citation_footer(db, chat_id, new_text, rag_bundle)
     reply = render_session_response(
         api_key,
         session,
@@ -274,6 +275,7 @@ def edit_last_user(
     memory_service: MemoryService,
     persona_service: PersonaService,
     app_settings: AppSettings,
+    rag_service: RagService,
 ) -> None:
     session_id = session["session_id"]
     rows = db.execute(
@@ -298,6 +300,7 @@ def edit_last_user(
         memory_service=memory_service,
         persona_service=persona_service,
         app_settings=app_settings,
+        rag_service=rag_service,
     )
 
 
@@ -315,6 +318,7 @@ def edit_telegram_user_message(
     memory_service: MemoryService,
     persona_service: PersonaService,
     app_settings: AppSettings,
+    rag_service: RagService,
 ) -> None:
     row = native_edit_target(db, chat_id, message_id)
     if row is None or row[2] != "user":
@@ -339,4 +343,5 @@ def edit_telegram_user_message(
         memory_service=memory_service,
         persona_service=persona_service,
         app_settings=app_settings,
+        rag_service=rag_service,
     )

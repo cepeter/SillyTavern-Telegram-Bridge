@@ -31,7 +31,7 @@ from bridge.operations import (
 from bridge.performance import timed_call
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
-from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
+from bridge.rag_service import RagService
 from bridge.regeneration import regenerate_last
 from bridge.request_types import PreparedMessage, RequestContext
 from bridge.reset_panel import reset_confirmation_request
@@ -117,6 +117,7 @@ def generate_and_store_reply(
     memory_service: MemoryService,
     persona_service: PersonaService,
     app_settings: AppSettings,
+    rag_service: RagService,
 ) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
     history_rows = timed_call(
@@ -132,7 +133,7 @@ def generate_and_store_reply(
     history_rows = list(reversed(history_rows))
     rag_bundle = timed_call(
         "rag_retrieval",
-        _partial(rag_retrieval_bundle, app_settings=app_settings),
+        rag_service.bundle,
         db,
         chat_id,
         text,
@@ -156,7 +157,7 @@ def generate_and_store_reply(
         history_rows,
         memory_context=memory_context,
         session_summary=session_summary,
-        rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle, app_settings=app_settings),
+        rag_context=rag_service.context_for_prompt(db, chat_id, text, rag_bundle),
         group_context=group_context,
         persona_service=persona_service,
         app_settings=app_settings,
@@ -195,7 +196,7 @@ def generate_and_store_reply(
         stream_callback=stream_update if stream_message_id else None,
         app_settings=app_settings,
     )
-    reply += rag_citation_footer(db, chat_id, text, rag_bundle, app_settings=app_settings)
+    reply += rag_service.citation_footer(db, chat_id, text, rag_bundle)
     reply = render_response_language(
         api_key, current_model, reply, language, generation_session_id, generation_settings, provider_port=provider_port
     )
@@ -296,6 +297,7 @@ def prepare_message(
     memory_service,
     persona_service,
     provider_port,
+    rag_service: RagService,
 ) -> PreparedMessage | None:
     stripped = text.strip()
     command = stripped.lower()
@@ -336,6 +338,7 @@ def prepare_message(
                 memory_service=memory_service,
                 persona_service=persona_service,
                 app_settings=app_settings,
+                rag_service=rag_service,
             )
             return None
         if recovery_command == "/continue":
@@ -352,6 +355,7 @@ def prepare_message(
                 memory_service=memory_service,
                 persona_service=persona_service,
                 app_settings=app_settings,
+                rag_service=rag_service,
             )
             return None
         if recovery_command == "/edit":
@@ -370,6 +374,7 @@ def prepare_message(
                 memory_service=memory_service,
                 persona_service=persona_service,
                 app_settings=app_settings,
+                rag_service=rag_service,
             )
             return None
 
@@ -411,6 +416,7 @@ def prepare_message(
         memory_service=memory_service,
         persona_service=persona_service,
         request_context=request_context,
+        rag_service=rag_service,
     ):
         return
     if command == "/session":

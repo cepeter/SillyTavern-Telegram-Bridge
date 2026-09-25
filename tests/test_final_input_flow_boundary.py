@@ -11,6 +11,7 @@ from application_test_setup import (
     make_test_memory_service,
     make_test_persona_service,
     make_test_provider_port,
+    make_test_rag_service,
     make_test_request_context,
 )
 
@@ -98,6 +99,7 @@ def test_help_no_longer_imports_input_flows_and_enum_uses_service():
         message,
         input_flow_service=input_flow,
         request_context=SimpleNamespace(db=db),
+        rag_service=make_test_rag_service(),
     )
 
     assert len(calls) == 1
@@ -225,6 +227,7 @@ def test_pending_session_name_uses_injected_handler(monkeypatch, *, app_settings
         memory_service=make_test_memory_service(),
         persona_service=make_test_persona_service(),
         request_context=make_test_request_context(db, "session", "user", app_settings=app_settings_builder.build()),
+        rag_service=make_test_rag_service(),
     )
 
     assert handled is True
@@ -282,6 +285,7 @@ def test_director_goal_pending_action_uses_pure_panel_delivery(monkeypatch, *, a
         memory_service=make_test_memory_service(),
         persona_service=make_test_persona_service(),
         request_context=make_test_request_context(db, "session", "user", app_settings=app_settings_builder.build()),
+        rag_service=make_test_rag_service(),
     )
 
     assert handled is True
