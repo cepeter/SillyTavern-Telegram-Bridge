@@ -279,21 +279,33 @@ The default character name used as a display fallback is derived from
 `SILLYTAVERN_DEFAULT_CHARACTER` (the filename without extension), so renaming
 the file renames the fallback too.
 
-The executable loads the environment file **before importing application
-modules**. The default file is
-`~/.local/share/sillytavern-telegram/.env`, or use
-`SILLYTAVERN_ENV_FILE` to choose another path. A missing file is allowed when
-the process environment already supplies configuration; existing process
-environment values always take precedence over file values. Environment files
-use strict `KEY=VALUE` syntax (with optional `export ` and matching quotes),
-and malformed assignments stop startup instead of being silently ignored.
+Both supported entry points load configuration at runtime:
 
-Use `python3 sillytavern_telegram_bridge.py` as the supported entry point.
-`python -m bridge.main` imports the application module before the launcher
-bootstrap can run, so it does not load the environment file and is not the
-supported startup path. It can only rely on values already present in the
-process environment.
+```bash
+./.venv/bin/python sillytavern_telegram_bridge.py --check
+./.venv/bin/python -m bridge.main --check
+```
 
+Startup reads the private environment file into a detached mapping, constructs
+one immutable `AppSettings`, and validates required inputs before starting
+application services. Importing `bridge.config` or `bridge.main` does not read
+application environment variables or bootstrap the runtime. `--help` is available
+without configured credentials or a character card.
+
+The default environment file is `~/.local/share/sillytavern-telegram/.env`;
+`SILLYTAVERN_ENV_FILE` selects a different path. A missing file remains allowed
+when process environment values already supply configuration. Existing process
+values take precedence over file values. The parser accepts strict `KEY=VALUE`
+assignments with optional `export ` and matching quotes. Invalid settings name
+the affected variable without printing its supplied value.
+
+Settings are captured per application instance rather than read again from
+process globals. Change the private configuration and restart the service to
+apply new settings. Native card and Persona data are still read from the paths
+owned by that instance. Queued provider callbacks retain their instance's model
+catalog, credentials and outbound policy; they do not inherit another instance's
+configuration. This does not promise independent process-wide scheduler capacity
+for multiple bots running inside a single Python process.
 
 `SILLYTAVERN_TELEGRAM_ALLOWED_USERS` is required and every retained
 comma-separated value must be a numeric Telegram user ID.
@@ -879,7 +891,7 @@ and never replaces the original conversation history.
 - **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
   reverse imports from the isolated service/port layer. Ruff linting, security
   rules, and formatting cover the complete Python tree. Mypy currently checks
-  16 explicitly listed modules, including the network and callback-token policy.
+  17 explicitly listed modules, including the network and callback-token policy.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---
@@ -963,7 +975,8 @@ loader, module override chain, or shared execution namespace.
 The current boundaries are deliberately small:
 
 - `sillytavern_telegram_bridge.py` bootstraps the environment and starts the app.
-- `bridge.main` composes required services and ports.
+- `bridge.main` constructs validated immutable `AppSettings` and explicitly binds
+  required services and ports. `bridge.config` contains fixed limits/defaults only.
 - Application services own conversation, jobs, groups, memory, Persona, sync,
   pending input, and Director policy behavior.
 - Provider routing/transport and Telegram delivery sit behind explicit ports.

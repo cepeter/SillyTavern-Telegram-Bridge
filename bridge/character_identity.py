@@ -8,13 +8,9 @@ import sqlite3
 import struct
 from pathlib import Path
 
-from bridge.card_content import (
-    character_card_paths,
-    character_display_name,
-    safe_character_path,
-)
+from bridge.card_content import character_card_paths, character_display_name, safe_character_path
 from bridge.common import IMAGE_MAX_BYTES
-from bridge.config import CHARACTER_BACKUP_DIR
+from bridge.settings import AppSettings
 from bridge.telegram import update_session
 
 
@@ -49,39 +45,45 @@ def character_image_fingerprint(path: Path) -> str:
     return digest.hexdigest() if seen_header and seen_image else ""
 
 
-def _old_character_backups(filename: str) -> list[Path]:
+def _old_character_backups(filename: str, *, app_settings: AppSettings) -> list[Path]:
     """Return safe exact/versioned backups for one missing character filename."""
     if not filename or Path(filename).name != filename or Path(filename).suffix.casefold() != ".png":
         return []
-    candidates = [CHARACTER_BACKUP_DIR / filename]
-    candidates.extend(sorted(CHARACTER_BACKUP_DIR.glob(f"{Path(filename).stem}.*.png"), reverse=True))
+    candidates = [app_settings.character_backup_dir / filename]
+    candidates.extend(sorted(app_settings.character_backup_dir.glob(f"{Path(filename).stem}.*.png"), reverse=True))
     return [path for path in candidates if path.is_file()]
 
 
-def resolve_renamed_character(filename: str) -> str:
+def resolve_renamed_character(filename: str, *, app_settings: AppSettings) -> str:
     """Resolve one missing card only when a unique native rename can be proven."""
-    current = safe_character_path(filename)
+    current = safe_character_path(filename, app_settings=app_settings)
     if current is not None:
         return current.name
-    cards = character_card_paths()
+    cards = character_card_paths(app_settings=app_settings)
     if not cards:
         return ""
-    old_fingerprints = {character_image_fingerprint(path) for path in _old_character_backups(filename)} - {""}
+    old_fingerprints = {
+        character_image_fingerprint(path) for path in _old_character_backups(filename, app_settings=app_settings)
+    } - {""}
     if old_fingerprints:
         fingerprint_matches = [path.name for path in cards if character_image_fingerprint(path) in old_fingerprints]
         if len(fingerprint_matches) == 1:
             return fingerprint_matches[0]
     expected = " ".join(Path(filename).stem.replace("_", " ").split()).casefold()
     name_matches = [
-        path.name for path in cards if " ".join(character_display_name(path).split()).casefold() == expected
+        path.name
+        for path in cards
+        if " ".join(character_display_name(path, app_settings=app_settings).split()).casefold() == expected
     ]
     return name_matches[0] if len(name_matches) == 1 else ""
 
 
-def reconcile_session_character(db: sqlite3.Connection, chat_id: str, session: dict[str, str]) -> dict[str, str]:
+def reconcile_session_character(
+    db: sqlite3.Connection, chat_id: str, session: dict[str, str], *, app_settings: AppSettings
+) -> dict[str, str]:
     """Rebind a stale session filename after a uniquely identified native rename."""
     old_name = str(session.get("character_file") or "")
-    replacement = resolve_renamed_character(old_name)
+    replacement = resolve_renamed_character(old_name, app_settings=app_settings)
     if not replacement or replacement == old_name:
         return session
     update_session(db, chat_id, session["session_id"], character_file=replacement)

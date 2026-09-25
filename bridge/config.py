@@ -1,73 +1,8 @@
-"""Canonical startup defaults shared by ordinary bridge modules."""
+"""Fixed application limits and generation defaults; no environment is read at import."""
 
-import os
-from pathlib import Path
-
-from bridge.config_values import read_int
-
-BRIDGE_HOME = Path(
-    os.environ.get(
-        "SILLYTAVERN_BRIDGE_HOME",
-        Path.home() / ".local/share/sillytavern-telegram",
-    )
-)
-DB_FILE = BRIDGE_HOME / "scripts" / "sillytavern_telegram.sqlite3"
-LOG_FILE = BRIDGE_HOME / "logs" / "sillytavern_telegram_bridge.log"
-PROVIDER_CONFIG_FILE = Path(
-    os.environ.get(
-        "SILLYTAVERN_PROVIDER_CONFIG",
-        str(BRIDGE_HOME / "sillytavern_telegram_providers.yaml"),
-    )
-)
-MODEL_CACHE_FILE = Path(
-    os.environ.get(
-        "SILLYTAVERN_MODEL_CACHE",
-        str(BRIDGE_HOME / "model_catalog_cache.json"),
-    )
-)
-CHARACTER_BACKUP_DIR = Path(
-    os.environ.get(
-        "SILLYTAVERN_CHARACTER_BACKUP_DIR",
-        str(BRIDGE_HOME / "backups/sillytavern/characters"),
-    )
-)
-DEFAULT_MODEL = os.environ.get("SILLYTAVERN_MODEL", "").strip()
 DEFAULT_MAX_TOKENS = 1800
 PENDING_SETTINGS_TTL_SECONDS = 600
 
-SILLYTAVERN_DIR = Path(
-    os.environ.get(
-        "SILLYTAVERN_DIR",
-        str(BRIDGE_HOME.parent / "SillyTavern"),
-    )
-)
-CHARACTER_DIR = Path(
-    os.environ.get(
-        "SILLYTAVERN_CHARACTER_DIR",
-        str(SILLYTAVERN_DIR / "data/default-user/characters"),
-    )
-)
-DEFAULT_CHARACTER_FILE = os.environ.get(
-    "SILLYTAVERN_DEFAULT_CHARACTER",
-    "",
-).strip()
-CARD_FILE = CHARACTER_DIR / DEFAULT_CHARACTER_FILE
-WORLD_DIR = Path(
-    os.environ.get(
-        "SILLYTAVERN_WORLD_DIR",
-        str(SILLYTAVERN_DIR / "data/default-user/worlds"),
-    )
-)
-SYSTEM_PROMPTS_DIR = Path(
-    os.environ.get(
-        "SILLYTAVERN_SYSTEM_PROMPTS_DIR",
-        str(SILLYTAVERN_DIR / "data/default-user/sysprompt"),
-    )
-)
-DEFAULT_USER_NAME = os.environ.get(
-    "SILLYTAVERN_DEFAULT_USER_NAME",
-    "",
-).strip()
 CATALOG_MAX_ITEMS = 40
 CARD_FIELD_MAX_CHARS = 20000
 CARD_TOTAL_MAX_CHARS = 60000
@@ -104,22 +39,6 @@ RAG_SUPPORTED_SUFFIXES = {
     ".docx",
     ".pdf",
 }
-RAG_EMBEDDING_URL = os.environ.get(
-    "SILLYTAVERN_RAG_EMBEDDING_URL",
-    "http://127.0.0.1:8891/v1/embeddings",
-)
-RAG_EMBEDDING_MODEL = os.environ.get(
-    "SILLYTAVERN_RAG_EMBEDDING_MODEL",
-    "text-embedding-3-small",
-)
-RAG_EMBEDDING_DIMENSIONS = read_int(os.environ, "SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS", 1536, minimum=1, maximum=65536)
-RAG_MAX_EXTRACTED_CHARS = read_int(
-    os.environ, "SILLYTAVERN_RAG_MAX_EXTRACTED_CHARS", 1000000, minimum=1, maximum=10000000
-)
-RAG_MAX_PDF_PAGES = read_int(os.environ, "SILLYTAVERN_RAG_MAX_PDF_PAGES", 200, minimum=1, maximum=10000)
-RAG_PDF_PARSE_TIMEOUT_SECONDS = read_int(
-    os.environ, "SILLYTAVERN_RAG_PDF_PARSE_TIMEOUT_SECONDS", 45, minimum=1, maximum=300
-)
 
 REASONING_LEVELS = {
     "none": 0,

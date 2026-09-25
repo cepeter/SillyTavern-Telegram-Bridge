@@ -2,6 +2,8 @@ import ast
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
 
@@ -11,7 +13,7 @@ def _top_level_functions(path: Path) -> set[str]:
     return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
-class MainDecompositionTests(unittest.TestCase):
+class MainDecompositionTests(SettingsTestCase):
     def test_worker_recovery_orchestration_has_focused_owner(self):
         worker_path = BRIDGE_DIR / "worker_orchestration.py"
         self.assertTrue(worker_path.is_file(), "worker orchestration module must exist")
@@ -83,7 +85,7 @@ class MainDecompositionTests(unittest.TestCase):
         self.assertTrue(expected.isdisjoint(main_functions))
 
         main_source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
-        main_chunk = main_source[main_source.index("def main()") :]
+        main_chunk = main_source[main_source.index("def _main()") :]
         self.assertIn("run_bridge_runtime(", main_chunk)
         self.assertNotIn("getUpdates", main_chunk)
         self.assertNotIn("services.jobs.recover(", main_chunk)

@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
-from application_test_setup import make_test_delivery_port
+from application_test_setup import make_test_delivery_port, make_test_request_context
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -58,6 +58,7 @@ def test_help_menu_requires_delivery_port_and_preserves_payload():
     assert param is not None
     assert param.default is inspect.Parameter.empty
 
+    context = make_test_request_context()
     calls = []
     delivery = make_test_delivery_port(
         send_panel_request=lambda token, method, payload, **kwargs: (
@@ -73,7 +74,7 @@ def test_help_menu_requires_delivery_port_and_preserves_payload():
         0,
         0,
         delivery_port=delivery,
-        request_context="ctx",
+        request_context=context,
     )
 
     assert len(calls) == 1
@@ -83,7 +84,7 @@ def test_help_menu_requires_delivery_port_and_preserves_payload():
     assert payload["chat_id"] == "chat"
     assert payload["message_id"] == 41
     assert payload["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == "help:basic"
-    assert kwargs["request_context"] == "ctx"
+    assert kwargs["request_context"] is context
 
 
 def test_help_command_requires_delivery_port():
@@ -105,6 +106,7 @@ def test_help_callback_requires_delivery_port():
 def test_command_route_help_detail_forwards_correct_arguments(monkeypatch):
     import bridge.command_routes as routes
 
+    context = make_test_request_context()
     calls = []
     delivery = object()
     monkeypatch.setattr(
@@ -129,7 +131,7 @@ def test_command_route_help_detail_forwards_correct_arguments(monkeypatch):
         "User",
         None,
         SimpleNamespace(delivery=delivery, provider=object()),
-        request_context="ctx",
+        request_context=context,
     )
 
     assert handled is True
@@ -138,7 +140,7 @@ def test_command_route_help_detail_forwards_correct_arguments(monkeypatch):
             ("token", "chat", "/help sync"),
             {
                 "delivery_port": delivery,
-                "request_context": "ctx",
+                "request_context": context,
             },
         )
     ]
@@ -166,7 +168,7 @@ def test_update_routing_help_callback_fast_path_forwards_delivery_and_context(mo
     monkeypatch.setattr(
         callback_routing,
         "ensure_session",
-        lambda *_args, **_kwargs: {"session_id": "session"},
+        lambda *_args, app_settings=None, **_kwargs: {"session_id": "session"},
     )
     monkeypatch.setattr(
         callback_routing,
@@ -220,7 +222,7 @@ def test_update_routing_help_text_fast_path_forwards_delivery_and_context(monkey
     monkeypatch.setattr(
         message_routing,
         "ensure_session",
-        lambda *_args, **_kwargs: {"session_id": "session"},
+        lambda *_args, app_settings=None, **_kwargs: {"session_id": "session"},
     )
     monkeypatch.setattr(
         message_routing,
@@ -261,7 +263,7 @@ def test_memory_module_no_longer_imports_telegram():
     assert "bridge.telegram" not in imported_modules("memory.py")
 
 
-def test_memory_command_requires_text_delivery_and_preserves_message():
+def test_memory_command_requires_text_delivery_and_preserves_message(*, app_settings_builder):
     import bridge.memory as memory
 
     param = inspect.signature(memory.handle_memory_command).parameters.get("send_text_fn")
@@ -277,6 +279,7 @@ def test_memory_command_requires_text_delivery_and_preserves_message():
         {"name": "Mira"},
         "/memory scope user",
         send_text_fn=lambda token, chat_id, text: sent.append((token, chat_id, text)),
+        app_settings=app_settings_builder.build(),
     )
 
     assert sent == [
@@ -296,7 +299,7 @@ def test_command_routes_memory_search_forwards_delivery_send_text(monkeypatch):
     monkeypatch.setattr(
         routes,
         "handle_memory_command",
-        lambda *args, **kwargs: calls.append((args, kwargs)),
+        lambda *args, app_settings=None, **kwargs: calls.append((args, kwargs)),
     )
 
     handled = routes._handle_memory_media(
@@ -315,7 +318,7 @@ def test_command_routes_memory_search_forwards_delivery_send_text(monkeypatch):
             provider=object(),
             delivery=SimpleNamespace(send_text=send_text_fn),
         ),
-        request_context="ctx",
+        request_context=make_test_request_context(),
     )
 
     assert handled is True
@@ -331,7 +334,7 @@ def test_pending_memory_search_forwards_existing_send_text(monkeypatch):
     monkeypatch.setattr(
         flows,
         "handle_memory_command",
-        lambda *args, **kwargs: calls.append((args, kwargs)),
+        lambda *args, app_settings=None, **kwargs: calls.append((args, kwargs)),
     )
     monkeypatch.setattr(flows, "send_memory_menu", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(flows, "_cancel_pending", lambda *_args, **_kwargs: None)
@@ -349,7 +352,7 @@ def test_pending_memory_search_forwards_existing_send_text(monkeypatch):
         provider_port=object(),
         memory_service=object(),
         persona_service=object(),
-        request_context="ctx",
+        request_context=make_test_request_context(),
     )
 
     assert result is True

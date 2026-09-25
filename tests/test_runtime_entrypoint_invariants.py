@@ -10,6 +10,8 @@ import sys
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
 
@@ -89,7 +91,7 @@ def _owner_index() -> dict[str, list[str]]:
     return owners
 
 
-class RuntimeEntrypointInvariantTests(unittest.TestCase):
+class RuntimeEntrypointInvariantTests(SettingsTestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -112,15 +114,21 @@ class RuntimeEntrypointInvariantTests(unittest.TestCase):
             completed.stdout + completed.stderr,
         )
 
-    def test_entrypoint_bootstraps_environment_before_importing_main(self):
-        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(encoding="utf-8")
-        bootstrap_import = source.index("from bridge.environment import bootstrap_environment")
-        bootstrap_call = source.index("bootstrap_environment()")
-        main_import = source.index("from bridge.main import main")
-
-        self.assertLess(bootstrap_import, bootstrap_call)
-        self.assertLess(bootstrap_call, main_import)
-        self.assertNotIn("def bootstrap_env(", source)
+    def test_both_entrypoints_use_one_runtime_environment_bootstrap(self):
+        launcher = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(encoding="utf-8")
+        main_source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
+        self.assertIn("from bridge.main import main", launcher)
+        self.assertNotIn("bootstrap_environment()", launcher)
+        tree = ast.parse(main_source)
+        startup = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_main")
+        calls = {
+            node.func.id: node.lineno
+            for node in ast.walk(startup)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertLess(calls["bootstrap_environment"], calls["_load_startup_config"])
+        self.assertLess(calls["_load_startup_config"], calls["_build_startup_services"])
+        self.assertNotIn("def bootstrap_env(", launcher)
 
     def test_entrypoint_imports_main_directly(self):
         source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(encoding="utf-8")

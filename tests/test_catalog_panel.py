@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_request_context
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -12,7 +13,7 @@ import bridge.catalog as _m_catalog
 import bridge.panel_callback_routes as _m_panel_callback_routes
 
 
-class CatalogPanelTests(unittest.TestCase):
+class CatalogPanelTests(SettingsTestCase):
     def test_hive_health_uses_streaming_chat_completion_not_models(self):
         old_catalog = _m_catalog.load_provider_catalog
         old_request = _m_catalog.strict_urlopen
@@ -31,11 +32,11 @@ class CatalogPanelTests(unittest.TestCase):
             def read(self, *_args):
                 return b"data: {}\n"
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             calls.append((request, timeout))
             return Response()
 
-        _m_catalog.load_provider_catalog = lambda: {
+        _m_catalog.load_provider_catalog = lambda *, app_settings=None: {
             "hive": {
                 "name": "Hive",
                 "api_endpoint": "https://api-cdn.thehive.ai/api/v3",
@@ -50,7 +51,7 @@ class CatalogPanelTests(unittest.TestCase):
         os.environ["TEST_HIVE_KEY"] = "test-only"
         os.environ["SILLYTAVERN_PROVIDER_ALLOWED_HOSTS"] = "api-cdn.thehive.ai"
         try:
-            result = _m_catalog.provider_health_checks("hive")
+            result = _m_catalog.provider_health_checks("hive", app_settings=self.app_settings_builder.build())
         finally:
             _m_catalog.load_provider_catalog = old_catalog
             _m_catalog.strict_urlopen = old_request
@@ -77,7 +78,11 @@ class CatalogPanelTests(unittest.TestCase):
         )
         try:
             _m_panel_callback_routes.send_model_target_menu(
-                "token", "chat", "main::model", "utility::model", request_context=make_test_request_context()
+                "token",
+                "chat",
+                "main::model",
+                "utility::model",
+                request_context=make_test_request_context(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -96,13 +101,19 @@ class CatalogPanelTests(unittest.TestCase):
         )
         original_groups = _m_catalog.get_model_groups
         original_request = _m_cards.send_panel_request
-        _m_catalog.get_model_groups = lambda: {"provider": ("Provider", [("model", "provider::model")], True)}
+        _m_catalog.get_model_groups = lambda *, app_settings=None: {
+            "provider": ("Provider", [("model", "provider::model")], True)
+        }
         _m_cards.send_panel_request = lambda *_args, **_kwargs: (_ for _ in ()).throw(
             RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified")
         )
         try:
             _m_panel_callback_routes.send_model_menu(
-                "token", "chat", "provider::model", message_id=10, request_context=make_test_request_context(db)
+                "token",
+                "chat",
+                "provider::model",
+                message_id=10,
+                request_context=make_test_request_context(db, app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_catalog.get_model_groups = original_groups

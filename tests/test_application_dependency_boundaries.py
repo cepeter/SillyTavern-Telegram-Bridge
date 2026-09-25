@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 
 from application_test_setup import make_native_test_persona_service, make_test_provider_port
+from settings_test_support import SettingsBuilder, make_test_settings
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -30,11 +31,11 @@ def test_input_flows_does_not_own_persona_edit_lock():
     assert not hasattr(input_flows, "PERSONA_EDIT_LOCK")
 
 
-def test_native_persona_store_and_service_share_canonical_lock():
+def test_native_persona_store_and_service_share_canonical_lock(*, app_settings_builder):
     import bridge.persona_sync as persona_sync
 
-    service = make_native_test_persona_service()
-    assert persona_sync._PERSONA_STORE.edit_lock() is persona_sync.PERSONA_EDIT_LOCK
+    service = make_native_test_persona_service(app_settings=app_settings_builder.build())
+    assert persona_sync._persona_store(app_settings=make_test_settings()).edit_lock() is persona_sync.PERSONA_EDIT_LOCK
     assert service.persona_edit_lock() is persona_sync.PERSONA_EDIT_LOCK
 
 
@@ -163,17 +164,17 @@ def test_image_worker_uses_injected_download_and_forwards_identity(monkeypatch):
         "model_id": "resolved-model",
     }
     monkeypatch.setattr(workers, "committed_assistant_for_message", lambda *_args: None)
-    monkeypatch.setattr(workers, "load_session", lambda *_args: session)
+    monkeypatch.setattr(workers, "load_session", lambda *_args, app_settings=None: session)
     monkeypatch.setattr(
         workers,
         "card_fields_from_file",
-        lambda filename: {"name": "Mira", "source": filename},
+        lambda filename, *, app_settings=None: {"name": "Mira", "source": filename},
         raising=False,
     )
     monkeypatch.setattr(
         workers,
         "process_image_message",
-        lambda *args, **kwargs: delivered.append((args, kwargs)),
+        lambda *args, app_settings=None, **kwargs: delivered.append((args, kwargs)),
         raising=False,
     )
     monkeypatch.setattr(
@@ -229,12 +230,12 @@ def test_committed_image_recovery_returns_before_download(monkeypatch):
     monkeypatch.setattr(
         workers,
         "load_session",
-        lambda *_args: {"session_id": "queued-session"},
+        lambda *_args, app_settings=None: {"session_id": "queued-session"},
     )
     monkeypatch.setattr(
         workers,
         "send_reply",
-        lambda *args, **kwargs: replies.append((args, kwargs)),
+        lambda *args, app_settings=None, **kwargs: replies.append((args, kwargs)),
     )
     monkeypatch.setattr(workers, "clear_failed_turn", lambda *_args: None)
 
@@ -252,7 +253,9 @@ def test_committed_image_recovery_returns_before_download(monkeypatch):
     assert len(replies) == 1
 
 
-def _assert_document_injection_signature():
+def _assert_document_injection_signature(*, app_settings_builder=None):
+    if app_settings_builder is None:
+        app_settings_builder = SettingsBuilder()
     import inspect
 
     import bridge.telegram as telegram
@@ -262,10 +265,12 @@ def _assert_document_injection_signature():
     assert "process_image" in params
 
 
-def _run_document_import(monkeypatch, document, *, parse_card, add_document=None):
+def _run_document_import(monkeypatch, document, *, parse_card, add_document=None, app_settings_builder=None):
+    if app_settings_builder is None:
+        app_settings_builder = SettingsBuilder()
     import bridge.telegram as telegram
 
-    _assert_document_injection_signature()
+    _assert_document_injection_signature(app_settings_builder=app_settings_builder)
     image_calls = []
     sent = []
     monkeypatch.setattr(telegram, "_consume_world_upload", lambda *_args: False)
@@ -285,7 +290,7 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
     monkeypatch.setattr(
         telegram,
         "ensure_session",
-        lambda *_args: {
+        lambda *_args, app_settings=None: {
             "session_id": "session",
             "character_file": "mira.png",
             "model_id": "model",
@@ -294,9 +299,9 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
     monkeypatch.setattr(
         telegram,
         "card_fields_from_file",
-        lambda filename: {"name": "Mira", "source": filename},
+        lambda filename, *, app_settings=None: {"name": "Mira", "source": filename},
     )
-    monkeypatch.setattr(telegram, "import_character_card", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(telegram, "import_character_card", lambda *_args, app_settings=None, **_kwargs: None)
     monkeypatch.setattr(telegram, "send_text", lambda *args, **_kwargs: sent.append(args))
     if add_document is not None:
         monkeypatch.setattr(telegram, "add_data_bank_document", add_document)
@@ -314,15 +319,17 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
         memory_service="memory",
         persona_service="persona",
         group_director_service="director",
+        app_settings=app_settings_builder.build(),
     )
     return image_calls, sent
 
 
-def test_document_non_character_png_uses_explicit_api_key_and_image_collaborator(monkeypatch):
+def test_document_non_character_png_uses_explicit_api_key_and_image_collaborator(monkeypatch, *, app_settings_builder):
     calls, _sent = _run_document_import(
         monkeypatch,
         {"file_name": "photo.png", "file_id": "file", "caption": "caption"},
         parse_card=ValueError("not a card"),
+        app_settings_builder=app_settings_builder,
     )
 
     assert len(calls) == 1
@@ -338,26 +345,28 @@ def test_document_non_character_png_uses_explicit_api_key_and_image_collaborator
     assert kwargs["group_director_service"] == "director"
 
 
-def test_document_character_card_png_does_not_call_image_collaborator(monkeypatch):
+def test_document_character_card_png_does_not_call_image_collaborator(monkeypatch, *, app_settings_builder):
     calls, _sent = _run_document_import(
         monkeypatch,
         {"file_name": "character.png", "file_id": "file"},
         parse_card={"name": "character"},
+        app_settings_builder=app_settings_builder,
     )
     assert calls == []
 
 
-def test_document_data_bank_branch_does_not_call_image_collaborator(monkeypatch):
+def test_document_data_bank_branch_does_not_call_image_collaborator(monkeypatch, *, app_settings_builder):
     calls, _sent = _run_document_import(
         monkeypatch,
         {"file_name": "notes.txt", "file_id": "file"},
         parse_card={},
-        add_document=lambda *_args: ("added", 2),
+        add_document=lambda *_args, app_settings: ("added", 2),
+        app_settings_builder=app_settings_builder,
     )
     assert calls == []
 
 
-def test_document_job_passes_configured_api_key_and_canonical_image_collaborator(monkeypatch):
+def test_document_job_passes_configured_api_key_and_canonical_image_collaborator(monkeypatch, *, app_settings_builder):
     import sqlite3
     from types import SimpleNamespace
 
@@ -385,7 +394,7 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
     monkeypatch.setattr(
         help_module,
         "import_telegram_document",
-        lambda *args, **kwargs: captured.update(kwargs),
+        lambda *args, app_settings=None, **kwargs: captured.update(kwargs),
     )
 
     help_module.process_document_job(
@@ -401,7 +410,7 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
     assert process_image.keywords["provider_port"] is services.provider
 
 
-def test_document_image_collaborator_has_explicit_callable_contract():
+def test_document_image_collaborator_has_explicit_callable_contract(*, app_settings_builder):
     import inspect
 
     import bridge.telegram as telegram

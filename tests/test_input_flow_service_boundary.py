@@ -7,6 +7,8 @@ from dataclasses import MISSING
 from pathlib import Path
 from types import SimpleNamespace
 
+from settings_test_support import make_test_settings
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -97,6 +99,7 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
         handle_session_name_backend=lambda *_args, **_kwargs: False,
     )
     services = SimpleNamespace(
+        config=make_test_settings(),
         input_flow=input_flow,
         group=group,
         provider=provider,
@@ -107,7 +110,7 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
     monkeypatch.setattr(
         message_commands,
         "ensure_session",
-        lambda *_args, **_kwargs: session,
+        lambda *_args, app_settings=None, **_kwargs: session,
     )
 
     result = message_commands.prepare_message(

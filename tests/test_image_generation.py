@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -30,7 +31,7 @@ class _Response:
         return json.dumps(self.payload).encode()
 
 
-class ImageGenerationTests(unittest.TestCase):
+class ImageGenerationTests(SettingsTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.catalog = Path(self.temp.name) / "providers.yaml"
@@ -42,14 +43,14 @@ class ImageGenerationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        self.old_catalog = _m_image_generation.PROVIDER_CONFIG_FILE
+        self.old_catalog = self.app_settings_builder.provider_config_file
         self.old_urlopen = _m_image_generation.strict_urlopen
         self.old_key = os.environ.get("TEST_IMAGE_KEY")
-        _m_image_generation.PROVIDER_CONFIG_FILE = self.catalog
+        self.app_settings_builder.provider_config_file = self.catalog
         os.environ["TEST_IMAGE_KEY"] = "test-key"
 
     def tearDown(self):
-        _m_image_generation.PROVIDER_CONFIG_FILE = self.old_catalog
+        self.app_settings_builder.provider_config_file = self.old_catalog
         _m_image_generation.strict_urlopen = self.old_urlopen
         if self.old_key is None:
             os.environ.pop("TEST_IMAGE_KEY", None)
@@ -61,13 +62,15 @@ class ImageGenerationTests(unittest.TestCase):
         captured = []
         raw = b"PNG-DATA"
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             captured.append((request, timeout))
             return _Response({"data": [{"b64_json": base64.b64encode(raw).decode(), "revised_prompt": "revised"}]})
 
         _m_image_generation.strict_urlopen = fake_urlopen
         with patch.dict(os.environ, {"SILLYTAVERN_PROVIDER_ALLOWED_HOSTS": "images.example"}):
-            result = _m_image_generation.generate_image("test-image::test-model", "a small moon", "1024x1024")
+            result = _m_image_generation.generate_image(
+                "test-image::test-model", "a small moon", "1024x1024", app_settings=self.app_settings_builder.build()
+            )
         body = json.loads(captured[0][0].data.decode())
         self.assertEqual(result, (raw, "revised", "test-image::test-model"))
         self.assertEqual(body["model"], "test-model")
@@ -76,14 +79,18 @@ class ImageGenerationTests(unittest.TestCase):
 
     def test_prompt_and_size_are_validated(self):
         with self.assertRaises(ValueError):
-            _m_image_generation.generate_image("test-image::test-model", "", "1024x1024")
+            _m_image_generation.generate_image(
+                "test-image::test-model", "", "1024x1024", app_settings=self.app_settings_builder.build()
+            )
         with self.assertRaises(ValueError):
-            _m_image_generation.generate_image("test-image::test-model", "a prompt", "999x999")
+            _m_image_generation.generate_image(
+                "test-image::test-model", "a prompt", "999x999", app_settings=self.app_settings_builder.build()
+            )
 
     def test_disabled_provider_fails_closed(self):
         self.catalog.write_text("providers: {}\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "No image provider"):
-            _m_image_generation.generate_image("", "a prompt")
+            _m_image_generation.generate_image("", "a prompt", app_settings=self.app_settings_builder.build())
 
     def test_command_is_registered(self):
         source = Path(_m_image_generation.__file__).parent / "help.py"

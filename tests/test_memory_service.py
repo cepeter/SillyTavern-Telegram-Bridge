@@ -8,6 +8,7 @@ from application_test_setup import (
     make_test_provider_port,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -21,7 +22,6 @@ from unittest.mock import patch
 
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
-import bridge.config as config
 import bridge.database as _m_database
 import bridge.help as _m_help
 import bridge.memory as _m_memory
@@ -34,7 +34,7 @@ import bridge.telegram as _m_telegram
 from bridge.memory_service import MemoryPromptContext, MemoryService
 
 
-class MemoryServiceTests(unittest.TestCase):
+class MemoryServiceTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.session = {"session_id": "session-1", "character_file": "mira.png"}
@@ -178,23 +178,24 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(calls, [(self.db, "chat", "session-1")])
 
 
-class MemoryServiceMessageIntegrationTests(unittest.TestCase):
+class MemoryServiceMessageIntegrationTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.session = _m_session_naming.create_session(
             self.db,
             "chat",
             "provider::model",
             session_id="memory-message",
+            app_settings=self.app_settings_builder.build(),
         )
         self.fields = {"name": "Mira"}
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def test_generate_and_store_reply_uses_injected_memory_service(self):
@@ -243,12 +244,14 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             fields,
             text,
             history_rows,
+            *,
+            app_settings=None,
             **kwargs,
         ):
             captured.update(kwargs)
             return [{"role": "user", "content": text}]
 
-        def legacy_called(*_args, **_kwargs):
+        def legacy_called(*_args, app_settings=None, **_kwargs):
             raise AssertionError("legacy memory global must not run")
 
         with (
@@ -335,9 +338,10 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 None,
                 None,
                 provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "reply"),
-                group_service=make_test_group_service(),
+                group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(captured["memory_context"], "service recall")
@@ -382,7 +386,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             def retain(self, db, chat_id, session, fields):
                 calls.append(("retain", chat_id, session["session_id"]))
 
-        def legacy_called(*_args, **_kwargs):
+        def legacy_called(*_args, app_settings=None, **_kwargs):
             raise AssertionError("legacy memory global must not run")
 
         def build_messages(
@@ -390,6 +394,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             fields,
             text,
             history_rows,
+            *,
+            app_settings=None,
             **kwargs,
         ):
             captured.update(kwargs)
@@ -466,6 +472,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "new reply"),
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(
@@ -483,7 +490,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         memory = object()
         captured = {}
 
-        def fake_regen(*args, **kwargs):
+        def fake_regen(*args, app_settings=None, **kwargs):
             captured.update(kwargs)
 
         with (
@@ -512,8 +519,10 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "provider::model",
                 "",
                 "User",
-                request_context=make_test_request_context(self.db, self.session["session_id"]),
-                services=make_test_application_services(memory=memory),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
+                services=make_test_application_services(memory=memory, app_settings=self.app_settings_builder.build()),
             )
 
         self.assertTrue(handled)
@@ -527,7 +536,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             captured.update(kwargs)
             return True
 
-        make_test_conversation_service().process_message(
+        make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
             self.db,
             "token",
             "key",
@@ -538,8 +547,9 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             services=make_test_application_services(
                 memory=memory,
                 input_flow=make_test_input_flow_service(
-                    handle_pending_backend=fake_pending,
+                    handle_pending_backend=fake_pending, app_settings=self.app_settings_builder.build()
                 ),
+                app_settings=self.app_settings_builder.build(),
             ),
         )
 
@@ -568,7 +578,7 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             def retain(self, db, chat_id, session, fields):
                 calls.append(("retain", session["session_id"]))
 
-        def legacy_called(*_args, **_kwargs):
+        def legacy_called(*_args, app_settings=None, **_kwargs):
             raise AssertionError("legacy memory global must not run")
 
         def build_messages(
@@ -576,6 +586,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             fields,
             text,
             history_rows,
+            *,
+            app_settings=None,
             **kwargs,
         ):
             captured.update(kwargs)
@@ -659,7 +671,10 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 group_service=group_service,
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
-                group_director_service=make_test_application_services().group_director,
+                group_director_service=make_test_application_services(
+                    app_settings=self.app_settings_builder.build()
+                ).group_director,
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(captured["memory_context"], "image recall")
@@ -719,13 +734,16 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 process_image=lambda *_args, **kwargs: captured.update(kwargs),
                 memory_service=memory,
                 persona_service=make_test_persona_service(),
-                group_director_service=make_test_application_services().group_director,
+                group_director_service=make_test_application_services(
+                    app_settings=self.app_settings_builder.build()
+                ).group_director,
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertIs(captured["memory_service"], memory)
 
 
-class MemoryServiceExplicitInjectionBoundaryTests(unittest.TestCase):
+class MemoryServiceExplicitInjectionBoundaryTests(SettingsTestCase):
     def test_memory_application_paths_do_not_resolve_compatibility_service(self):
         root = Path(__file__).parents[1] / "bridge"
         for filename in (
@@ -742,7 +760,7 @@ class MemoryServiceExplicitInjectionBoundaryTests(unittest.TestCase):
             self.assertNotIn("compatibility_memory_service", source, filename)
 
 
-class MemoryServiceBoundaryTests(unittest.TestCase):
+class MemoryServiceBoundaryTests(SettingsTestCase):
     def test_reviewed_application_paths_do_not_call_memory_backend_functions_directly(self):
         root = Path(__file__).parents[1] / "bridge"
         reviewed = (
@@ -766,15 +784,12 @@ class MemoryServiceBoundaryTests(unittest.TestCase):
 
     def test_reset_session_uses_memory_service_boundary(self):
         tmp = tempfile.TemporaryDirectory()
-        old_db = config.DB_FILE
+        old_db = self.app_settings_builder.db_file
         try:
-            config.DB_FILE = Path(tmp.name) / "reset.sqlite3"
-            db = _m_memory_curator.db_connect()
+            self.app_settings_builder.db_file = Path(tmp.name) / "reset.sqlite3"
+            db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
             session = _m_session_naming.create_session(
-                db,
-                "chat",
-                "provider::model",
-                session_id="reset-memory",
+                db, "chat", "provider::model", session_id="reset-memory", app_settings=self.app_settings_builder.build()
             )
             db.execute(
                 "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
@@ -817,7 +832,7 @@ class MemoryServiceBoundaryTests(unittest.TestCase):
             )
             db.close()
         finally:
-            config.DB_FILE = old_db
+            self.app_settings_builder.db_file = old_db
             tmp.cleanup()
 
 

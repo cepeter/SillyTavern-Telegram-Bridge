@@ -6,29 +6,14 @@ import time
 from pathlib import Path
 
 from bridge.callbacks import close_panel_message
-from bridge.card_content import (
-    active_world_files,
-    card_fields_from_file,
-    system_prompt_label,
-)
+from bridge.card_content import active_world_files, card_fields_from_file, system_prompt_label
 from bridge.cards import send_panel_message
 from bridge.commands import prompt_diagnostics
-from bridge.config import DEFAULT_MODEL
-from bridge.context_compaction import (
-    context_history_candidate_limit,
-    context_input_budget_tokens,
-)
+from bridge.context_compaction import context_history_candidate_limit, context_input_budget_tokens
 from bridge.curated_memory_panel import curated_memory_panel
-from bridge.database import (
-    get_generation_settings,
-    get_meta,
-    task_model_for_session,
-)
+from bridge.database import get_generation_settings, get_meta, task_model_for_session
 from bridge.director_goal_panel import director_goal_panel
-from bridge.director_goals import (
-    get_director_goal,
-    set_director_goal,
-)
+from bridge.director_goals import get_director_goal, set_director_goal
 from bridge.expressions import expression_mode_key
 from bridge.group_service import GroupService
 from bridge.groups import handle_summary_command
@@ -37,37 +22,35 @@ from bridge.input_flows import start_text_action_input
 from bridge.language import response_language_label
 from bridge.media import send_typing
 from bridge.memory import get_session_summary
-from bridge.memory_backend import (
-    memory_mode,
-    memory_scope,
-)
-from bridge.memory_curator import (
-    curate_memory_now,
-    curated_memory_text,
-)
+from bridge.memory_backend import memory_mode, memory_scope
+from bridge.memory_curator import curate_memory_now, curated_memory_text
 from bridge.persona_sync import persona_name
 from bridge.provider_port import ProviderPort
-from bridge.rag_core import (
-    data_bank_documents,
-    rag_mode,
-)
+from bridge.rag_core import data_bank_documents, rag_mode
 from bridge.scene_panel import scene_panel
-from bridge.scene_state import (
-    clear_scene_state,
-    get_scene_state,
-    refresh_scene_state_now,
-)
+from bridge.scene_state import clear_scene_state, get_scene_state, refresh_scene_state_now
+from bridge.settings import AppSettings
 from bridge.telegram import send_text
 
 
-def status_text(db, chat_id, session, fields, current_model, current_persona, *, group_service: GroupService):
+def status_text(
+    db,
+    chat_id,
+    session,
+    fields,
+    current_model,
+    current_persona,
+    *,
+    group_service: GroupService,
+    app_settings: AppSettings,
+):
     count = db.execute(
         "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?",
         (chat_id, session["session_id"]),
     ).fetchone()[0]
-    worlds = active_world_files(session["world_file"])
+    worlds = active_world_files(session["world_file"], app_settings=app_settings)
     world = ", ".join(Path(name).stem for name in worlds) if worlds else "off"
-    persona = persona_name(current_persona) if current_persona else "off"
+    persona = persona_name(current_persona, app_settings=app_settings) if current_persona else "off"
     note_state = "on" if session["author_note"] else "off"
     generation = get_generation_settings(db, chat_id, session["session_id"])
     summary, covered_until = get_session_summary(db, chat_id, session["session_id"])
@@ -77,7 +60,7 @@ def status_text(db, chat_id, session, fields, current_model, current_persona, *,
     group_labels = group_service.member_labels(group["members"])
     group_state_text = f"{'on' if group['enabled'] else 'off'} ({', '.join(group_labels) if group_labels else 'none'})"
     expression_mode = get_meta(db, expression_mode_key(chat_id, session["session_id"]), "off")
-    utility_model = task_model_for_session(db, chat_id, session, "utility")
+    utility_model = task_model_for_session(db, chat_id, session, "utility", app_settings=app_settings)
     return (
         "📊 Session status\n"
         "━━━━━━━━━━━━━━━━━━\n"
@@ -90,7 +73,7 @@ def status_text(db, chat_id, session, fields, current_model, current_persona, *,
         "📚 Native context\n"
         f"• Persona: {persona}\n"
         f"• World Info: {world}\n"
-        f"• System Prompt: {system_prompt_label(session.get('system_prompt'))}\n"
+        f"• System Prompt: {system_prompt_label(session.get('system_prompt'), app_settings=app_settings)}\n"
         f"• Author's Note: {note_state}\n"
         f"• Expressions: {expression_mode}\n\n"
         "🧠 Memory and state\n"
@@ -197,11 +180,21 @@ def send_sync_menu(
     )
 
 
-def prompt_panel_text(db, chat_id, session, fields, section="overview", *, group_service: GroupService, memory_service):
+def prompt_panel_text(
+    db,
+    chat_id,
+    session,
+    fields,
+    section="overview",
+    *,
+    group_service: GroupService,
+    memory_service,
+    app_settings: AppSettings,
+):
     if section == "budget":
         return (
-            f"Prompt budget\nContext input budget: ~{context_input_budget_tokens()} tokens\n"
-            f"History candidates: {context_history_candidate_limit()} messages\n"
+            f"Prompt budget\nContext input budget: ~{context_input_budget_tokens(app_settings=app_settings)} tokens\n"
+            f"History candidates: {context_history_candidate_limit(app_settings=app_settings)} messages\n"
             f"Session summary: {len(get_session_summary(db, chat_id, session['session_id'])[0])} chars"
         )
     if section == "memory":
@@ -220,7 +213,15 @@ def prompt_panel_text(db, chat_id, session, fields, section="overview", *, group
             "\nMembers: "
             f"""{len(group["members"])}"""
         )
-    return prompt_diagnostics(db, chat_id, session, fields, group_service=group_service, memory_service=memory_service)
+    return prompt_diagnostics(
+        db,
+        chat_id,
+        session,
+        fields,
+        group_service=group_service,
+        memory_service=memory_service,
+        app_settings=app_settings,
+    )
 
 
 def send_prompt_menu(
@@ -261,7 +262,14 @@ def send_prompt_menu(
         labels.get(section, labels["overview"])
         + "\n\n"
         + prompt_panel_text(
-            db, chat_id, session, fields, section, group_service=group_service, memory_service=memory_service
+            db,
+            chat_id,
+            session,
+            fields,
+            section,
+            group_service=group_service,
+            memory_service=memory_service,
+            app_settings=request_context.app_settings,
         ),
         markup,
         message_id,
@@ -298,7 +306,7 @@ def handle_prompt_and_feature_callback(
             chat_id,
             db,
             session,
-            card_fields_from_file(session["character_file"]),
+            card_fields_from_file(session["character_file"], app_settings=request_context.app_settings),
             message_id,
             group_service=group_service,
             memory_service=memory_service,
@@ -314,10 +322,11 @@ def handle_prompt_and_feature_callback(
                     db,
                     chat_id,
                     session,
-                    card_fields_from_file(session["character_file"]),
-                    session.get("model_id") or DEFAULT_MODEL,
+                    card_fields_from_file(session["character_file"], app_settings=request_context.app_settings),
+                    session.get("model_id") or request_context.app_settings.default_model,
                     session.get("persona_id") or "",
                     group_service=group_service,
+                    app_settings=request_context.app_settings,
                 ),
             )
         elif data.rsplit(":", 1)[1] in {"budget", "memory", "group"}:
@@ -326,7 +335,7 @@ def handle_prompt_and_feature_callback(
                 chat_id,
                 db,
                 session,
-                card_fields_from_file(session["character_file"]),
+                card_fields_from_file(session["character_file"], app_settings=request_context.app_settings),
                 message_id,
                 data.rsplit(":", 1)[1],
                 group_service=group_service,
@@ -403,7 +412,9 @@ def handle_feature_panel_callback(
             close_panel_message(db, token, chat_id, callback)
         elif action == "confirm":
             answer_callback(token, str(callback.get("id", "")), "Summarizing")
-            handle_summary_command(db, token, chat_id, session, provider_port=provider_port)
+            handle_summary_command(
+                db, token, chat_id, session, provider_port=provider_port, app_settings=request_context.app_settings
+            )
         return True
     if data.startswith("scene:"):
         action = data.split(":", 1)[1]
@@ -418,10 +429,11 @@ def handle_feature_panel_callback(
                     db,
                     chat_id,
                     session,
-                    card_fields_from_file(session["character_file"]),
-                    session.get("model_id") or DEFAULT_MODEL,
+                    card_fields_from_file(session["character_file"], app_settings=request_context.app_settings),
+                    session.get("model_id") or request_context.app_settings.default_model,
                     session.get("persona_id") or "",
                     group_service=group_service,
+                    app_settings=request_context.app_settings,
                 ),
             )
         elif action == "refresh":
@@ -431,8 +443,14 @@ def handle_feature_panel_callback(
                 "",
                 chat_id,
                 session,
-                str(card_fields_from_file(session["character_file"]).get("name") or "unknown"),
+                str(
+                    card_fields_from_file(session["character_file"], app_settings=request_context.app_settings).get(
+                        "name"
+                    )
+                    or "unknown"
+                ),
                 provider_port=provider_port,
+                app_settings=request_context.app_settings,
             )
             send_scene_menu(token, chat_id, db, session, message_id, request_context=request_context)
         elif action == "clear":
@@ -492,8 +510,14 @@ def handle_feature_panel_callback(
                     "",
                     chat_id,
                     session,
-                    str(card_fields_from_file(session["character_file"]).get("name") or "unknown"),
+                    str(
+                        card_fields_from_file(session["character_file"], app_settings=request_context.app_settings).get(
+                            "name"
+                        )
+                        or "unknown"
+                    ),
                     provider_port=provider_port,
+                    app_settings=request_context.app_settings,
                 )
                 send_curated_memory_menu(token, chat_id, db, session, message_id, request_context=request_context)
         elif action == "back":

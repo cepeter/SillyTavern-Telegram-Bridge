@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -11,7 +12,7 @@ import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 
 
-class BackgroundLifecycleTests(unittest.TestCase):
+class BackgroundLifecycleTests(SettingsTestCase):
     @classmethod
     def setUpClass(cls):
         # Simulate unrelated work already tracked on the same pytest-xdist worker.

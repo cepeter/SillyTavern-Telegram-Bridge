@@ -13,24 +13,11 @@ import urllib.request
 from pathlib import Path
 
 from bridge.card_content import safe_character_path
-from bridge.common import (
-    IMAGE_MAX_BYTES,
-    parse_topic_scope,
-)
-from bridge.config import (
-    CARD_FILE,
-    DEFAULT_CHARACTER_FILE,
-    SILLYTAVERN_DIR,
-)
-from bridge.database import (
-    get_meta,
-    set_meta,
-)
+from bridge.common import IMAGE_MAX_BYTES, parse_topic_scope
+from bridge.database import get_meta, set_meta
 from bridge.delivery_port import DeliveryPort
-from bridge.panel_utils import (
-    panel_navigation,
-    panel_page,
-)
+from bridge.panel_utils import panel_navigation, panel_page
+from bridge.settings import AppSettings
 
 EXPRESSION_META = "expression"
 EXPRESSION_MODES = {"auto", "off", "manual"}
@@ -68,21 +55,21 @@ def expression_label(path: Path) -> str:
     return normalize_expression_label(match.group(1) if match else stem)
 
 
-def _expression_roots(character_file: str) -> list[Path]:
-    card = safe_character_path(character_file)
+def _expression_roots(character_file: str, *, app_settings: AppSettings) -> list[Path]:
+    card = safe_character_path(character_file, app_settings=app_settings)
     if card is None:
-        card = CARD_FILE
+        card = app_settings.card_file
     roots = [card.with_suffix("")]
-    default_root = SILLYTAVERN_DIR / "public" / "img" / "default-expressions"
+    default_root = app_settings.sillytavern_dir / "public" / "img" / "default-expressions"
     if default_root.exists():
         roots.append(default_root)
     return roots
 
 
-def discover_expression_assets(character_file: str) -> dict[str, Path]:
+def discover_expression_assets(character_file: str, *, app_settings: AppSettings) -> dict[str, Path]:
     """Discover native ST sprites in <characters>/<card stem> and defaults."""
     assets: dict[str, Path] = {}
-    for root in _expression_roots(character_file):
+    for root in _expression_roots(character_file, app_settings=app_settings):
         if not root.is_dir():
             continue
         for path in sorted(
@@ -114,9 +101,9 @@ def classify_expression(text: str, available: dict[str, Path]) -> str:
     return ""
 
 
-def _fixed_avatar(character_file: str) -> Path | None:
-    path = safe_character_path(character_file)
-    return path if path and path.is_file() else (CARD_FILE if CARD_FILE.is_file() else None)
+def _fixed_avatar(character_file: str, *, app_settings: AppSettings) -> Path | None:
+    path = safe_character_path(character_file, app_settings=app_settings)
+    return path if path and path.is_file() else (app_settings.card_file if app_settings.card_file.is_file() else None)
 
 
 def _send_expression_photo(token: str, chat_id: str, path: Path) -> bool:
@@ -156,22 +143,24 @@ def _send_expression_photo(token: str, chat_id: str, path: Path) -> bool:
         return False
 
 
-def deliver_expression(token: str, chat_id: str, text: str, db: sqlite3.Connection, session_id: str) -> None:
+def deliver_expression(
+    token: str, chat_id: str, text: str, db: sqlite3.Connection, session_id: str, *, app_settings: AppSettings
+) -> None:
     mode = get_meta(db, expression_mode_key(chat_id, session_id), "off")
     if mode == "off":
         return
     row = db.execute(
         "SELECT character_file FROM sessions WHERE chat_id=? AND session_id=?", (chat_id, session_id)
     ).fetchone()
-    character_file = str(row[0]) if row else DEFAULT_CHARACTER_FILE
-    assets = discover_expression_assets(character_file)
+    character_file = str(row[0]) if row else app_settings.default_character_file
+    assets = discover_expression_assets(character_file, app_settings=app_settings)
     if mode == "auto":
         selected = classify_expression(text, assets)
     elif mode in assets:
         selected = mode
     else:
         return
-    path = assets.get(selected) or assets.get("neutral") or _fixed_avatar(character_file)
+    path = assets.get(selected) or assets.get("neutral") or _fixed_avatar(character_file, app_settings=app_settings)
     if path is None:
         return
     effective = f"{selected or 'fixed'}:{path.resolve()}"
@@ -182,8 +171,10 @@ def deliver_expression(token: str, chat_id: str, text: str, db: sqlite3.Connecti
         db.commit()
 
 
-def expression_menu_markup(character_file: str, current: str = "off", page: int = 0) -> dict:
-    assets = discover_expression_assets(character_file)
+def expression_menu_markup(
+    character_file: str, current: str = "off", page: int = 0, *, app_settings: AppSettings
+) -> dict:
+    assets = discover_expression_assets(character_file, app_settings=app_settings)
     page_options, current_page, total_pages = panel_page(list(assets.items()), page)
     rows = []
     for label, _path in page_options:
@@ -214,7 +205,7 @@ def send_expression_menu(
     request_context,
 ) -> None:
     current = get_meta(db, expression_mode_key(chat_id, session["session_id"]), "off")
-    assets = discover_expression_assets(session["character_file"])
+    assets = discover_expression_assets(session["character_file"], app_settings=request_context.app_settings)
     _page_options, current_page, total_pages = panel_page(list(assets.items()), page)
     page_text = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     available = ", ".join(label.title() for label in assets) or "none; fixed avatar fallback available"
@@ -229,7 +220,9 @@ def send_expression_menu(
             "\nAutomatic mode classifies locally and sends an image only when it "
             "changes."
         ),
-        "reply_markup": expression_menu_markup(session["character_file"], current, current_page),
+        "reply_markup": expression_menu_markup(
+            session["character_file"], current, current_page, app_settings=request_context.app_settings
+        ),
     }
     method = "sendMessage"
     if message_id:

@@ -32,3 +32,6 @@ precision = 2
 show_missing = true
 # Measured statement+branch baseline 68.70%; whole-number floor (tools/coverage_baseline.json).
 fail_under = 68
+
+[tool.pytest.ini_options]
+filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]

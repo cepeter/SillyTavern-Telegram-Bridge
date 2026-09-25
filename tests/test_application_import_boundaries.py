@@ -10,6 +10,8 @@ import sys
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
 
@@ -126,7 +128,7 @@ def _owner_index() -> dict[str, list[str]]:
     return owners
 
 
-class ApplicationImportBoundaryTests(unittest.TestCase):
+class ApplicationImportBoundaryTests(SettingsTestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],

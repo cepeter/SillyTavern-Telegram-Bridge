@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -15,7 +16,7 @@ class ExpectedSyncError(RuntimeError):
     pass
 
 
-class SyncServiceTests(unittest.TestCase):
+class SyncServiceTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.binding = {
@@ -131,7 +132,7 @@ class SyncServiceTests(unittest.TestCase):
         self.assertEqual(self.polls, [self.db])
 
 
-class SyncSourceBoundaryTests(unittest.TestCase):
+class SyncSourceBoundaryTests(SettingsTestCase):
     def _function_chunk(self, source, marker):
         start = source.index(marker)
         next_def = source.find("\ndef ", start + len(marker))
@@ -188,7 +189,7 @@ class SyncSourceBoundaryTests(unittest.TestCase):
                 return_value=FakeDb(),
             ),
         ):
-            _m_sync_api._live_sync_worker_loop(service)
+            _m_sync_api._live_sync_worker_loop(service, app_settings=self.app_settings_builder.build())
 
         self.assertEqual(service.polls, 1)
 

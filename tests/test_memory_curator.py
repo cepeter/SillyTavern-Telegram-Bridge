@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -9,7 +10,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import bridge.config as config
 import bridge.memory as _m_memory
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
@@ -17,24 +17,25 @@ import bridge.session_naming as _m_session_naming
 import bridge.sync_core as _m_sync_core
 
 
-class MemoryCuratorTests(unittest.TestCase):
+class MemoryCuratorTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.session = _m_session_naming.create_session(
             self.db,
             "chat",
             "primary::main",
             session_id="curator",
             title="Curator",
+            app_settings=self.app_settings_builder.build(),
         )
         _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def _add_turn(self):
@@ -85,7 +86,7 @@ class MemoryCuratorTests(unittest.TestCase):
                 '"kind":"relationship","confidence":0.95}]}'
             )
 
-        def fake_retain(*args, **kwargs):
+        def fake_retain(*args, app_settings=None, **kwargs):
             self.assertFalse(self.db.in_transaction)
             retained.append((args, kwargs))
             return True
@@ -100,6 +101,7 @@ class MemoryCuratorTests(unittest.TestCase):
                 self.session,
                 "Mira",
                 provider_port=provider,
+                app_settings=self.app_settings_builder.build(),
             )
         finally:
             _m_memory_curator._retain_with_client = old_retain
@@ -125,6 +127,7 @@ class MemoryCuratorTests(unittest.TestCase):
                 self.session,
                 {"name": "Mira"},
                 provider_port=provider,
+                app_settings=self.app_settings_builder.build(),
             )
             self.assertNotIn("memory_curator", queued)
 
@@ -135,6 +138,7 @@ class MemoryCuratorTests(unittest.TestCase):
                 self.session,
                 {"name": "Mira"},
                 provider_port=provider,
+                app_settings=self.app_settings_builder.build(),
             )
         finally:
             _m_memory_curator.submit_background = old_submit
@@ -188,6 +192,7 @@ class MemoryCuratorTests(unittest.TestCase):
                 self.session,
                 "Mira",
                 provider_port=provider,
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(items, newer_items)
@@ -218,6 +223,7 @@ class MemoryCuratorTests(unittest.TestCase):
             "Mira",
             through_rowid=2,
             provider_port=provider,
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(calls, [])

@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-from bridge.common import (
-    MAX_TELEGRAM_LENGTH,
-    sqlite3,
-)
-from bridge.database import (
-    set_meta,
-)
+from bridge.common import MAX_TELEGRAM_LENGTH, sqlite3
+from bridge.database import set_meta
 from bridge.rag_core import (
     activate_data_bank_version,
     data_bank_document_versions,
@@ -33,10 +28,13 @@ from bridge.rag_core import rag_retrieval_bundle as rag_retrieval_bundle
 from bridge.rag_core import rag_semantic_candidate_limit as rag_semantic_candidate_limit
 from bridge.rag_core import semantic_candidate_chunk_ids as semantic_candidate_chunk_ids
 from bridge.rag_core import split_data_bank_chunks as split_data_bank_chunks
+from bridge.settings import AppSettings
 from bridge.telegram import send_text
 
 
-def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, command_text: str) -> None:
+def handle_data_bank_command(
+    db: sqlite3.Connection, token: str, chat_id: str, command_text: str, *, app_settings: AppSettings
+) -> None:
     parts = command_text.split(None, 3)
     argument = parts[1].casefold() if len(parts) > 1 else "status"
     if argument in {"on", "off"}:
@@ -58,7 +56,7 @@ def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, c
         return
     if argument == "reindex":
         filename = parts[2].strip() if len(parts) > 2 else None
-        total, indexed = reindex_data_bank_documents(db, chat_id, filename)
+        total, indexed = reindex_data_bank_documents(db, chat_id, filename, app_settings=app_settings)
         send_text(
             token,
             chat_id,
@@ -115,7 +113,7 @@ def handle_data_bank_command(db: sqlite3.Connection, token: str, chat_id: str, c
         return
     if argument == "search":
         query = parts[2].strip() if len(parts) > 2 else ""
-        results = retrieve_data_bank(db, chat_id, query)
+        results = retrieve_data_bank(db, chat_id, query, app_settings=app_settings)
         text = "\n\n".join(f"[{filename}]\n{content}" for filename, content, _ in results)
         send_text(
             token,

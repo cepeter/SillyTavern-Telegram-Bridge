@@ -66,7 +66,7 @@ def test_group_director_service_owns_typed_policy_contract():
     assert customization.speaker_context == "context"
 
 
-def test_director_goals_exposes_direct_policy_without_registry_slot(monkeypatch):
+def test_director_goals_exposes_direct_policy_without_registry_slot(monkeypatch, *, app_settings_builder):
     import bridge.director_goals as goals
     from bridge.group_director_service import DirectorCustomization
 
@@ -85,13 +85,11 @@ def test_director_goals_exposes_direct_policy_without_registry_slot(monkeypatch)
     monkeypatch.setattr(
         goals,
         "task_model_for_session",
-        lambda *_args, **_kwargs: "director-model",
+        lambda *_args, app_settings=None, **_kwargs: "director-model",
     )
 
     result = goals.director_goal_policy(
-        object(),
-        "chat",
-        {"session_id": "session"},
+        object(), "chat", {"session_id": "session"}, app_settings=app_settings_builder.build()
     )
 
     assert isinstance(result, DirectorCustomization)
@@ -117,7 +115,7 @@ def test_main_injects_director_goal_policy_directly():
 
     assert "get_director_customization" not in source
     assert "director_goal_policy" in source
-    assert "director_policy=director_goal_policy" in source
+    assert "director_policy=_partial(director_goal_policy, app_settings=config)" in source
 
 
 def test_group_director_service_stays_bridge_independent():

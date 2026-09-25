@@ -24,7 +24,7 @@ def top_level_functions(filename: str) -> set[str]:
     return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
-def test_persona_sync_is_canonical_identity_owner(monkeypatch):
+def test_persona_sync_is_canonical_identity_owner(monkeypatch, *, app_settings_builder):
     import bridge.persona_sync as persona_sync
 
     for name in ("get_persona", "default_persona_id", "persona_name"):
@@ -33,7 +33,7 @@ def test_persona_sync_is_canonical_identity_owner(monkeypatch):
     monkeypatch.setattr(
         persona_sync,
         "load_personas",
-        lambda: {
+        lambda *, app_settings=None: {
             "alice.png": {
                 "name": "Alice",
                 "description": "Test",
@@ -43,17 +43,17 @@ def test_persona_sync_is_canonical_identity_owner(monkeypatch):
     monkeypatch.setattr(
         persona_sync,
         "_native_settings",
-        lambda: {
+        lambda *, app_settings=None: {
             "power_user": {
                 "default_persona": "alice.png",
             }
         },
     )
 
-    assert persona_sync.get_persona("alice.png")["name"] == "Alice"
-    assert persona_sync.persona_name("alice.png") == "Alice"
-    assert persona_sync.persona_name("missing.png") == ""
-    assert persona_sync.default_persona_id() == "alice.png"
+    assert persona_sync.get_persona("alice.png", app_settings=app_settings_builder.build())["name"] == "Alice"
+    assert persona_sync.persona_name("alice.png", app_settings=app_settings_builder.build()) == "Alice"
+    assert persona_sync.persona_name("missing.png", app_settings=app_settings_builder.build()) == ""
+    assert persona_sync.default_persona_id(app_settings=app_settings_builder.build()) == "alice.png"
 
 
 def test_cards_no_longer_owns_or_imports_persona_identity():

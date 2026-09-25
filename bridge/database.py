@@ -9,10 +9,9 @@ from contextlib import contextmanager as _contextmanager
 from pathlib import Path
 
 from bridge import config as _config
-from bridge.scheduler_safety import (
-    DatabaseConnectionGate as _DatabaseConnectionGate,
-)
+from bridge.scheduler_safety import DatabaseConnectionGate as _DatabaseConnectionGate
 from bridge.schema import initialize_database_schema
+from bridge.settings import AppSettings
 
 _DB_WRITE_LOCK = threading.RLock()
 _WRITE_SQL_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
@@ -166,7 +165,9 @@ def optimize_database(db: sqlite3.Connection) -> None:
         pass
 
 
-def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: float = 5.0) -> bool:
+def run_database_maintenance(
+    vacuum_freelist_threshold: int = 500, timeout: float = 5.0, *, app_settings: AppSettings
+) -> bool:
     """Reclaim disk space on a dedicated autocommit connection.
 
     VACUUM is a database-wide writer operation that can starve durable job
@@ -175,7 +176,7 @@ def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: floa
     to live traffic instead of blocking it, and only when freelist slack
     actually justifies the rewrite.
     """
-    path = _database_path()
+    path = _database_path(app_settings=app_settings)
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path, timeout=timeout, isolation_level=None)
     reclaimed = False
@@ -201,15 +202,15 @@ def run_database_maintenance(vacuum_freelist_threshold: int = 500, timeout: floa
     return reclaimed
 
 
-def _database_path(database_path: Path | None = None) -> Path:
-    path = Path(database_path) if database_path is not None else _config.DB_FILE
+def _database_path(database_path: Path | None = None, *, app_settings: AppSettings) -> Path:
+    path = Path(database_path) if database_path is not None else app_settings.db_file
     return path.expanduser().resolve()
 
 
 def _open_initialized_database(
     database_path: Path,
 ) -> sqlite3.Connection:
-    path = _database_path(database_path)
+    path = Path(database_path).expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(
         path,
@@ -232,10 +233,10 @@ def _open_initialized_database(
 
 
 def _lightweight_db_connect(
-    database_path: Path | None = None,
+    database_path: Path,
     timeout: float = 30.0,
 ) -> sqlite3.Connection:
-    path = _database_path(database_path)
+    path = Path(database_path).expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(
         path,
@@ -257,9 +258,9 @@ _DB_CONNECTION_GATE = _DatabaseConnectionGate(
 )
 
 
-def db_connect(database_path: Path | None = None) -> sqlite3.Connection:
+def db_connect(database_path: Path | None = None, *, app_settings: AppSettings) -> sqlite3.Connection:
     """Open the canonical connection for a SQLite database path."""
-    return _DB_CONNECTION_GATE.connect(_database_path(database_path))
+    return _DB_CONNECTION_GATE.connect(_database_path(database_path, app_settings=app_settings))
 
 
 def get_meta(db: sqlite3.Connection, key: str, default: str = "") -> str:
@@ -581,10 +582,7 @@ def task_model_key(chat_id: str, session_id: str, task: str = "utility") -> str:
 
 
 def task_model_for_session(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session: dict[str, str],
-    task: str = "utility",
+    db: sqlite3.Connection, chat_id: str, session: dict[str, str], task: str = "utility", *, app_settings: AppSettings
 ) -> str:
     """Resolve a per-task model with utility -> main-model fallback."""
     session_id = str(session["session_id"])
@@ -592,7 +590,7 @@ def task_model_for_session(
     model = get_meta(db, task_model_key(chat_id, session_id, task_name), "").strip()
     if not model and task_name != "utility":
         model = get_meta(db, task_model_key(chat_id, session_id, "utility"), "").strip()
-    return model or str(session.get("model_id") or _config.DEFAULT_MODEL)
+    return model or str(session.get("model_id") or app_settings.default_model)
 
 
 def set_task_model(

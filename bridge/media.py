@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from functools import partial as _partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,8 +29,6 @@ from bridge.common import (
     parse_topic_scope,
     submit_background,
 )
-from bridge.config import BRIDGE_HOME
-from bridge.config import PROVIDER_CONFIG_FILE as PROVIDER_CONFIG_FILE
 from bridge.database import (
     begin_operation,
     clear_failed_turn,
@@ -41,12 +40,8 @@ from bridge.database import (
     run_write_txn,
 )
 from bridge.expressions import deliver_expression
-from bridge.telegram import (
-    download_telegram_file,
-    ensure_session,
-    send_text,
-    telegram_request,
-)
+from bridge.settings import AppSettings
+from bridge.telegram import download_telegram_file, ensure_session, send_text, telegram_request
 
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices as _BridgeServices
@@ -105,15 +100,15 @@ def send_voice(token: str, chat_id: str, path: Path, caption: str = "") -> bool:
         return False
 
 
-def synthesize_voice(text: str, output_path: Path) -> None:
+def synthesize_voice(text: str, output_path: Path, *, app_settings: AppSettings) -> None:
     text = str(text).strip()[:TTS_MAX_CHARS]
     if not text:
         raise ValueError("TTS text is empty")
     tts_bin = _resolve_media_command(
-        os.environ.get("SILLYTAVERN_TTS_BIN", str(BRIDGE_HOME / "venv" / "bin" / "edge-tts")),
+        app_settings.environ.get("SILLYTAVERN_TTS_BIN", str(app_settings.bridge_home / "venv" / "bin" / "edge-tts")),
         "TTS",
     )
-    voice = os.environ.get("SILLYTAVERN_TTS_VOICE", "").strip()
+    voice = app_settings.environ.get("SILLYTAVERN_TTS_VOICE", "").strip()
     if not voice:
         raise ValueError("SILLYTAVERN_TTS_VOICE is required for voice output")
     with tempfile.TemporaryDirectory(prefix="st-tts-") as temp_dir:
@@ -147,8 +142,10 @@ def synthesize_voice(text: str, output_path: Path) -> None:
         )
 
 
-def send_tts(token: str, chat_id: str, text: str, operation_id: int | str | None = None) -> bool:
-    operation_db = db_connect() if operation_id is not None else None
+def send_tts(
+    token: str, chat_id: str, text: str, operation_id: int | str | None = None, *, app_settings: AppSettings
+) -> bool:
+    operation_db = db_connect(app_settings=app_settings) if operation_id is not None else None
     try:
         if operation_db is not None:
             if operation_was_applied(operation_db, operation_id):
@@ -158,7 +155,7 @@ def send_tts(token: str, chat_id: str, text: str, operation_id: int | str | None
         with tempfile.TemporaryDirectory(prefix="st-voice-") as temp_dir:
             voice_path = Path(temp_dir) / "reply.ogg"
             try:
-                synthesize_voice(text, voice_path)
+                synthesize_voice(text, voice_path, app_settings=app_settings)
                 delivered = send_voice(token, chat_id, voice_path)
                 if delivered and operation_db is not None:
                     record_operation(operation_db, operation_id, "tts_delivery")
@@ -218,7 +215,14 @@ def quoted_speech_from_reply(text: str) -> str:
 
 
 def queue_user_quote_tts(
-    token: str, chat_id: str, text: str, db: sqlite3.Connection, session_id: str, message_id: int | None = None
+    token: str,
+    chat_id: str,
+    text: str,
+    db: sqlite3.Connection,
+    session_id: str,
+    message_id: int | None = None,
+    *,
+    app_settings: AppSettings,
 ) -> bool:
     """Queue quoted user dialogue for TTS without changing the transcript."""
     if get_meta(db, f"voice_mode:{chat_id}", "off") != "tts":
@@ -232,7 +236,9 @@ def queue_user_quote_tts(
         else hashlib.sha256(f"{session_id}\0{text}".encode("utf-8")).hexdigest()[:24]
     )
     operation_id = f"user-tts:{chat_id}:{session_id}:{stable_id}"
-    if not submit_background("tts", send_tts, token, chat_id, speech, operation_id):
+    if not submit_background(
+        "tts", _partial(send_tts, app_settings=app_settings), token, chat_id, speech, operation_id
+    ):
         logging.warning("Automatic user-quote TTS dropped for chat %s", chat_id)
         return False
     return True
@@ -268,9 +274,11 @@ def send_reply(
     db: sqlite3.Connection | None = None,
     session_id: str | None = None,
     assistant_rowid: int | None = None,
+    *,
+    app_settings: AppSettings,
 ) -> None:
     if db is not None and session_id:
-        deliver_expression(token, chat_id, text, db, session_id)
+        deliver_expression(token, chat_id, text, db, session_id, app_settings=app_settings)
     message_ids = send_text(token, chat_id, text)
     if db is not None and assistant_rowid is not None:
         persist_assistant_delivery_ids(db, assistant_rowid, message_ids)
@@ -281,7 +289,9 @@ def send_reply(
             if assistant_rowid is not None:
                 speech_hash = hashlib.sha256(speech.encode("utf-8")).hexdigest()[:16]
                 operation_id = f"assistant-tts:{chat_id}:{session_id}:{assistant_rowid}:{speech_hash}"
-            if not submit_background("tts", send_tts, token, chat_id, speech, operation_id):
+            if not submit_background(
+                "tts", _partial(send_tts, app_settings=app_settings), token, chat_id, speech, operation_id
+            ):
                 logging.warning("Automatic TTS dropped for chat %s", chat_id)
 
 
@@ -290,13 +300,18 @@ _STT_MODEL_LOCK = threading.Lock()
 
 
 def transcribe_audio_bytes(
-    raw: bytes, suffix: str = ".ogg", model_name: str | None = None, language: str | None = None
+    raw: bytes,
+    suffix: str = ".ogg",
+    model_name: str | None = None,
+    language: str | None = None,
+    *,
+    app_settings: AppSettings,
 ) -> str:
     if len(raw) > STT_MAX_BYTES:
         raise ValueError("voice message exceeds 20 MB")
     from faster_whisper import WhisperModel
 
-    model_name = model_name or os.environ.get("SILLYTAVERN_STT_MODEL", STT_DEFAULT_MODEL)
+    model_name = model_name or app_settings.environ.get("SILLYTAVERN_STT_MODEL", STT_DEFAULT_MODEL)
     model = _STT_MODEL_CACHE.get(model_name)
     if model is None:
         with _STT_MODEL_LOCK:
@@ -342,7 +357,7 @@ def process_voice_message(
     suffix = Path(str(voice.get("file_name") or ".ogg")).suffix or ".ogg"
     language = get_meta(db, f"stt_language:{chat_id}", "auto")
     stt_model = get_meta(db, f"stt_model:{chat_id}", STT_DEFAULT_MODEL)
-    transcript = transcribe_audio_bytes(raw, suffix, stt_model, language)
+    transcript = transcribe_audio_bytes(raw, suffix, stt_model, language, app_settings=services.config)
     services.conversation.process_message(
         db,
         token,
@@ -385,8 +400,18 @@ def process_voice_job(
                     if job_id is not None:
                         jobs.complete(db, job_id)
                     return
-                delivery_session_id = queued_session_id or ensure_session(db, chat_id, model)["session_id"]
-                send_reply(token, chat_id, str(existing[1]), db, delivery_session_id, int(existing[0]))
+                delivery_session_id = (
+                    queued_session_id or ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+                )
+                send_reply(
+                    token,
+                    chat_id,
+                    str(existing[1]),
+                    db,
+                    delivery_session_id,
+                    int(existing[0]),
+                    app_settings=services.config,
+                )
                 clear_failed_turn(db, chat_id, message_id)
                 if job_id is not None:
                     jobs.complete(db, job_id)

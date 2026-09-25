@@ -1,10 +1,12 @@
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 from bridge.sync_integrity import SyncSnapshotIntegrityAdapter
 
 
-class SyncSnapshotIntegrityAdapterTests(unittest.TestCase):
+class SyncSnapshotIntegrityAdapterTests(SettingsTestCase):
     def setUp(self):
         self.events = []
         self.updates = []
@@ -421,7 +423,7 @@ class SyncSnapshotIntegrityAdapterTests(unittest.TestCase):
         self.assertEqual(len(self.warnings), 1)
 
 
-class SyncIntegritySourceBoundaryTests(unittest.TestCase):
+class SyncIntegritySourceBoundaryTests(SettingsTestCase):
     def test_sync_integrity_has_no_runtime_sync_or_ui_imports(self):
         source = (Path(__file__).parents[1] / "bridge" / "sync_integrity.py").read_text(encoding="utf-8")
 

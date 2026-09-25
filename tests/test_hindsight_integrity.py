@@ -3,10 +3,12 @@ import threading
 import time
 import unittest
 
+from settings_test_support import SettingsTestCase
+
 from bridge.hindsight_integrity import HindsightStaleGuard
 
 
-class HindsightStaleGuardTests(unittest.TestCase):
+class HindsightStaleGuardTests(SettingsTestCase):
     def setUp(self):
         self.lock = threading.RLock()
         self.enabled = True

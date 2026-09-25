@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -51,7 +52,7 @@ class _CancelAfterLineStreamResponse(_FakeStreamResponse):
                 self.cancel_event.set()
 
 
-class GenerationContinuationTests(unittest.TestCase):
+class GenerationContinuationTests(SettingsTestCase):
     def setUp(self):
         self.original_urlopen = _m_provider_transport.strict_urlopen
         self.old_key = os.environ.get("TEST_OPENROUTER_KEY")
@@ -105,6 +106,7 @@ class GenerationContinuationTests(unittest.TestCase):
                     "test",
                     [{"role": "user", "content": "Write a complete answer."}],
                     settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+                    app_settings=self.app_settings_builder.build(),
                 )
 
         logs = "\\n".join(captured.output)
@@ -138,6 +140,7 @@ class GenerationContinuationTests(unittest.TestCase):
             "test",
             [{"role": "user", "content": "Reply OK."}],
             settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "OK")
@@ -160,6 +163,7 @@ class GenerationContinuationTests(unittest.TestCase):
             "test",
             [{"role": "user", "content": "Reply TOP."}],
             settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "TOP")
@@ -192,6 +196,7 @@ class GenerationContinuationTests(unittest.TestCase):
                         }
                     ],
                     settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+                    app_settings=self.app_settings_builder.build(),
                 )
 
         logs = "\n".join(captured.output)
@@ -224,7 +229,7 @@ class GenerationContinuationTests(unittest.TestCase):
             },
         ]
 
-        def fake_urlopen(_request, **_kwargs):
+        def fake_urlopen(_request, *, environ=None, **_kwargs):
             return _FakeResponse(payloads.pop(0))
 
         _m_provider_transport.strict_urlopen = fake_urlopen
@@ -234,6 +239,7 @@ class GenerationContinuationTests(unittest.TestCase):
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
             settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Part one. Part two.")
@@ -242,7 +248,7 @@ class GenerationContinuationTests(unittest.TestCase):
     def test_generate_text_honors_explicit_request_timeout(self):
         seen = []
 
-        def fake_urlopen(_request, timeout):
+        def fake_urlopen(_request, timeout, *, environ=None):
             seen.append(timeout)
             return _FakeResponse({"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]})
 
@@ -254,6 +260,7 @@ class GenerationContinuationTests(unittest.TestCase):
             [{"role": "user", "content": "Reply OK."}],
             settings=dict(_m_sync_core.GENERATION_DEFAULTS),
             request_timeout=30,
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "OK")
@@ -278,7 +285,7 @@ class GenerationContinuationTests(unittest.TestCase):
         ]
         requests = []
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             requests.append(json.loads(request.data.decode()))
             return responses.pop(0)
 
@@ -289,6 +296,7 @@ class GenerationContinuationTests(unittest.TestCase):
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
             settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Recovered answer.")
@@ -316,7 +324,7 @@ class GenerationContinuationTests(unittest.TestCase):
         ]
         requests = []
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             requests.append(json.loads(request.data.decode()))
             return responses.pop(0)
 
@@ -327,6 +335,7 @@ class GenerationContinuationTests(unittest.TestCase):
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
             settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Part one. Part two.")
@@ -341,7 +350,7 @@ class GenerationContinuationTests(unittest.TestCase):
         ]
         requests = []
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             requests.append(json.loads(request.data.decode()))
             return _FakeResponse(payloads.pop(0))
 
@@ -352,6 +361,7 @@ class GenerationContinuationTests(unittest.TestCase):
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
             settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Part one. Part two.")
@@ -363,7 +373,7 @@ class GenerationContinuationTests(unittest.TestCase):
     def test_failed_automatic_continuation_keeps_first_segment(self):
         calls = 0
 
-        def fake_urlopen(_request, timeout):
+        def fake_urlopen(_request, timeout, *, environ=None):
             nonlocal calls
             calls += 1
             if calls == 1:
@@ -379,6 +389,7 @@ class GenerationContinuationTests(unittest.TestCase):
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
             settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Partial but usable.")
@@ -403,7 +414,7 @@ class GenerationContinuationTests(unittest.TestCase):
         ]
         callbacks = []
 
-        def fake_urlopen(_request, timeout):
+        def fake_urlopen(_request, timeout, *, environ=None):
             return responses.pop(0)
 
         _m_provider_transport.strict_urlopen = fake_urlopen
@@ -414,6 +425,7 @@ class GenerationContinuationTests(unittest.TestCase):
             [{"role": "user", "content": "Write a complete answer."}],
             settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
             stream_callback=callbacks.append,
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Part one. Part two.")
@@ -425,7 +437,7 @@ class GenerationContinuationTests(unittest.TestCase):
         cancel_event = threading.Event()
         calls = 0
 
-        def fake_urlopen(_request, timeout):
+        def fake_urlopen(_request, timeout, *, environ=None):
             nonlocal calls
             calls += 1
             if calls > 1:
@@ -451,6 +463,7 @@ class GenerationContinuationTests(unittest.TestCase):
             settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
             stream_callback=callback,
             cancel_event=cancel_event,
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Part one.")
@@ -480,7 +493,7 @@ class GenerationContinuationTests(unittest.TestCase):
         calls = 0
         callbacks = []
 
-        def fake_urlopen(_request, timeout):
+        def fake_urlopen(_request, timeout, *, environ=None):
             nonlocal calls
             calls += 1
             if not responses:
@@ -496,6 +509,7 @@ class GenerationContinuationTests(unittest.TestCase):
             settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
             stream_callback=callbacks.append,
             cancel_event=cancel_event,
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Part one. Part two.")
@@ -521,7 +535,7 @@ class GenerationContinuationTests(unittest.TestCase):
         ]
         callbacks = []
 
-        def fake_urlopen(_request, timeout):
+        def fake_urlopen(_request, timeout, *, environ=None):
             return responses.pop(0)
 
         _m_provider_transport.strict_urlopen = fake_urlopen
@@ -532,6 +546,7 @@ class GenerationContinuationTests(unittest.TestCase):
             [{"role": "user", "content": "Write a complete answer."}],
             settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
             stream_callback=callbacks.append,
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "Recovered answer.")
@@ -542,7 +557,7 @@ class GenerationContinuationTests(unittest.TestCase):
         cancel_event = threading.Event()
         calls = 0
 
-        def fake_urlopen(_request, timeout):
+        def fake_urlopen(_request, timeout, *, environ=None):
             nonlocal calls
             calls += 1
             if calls > 1:
@@ -565,6 +580,7 @@ class GenerationContinuationTests(unittest.TestCase):
                 [{"role": "user", "content": "Write a complete answer."}],
                 settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
                 cancel_event=cancel_event,
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(calls, 1)
@@ -584,7 +600,7 @@ class GenerationContinuationTests(unittest.TestCase):
             for segment in segments
         ]
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             requests.append(json.loads(request.data.decode()))
             if not responses:
                 raise AssertionError("visible continuation exceeded three requests")
@@ -597,6 +613,7 @@ class GenerationContinuationTests(unittest.TestCase):
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
             settings={**_m_sync_core.GENERATION_DEFAULTS, "max_tokens": 1800},
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(result, "One. Two. Three. Four.")

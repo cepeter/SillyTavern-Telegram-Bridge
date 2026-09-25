@@ -6,15 +6,9 @@ import re
 import sqlite3
 import time
 
-from bridge.card_content import (
-    card_fields_from_file,
-    replace_macros,
-)
+from bridge.card_content import card_fields_from_file, replace_macros
 from bridge.common import MAX_HISTORY_MESSAGES
-from bridge.context_compaction import (
-    context_history_candidate_limit,
-    context_input_budget_tokens,
-)
+from bridge.context_compaction import context_history_candidate_limit, context_input_budget_tokens
 from bridge.database import (
     begin_operation,
     delete_generation_preset,
@@ -29,26 +23,13 @@ from bridge.database import (
     update_generation_settings,
     write_transaction,
 )
-from bridge.generation import (
-    build_chat_messages,
-    render_session_response,
-    save_response_variant,
-)
+from bridge.generation import build_chat_messages, render_session_response, save_response_variant
 from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
-from bridge.media import (
-    delete_outgoing_message_row,
-    send_reply,
-    send_typing,
-)
-from bridge.memory_backend import (
-    memory_mode,
-    memory_scope,
-)
+from bridge.media import delete_outgoing_message_row, send_reply, send_typing
+from bridge.memory_backend import memory_mode, memory_scope
 from bridge.memory_service import MemoryService
-from bridge.operation_recovery import (
-    OperationRecovery as _OperationRecovery,
-)
+from bridge.operation_recovery import OperationRecovery as _OperationRecovery
 from bridge.persona_service import PersonaService
 from bridge.persona_sync import persona_name
 from bridge.provider_port import ProviderPort
@@ -60,6 +41,7 @@ from bridge.rag_core import (
     rag_retrieval_bundle,
 )
 from bridge.reset_panel import reset_confirmation_request
+from bridge.settings import AppSettings
 from bridge.telegram import ensure_session as ensure_session
 from bridge.telegram import load_session, send_panel_request, send_text, telegram_request
 
@@ -125,12 +107,13 @@ def process_image_message(
     memory_service: MemoryService,
     persona_service: PersonaService,
     group_director_service: GroupDirectorService,
+    app_settings: AppSettings,
 ) -> None:
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_service.current_speaker(db, chat_id, session, caption)
     group_context = ""
     if group_turn:
-        fields = card_fields_from_file(group_turn[0])
+        fields = card_fields_from_file(group_turn[0], app_settings=app_settings)
         group_context = group_director_service.prompt_context(
             db,
             chat_id,
@@ -143,7 +126,7 @@ def process_image_message(
         (chat_id, session["session_id"]),
     ).fetchall()
     history_rows = [(row[0], row[1]) for row in rows[-MAX_HISTORY_MESSAGES:]]
-    rag_bundle = rag_retrieval_bundle(db, chat_id, caption)
+    rag_bundle = rag_retrieval_bundle(db, chat_id, caption, app_settings=app_settings)
     memory_prompt = memory_service.prompt_context(
         db,
         chat_id,
@@ -161,9 +144,10 @@ def process_image_message(
         image_data_uri=image_data_uri,
         memory_context=memory_context,
         session_summary=session_summary,
-        rag_context=rag_context_for_prompt(db, chat_id, caption, rag_bundle),
+        rag_context=rag_context_for_prompt(db, chat_id, caption, rag_bundle, app_settings=app_settings),
         group_context=group_context,
         persona_service=persona_service,
+        app_settings=app_settings,
     )
     send_typing(token, chat_id)
     reply = provider_port.generate(
@@ -173,7 +157,7 @@ def process_image_message(
         session_id=f"telegram:{chat_id}:{session['session_id']}",
         settings=get_generation_settings(db, chat_id, session["session_id"]),
     )
-    reply += rag_citation_footer(db, chat_id, caption, rag_bundle)
+    reply += rag_citation_footer(db, chat_id, caption, rag_bundle, app_settings=app_settings)
     reply = render_session_response(
         api_key,
         session,
@@ -216,7 +200,7 @@ def process_image_message(
         if group_turn:
             group_service.advance_turn(db, chat_id, session["session_id"])
     memory_service.retain(db, chat_id, session, fields)
-    send_reply(token, chat_id, stored_reply, db, session["session_id"], assistant_rowid)
+    send_reply(token, chat_id, stored_reply, db, session["session_id"], assistant_rowid, app_settings=app_settings)
 
 
 def regenerate_edited_turn(
@@ -233,6 +217,7 @@ def regenerate_edited_turn(
     provider_port: ProviderPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
+    app_settings: AppSettings,
 ) -> None:
     session_id = session["session_id"]
 
@@ -263,6 +248,7 @@ def regenerate_edited_turn(
             db,
             session_id,
             int(assistant_row[0]),
+            app_settings=app_settings,
         )
         _COMMAND_OPERATION_RECOVERY.finish(
             db,
@@ -298,11 +284,7 @@ def regenerate_edited_turn(
         new_text,
         edited_user_rowid=int(user_rowid),
     )
-    rag_bundle = rag_retrieval_bundle(
-        db,
-        chat_id,
-        new_text,
-    )
+    rag_bundle = rag_retrieval_bundle(db, chat_id, new_text, app_settings=app_settings)
     messages = build_chat_messages(
         session,
         fields,
@@ -311,12 +293,8 @@ def regenerate_edited_turn(
         memory_context=memory_prompt.recall,
         session_summary=memory_prompt.summary,
         persona_service=persona_service,
-        rag_context=rag_context_for_prompt(
-            db,
-            chat_id,
-            new_text,
-            rag_bundle,
-        ),
+        rag_context=rag_context_for_prompt(db, chat_id, new_text, rag_bundle, app_settings=app_settings),
+        app_settings=app_settings,
     )
     send_typing(token, chat_id)
     generation_settings = get_generation_settings(
@@ -331,12 +309,7 @@ def regenerate_edited_turn(
         session_id=f"telegram:{chat_id}:{session_id}",
         settings=generation_settings,
     )
-    reply += rag_citation_footer(
-        db,
-        chat_id,
-        new_text,
-        rag_bundle,
-    )
+    reply += rag_citation_footer(db, chat_id, new_text, rag_bundle, app_settings=app_settings)
     reply = render_session_response(
         api_key,
         session,
@@ -425,6 +398,7 @@ def regenerate_edited_turn(
         db,
         session_id,
         assistant_rowid,
+        app_settings=app_settings,
     )
     _COMMAND_OPERATION_RECOVERY.finish(
         db,
@@ -446,6 +420,7 @@ def edit_last_user(
     provider_port: ProviderPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
+    app_settings: AppSettings,
 ) -> None:
     session_id = session["session_id"]
     rows = db.execute(
@@ -469,6 +444,7 @@ def edit_last_user(
         provider_port=provider_port,
         memory_service=memory_service,
         persona_service=persona_service,
+        app_settings=app_settings,
     )
 
 
@@ -485,6 +461,7 @@ def edit_telegram_user_message(
     provider_port: ProviderPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
+    app_settings: AppSettings,
 ) -> None:
     row = db.execute(
         (
@@ -499,8 +476,8 @@ def edit_telegram_user_message(
     if not new_text.strip():
         send_text(token, chat_id, "Edited message cannot be empty.")
         return
-    session = load_session(db, chat_id, str(row[1]), default_model)
-    fields = card_fields_from_file(session["character_file"])
+    session = load_session(db, chat_id, str(row[1]), default_model, app_settings=app_settings)
+    fields = card_fields_from_file(session["character_file"], app_settings=app_settings)
     regenerate_edited_turn(
         db,
         token,
@@ -514,6 +491,7 @@ def edit_telegram_user_message(
         provider_port=provider_port,
         memory_service=memory_service,
         persona_service=persona_service,
+        app_settings=app_settings,
     )
 
 
@@ -577,7 +555,14 @@ def handle_macro_command(
         send_text(
             token,
             chat_id,
-            replace_macros(raw, fields, persona_name(session["persona_id"]) if session["persona_id"] else "user"),
+            replace_macros(
+                raw,
+                fields,
+                persona_name(session["persona_id"], app_settings=request_context.app_settings)
+                if session["persona_id"]
+                else "user",
+                app_settings=request_context.app_settings,
+            ),
         )
         return
     script = parts[1].strip() if len(parts) > 1 else ""
@@ -633,6 +618,7 @@ def prompt_diagnostics(
     *,
     group_service: GroupService,
     memory_service: MemoryService,
+    app_settings: AppSettings,
 ) -> str:
     message_count = db.execute(
         "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])
@@ -646,9 +632,9 @@ def prompt_diagnostics(
         "\nMessages: "
         f"""{message_count}"""
         "\nContext input budget: ~"
-        f"""{context_input_budget_tokens()}"""
+        f"""{context_input_budget_tokens(app_settings=app_settings)}"""
         " tokens\nHistory candidates: "
-        f"""{context_history_candidate_limit()}"""
+        f"""{context_history_candidate_limit(app_settings=app_settings)}"""
         " messages\nSession summary: "
         f"""{len(summary)}"""
         " chars (through row "

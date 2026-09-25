@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_request_context
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -11,7 +12,6 @@ import unittest
 import urllib
 from pathlib import Path
 
-import bridge.config as config
 import bridge.database as database
 import bridge.main as _m_main
 import bridge.media as _m_media
@@ -36,16 +36,16 @@ class _FakeTelegramResponse:
         return json.dumps({"ok": True, "result": {"message_id": 900}}).encode("utf-8")
 
 
-class SqliteContentionTests(unittest.TestCase):
+class SqliteContentionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db_file = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db_file = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db_file
+        self.app_settings_builder.db_file = self.old_db_file
         self.tmp.cleanup()
 
     def test_failed_poll_update_restores_durable_offset(self):
@@ -79,7 +79,9 @@ class SqliteContentionTests(unittest.TestCase):
         self.assertEqual(maximum, 1)
 
         original_connect = _m_memory_curator.db_connect
-        _m_memory_curator.db_connect = lambda: (_ for _ in ()).throw(AssertionError("opened nested SQLite connection"))
+        _m_memory_curator.db_connect = lambda *, app_settings=None: (_ for _ in ()).throw(
+            AssertionError("opened nested SQLite connection")
+        )
         try:
             token = _m_panel_callback_routes.dynamic_callback_token("persona", "bridge-user.png", "chat", db=self.db)
         finally:
@@ -92,7 +94,7 @@ class SqliteContentionTests(unittest.TestCase):
         connect = _m_memory_curator.db_connect
 
         def worker(index):
-            db = connect()
+            db = connect(app_settings=self.app_settings_builder.build())
             try:
                 barrier.wait()
                 db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)", (f"raw-mutex-{index}", "ok"))
@@ -109,6 +111,12 @@ class SqliteContentionTests(unittest.TestCase):
         for thread in threads:
             thread.join()
         self.assertEqual(errors, [])
+        self.assertEqual(
+            self.db.execute("SELECT count(*) FROM meta WHERE key IN (?, ?)", ("raw-mutex-0", "raw-mutex-1")).fetchone()[
+                0
+            ],
+            2,
+        )
 
     def test_begin_operation_commits_before_external_work(self):
         operation_id = "lock-release-test"
@@ -121,7 +129,7 @@ class SqliteContentionTests(unittest.TestCase):
         old_connect = _m_memory_curator.db_connect
 
         def worker(index):
-            db = old_connect()
+            db = old_connect(app_settings=self.app_settings_builder.build())
             try:
                 barrier.wait()
                 job_id = _m_main.enqueue_job(
@@ -145,7 +153,9 @@ class SqliteContentionTests(unittest.TestCase):
         calls = []
         original_urlopen = urllib.request.urlopen
         original_connect = _m_memory_curator.db_connect
-        _m_memory_curator.db_connect = lambda: (_ for _ in ()).throw(AssertionError("opened nested SQLite connection"))
+        _m_memory_curator.db_connect = lambda *, app_settings=None: (_ for _ in ()).throw(
+            AssertionError("opened nested SQLite connection")
+        )
         urllib.request.urlopen = lambda *_args, **_kwargs: _FakeTelegramResponse()
         try:
             result = _m_telegram.send_panel_request(
@@ -156,7 +166,9 @@ class SqliteContentionTests(unittest.TestCase):
                     "text": "panel",
                     "reply_markup": {"inline_keyboard": []},
                 },
-                request_context=make_test_request_context(self.db, "session", "user"),
+                request_context=make_test_request_context(
+                    self.db, "session", "user", app_settings=self.app_settings_builder.build()
+                ),
             )
             calls.append(result)
         finally:
@@ -185,7 +197,7 @@ class SqliteContentionTests(unittest.TestCase):
             def read(self):
                 return b'{"ok": true, "result": {"message_id": 901}}'
 
-        def fake_urlopen(*_args, **_kwargs):
+        def fake_urlopen(*_args, environ=None, **_kwargs):
             calls.append(True)
             if len(calls) <= 2:
                 raise urllib.error.HTTPError(
@@ -288,7 +300,7 @@ class SqliteContentionTests(unittest.TestCase):
 
     def test_explicit_path_workers_still_use_serialized_connection(self):
         path = Path(self.tmp.name) / "explicit-worker.sqlite3"
-        db = database.db_connect(path)
+        db = database.db_connect(path, app_settings=self.app_settings_builder.build())
         try:
             self.assertIsInstance(db, database._SerializedSQLiteConnection)
             self.assertEqual(

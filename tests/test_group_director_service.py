@@ -2,10 +2,12 @@ import sqlite3
 import unittest
 from dataclasses import replace
 
+from settings_test_support import SettingsTestCase
+
 from bridge.group_director_service import DirectorCustomization, GroupDirectorService
 
 
-class GroupDirectorServiceTests(unittest.TestCase):
+class GroupDirectorServiceTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.execute("CREATE TABLE messages(chat_id TEXT,session_id TEXT,role TEXT,content TEXT,created_at REAL)")

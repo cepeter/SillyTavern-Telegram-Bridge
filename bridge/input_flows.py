@@ -9,27 +9,11 @@ import re
 import sqlite3
 import time
 
-from bridge.callback_tokens import (
-    dynamic_callback_token,
-    resolve_dynamic_callback_token,
-)
-from bridge.callbacks import (
-    close_panel_message,
-    discard_panel_binding,
-)
-from bridge.card_content import (
-    card_fields_from_file,
-    safe_character_path,
-)
-from bridge.cards import (
-    send_panel_message,
-    send_persona_menu,
-)
-from bridge.commands import (
-    edit_last_user,
-    handle_macro_command,
-    send_note_menu,
-)
+from bridge.callback_tokens import dynamic_callback_token, resolve_dynamic_callback_token
+from bridge.callbacks import close_panel_message, discard_panel_binding
+from bridge.card_content import card_fields_from_file, safe_character_path
+from bridge.cards import send_panel_message, send_persona_menu
+from bridge.commands import edit_last_user, handle_macro_command, send_note_menu
 from bridge.config import PENDING_SETTINGS_TTL_SECONDS
 from bridge.database import (
     get_generation_settings,
@@ -51,10 +35,7 @@ from bridge.help import (
     send_voice_input_menu,
 )
 from bridge.image_generation import handle_imagine_prompt
-from bridge.language import (
-    normalize_stt_language,
-    stt_language_label,
-)
+from bridge.language import normalize_stt_language, stt_language_label
 from bridge.media import remove_inline_keyboard
 from bridge.memory import handle_memory_command
 from bridge.memory_backend import remember_fact
@@ -64,6 +45,7 @@ from bridge.persona_delete_panel import send_persona_delete_menu
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.rag import handle_data_bank_command
+from bridge.settings import AppSettings
 from bridge.telegram import delete_pending_input_prompts, send_panel_request, send_text, update_session
 from bridge.telegram import telegram_request as telegram_request
 
@@ -186,9 +168,12 @@ def _handle_text_action_input(
                 provider_port=provider_port,
                 memory_service=memory_service,
                 persona_service=persona_service,
+                app_settings=request_context.app_settings,
             )
         elif action == "remember":
-            if len(value) > 4000 or not remember_fact(db, chat_id, session, fields, value):
+            if len(value) > 4000 or not remember_fact(
+                db, chat_id, session, fields, value, app_settings=request_context.app_settings
+            ):
                 raise ValueError("Hindsight memory is unavailable or exceeds 4,000 characters")
             send_text(token, chat_id, "Memory queued for Hindsight.")
         elif action == "macro":
@@ -196,14 +181,23 @@ def _handle_text_action_input(
                 db, token, chat_id, session, fields, "/macro " + value, request_context=request_context
             )
         elif action == "imagine":
-            handle_imagine_prompt(token, chat_id, value)
+            handle_imagine_prompt(token, chat_id, value, app_settings=request_context.app_settings)
         elif action == "memory_search":
             handle_memory_command(
-                db, token, chat_id, session, fields, "/memory search " + value, send_text_fn=send_text
+                db,
+                token,
+                chat_id,
+                session,
+                fields,
+                "/memory search " + value,
+                send_text_fn=send_text,
+                app_settings=request_context.app_settings,
             )
             send_memory_menu(token, chat_id, db, request_context=request_context)
         elif action == "databank_search":
-            handle_data_bank_command(db, token, chat_id, "/databank search " + value)
+            handle_data_bank_command(
+                db, token, chat_id, "/databank search " + value, app_settings=request_context.app_settings
+            )
             send_databank_menu(token, chat_id, db, request_context=request_context)
         elif action == "director_goal":
             if len(value) > 1200:
@@ -234,12 +228,16 @@ def _handle_text_action_input(
     return True
 
 
-def pending_character_for_session(db, chat_id: str) -> dict | None:
+def pending_character_for_session(db, chat_id: str, *, app_settings: AppSettings) -> dict | None:
     """Load and validate a character waiting for session assignment."""
     meta_key = f"character_session_input:{chat_id}"
     state = _decode_pending_state(get_meta(db, meta_key, ""), meta_key)
     filename = str(state.get("character_file") or "")
-    if not state or float(state.get("expires_at", 0) or 0) < time.time() or not safe_character_path(filename):
+    if (
+        not state
+        or float(state.get("expires_at", 0) or 0) < time.time()
+        or not safe_character_path(filename, app_settings=app_settings)
+    ):
         if state:
             set_meta(db, meta_key, "")
         return None
@@ -676,7 +674,11 @@ def handle_pending_input(
         return True
     text_action = _pending_state(db, f"text_action_input:{chat_id}", session_id, token, chat_id)
     if text_action:
-        action_fields = fields if fields is not None else card_fields_from_file(session["character_file"])
+        action_fields = (
+            fields
+            if fields is not None
+            else card_fields_from_file(session["character_file"], app_settings=request_context.app_settings)
+        )
         return _handle_text_action_input(
             db,
             token,

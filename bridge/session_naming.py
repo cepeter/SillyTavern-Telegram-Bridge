@@ -7,33 +7,17 @@ import time
 from pathlib import Path
 
 from bridge import session_titles as _session_titles
-from bridge.callbacks import (
-    close_panel_message,
-    discard_panel_binding,
-)
+from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.cards import send_character_menu
 from bridge.composition import RequestContext
-from bridge.config import (
-    DEFAULT_MODEL,
-    PENDING_SETTINGS_TTL_SECONDS,
-)
-from bridge.database import (
-    get_meta,
-    set_meta,
-)
+from bridge.config import PENDING_SETTINGS_TTL_SECONDS
+from bridge.database import get_meta, set_meta
 from bridge.group_service import GroupService
 from bridge.groups import start_group_session
-from bridge.input_flows import (
-    _cancel_pending,
-    pending_character_for_session,
-)
+from bridge.input_flows import _cancel_pending, pending_character_for_session
 from bridge.message_commands import send_pending_input_message
-from bridge.telegram import (
-    create_session,
-    delete_pending_input_prompts,
-    send_text,
-    update_session,
-)
+from bridge.settings import AppSettings
+from bridge.telegram import create_session, delete_pending_input_prompts, send_text, update_session
 
 _SESSION_PENDING_PREFIXES = (
     "settings_input",
@@ -75,6 +59,7 @@ def start_session_name_input(
     message: dict | None = None,
     *,
     group_service: GroupService,
+    app_settings: AppSettings,
 ) -> None:
     """Close the old panel and request a scoped name without creating a session."""
     meta_key = f"session_name_input:{chat_id}"
@@ -92,7 +77,7 @@ def start_session_name_input(
     state = {
         "session_id": session["session_id"],
         "kind": "group" if kind == "group" else "standard",
-        "model_id": session.get("model_id") or DEFAULT_MODEL,
+        "model_id": session.get("model_id") or app_settings.default_model,
         "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS,
     }
     prompt = "Send a name for the new group session" if state["kind"] == "group" else "Send a name for the new session"
@@ -130,25 +115,31 @@ def handle_session_name_input(
     except ValueError as exc:
         send_pending_input_message(db, token, chat_id, meta_key, state, f"{exc} Try again or send /cancel.")
         return True
-    model_id = str(state.get("model_id") or session.get("model_id") or DEFAULT_MODEL)
+    model_id = str(state.get("model_id") or session.get("model_id") or request_context.app_settings.default_model)
     kind = str(state.get("kind") or "standard")
     if kind == "group":
         new_id = f"group-{operation_id}" if operation_id is not None else f"group-{time.time_ns()}"
         new_session = start_group_session(
-            db, chat_id, model_id, title=title, session_id=new_id, group_service=group_service
+            db,
+            chat_id,
+            model_id,
+            title=title,
+            session_id=new_id,
+            group_service=group_service,
+            app_settings=request_context.app_settings,
         )
         _cancel_pending(db, token, chat_id, meta_key, state)
         new_request_context = RequestContext(
-            db,
-            new_session["session_id"],
-            request_context.actor_id,
+            db, new_session["session_id"], request_context.actor_id, app_settings=request_context.app_settings
         )
         send_text(token, chat_id, f"New group session started: {title}")
         send_character_menu(token, chat_id, new_session["character_file"], request_context=new_request_context)
         return True
     new_id = f"job-{operation_id}" if operation_id is not None else None
-    pending_character = pending_character_for_session(db, chat_id)
-    new_session = create_session(db, chat_id, model_id, session_id=new_id, title=title)
+    pending_character = pending_character_for_session(db, chat_id, app_settings=request_context.app_settings)
+    new_session = create_session(
+        db, chat_id, model_id, session_id=new_id, title=title, app_settings=request_context.app_settings
+    )
     if pending_character:
         update_session(
             db,

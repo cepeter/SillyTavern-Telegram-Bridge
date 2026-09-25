@@ -5,16 +5,12 @@ from __future__ import annotations
 import argparse
 import os
 from functools import partial as _partial
+from pathlib import Path
 
 import bridge.sillytavern_api as _st_api
 from bridge import database as _database
 from bridge.application_composition import initialize_extensions as _initialize_extensions
-from bridge.card_content import (
-    card_fields,
-    card_fields_from_file,
-    read_png_chara,
-    safe_character_path,
-)
+from bridge.card_content import card_fields, card_fields_from_file, read_png_chara, safe_character_path
 from bridge.command_routes import handle_command_route
 from bridge.common import (
     begin_background_shutdown,
@@ -23,33 +19,11 @@ from bridge.common import (
     register_durable_backlog_dispatcher,
     submit_chat_background,
 )
-from bridge.composition import (
-    BackgroundRuntime as _BackgroundRuntime,
-)
-from bridge.composition import (
-    BridgeConfig as _BridgeConfig,
-)
-from bridge.composition import (
-    BridgeServices as _BridgeServices,
-)
-from bridge.composition import (
-    TelegramRuntime as _TelegramRuntime,
-)
-from bridge.composition import (
-    build_bridge_services as _build_bridge_services_value,
-)
-from bridge.composition import (
-    load_bridge_config as _load_bridge_config_value,
-)
-from bridge.composition import (
-    validate_bridge_config as _validate_bridge_config_value,
-)
-from bridge.config import (
-    CARD_FILE,
-    CHARACTER_DIR,
-    DB_FILE,
-    DEFAULT_CHARACTER_FILE,
-)
+from bridge.composition import BackgroundRuntime as _BackgroundRuntime
+from bridge.composition import BridgeServices as _BridgeServices
+from bridge.composition import TelegramRuntime as _TelegramRuntime
+from bridge.composition import build_bridge_services as _build_bridge_services_value
+from bridge.config_values import ConfigurationError
 from bridge.conversation_service import ConversationService as _ConversationService
 from bridge.database import (
     db_connect,
@@ -63,6 +37,7 @@ from bridge.database import (
 )
 from bridge.delivery_port import DeliveryPort as _DeliveryPort
 from bridge.director_goals import director_goal_policy
+from bridge.environment import bootstrap_environment
 from bridge.group_core import (
     advance_group_turn,
     claim_group_user_turn,
@@ -82,11 +57,7 @@ from bridge.help import set_bot_commands
 from bridge.input_flow_service import InputFlowService as _InputFlowService
 from bridge.input_flows import handle_pending_input, start_text_action_input
 from bridge.job_service import JobService as _JobService
-from bridge.media import (
-    delete_outgoing_message_row,
-    send_reply,
-    send_typing,
-)
+from bridge.media import delete_outgoing_message_row, send_reply, send_typing
 from bridge.memory import (
     get_session_summary,
     purge_hindsight_session,
@@ -108,36 +79,19 @@ from bridge.persona_sync import (
 from bridge.provider_catalog import load_provider_catalog
 from bridge.provider_port import ProviderPort as _ProviderPort
 from bridge.provider_transport import generate_provider_text
-from bridge.repositories import (
-    count_persona_references as _count_persona_references,
-)
-from bridge.repositories import (
-    count_session_messages as _count_session_messages,
-)
+from bridge.repositories import count_persona_references as _count_persona_references
+from bridge.repositories import count_session_messages as _count_session_messages
 from bridge.runtime_lifecycle import run_bridge_runtime
 from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
 from bridge.session_naming import handle_session_name_input, start_session_name_input
-from bridge.sync_api import (
-    _live_sync_disable,
-    live_sync_now,
-    live_sync_poll,
-    live_sync_toggle_realtime,
-    refresh_live_sync_config,
-)
+from bridge.settings import AppSettings, load_app_settings, validate_app_settings
+from bridge.sync_api import _live_sync_disable, live_sync_now, live_sync_poll, live_sync_toggle_realtime
 from bridge.sync_core import sync_binding
 from bridge.sync_service import SyncService as _SyncService
-from bridge.telegram import (
-    download_telegram_file,
-    send_panel_request,
-    send_text,
-    telegram_request,
-    update_session,
-)
-
-_DURABLE_WORKER_GUARD = _DurableWorkerGuard(_database._lightweight_db_connect)
+from bridge.telegram import download_telegram_file, send_panel_request, send_text, telegram_request, update_session
 
 
-def validate_startup_credential(model: str, model_router: _ModelRouter) -> None:
+def validate_startup_credential(model: str, model_router: _ModelRouter, *, app_settings: AppSettings) -> None:
     route = model_router.route(model)
     spec = dict(route.spec)
     transport = str(spec.get("transport") or "")
@@ -150,42 +104,27 @@ def validate_startup_credential(model: str, model_router: _ModelRouter) -> None:
         key_envs = ["ANTHROPIC_API_KEY", "LLM_API_KEY"]
     else:
         key_envs = ["LLM_API_KEY"]
-    if not any(os.environ.get(key_env) for key_env in key_envs):
+    if not any(app_settings.environ.get(key_env) for key_env in key_envs):
         raise RuntimeError(f"required provider credential is missing; set one of: {', '.join(key_envs)}")
 
 
-def _require_runtime_configuration(model: str) -> None:
-    if not DEFAULT_CHARACTER_FILE:
-        raise SystemExit("required SILLYTAVERN_DEFAULT_CHARACTER is missing from .env")
-    if not model:
-        raise SystemExit("required SILLYTAVERN_MODEL is missing from .env")
-    if not CARD_FILE.is_file():
-        raise SystemExit(f"configured default character card does not exist: {CARD_FILE}")
-
-
-def _load_startup_config(environ) -> _BridgeConfig:
-    config = _load_bridge_config_value(
-        environ,
-        character_dir=CHARACTER_DIR,
-        db_file=DB_FILE,
-    )
-    try:
-        _validate_bridge_config_value(config)
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
-    return config
+def _load_startup_config(environ) -> AppSettings:
+    settings = load_app_settings(environ, home=Path.home())
+    validate_app_settings(settings)
+    return settings
 
 
 def _build_startup_services(
-    config: _BridgeConfig,
+    config: AppSettings,
     *,
     model_router: _ModelRouter,
 ) -> _BridgeServices:
-    provider = _ProviderPort(generate_backend=_partial(generate_provider_text, model_router))
+    durable_worker_guard = _DurableWorkerGuard(_database._lightweight_db_connect)
+    provider = _ProviderPort(generate_backend=_partial(generate_provider_text, model_router, app_settings=config))
     delivery = _DeliveryPort(
         request=telegram_request,
         send_text=send_text,
-        send_reply=send_reply,
+        send_reply=_partial(send_reply, app_settings=config),
         send_typing=send_typing,
         send_panel_request=send_panel_request,
         delete_outgoing_message_row=delete_outgoing_message_row,
@@ -197,55 +136,48 @@ def _build_startup_services(
         claim_user_turn_backend=claim_group_user_turn,
         pass_user_turn_backend=pass_group_user_turn,
         setup_state_backend=group_setup_state,
-        character_option_label_backend=group_character_option_label,
-        resolve_character_backend=resolve_character_file,
-        member_labels_backend=group_member_labels,
-        current_speaker_backend=group_current_speaker,
+        character_option_label_backend=_partial(group_character_option_label, app_settings=config),
+        resolve_character_backend=_partial(resolve_character_file, app_settings=config),
+        member_labels_backend=_partial(group_member_labels, app_settings=config),
+        current_speaker_backend=_partial(group_current_speaker, app_settings=config),
         advance_turn_backend=advance_group_turn,
     )
     input_flow = _InputFlowService(
         handle_pending_backend=handle_pending_input,
-        start_session_name_backend=start_session_name_input,
+        start_session_name_backend=_partial(start_session_name_input, app_settings=config),
         start_text_action_backend=start_text_action_input,
         handle_session_name_backend=handle_session_name_input,
     )
     group_director = _GroupDirectorService(
         load_group_state=group.state,
-        safe_character=safe_character_path,
+        safe_character=_partial(safe_character_path, app_settings=config),
         member_labels=group.member_labels,
-        card_fields=card_fields_from_file,
+        card_fields=_partial(card_fields_from_file, app_settings=config),
         generation_settings=get_generation_settings,
         generate_text=provider.generate,
-        director_policy=director_goal_policy,
+        director_policy=_partial(director_goal_policy, app_settings=config),
         default_model=config.default_model,
     )
     memory = _MemoryService(
-        recall_context=recall_memory_context,
+        recall_context=_partial(recall_memory_context, app_settings=config),
         summary_for_prompt=(
             lambda db, chat_id, session: session_summary_for_prompt(
-                db,
-                chat_id,
-                session,
-                provider_port=provider,
+                db, chat_id, session, provider_port=provider, app_settings=config
             )
         ),
         summary_state=get_session_summary,
         retain_session=(
             lambda db, chat_id, session, fields: retain_session_memory(
-                db,
-                chat_id,
-                session,
-                fields,
-                provider_port=provider,
+                db, chat_id, session, fields, provider_port=provider, app_settings=config
             )
         ),
-        purge_session_memory=purge_hindsight_session,
+        purge_session_memory=_partial(purge_hindsight_session, app_settings=config),
     )
     persona = _PersonaService(
-        load_personas=load_personas,
-        load_default_persona=default_persona_id,
-        upsert_persona=upsert_native_persona,
-        delete_persona=delete_native_persona,
+        load_personas=_partial(load_personas, app_settings=config),
+        load_default_persona=_partial(default_persona_id, app_settings=config),
+        upsert_persona=_partial(upsert_native_persona, app_settings=config),
+        delete_persona=_partial(delete_native_persona, app_settings=config),
         update_session_persona=update_session,
         persona_reference_count=_count_persona_references,
         persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
@@ -253,11 +185,11 @@ def _build_startup_services(
     sync = _SyncService(
         load_binding=sync_binding,
         count_messages=_count_session_messages,
-        sync_now_backend=live_sync_now,
-        toggle_realtime_backend=live_sync_toggle_realtime,
-        poll_backend=live_sync_poll,
+        sync_now_backend=_partial(live_sync_now, app_settings=config),
+        toggle_realtime_backend=_partial(live_sync_toggle_realtime, app_settings=config),
+        poll_backend=_partial(live_sync_poll, app_settings=config),
         disable_realtime=_live_sync_disable,
-        api_configured=_st_api.live_sync_api_configured,
+        api_configured=_partial(_st_api.live_sync_api_configured, app_settings=config),
         expected_errors=(_st_api.SillyTavernApiError, ValueError),
     )
     background = _BackgroundRuntime(
@@ -273,11 +205,11 @@ def _build_startup_services(
         finish_backend=finish_job,
         recover_backend=recover_jobs,
         submit_chat=background.submit_chat,
-        prepare_worker=_DURABLE_WORKER_GUARD.prepare,
+        prepare_worker=durable_worker_guard.prepare,
     )
     return _build_bridge_services_value(
         config,
-        db_factory=_partial(db_connect, config.db_file),
+        db_factory=_partial(db_connect, config.db_file, app_settings=config),
         telegram=_TelegramRuntime(
             request=telegram_request,
             send_text=send_text,
@@ -297,17 +229,17 @@ def _build_startup_services(
         conversation=_ConversationService(
             prepare_message=prepare_message,
             dispatch_command=handle_command_route,
-            generate_reply=generate_and_store_reply,
+            generate_reply=_partial(generate_and_store_reply, app_settings=config),
         ),
     )
 
 
 def run_check(services: _BridgeServices) -> int:
     config = services.config
-    fields = card_fields(read_png_chara(config.card_file))
-    if _st_api.live_sync_api_configured():
+    fields = card_fields(read_png_chara(config.card_file), app_settings=services.config)
+    if _st_api.live_sync_api_configured(app_settings=services.config):
         try:
-            _st_api.live_sync_client().authenticate()
+            _st_api.live_sync_client(app_settings=services.config).authenticate()
         except (_st_api.SillyTavernApiError, ValueError) as exc:
             raise SystemExit(f"Live Sync check failed: {exc}") from exc
     me = services.telegram.request(
@@ -319,40 +251,43 @@ def run_check(services: _BridgeServices) -> int:
     return 0
 
 
-def main() -> int:
-    _initialize_extensions()
-
+def _main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
-    refresh_live_sync_config()
-
-    config = _load_startup_config(os.environ)
-    model_router = _ModelRouter(load_catalog=load_provider_catalog)
+    environment = dict(os.environ)
+    bootstrap_environment(environment)
+    config = _load_startup_config(environment)
+    model_router = _ModelRouter(load_catalog=_partial(load_provider_catalog, app_settings=config))
     try:
-        validate_startup_credential(
-            config.default_model,
-            model_router,
-        )
+        validate_startup_credential(config.default_model, model_router, app_settings=config)
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
 
-    enforce_runtime_permissions()
-    configure_logging()
+    enforce_runtime_permissions(app_settings=config)
+    configure_logging(app_settings=config)
 
     services = _build_startup_services(
         config,
         model_router=model_router,
     )
+    _initialize_extensions()
     token = config.bot_token
     set_bot_commands(token)
 
     if args.check:
         return run_check(services)
 
-    fields = card_fields(read_png_chara(config.card_file))
+    fields = card_fields(read_png_chara(config.card_file), app_settings=config)
     return run_bridge_runtime(services, fields)
+
+
+def main() -> int:
+    try:
+        return _main()
+    except ConfigurationError as exc:
+        raise SystemExit(str(exc)) from None
 
 
 if __name__ == "__main__":

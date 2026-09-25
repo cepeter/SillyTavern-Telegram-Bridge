@@ -6,22 +6,9 @@ import sqlite3
 import time
 from pathlib import Path
 
-from bridge.card_content import (
-    active_world_files,
-    build_system_prompt,
-    build_world_info,
-    replace_macros,
-)
-from bridge.config import (
-    DEFAULT_USER_NAME,
-    GENERATION_DEFAULTS,
-    HINDSIGHT_CONTEXT_MAX_CHARS,
-    RAG_MAX_CONTEXT_CHARS,
-    SUMMARY_MAX_CHARS,
-)
-from bridge.context_compaction import (
-    compact_chat_messages,
-)
+from bridge.card_content import active_world_files, build_system_prompt, build_world_info, replace_macros
+from bridge.config import GENERATION_DEFAULTS, HINDSIGHT_CONTEXT_MAX_CHARS, RAG_MAX_CONTEXT_CHARS, SUMMARY_MAX_CHARS
+from bridge.context_compaction import compact_chat_messages
 from bridge.database import (
     begin_operation,
     get_generation_settings,
@@ -33,22 +20,13 @@ from bridge.database import (
     set_operation_phase,
 )
 from bridge.delivery_port import DeliveryPort
-from bridge.language import (
-    normalize_response_language,
-    response_language_instruction,
-    response_language_label,
-)
+from bridge.language import normalize_response_language, response_language_instruction, response_language_label
 from bridge.memory_service import MemoryService
-from bridge.operation_recovery import (
-    OperationRecovery as _OperationRecovery,
-)
+from bridge.operation_recovery import OperationRecovery as _OperationRecovery
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
-from bridge.rag_core import (
-    rag_citation_footer,
-    rag_context_for_prompt,
-    rag_retrieval_bundle,
-)
+from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
+from bridge.settings import AppSettings
 
 
 def _generation_operation_recovery(
@@ -178,9 +156,10 @@ def build_chat_messages(
     session_summary: str = "",
     rag_context: str = "",
     group_context: str = "",
+    app_settings: AppSettings,
 ) -> list[dict]:
     current_persona = session["persona_id"]
-    user_name = persona_service.name(current_persona) if current_persona else DEFAULT_USER_NAME
+    user_name = persona_service.name(current_persona) if current_persona else app_settings.default_user_name
     persona = persona_service.get(current_persona) if current_persona else None
     history = [
         {"role": role, "content": format_user_dialogue_action(content) if role == "user" else content}
@@ -188,10 +167,12 @@ def build_chat_messages(
     ]
     language_value = session.get("response_language") or "auto"
     language_instruction = response_language_instruction(language_value)
-    system = build_system_prompt(fields, user_name)
+    system = build_system_prompt(fields, user_name, app_settings=app_settings)
     session_system_prompt = str(session.get("system_prompt") or "").strip()
     if session_system_prompt:
-        system += "\n\n## Session System Prompt\n" + replace_macros(session_system_prompt, fields, user_name)
+        system += "\n\n## Session System Prompt\n" + replace_macros(
+            session_system_prompt, fields, user_name, app_settings=app_settings
+        )
     if persona:
         description = str(persona.get("description") or "").strip()
         if description:
@@ -210,22 +191,27 @@ def build_chat_messages(
         )
     if group_context:
         system += "\n\n## Group speaker rules\n" + group_context
-    world_names = active_world_files(session["world_file"])
+    world_names = active_world_files(session["world_file"], app_settings=app_settings)
     world_context = "\n".join([user_text] + [item["content"] for item in history])
-    world_info = build_world_info(world_names, world_context, fields, user_name)
+    world_info = build_world_info(world_names, world_context, fields, user_name, app_settings=app_settings)
     if world_info:
         world_label = ", ".join(Path(name).stem for name in world_names)
         system += f"\n\n## World Info ({world_label})\n{world_info}"
     author_note = str(session.get("author_note") or "").strip()
     if author_note:
-        system += f"\n\n## Author's Note\n{replace_macros(author_note, fields, user_name)}"
-    post_history = replace_macros(fields["post_history_instructions"], fields, user_name)
+        system += f"\n\n## Author's Note\n{replace_macros(author_note, fields, user_name, app_settings=app_settings)}"
+    post_history = replace_macros(fields["post_history_instructions"], fields, user_name, app_settings=app_settings)
     if post_history:
         system += f"\n\n## Final instruction\n{post_history}"
     system += "\n\n## Mandatory response language\n" + language_instruction
     messages = [{"role": "system", "content": system}]
     if not history and fields["first_mes"]:
-        messages.append({"role": "assistant", "content": replace_macros(fields["first_mes"], fields, user_name)})
+        messages.append(
+            {
+                "role": "assistant",
+                "content": replace_macros(fields["first_mes"], fields, user_name, app_settings=app_settings),
+            }
+        )
     messages.extend(history)
     if normalize_response_language(language_value) != "auto":
         messages.append({"role": "system", "content": "## Runtime output constraint\n" + language_instruction})
@@ -259,7 +245,7 @@ def build_chat_messages(
         )
     else:
         messages.append({"role": "user", "content": user_content})
-    compacted, stats = compact_chat_messages(messages)
+    compacted, stats = compact_chat_messages(messages, app_settings=app_settings)
     if stats["original_tokens"] != stats["final_tokens"]:
         logging.info(
             (
@@ -337,6 +323,7 @@ def _generation_generate_rendered_reply(
     *,
     provider_port: ProviderPort,
     delivery_port: DeliveryPort,
+    app_settings: AppSettings,
 ):
     session_id = session["session_id"]
     delivery_port.send_typing(token, chat_id)
@@ -352,12 +339,7 @@ def _generation_generate_rendered_reply(
         session_id=f"telegram:{chat_id}:{session_id}",
         settings=settings,
     )
-    reply += rag_citation_footer(
-        db,
-        chat_id,
-        query,
-        rag_bundle,
-    )
+    reply += rag_citation_footer(db, chat_id, query, rag_bundle, app_settings=app_settings)
     return render_session_response(
         api_key,
         session,
@@ -381,6 +363,7 @@ def regenerate_last(
     delivery_port: DeliveryPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
+    app_settings: AppSettings,
 ) -> None:
     session_id = session["session_id"]
     recovery = _generation_operation_recovery(delivery_port)
@@ -451,11 +434,7 @@ def regenerate_last(
 
     user_text = rows[last_user_index][2]
     history_rows = [(row[1], row[2]) for row in rows[:last_user_index]]
-    rag_bundle = rag_retrieval_bundle(
-        db,
-        chat_id,
-        user_text,
-    )
+    rag_bundle = rag_retrieval_bundle(db, chat_id, user_text, app_settings=app_settings)
     memory_prompt = memory_service.prompt_context(
         db,
         chat_id,
@@ -471,12 +450,8 @@ def regenerate_last(
         memory_context=memory_prompt.recall,
         session_summary=memory_prompt.summary,
         persona_service=persona_service,
-        rag_context=rag_context_for_prompt(
-            db,
-            chat_id,
-            user_text,
-            rag_bundle,
-        ),
+        rag_context=rag_context_for_prompt(db, chat_id, user_text, rag_bundle, app_settings=app_settings),
+        app_settings=app_settings,
     )
     reply = _generation_generate_rendered_reply(
         db,
@@ -489,6 +464,7 @@ def regenerate_last(
         rag_bundle,
         provider_port=provider_port,
         delivery_port=delivery_port,
+        app_settings=app_settings,
     )
     last_user_rowid = int(rows[last_user_index][0])
     old_message_ids = recovery.outgoing_ids_after(
@@ -694,6 +670,7 @@ def continue_last(
     delivery_port: DeliveryPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
+    app_settings: AppSettings,
 ) -> None:
     session_id = session["session_id"]
     recovery = _generation_operation_recovery(delivery_port)
@@ -756,11 +733,7 @@ def continue_last(
         "Do not repeat any existing text. Output only the continuation."
     )
     history_rows = [(row[1], row[2]) for row in rows]
-    rag_bundle = rag_retrieval_bundle(
-        db,
-        chat_id,
-        instruction,
-    )
+    rag_bundle = rag_retrieval_bundle(db, chat_id, instruction, app_settings=app_settings)
     memory_prompt = memory_service.prompt_context(
         db,
         chat_id,
@@ -776,12 +749,8 @@ def continue_last(
         memory_context=memory_prompt.recall,
         session_summary=memory_prompt.summary,
         persona_service=persona_service,
-        rag_context=rag_context_for_prompt(
-            db,
-            chat_id,
-            instruction,
-            rag_bundle,
-        ),
+        rag_context=rag_context_for_prompt(db, chat_id, instruction, rag_bundle, app_settings=app_settings),
+        app_settings=app_settings,
     )
     reply = _generation_generate_rendered_reply(
         db,
@@ -794,6 +763,7 @@ def continue_last(
         rag_bundle,
         provider_port=provider_port,
         delivery_port=delivery_port,
+        app_settings=app_settings,
     )
     combined = assistant_row[2].rstrip() + " " + reply.lstrip()
     old_message_ids = recovery.message_ids_from_rows(

@@ -5,30 +5,13 @@ from __future__ import annotations
 import logging
 import random
 
-from bridge.card_content import (
-    replace_macros,
-)
-from bridge.common import (
-    json,
-    sqlite3,
-    time,
-)
-from bridge.config import (
-    CARD_FIELD_MAX_CHARS,
-)
-from bridge.database import (
-    begin_operation,
-    operation_was_applied,
-    record_operation,
-)
-from bridge.panel_utils import (
-    PANEL_PAGE_SIZE,
-    panel_page,
-)
-from bridge.telegram import (
-    send_panel_request,
-    send_text,
-)
+from bridge.card_content import replace_macros
+from bridge.common import json, sqlite3, time
+from bridge.config import CARD_FIELD_MAX_CHARS
+from bridge.database import begin_operation, operation_was_applied, record_operation
+from bridge.panel_utils import PANEL_PAGE_SIZE, panel_page
+from bridge.settings import AppSettings
+from bridge.telegram import send_panel_request, send_text
 
 _GREETING_PREVIEW_MAX_CHARS = 3200
 
@@ -50,12 +33,12 @@ def greeting_choice_label(index: int) -> str:
     return "Default" if int(index) == 0 else f"Alternate {int(index)}"
 
 
-def render_greeting(fields: dict, user_name: str, index: int) -> str:
+def render_greeting(fields: dict, user_name: str, index: int, *, app_settings: AppSettings) -> str:
     options = greeting_options(fields)
     selected_index = int(index)
     if selected_index < 0 or selected_index >= len(options):
         return ""
-    return replace_macros(options[selected_index], fields, user_name).strip()
+    return replace_macros(options[selected_index], fields, user_name, app_settings=app_settings).strip()
 
 
 def send_greeting_menu(
@@ -130,7 +113,7 @@ def send_greeting_menu(
         ]
     )
 
-    preview = render_greeting(fields, user_name, selected_index)
+    preview = render_greeting(fields, user_name, selected_index, app_settings=request_context.app_settings)
     if len(preview) > _GREETING_PREVIEW_MAX_CHARS:
         preview = preview[: _GREETING_PREVIEW_MAX_CHARS - 1].rstrip() + "…"
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
@@ -167,6 +150,8 @@ def send_character_greeting(
     index: int | None = 0,
     operation_id=None,
     operation_kind: str = "greeting",
+    *,
+    app_settings: AppSettings,
 ) -> bool:
     if operation_id is not None and (
         operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, operation_kind)
@@ -176,7 +161,7 @@ def send_character_greeting(
     if not options:
         return False
     selected_index = random.randrange(len(options)) if index is None else int(index)  # noqa: S311 -- character text selection, not a security token
-    greeting = render_greeting(fields, user_name, selected_index)
+    greeting = render_greeting(fields, user_name, selected_index, app_settings=app_settings)
     if not greeting:
         return False
     message_ids = send_text(token, chat_id, greeting)

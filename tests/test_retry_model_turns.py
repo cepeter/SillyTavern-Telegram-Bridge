@@ -5,13 +5,17 @@ import time
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 import bridge.database as database
 
 
-class RetryModelTurnOnlyTests(unittest.TestCase):
+class RetryModelTurnOnlyTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = database.db_connect(Path(self.tmp.name) / "retry.sqlite3")
+        self.db = database.db_connect(
+            Path(self.tmp.name) / "retry.sqlite3", app_settings=self.app_settings_builder.build()
+        )
 
     def tearDown(self):
         self.db.close()

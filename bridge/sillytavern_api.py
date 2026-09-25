@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import threading
 import urllib.error
 import urllib.request
@@ -12,11 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from bridge.config import SYNC_MAX_BYTES
-
-LIVE_SYNC_API_URL = ""
-LIVE_SYNC_API_HANDLE = ""
-LIVE_SYNC_API_PASSWORD = None
-LIVE_SYNC_TIMEOUT_SECONDS = 10
+from bridge.settings import AppSettings
 
 _ALLOWED_PATHS = {
     "/csrf-token",
@@ -29,33 +24,6 @@ _ALLOWED_PATHS = {
     "/api/settings/get",
     "/api/settings/save",
 }
-_CLIENT = None
-_CLIENT_LOCK = threading.Lock()
-
-
-def _bounded_number(raw: str, default, low, high, cast):
-    try:
-        return min(high, max(low, cast(raw)))
-    except (TypeError, ValueError):
-        return default
-
-
-def refresh_sillytavern_api_config() -> None:
-    """Refresh loopback API configuration from the current environment."""
-    global LIVE_SYNC_API_URL, LIVE_SYNC_API_HANDLE, LIVE_SYNC_API_PASSWORD
-    global LIVE_SYNC_TIMEOUT_SECONDS, _CLIENT
-
-    LIVE_SYNC_API_URL = os.environ.get("SILLYTAVERN_SYNC_API_URL", "").strip().rstrip("/")
-    LIVE_SYNC_API_HANDLE = os.environ.get("SILLYTAVERN_SYNC_API_HANDLE", "").strip()
-    LIVE_SYNC_API_PASSWORD = os.environ.get("SILLYTAVERN_SYNC_API_PASSWORD")
-    LIVE_SYNC_TIMEOUT_SECONDS = _bounded_number(
-        os.environ.get("SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS", "10"),
-        10,
-        2,
-        30,
-        int,
-    )
-    _CLIENT = None
 
 
 class SillyTavernApiError(RuntimeError):
@@ -103,7 +71,10 @@ class SillyTavernApiClient:
         base_url: str,
         handle: str = "",
         password: str | None = None,
+        *,
+        timeout: float = 10,
     ):
+        self.timeout = timeout
         self.base_url = validate_live_sync_api_url(base_url)
         self.handle = str(handle or "")
         self.password = str(password or "")
@@ -153,7 +124,7 @@ class SillyTavernApiClient:
         try:
             with self.opener.open(
                 request,
-                timeout=LIVE_SYNC_TIMEOUT_SECONDS,
+                timeout=self.timeout,
             ) as response:
                 raw = response.read(SYNC_MAX_BYTES + 1)
         except urllib.error.HTTPError as exc:
@@ -297,38 +268,23 @@ class SillyTavernApiClient:
             raise SillyTavernApiError("SillyTavern refused the chat update")
 
 
-def live_sync_api_configured() -> bool:
-    if not LIVE_SYNC_API_URL:
+def live_sync_api_configured(*, app_settings: AppSettings) -> bool:
+    if not app_settings.live_sync_api_url:
         return False
     try:
-        validate_live_sync_api_url(LIVE_SYNC_API_URL)
+        validate_live_sync_api_url(app_settings.live_sync_api_url)
         return True
     except ValueError:
         return False
 
 
-def live_sync_client() -> SillyTavernApiClient:
-    global _CLIENT
-    if not live_sync_api_configured():
+def live_sync_client(*, app_settings: AppSettings) -> SillyTavernApiClient:
+    """Create an operation-owned client from an explicit immutable configuration."""
+    if not live_sync_api_configured(app_settings=app_settings):
         raise SillyTavernApiError("Live Sync API is not configured")
-    with _CLIENT_LOCK:
-        identity = (
-            LIVE_SYNC_API_URL,
-            LIVE_SYNC_API_HANDLE,
-            LIVE_SYNC_API_PASSWORD,
-        )
-        cached_identity = (
-            (
-                _CLIENT.base_url,
-                _CLIENT.handle,
-                _CLIENT.password,
-            )
-            if _CLIENT is not None
-            else None
-        )
-        if cached_identity != identity:
-            _CLIENT = SillyTavernApiClient(*identity)
-        return _CLIENT
-
-
-refresh_sillytavern_api_config()
+    return SillyTavernApiClient(
+        app_settings.live_sync_api_url,
+        app_settings.live_sync_api_handle,
+        app_settings.live_sync_api_password,
+        timeout=app_settings.live_sync_timeout_seconds,
+    )

@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import copy
 import math
-import os
 import re
+
+from bridge.settings import AppSettings
 
 DEFAULT_CONTEXT_WINDOW_TOKENS = 32768
 DEFAULT_CONTEXT_OUTPUT_RESERVE_TOKENS = 4096
@@ -20,46 +21,23 @@ DEFAULT_CONTEXT_HISTORY_CANDIDATES = 96
 MIN_CONTEXT_INPUT_BUDGET_TOKENS = 2048
 
 
-def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
-    try:
-        value = int(os.environ.get(name, str(default)))
-    except (TypeError, ValueError):
-        value = default
-    return max(minimum, min(value, maximum))
+def context_window_tokens(*, app_settings: AppSettings) -> int:
+    return app_settings.context_window_tokens
 
 
-def context_window_tokens() -> int:
-    return _bounded_env_int(
-        "SILLYTAVERN_CONTEXT_WINDOW_TOKENS",
-        DEFAULT_CONTEXT_WINDOW_TOKENS,
-        4096,
-        1_000_000,
-    )
+def context_output_reserve_tokens(*, app_settings: AppSettings) -> int:
+    return app_settings.context_output_reserve_tokens
 
 
-def context_output_reserve_tokens() -> int:
-    return _bounded_env_int(
-        "SILLYTAVERN_CONTEXT_OUTPUT_RESERVE_TOKENS",
-        DEFAULT_CONTEXT_OUTPUT_RESERVE_TOKENS,
-        512,
-        131072,
-    )
-
-
-def context_input_budget_tokens() -> int:
+def context_input_budget_tokens(*, app_settings: AppSettings) -> int:
     return max(
         MIN_CONTEXT_INPUT_BUDGET_TOKENS,
-        context_window_tokens() - context_output_reserve_tokens(),
+        context_window_tokens(app_settings=app_settings) - context_output_reserve_tokens(app_settings=app_settings),
     )
 
 
-def context_history_candidate_limit() -> int:
-    return _bounded_env_int(
-        "SILLYTAVERN_CONTEXT_HISTORY_CANDIDATES",
-        DEFAULT_CONTEXT_HISTORY_CANDIDATES,
-        8,
-        512,
-    )
+def context_history_candidate_limit(*, app_settings: AppSettings) -> int:
+    return app_settings.context_history_candidates
 
 
 def _content_tokens(content) -> int:
@@ -153,15 +131,12 @@ def _shrink_summary_section(text: str, target_chars: int) -> tuple[str, bool]:
 
 
 def compact_chat_messages(
-    messages: list[dict],
-    budget_tokens: int | None = None,
-    *,
-    min_recent_messages: int = 6,
+    messages: list[dict], budget_tokens: int | None = None, *, min_recent_messages: int = 6, app_settings: AppSettings
 ) -> tuple[list[dict], dict[str, int | bool]]:
     """Compact a built prompt while preserving fixed instructions/current turn."""
     budget = max(
         MIN_CONTEXT_INPUT_BUDGET_TOKENS,
-        int(budget_tokens or context_input_budget_tokens()),
+        int(budget_tokens or context_input_budget_tokens(app_settings=app_settings)),
     )
     compacted = copy.deepcopy(messages)
     original_tokens = estimate_message_tokens(compacted)

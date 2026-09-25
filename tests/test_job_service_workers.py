@@ -7,6 +7,7 @@ from application_test_setup import (
     make_test_model_router,
     make_test_provider_port,
 )
+from settings_test_support import SettingsTestCase, make_test_settings
 
 ensure_application_extensions()
 
@@ -21,12 +22,7 @@ import bridge.help as _m_help
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.worker_orchestration as _m_workers
-from bridge.composition import (
-    BackgroundRuntime,
-    BridgeConfig,
-    BridgeServices,
-    TelegramRuntime,
-)
+from bridge.composition import BackgroundRuntime, BridgeServices, TelegramRuntime
 
 
 class FakeJobs:
@@ -52,12 +48,12 @@ class FakeJobs:
         return self.actor
 
 
-class JobWorkerServiceTests(unittest.TestCase):
+class JobWorkerServiceTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "jobs.sqlite3"
         self.jobs = FakeJobs()
-        config = BridgeConfig(
+        config = make_test_settings(
             bot_token="token",
             api_key="key",
             default_model="provider::model",
@@ -65,12 +61,13 @@ class JobWorkerServiceTests(unittest.TestCase):
             card_file=Path(self.tmp.name) / "mira.png",
             db_file=self.path,
             allowed_users=frozenset(),
+            base=self.app_settings_builder.build(),
         )
         config.card_file.write_bytes(b"card")
         self.sent = []
         self.services = BridgeServices(
             config=config,
-            db_factory=lambda: _m_memory_curator.db_connect(self.path),
+            db_factory=lambda: _m_memory_curator.db_connect(self.path, app_settings=self.app_settings_builder.build()),
             telegram=TelegramRuntime(
                 request=lambda *_args, **_kwargs: {},
                 send_text=lambda *args, **_kwargs: self.sent.append(args),
@@ -86,12 +83,12 @@ class JobWorkerServiceTests(unittest.TestCase):
             memory=object(),
             persona=object(),
             sync=object(),
-            conversation=make_test_conversation_service(),
-            group=make_test_group_service(),
+            conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
+            group=make_test_group_service(app_settings=self.app_settings_builder.build()),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
-            input_flow=make_test_input_flow_service(),
+            input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
         )
 
     def tearDown(self):

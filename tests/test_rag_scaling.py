@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -9,7 +10,6 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.config as config
 import bridge.help as _m_help
 import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
@@ -17,17 +17,17 @@ import bridge.rag_core as rag_core
 import bridge.telegram as _m_telegram
 
 
-class RagScalingTests(unittest.TestCase):
+class RagScalingTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.original_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
-        self.namespace = _m_rag.rag_embedding_namespace()
+        self.original_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.namespace = _m_rag.rag_embedding_namespace(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.original_db
+        self.app_settings_builder.db_file = self.original_db
         self.tmp.cleanup()
 
     def _insert_chunks(
@@ -128,8 +128,8 @@ class RagScalingTests(unittest.TestCase):
         original_limit = rag_core.rag_semantic_candidate_limit
         original_cosine = rag_core.cosine_similarity
         cosine_calls = []
-        rag_core.cached_rag_embedding = lambda _db, _query: [1.0, 0.0]
-        rag_core.rag_semantic_candidate_limit = lambda: 32
+        rag_core.cached_rag_embedding = lambda _db, _query, *, app_settings=None: [1.0, 0.0]
+        rag_core.rag_semantic_candidate_limit = lambda *, app_settings=None: 32
 
         def counted_cosine(left, right, *norms):
             cosine_calls.append((left, right))
@@ -137,7 +137,9 @@ class RagScalingTests(unittest.TestCase):
 
         rag_core.cosine_similarity = counted_cosine
         try:
-            results = _m_rag.retrieve_data_bank(self.db, "chat", "needle", limit=5)
+            results = _m_rag.retrieve_data_bank(
+                self.db, "chat", "needle", limit=5, app_settings=self.app_settings_builder.build()
+            )
         finally:
             rag_core.cached_rag_embedding = original_cached
             rag_core.rag_semantic_candidate_limit = original_limit
@@ -151,14 +153,11 @@ class RagScalingTests(unittest.TestCase):
         self._insert_chunks(500, semantic_target_index=251)
         original_cached = rag_core.cached_rag_embedding
         original_limit = rag_core.rag_semantic_candidate_limit
-        rag_core.cached_rag_embedding = lambda _db, _query: [1.0, 0.0]
-        rag_core.rag_semantic_candidate_limit = lambda: 16
+        rag_core.cached_rag_embedding = lambda _db, _query, *, app_settings=None: [1.0, 0.0]
+        rag_core.rag_semantic_candidate_limit = lambda *, app_settings=None: 16
         try:
             results = _m_rag.retrieve_data_bank(
-                self.db,
-                "chat",
-                "meaningfulconcept",
-                limit=3,
+                self.db, "chat", "meaningfulconcept", limit=3, app_settings=self.app_settings_builder.build()
             )
         finally:
             rag_core.cached_rag_embedding = original_cached
@@ -173,20 +172,17 @@ class RagScalingTests(unittest.TestCase):
         original_embed = rag_core.embed_rag_batch
         transaction_states = []
 
-        rag_core.extract_data_bank_text = lambda _filename, _raw: "content"
+        rag_core.extract_data_bank_text = lambda _filename, _raw, *, app_settings=None: "content"
         rag_core.split_data_bank_chunks = lambda _text: [f"chunk {index}" for index in range(65)]
 
-        def fake_embed(texts):
+        def fake_embed(texts, *, app_settings=None):
             transaction_states.append(self.db.in_transaction)
             return [[1.0, 0.0] for _ in texts]
 
         rag_core.embed_rag_batch = fake_embed
         try:
             status, count = _m_telegram.add_data_bank_document(
-                self.db,
-                "chat",
-                "batched.txt",
-                b"batched-payload",
+                self.db, "chat", "batched.txt", b"batched-payload", app_settings=self.app_settings_builder.build()
             )
         finally:
             rag_core.extract_data_bank_text = original_extract
@@ -230,16 +226,14 @@ class RagScalingTests(unittest.TestCase):
         original_embed = rag_core.embed_rag_batch
         transaction_states = []
 
-        def fake_embed(texts):
+        def fake_embed(texts, *, app_settings=None):
             transaction_states.append(self.db.in_transaction)
             return [[1.0, 0.0] for _ in texts]
 
         rag_core.embed_rag_batch = fake_embed
         try:
             total, indexed = _m_help.reindex_data_bank_documents(
-                self.db,
-                "chat",
-                "reindex.txt",
+                self.db, "chat", "reindex.txt", app_settings=self.app_settings_builder.build()
             )
         finally:
             rag_core.embed_rag_batch = original_embed

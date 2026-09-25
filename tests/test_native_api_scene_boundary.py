@@ -52,7 +52,7 @@ def test_sillytavern_api_module_is_canonical_and_lower_level():
     assert hasattr(module, "SillyTavernApiClient")
     assert callable(module.live_sync_api_configured)
     assert callable(module.live_sync_client)
-    assert callable(module.refresh_sillytavern_api_config)
+    assert not hasattr(module, "refresh_sillytavern_api_config")
 
 
 def test_sync_api_no_longer_owns_client_or_error_symbols():
@@ -68,21 +68,29 @@ def test_persona_sync_has_no_sync_api_or_sync_core_imports():
     assert "bridge.sync_core" not in imports
 
 
-def test_native_api_config_refresh_owns_api_credentials_and_timeout(monkeypatch):
+def test_native_api_settings_own_credentials_and_validate_timeout(tmp_path):
+    import pytest
+
+    from bridge.config_values import ConfigurationError
+    from bridge.settings import load_app_settings
+
     module = importlib.import_module("bridge.sillytavern_api")
-
-    monkeypatch.setenv("SILLYTAVERN_SYNC_API_URL", "http://localhost:8123/")
-    monkeypatch.setenv("SILLYTAVERN_SYNC_API_HANDLE", "tester")
-    monkeypatch.setenv("SILLYTAVERN_SYNC_API_PASSWORD", "secret")
-    monkeypatch.setenv("SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS", "999")
-
-    module.refresh_sillytavern_api_config()
-
-    assert module.LIVE_SYNC_API_URL == "http://localhost:8123"
-    assert module.LIVE_SYNC_API_HANDLE == "tester"
-    assert module.LIVE_SYNC_API_PASSWORD == "secret"
-    assert module.LIVE_SYNC_TIMEOUT_SECONDS == 30
-    assert module.live_sync_api_configured() is True
+    values = {
+        "SILLYTAVERN_SYNC_API_URL": "http://localhost:8123/",
+        "SILLYTAVERN_SYNC_API_HANDLE": "tester",
+        "SILLYTAVERN_SYNC_API_PASSWORD": "secret",
+        "SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS": "30",
+    }
+    settings = load_app_settings(values, home=tmp_path)
+    client = module.live_sync_client(app_settings=settings)
+    assert client.base_url == "http://localhost:8123"
+    assert client.handle == "tester"
+    assert client.password == "secret"
+    assert client.timeout == 30
+    assert module.live_sync_api_configured(app_settings=settings)
+    with pytest.raises(ConfigurationError, match="SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS"):
+        load_app_settings(dict(values, SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS="999"), home=tmp_path)
+    assert not hasattr(module, "_CLIENT")
 
 
 def test_scene_panel_is_pure_and_exact():

@@ -30,6 +30,7 @@ TYPE_TARGETS: tuple[str, ...] = (
     "bridge/config_values.py",
     "bridge/environment.py",
     "bridge/self_update.py",
+    "bridge/settings.py",
 )
 
 

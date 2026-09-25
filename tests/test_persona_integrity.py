@@ -2,10 +2,12 @@ import threading
 import time
 import unittest
 
+from settings_test_support import SettingsTestCase
+
 from bridge.persona_integrity import IntegrityCheckedPersonaStore
 
 
-class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
+class IntegrityCheckedPersonaStoreTests(SettingsTestCase):
     def setUp(self):
         self.personas = {
             "native.png": {
@@ -18,8 +20,7 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
         self.upserts = []
         self.deletes = []
 
-        def load_personas(*, force=False):
-            self.assertTrue(force)
+        def load_personas():
             return dict(self.personas)
 
         def upsert(identifier, name, description, client=None):

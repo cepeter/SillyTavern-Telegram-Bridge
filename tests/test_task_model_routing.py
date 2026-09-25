@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -7,35 +8,37 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.config as config
 import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
-class TaskModelRoutingTests(unittest.TestCase):
+class TaskModelRoutingTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.session = _m_session_naming.create_session(
             self.db,
             "chat",
             "primary::main-model",
             session_id="task-routing",
             title="Task routing",
+            app_settings=self.app_settings_builder.build(),
         )
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def test_utility_route_defaults_to_main_model(self):
         self.assertEqual(
-            _m_memory_curator.task_model_for_session(self.db, "chat", self.session, "summary"),
+            _m_memory_curator.task_model_for_session(
+                self.db, "chat", self.session, "summary", app_settings=self.app_settings_builder.build()
+            ),
             "primary::main-model",
         )
 
@@ -69,6 +72,7 @@ class TaskModelRoutingTests(unittest.TestCase):
             self.session,
             force=True,
             provider_port=provider,
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertEqual(summary, "Blue key in drawer.")
@@ -78,7 +82,9 @@ class TaskModelRoutingTests(unittest.TestCase):
         _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "cheap::summary-model")
         _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "main")
         self.assertEqual(
-            _m_memory_curator.task_model_for_session(self.db, "chat", self.session, "summary"),
+            _m_memory_curator.task_model_for_session(
+                self.db, "chat", self.session, "summary", app_settings=self.app_settings_builder.build()
+            ),
             "primary::main-model",
         )
 

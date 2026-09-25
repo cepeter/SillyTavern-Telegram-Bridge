@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-from bridge.callback_tokens import (
-    dynamic_callback_token,
-)
+from bridge.callback_tokens import dynamic_callback_token
 from bridge.cards import send_panel_message
-from bridge.panel_utils import (
-    panel_navigation,
-    panel_page,
-)
+from bridge.panel_utils import panel_navigation, panel_page
 from bridge.persona_service import PersonaService
 
 

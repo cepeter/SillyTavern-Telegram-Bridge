@@ -1,12 +1,11 @@
 import unittest
 
-from bridge.context_compaction import (
-    compact_chat_messages,
-    estimate_message_tokens,
-)
+from settings_test_support import SettingsTestCase
+
+from bridge.context_compaction import compact_chat_messages, estimate_message_tokens
 
 
-class SmartContextCompactionTests(unittest.TestCase):
+class SmartContextCompactionTests(SettingsTestCase):
     def test_drops_oldest_history_before_touching_current_turn(self):
         messages = [{"role": "system", "content": "System rules."}]
         for index in range(20):
@@ -23,7 +22,9 @@ class SmartContextCompactionTests(unittest.TestCase):
             }
         )
 
-        compacted, stats = compact_chat_messages(messages, budget_tokens=3000)
+        compacted, stats = compact_chat_messages(
+            messages, budget_tokens=3000, app_settings=self.app_settings_builder.build()
+        )
 
         self.assertLessEqual(estimate_message_tokens(compacted), 3000)
         self.assertGreater(stats["dropped_history"], 0)
@@ -52,7 +53,9 @@ class SmartContextCompactionTests(unittest.TestCase):
             },
         ]
 
-        compacted, stats = compact_chat_messages(messages, budget_tokens=2200)
+        compacted, stats = compact_chat_messages(
+            messages, budget_tokens=2200, app_settings=self.app_settings_builder.build()
+        )
 
         self.assertLessEqual(estimate_message_tokens(compacted), 2200)
         self.assertTrue(stats["rag_trimmed"])
@@ -69,7 +72,9 @@ class SmartContextCompactionTests(unittest.TestCase):
             {"role": "user", "content": current},
         ]
 
-        compacted, stats = compact_chat_messages(messages, budget_tokens=2048)
+        compacted, stats = compact_chat_messages(
+            messages, budget_tokens=2048, app_settings=self.app_settings_builder.build()
+        )
 
         self.assertEqual(compacted[0]["content"], system)
         self.assertEqual(compacted[-1]["content"], current)

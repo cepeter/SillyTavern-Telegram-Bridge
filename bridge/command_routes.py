@@ -6,20 +6,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from bridge.card_content import active_world_files
-from bridge.cards import (
-    send_character_menu,
-    send_persona_menu,
-    send_session_menu,
-)
-from bridge.catalog import (
-    send_model_target_menu,
-    send_world_menu,
-)
-from bridge.commands import (
-    prompt_diagnostics,
-    send_note_menu,
-    send_stscript_menu,
-)
+from bridge.cards import send_character_menu, send_persona_menu, send_session_menu
+from bridge.catalog import send_model_target_menu, send_world_menu
+from bridge.commands import prompt_diagnostics, send_note_menu, send_stscript_menu
 from bridge.common import parse_topic_scope
 from bridge.database import (
     clear_failed_turn,
@@ -30,16 +19,9 @@ from bridge.database import (
 )
 from bridge.expressions import send_expression_menu
 from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
-from bridge.generation import (
-    continue_last,
-    regenerate_last,
-    send_swipe_menu,
-)
+from bridge.generation import continue_last, regenerate_last, send_swipe_menu
 from bridge.greetings import send_greeting_menu
-from bridge.groups import (
-    handle_group_command,
-    send_group_menu,
-)
+from bridge.groups import handle_group_command, send_group_menu
 from bridge.help import (
     send_databank_menu,
     send_memory_menu,
@@ -53,29 +35,14 @@ from bridge.help import (
 )
 from bridge.help_details import send_help_command, send_help_menu
 from bridge.image_generation import handle_imagine_prompt
-from bridge.input_flows import (
-    handle_inline_text_action,
-    start_text_action_input,
-)
-from bridge.language import (
-    handle_language_command,
-    send_language_menu,
-)
+from bridge.input_flows import handle_inline_text_action, start_text_action_input
+from bridge.language import handle_language_command, send_language_menu
 from bridge.media import send_reply
 from bridge.memory import handle_memory_command
 from bridge.rag import handle_data_bank_command
 from bridge.session_naming import start_session_name_input
-from bridge.status_panels import (
-    send_prompt_menu,
-    send_summary_menu,
-    send_sync_menu,
-    status_text,
-)
-from bridge.telegram import (
-    list_sessions,
-    send_text,
-    update_session,
-)
+from bridge.status_panels import send_prompt_menu, send_summary_menu, send_sync_menu, status_text
+from bridge.telegram import list_sessions, send_text, update_session
 from bridge.update import send_update_menu
 
 if TYPE_CHECKING:
@@ -145,7 +112,9 @@ def _handle_basic(
             return True
     if command == "/start":
         persona_ready = bool(current_persona)
-        world_ready = bool(active_world_files(session.get("world_file") or ""))
+        world_ready = bool(
+            active_world_files(session.get("world_file") or "", app_settings=request_context.app_settings)
+        )
         system_prompt_ready = bool(session.get("system_prompt") or "")
         if persona_ready and world_ready and system_prompt_ready:
             send_greeting_menu(token, chat_id, fields, user_name, request_context=request_context)
@@ -183,13 +152,24 @@ def _handle_basic(
         )
         return True
     if command == "/new":
-        start_session_name_input(db, token, chat_id, session, group_service=services.group)
+        start_session_name_input(
+            db, token, chat_id, session, group_service=services.group, app_settings=request_context.app_settings
+        )
         return True
     if command == "/status":
         send_text(
             token,
             chat_id,
-            status_text(db, chat_id, session, fields, current_model, current_persona, group_service=services.group),
+            status_text(
+                db,
+                chat_id,
+                session,
+                fields,
+                current_model,
+                current_persona,
+                group_service=services.group,
+                app_settings=request_context.app_settings,
+            ),
         )
         return True
     if command == "/retry":
@@ -201,7 +181,15 @@ def _handle_basic(
         existing = committed_assistant_for_message(db, chat_id, failed_message_id)
         if existing:
             try:
-                send_reply(token, chat_id, str(existing[1]), db, session_id, int(existing[0]))
+                send_reply(
+                    token,
+                    chat_id,
+                    str(existing[1]),
+                    db,
+                    session_id,
+                    int(existing[0]),
+                    app_settings=request_context.app_settings,
+                )
                 clear_failed_turn(db, chat_id, failed_message_id)
             except Exception as exc:
                 logging.error("Retry delivery failed: %s", exc, exc_info=True)
@@ -253,6 +241,7 @@ def _handle_basic(
                 fields,
                 group_service=services.group,
                 memory_service=memory_service,
+                app_settings=request_context.app_settings,
             ),
         )
         return True
@@ -285,7 +274,7 @@ def _handle_generation_panels(
         return True
     if command.startswith("/imagine "):
         try:
-            handle_imagine_prompt(token, chat_id, stripped.split(None, 1)[1])
+            handle_imagine_prompt(token, chat_id, stripped.split(None, 1)[1], app_settings=request_context.app_settings)
         except ValueError as exc:
             send_text(token, chat_id, f"Image generation unavailable: {exc}")
         return True
@@ -367,7 +356,16 @@ def _handle_memory_media(
         send_memory_menu(token, chat_id, db, request_context=request_context)
         return True
     if command.startswith("/memory search "):
-        handle_memory_command(db, token, chat_id, session, fields, stripped, send_text_fn=services.delivery.send_text)
+        handle_memory_command(
+            db,
+            token,
+            chat_id,
+            session,
+            fields,
+            stripped,
+            send_text_fn=services.delivery.send_text,
+            app_settings=request_context.app_settings,
+        )
         return True
     if command.startswith("/memory "):
         send_memory_menu(token, chat_id, db, request_context=request_context)
@@ -420,7 +418,7 @@ def _handle_memory_media(
         or command.startswith("/databank reindex ")
         or command.startswith("/databank remove ")
     ):
-        handle_data_bank_command(db, token, chat_id, stripped)
+        handle_data_bank_command(db, token, chat_id, stripped, app_settings=request_context.app_settings)
         return True
     if command.startswith("/databank "):
         send_databank_menu(token, chat_id, db, request_context=request_context)
@@ -577,7 +575,7 @@ def _handle_entities(
             token,
             chat_id,
             current_model,
-            task_model_for_session(db, chat_id, session, "utility"),
+            task_model_for_session(db, chat_id, session, "utility", app_settings=request_context.app_settings),
             request_context=request_context,
         )
         return True
@@ -629,6 +627,7 @@ def _handle_chat(
             delivery_port=services.delivery,
             memory_service=memory_service,
             persona_service=persona_service,
+            app_settings=request_context.app_settings,
         )
         return True
     if command == "/swipe" or command == "/branch" or command.startswith("/branch "):
@@ -649,6 +648,7 @@ def _handle_chat(
             delivery_port=services.delivery,
             memory_service=memory_service,
             persona_service=persona_service,
+            app_settings=request_context.app_settings,
         )
         return True
     return False

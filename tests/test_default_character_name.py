@@ -1,40 +1,40 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
 import unittest
 from pathlib import Path
 
-import bridge.config as config
 import bridge.main as _m_main
 
 
-class DefaultCharacterNameTests(unittest.TestCase):
+class DefaultCharacterNameTests(SettingsTestCase):
     def test_fallback_name_follows_configured_default_card(self):
-        original = config.DEFAULT_CHARACTER_FILE
-        config.DEFAULT_CHARACTER_FILE = "Seraphina.png"
+        original = self.app_settings_builder.default_character_file
+        self.app_settings_builder.default_character_file = "Seraphina.png"
         try:
-            fields = _m_main.card_fields({"data": {"name": ""}})
+            fields = _m_main.card_fields({"data": {"name": ""}}, app_settings=self.app_settings_builder.build())
             self.assertEqual(fields["name"], "Seraphina")
         finally:
-            config.DEFAULT_CHARACTER_FILE = original
+            self.app_settings_builder.default_character_file = original
 
     def test_fallback_name_defaults_to_default_card_stem(self):
-        default_name = Path(config.DEFAULT_CHARACTER_FILE).stem.strip() or "Character"
-        fields = _m_main.card_fields({"data": {}})
+        default_name = Path(self.app_settings_builder.default_character_file).stem.strip() or "Character"
+        fields = _m_main.card_fields({"data": {}}, app_settings=self.app_settings_builder.build())
         self.assertEqual(fields["name"], default_name)
 
     def test_fallback_name_last_resort_for_empty_config(self):
-        original = config.DEFAULT_CHARACTER_FILE
-        config.DEFAULT_CHARACTER_FILE = ""
+        original = self.app_settings_builder.default_character_file
+        self.app_settings_builder.default_character_file = ""
         try:
-            fields = _m_main.card_fields({"data": {"name": ""}})
+            fields = _m_main.card_fields({"data": {"name": ""}}, app_settings=self.app_settings_builder.build())
             self.assertEqual(fields["name"], "Character")
         finally:
-            config.DEFAULT_CHARACTER_FILE = original
+            self.app_settings_builder.default_character_file = original
 
     def test_real_card_name_is_never_replaced(self):
-        fields = _m_main.card_fields({"data": {"name": "Illia"}})
+        fields = _m_main.card_fields({"data": {"name": "Illia"}}, app_settings=self.app_settings_builder.build())
         self.assertEqual(fields["name"], "Illia")
 
 

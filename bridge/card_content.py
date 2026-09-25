@@ -11,12 +11,9 @@ import time
 from pathlib import Path
 
 from bridge import config as _config
-from bridge.native_cache import (
-    cached_json,
-    cached_png_metadata,
-    cached_text,
-)
+from bridge.native_cache import cached_json, cached_png_metadata, cached_text
 from bridge.panel_utils import panel_label
+from bridge.settings import AppSettings
 
 
 def read_png_chara(path: Path) -> dict:
@@ -41,12 +38,12 @@ def parse_png_chara_bytes(raw: bytes) -> dict:
     return json.loads(base64.b64decode(encoded).decode("utf-8"))
 
 
-def _default_character_name() -> str:
+def _default_character_name(*, app_settings: AppSettings) -> str:
     """Fallback display name, derived from the configured default card file."""
-    return Path(_config.DEFAULT_CHARACTER_FILE).stem.strip() or "Character"
+    return Path(app_settings.default_character_file).stem.strip() or "Character"
 
 
-def card_fields(card: dict) -> dict[str, str]:
+def card_fields(card: dict, *, app_settings: AppSettings) -> dict[str, str]:
     data = card.get("data") if isinstance(card.get("data"), dict) else card
     fields = {}
     for key in (
@@ -75,7 +72,7 @@ def card_fields(card: dict) -> dict[str, str]:
         ):
             fields[key] = fields[key][:remaining]
             remaining = max(0, remaining - len(fields[key]))
-    fields["name"] = fields["name"] or _default_character_name()
+    fields["name"] = fields["name"] or _default_character_name(app_settings=app_settings)
     alternate = data.get("alternate_greetings") or card.get("alternate_greetings") or []
     if not isinstance(alternate, list):
         alternate = []
@@ -85,42 +82,42 @@ def card_fields(card: dict) -> dict[str, str]:
     return fields
 
 
-def character_card_paths() -> list[Path]:
-    if not _config.CHARACTER_DIR.exists():
+def character_card_paths(*, app_settings: AppSettings) -> list[Path]:
+    if not app_settings.character_dir.exists():
         return []
-    return sorted(p for p in _config.CHARACTER_DIR.glob("*.png") if p.is_file())[: _config.CATALOG_MAX_ITEMS]
+    return sorted(p for p in app_settings.character_dir.glob("*.png") if p.is_file())[: _config.CATALOG_MAX_ITEMS]
 
 
-def safe_character_path(name: str) -> Path | None:
-    base = _config.CHARACTER_DIR.resolve()
-    path = (_config.CHARACTER_DIR / name).resolve()
+def safe_character_path(name: str, *, app_settings: AppSettings) -> Path | None:
+    base = app_settings.character_dir.resolve()
+    path = (app_settings.character_dir / name).resolve()
     if path.parent != base or path.suffix.lower() != ".png" or not path.is_file():
         return None
     return path
 
 
-def card_fields_from_file(name: str) -> dict[str, str]:
-    path = safe_character_path(name) or _config.CARD_FILE
-    return card_fields(read_png_chara(path))
+def card_fields_from_file(name: str, *, app_settings: AppSettings) -> dict[str, str]:
+    path = safe_character_path(name, app_settings=app_settings) or app_settings.card_file
+    return card_fields(read_png_chara(path), app_settings=app_settings)
 
 
-def world_file_paths() -> list[Path]:
-    if not _config.WORLD_DIR.exists():
+def world_file_paths(*, app_settings: AppSettings) -> list[Path]:
+    if not app_settings.world_dir.exists():
         return []
-    return sorted(p for p in _config.WORLD_DIR.glob("*.json") if p.is_file())[: _config.CATALOG_MAX_ITEMS]
+    return sorted(p for p in app_settings.world_dir.glob("*.json") if p.is_file())[: _config.CATALOG_MAX_ITEMS]
 
 
-def safe_world_path(name: str) -> Path | None:
+def safe_world_path(name: str, *, app_settings: AppSettings) -> Path | None:
     if not name or name == "off":
         return None
-    base = _config.WORLD_DIR.resolve()
-    path = (_config.WORLD_DIR / name).resolve()
+    base = app_settings.world_dir.resolve()
+    path = (app_settings.world_dir / name).resolve()
     if path.parent != base or path.suffix.lower() != ".json" or not path.is_file():
         return None
     return path
 
 
-def active_world_files(value: str | list[str] | None) -> list[str]:
+def active_world_files(value: str | list[str] | None, *, app_settings: AppSettings) -> list[str]:
     if isinstance(value, list):
         raw = value
     else:
@@ -135,7 +132,7 @@ def active_world_files(value: str | list[str] | None) -> list[str]:
     result = []
     for name in raw:
         name = str(name)
-        if name not in result and safe_world_path(name):
+        if name not in result and safe_world_path(name, app_settings=app_settings):
             result.append(name)
     return result
 
@@ -145,12 +142,19 @@ def encode_world_files(names: list[str]) -> str:
 
 
 def build_world_info(
-    world_names: str | list[str], context: str, fields: dict[str, str], user_name: str = _config.DEFAULT_USER_NAME
+    world_names: str | list[str],
+    context: str,
+    fields: dict[str, str],
+    user_name: str | None = None,
+    *,
+    app_settings: AppSettings,
 ) -> str:
     """Activate basic SillyTavern World Info entries by key and secondary key."""
+    if user_name is None:
+        user_name = app_settings.default_user_name
     sections = []
-    for world_name in active_world_files(world_names):
-        path = safe_world_path(world_name)
+    for world_name in active_world_files(world_names, app_settings=app_settings):
+        path = safe_world_path(world_name, app_settings=app_settings)
         if path is None:
             continue
         try:
@@ -187,7 +191,9 @@ def build_world_info(
                 if not changed:
                     break
             activated.sort(key=lambda item: item[0])
-            sections.extend(replace_macros(content, fields, user_name) for _, content in activated)
+            sections.extend(
+                replace_macros(content, fields, user_name, app_settings=app_settings) for _, content in activated
+            )
         except Exception:
             logging.warning("Could not load World Info %s", world_name, exc_info=True)
     return "\n\n".join(sections)[:12000]
@@ -241,30 +247,30 @@ def _merge_system_prompt_text(result: dict[str, dict[str, str]], path: Path) -> 
         result[path.stem] = {"name": _prompt_catalog_label(path.stem), "prompt": prompt}
 
 
-def load_system_prompts() -> dict[str, dict[str, str]]:
+def load_system_prompts(*, app_settings: AppSettings) -> dict[str, dict[str, str]]:
     result = {}
-    if _config.SYSTEM_PROMPTS_DIR.exists():
+    if app_settings.system_prompts_dir.exists():
         for path in sorted(
-            list(_config.SYSTEM_PROMPTS_DIR.glob("*.json")) + list(_config.SYSTEM_PROMPTS_DIR.glob("*.txt"))
+            list(app_settings.system_prompts_dir.glob("*.json")) + list(app_settings.system_prompts_dir.glob("*.txt"))
         ):
             _merge_system_prompt_file(result, path)
     return dict(list(result.items())[: _config.CATALOG_MAX_ITEMS])
 
 
-def get_system_prompt_choice(name: str) -> str | None:
-    prompts = load_system_prompts()
+def get_system_prompt_choice(name: str, *, app_settings: AppSettings) -> str | None:
+    prompts = load_system_prompts(app_settings=app_settings)
     item = prompts.get(name)
     if item is None and str(name).startswith("id:"):
         item = next((value for key, value in prompts.items() if system_prompt_callback_token(key) == name), None)
     return item["prompt"] if item else None
 
 
-def system_prompt_label(prompt: str | None) -> str:
+def system_prompt_label(prompt: str | None, *, app_settings: AppSettings) -> str:
     """Return only the selected native prompt label, never its body."""
     value = str(prompt or "").strip()
     if not value:
         return "off"
-    for item in load_system_prompts().values():
+    for item in load_system_prompts(app_settings=app_settings).values():
         if str(item.get("prompt") or "") == value:
             return panel_label(str(item.get("name") or "custom"), 64)
     return "custom"
@@ -277,11 +283,15 @@ def system_prompt_callback_token(key: str) -> str:
     return "id:" + hashlib.sha256(str(key).encode("utf-8")).hexdigest()[:24]
 
 
-def system_prompt_choices() -> list[tuple[str, str]]:
-    return [(key, item["name"]) for key, item in load_system_prompts().items()]
+def system_prompt_choices(*, app_settings: AppSettings) -> list[tuple[str, str]]:
+    return [(key, item["name"]) for key, item in load_system_prompts(app_settings=app_settings).items()]
 
 
-def replace_macros(text: str, fields: dict[str, str], user_name: str = _config.DEFAULT_USER_NAME) -> str:
+def replace_macros(
+    text: str, fields: dict[str, str], user_name: str | None = None, *, app_settings: AppSettings
+) -> str:
+    if user_name is None:
+        user_name = app_settings.default_user_name
     result = (
         text.replace("{{char}}", fields["name"])
         .replace("{{user}}", user_name)
@@ -302,39 +312,51 @@ def replace_macros(text: str, fields: dict[str, str], user_name: str = _config.D
     )
 
 
-def build_system_prompt(fields: dict[str, str], user_name: str = _config.DEFAULT_USER_NAME) -> str:
+def build_system_prompt(fields: dict[str, str], user_name: str | None = None, *, app_settings: AppSettings) -> str:
+    if user_name is None:
+        user_name = app_settings.default_user_name
     source = "\x1f".join(
         str(fields.get(key) or "")
         for key in ("system_prompt", "description", "personality", "scenario", "mes_example", "name")
     )
     if any(token in source for token in ("{{random", "{{pick", "{{time}}", "{{date}}", "{{weekday}}")):
-        return _build_system_prompt_uncached(fields, user_name)
+        return _build_system_prompt_uncached(fields, user_name, app_settings=app_settings)
     key = hashlib.sha256((source + "\x1f" + user_name).encode("utf-8")).hexdigest()
-    return cached_text("system-prompt:" + key, lambda: _build_system_prompt_uncached(fields, user_name))
+    return cached_text(
+        "system-prompt:" + key, lambda: _build_system_prompt_uncached(fields, user_name, app_settings=app_settings)
+    )
 
 
-def _build_system_prompt_uncached(fields: dict[str, str], user_name: str = _config.DEFAULT_USER_NAME) -> str:
+def _build_system_prompt_uncached(
+    fields: dict[str, str], user_name: str | None = None, *, app_settings: AppSettings
+) -> str:
+    if user_name is None:
+        user_name = app_settings.default_user_name
     system = fields["system_prompt"] or (
         "Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}. "
         "Stay in character and do not speak for {{user}}."
     )
-    sections = [replace_macros(system, fields, user_name)]
+    sections = [replace_macros(system, fields, user_name, app_settings=app_settings)]
     for label, key in (
         ("Character description", "description"),
         ("Personality", "personality"),
         ("Scenario", "scenario"),
     ):
         if fields[key]:
-            sections.append(f"\n## {label}\n{replace_macros(fields[key], fields, user_name)}")
+            sections.append(
+                f"\n## {label}\n{replace_macros(fields[key], fields, user_name, app_settings=app_settings)}"
+            )
     if fields["mes_example"]:
         examples = fields["mes_example"][-8000:]
-        sections.append(f"\n## Example dialogue\n{replace_macros(examples, fields, user_name)}")
+        sections.append(
+            f"\n## Example dialogue\n{replace_macros(examples, fields, user_name, app_settings=app_settings)}"
+        )
     return "\n".join(sections)
 
 
-def character_display_name(path: Path) -> str:
+def character_display_name(path: Path, *, app_settings: AppSettings) -> str:
     """Return the embedded card name with a safe filename fallback."""
     try:
-        return str(card_fields(read_png_chara(path)).get("name") or path.stem)
+        return str(card_fields(read_png_chara(path), app_settings=app_settings).get("name") or path.stem)
     except Exception:
         return path.stem

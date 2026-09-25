@@ -4,15 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bridge.environment import (
-    DEFAULT_BRIDGE_HOME,
-    bootstrap_environment,
-    environment_file,
-    load_environment_file,
-)
+from settings_test_support import SettingsTestCase, make_test_settings
+
+from bridge.environment import bootstrap_environment, environment_file, load_environment_file
 
 
-class EnvironmentBootstrapTests(unittest.TestCase):
+class EnvironmentBootstrapTests(SettingsTestCase):
     def test_missing_file_is_a_noop(self):
         with tempfile.TemporaryDirectory() as directory:
             target = {}
@@ -85,7 +82,7 @@ class EnvironmentBootstrapTests(unittest.TestCase):
         target = {"SILLYTAVERN_BRIDGE_HOME": "/tmp/other-home"}
         self.assertEqual(
             environment_file(target),
-            DEFAULT_BRIDGE_HOME / ".env",
+            make_test_settings(environ={}).bridge_home / ".env",
         )
 
     def test_bootstrap_loads_resolved_environment_file(self):

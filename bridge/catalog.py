@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 import urllib.error
 import urllib.parse
@@ -10,40 +9,30 @@ import urllib.request
 from pathlib import Path
 
 from bridge.callback_tokens import dynamic_callback_token
-from bridge.card_content import (
-    active_world_files,
-    safe_world_path,
-    world_file_paths,
-)
+from bridge.card_content import active_world_files, safe_world_path, world_file_paths
 from bridge.cards import send_panel_message
-from bridge.common import (
-    MODEL_CHOICES,
-    MODEL_REFRESH_SECONDS,
-)
-from bridge.config import (
-    MODEL_CACHE_FILE,
-)
-from bridge.network_security import (
-    strict_urlopen,
-    validate_provider_endpoint,
-)
-from bridge.panel_utils import (
-    panel_label,
-    panel_navigation,
-    panel_page,
-)
+from bridge.common import MODEL_CHOICES
+from bridge.network_security import strict_urlopen, validate_provider_endpoint
+from bridge.panel_utils import panel_label, panel_navigation, panel_page
 from bridge.provider_catalog import load_provider_catalog
 from bridge.provider_transport import opencode_muse_headers
+from bridge.settings import AppSettings
 from bridge.telegram import telegram_request
 
 
-def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
+def refresh_model_catalog(force: bool = False, *, app_settings: AppSettings) -> tuple[dict, int, int]:
     providers = {
-        str(provider_id): dict(spec) for provider_id, spec in load_provider_catalog().items() if isinstance(spec, dict)
+        str(provider_id): dict(spec)
+        for provider_id, spec in load_provider_catalog(app_settings=app_settings).items()
+        if isinstance(spec, dict)
     }
     config = {"providers": providers}
     try:
-        cache = json.loads(MODEL_CACHE_FILE.read_text(encoding="utf-8")) if MODEL_CACHE_FILE.exists() else {}
+        cache = (
+            json.loads(app_settings.model_cache_file.read_text(encoding="utf-8"))
+            if app_settings.model_cache_file.exists()
+            else {}
+        )
     except (OSError, json.JSONDecodeError):
         cache = {}
     now = time.time()
@@ -58,7 +47,11 @@ def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
             spec["models"] = cached_models
         if not spec.get("discover_models"):
             continue
-        if not force and cached.get("refreshed_at") and now - float(cached["refreshed_at"]) < MODEL_REFRESH_SECONDS:
+        if (
+            not force
+            and cached.get("refreshed_at")
+            and now - float(cached["refreshed_at"]) < app_settings.model_refresh_seconds
+        ):
             if cached_models:
                 spec["models"] = cached_models
             continue
@@ -68,12 +61,12 @@ def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
         if not api:
             failed += 1
             continue
-        validate_provider_endpoint(api)
+        validate_provider_endpoint(api, environ=app_settings.environ)
         configured_key_env = spec.get("api_key_env")
         key_env = str(configured_key_env or "LLM_API_KEY")
-        key = os.environ.get(key_env, "")
+        key = app_settings.environ.get(key_env, "")
         if not key and (not configured_key_env or key_env == "LLM_API_KEY"):
-            key = os.environ.get("LLM_API_KEY", "")
+            key = app_settings.environ.get("LLM_API_KEY", "")
         if configured_key_env and not key:
             failed += 1
             continue
@@ -85,7 +78,7 @@ def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
         headers.update(spec.get("extra_headers") or {})
         try:
             request = urllib.request.Request(api + "/models", headers=headers, method="GET")  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
-            with strict_urlopen(request, timeout=30) as response:
+            with strict_urlopen(request, timeout=30, environ=app_settings.environ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             models = [
                 str(item.get("id")) for item in (payload.get("data") or []) if isinstance(item, dict) and item.get("id")
@@ -102,17 +95,17 @@ def refresh_model_catalog(force: bool = False) -> tuple[dict, int, int]:
                 spec["models"] = cached_models
             logging.info("Model discovery failed for provider %s", provider_id, exc_info=True)
     try:
-        MODEL_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        temp = MODEL_CACHE_FILE.with_suffix(".tmp")
+        app_settings.model_cache_file.parent.mkdir(parents=True, exist_ok=True)
+        temp = app_settings.model_cache_file.with_suffix(".tmp")
         temp.write_text(json.dumps(cache, indent=2, sort_keys=True), encoding="utf-8")
-        temp.replace(MODEL_CACHE_FILE)
+        temp.replace(app_settings.model_cache_file)
     except OSError:
         logging.warning("Could not write model catalog cache", exc_info=True)
     return config, refreshed, failed
 
 
-def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, str, str]]:
-    providers = load_provider_catalog()
+def provider_health_checks(provider_id: str | None = None, *, app_settings: AppSettings) -> list[tuple[str, str, str]]:
+    providers = load_provider_catalog(app_settings=app_settings)
     results = []
     for current_id, spec in providers.items():
         if provider_id and current_id != provider_id:
@@ -126,18 +119,18 @@ def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, st
         if not endpoint:
             results.append((current_id, str(spec.get("name") or current_id), "not configured"))
             continue
-        validate_provider_endpoint(endpoint)
+        validate_provider_endpoint(endpoint, environ=app_settings.environ)
         configured_key_env = spec.get("api_key_env")
         key_env = str(configured_key_env or "LLM_API_KEY")
-        key = os.environ.get(key_env, "")
+        key = app_settings.environ.get(key_env, "")
         transport = str(spec.get("transport") or "")
         if not key and (not configured_key_env or key_env == "LLM_API_KEY"):
-            key = os.environ.get("LLM_API_KEY", "")
+            key = app_settings.environ.get("LLM_API_KEY", "")
         if configured_key_env and not key and transport != "opencode_muse":
             results.append((current_id, str(spec.get("name") or current_id), f"missing credential ({key_env})"))
             continue
         headers = (
-            opencode_muse_headers(f"health:{current_id}")
+            opencode_muse_headers(f"health:{current_id}", app_settings=app_settings)
             if transport == "opencode_muse"
             else {"Accept": "application/json", "User-Agent": "SillyTavernTelegramBridge/1.0"}
         )
@@ -163,12 +156,12 @@ def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, st
                     headers={**headers, "Accept": "text/event-stream", "Content-Type": "application/json"},
                     method="POST",
                 )
-                with strict_urlopen(request, timeout=30) as response:
+                with strict_urlopen(request, timeout=30, environ=app_settings.environ) as response:
                     response.read(1)
                 results.append((current_id, str(spec.get("name") or current_id), "healthy (chat completion)"))
                 continue
             request = urllib.request.Request(endpoint + "/models", headers=headers, method="GET")  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
-            with strict_urlopen(request, timeout=10) as response:
+            with strict_urlopen(request, timeout=10, environ=app_settings.environ) as response:
                 results.append((current_id, str(spec.get("name") or current_id), f"healthy ({response.status})"))
         except urllib.error.HTTPError as exc:
             results.append((current_id, str(spec.get("name") or current_id), f"reachable ({exc.code})"))
@@ -177,12 +170,12 @@ def provider_health_checks(provider_id: str | None = None) -> list[tuple[str, st
     return results
 
 
-def get_model_groups() -> dict[str, tuple[str, list[tuple[str, str]], bool]]:
+def get_model_groups(*, app_settings: AppSettings) -> dict[str, tuple[str, list[tuple[str, str]], bool]]:
     """Read every bridge provider/model group; mark bridge-supported providers."""
     groups: dict[str, tuple[str, list[tuple[str, str]], bool]] = {}
     supported_adapters = {"chat_completions", "openai", "openai_compatible", "anthropic_messages", "opencode_muse"}
     try:
-        config, _, _ = refresh_model_catalog()
+        config, _, _ = refresh_model_catalog(app_settings=app_settings)
         providers = config.get("providers") or {}
         for provider_id, provider in providers.items():
             models = []
@@ -228,7 +221,7 @@ def send_model_menu(
     *,
     request_context,
 ) -> None:
-    groups = get_model_groups()
+    groups = get_model_groups(app_settings=request_context.app_settings)
     if provider_id is None:
         options = [
             (group_id, f"{label} ({len(models)}){'' if is_supported else ' · catalog only'}", models, is_supported)
@@ -346,7 +339,7 @@ def send_model_target_menu(
 
 
 def send_provider_health_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
-    checks = provider_health_checks()
+    checks = provider_health_checks(app_settings=request_context.app_settings)
     lines = [f"{name}: {status}" for _provider_id, name, status in checks]
     text = "Provider health\n\n" + ("\n".join(lines) if lines else "No providers configured.")
     markup = {
@@ -370,8 +363,8 @@ def send_provider_health_menu(token: str, chat_id: str, message_id: int | None =
 def send_world_menu(
     token: str, chat_id: str, current_world: str, message_id: int | None = None, page: int = 0, *, request_context
 ) -> None:
-    selected = set(active_world_files(current_world))
-    options = [(path.name, path.stem) for path in world_file_paths()]
+    selected = set(active_world_files(current_world, app_settings=request_context.app_settings))
+    options = [(path.name, path.stem) for path in world_file_paths(app_settings=request_context.app_settings)]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for name, label in page_options:
@@ -405,12 +398,12 @@ def send_world_menu(
         raise
 
 
-def delete_world_info_file(db, chat_id: str, filename: str) -> None:
-    path = safe_world_path(filename)
+def delete_world_info_file(db, chat_id: str, filename: str, *, app_settings: AppSettings) -> None:
+    path = safe_world_path(filename, app_settings=app_settings)
     if path is None:
         raise ValueError("World Info file not found")
     for (world_value,) in db.execute("SELECT world_file FROM sessions").fetchall():
-        if path.name in active_world_files(world_value):
+        if path.name in active_world_files(world_value, app_settings=app_settings):
             raise ValueError("World Info is active in a session; disable it before deleting")
     path.unlink()
 

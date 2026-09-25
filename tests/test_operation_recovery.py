@@ -7,6 +7,7 @@ from application_test_setup import (
     make_test_persona_service,
     make_test_provider_port,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -28,15 +29,13 @@ import bridge.telegram as _m_telegram
 from bridge.operation_recovery import OperationRecovery
 
 
-class DurableRecoveryCharacterizationTests(unittest.TestCase):
+class DurableRecoveryCharacterizationTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "recovery.sqlite3"
-        self.db = _m_memory_curator.db_connect(self.path)
+        self.db = _m_memory_curator.db_connect(self.path, app_settings=self.app_settings_builder.build())
         self.session = _m_telegram.ensure_session(
-            self.db,
-            "chat",
-            "provider::model",
+            self.db, "chat", "provider::model", app_settings=self.app_settings_builder.build()
         )
         self.fields = {"name": "Mira"}
 
@@ -129,6 +128,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             ),
             memory_service=make_test_memory_service(),
             persona_service=make_test_persona_service(),
+            app_settings=self.app_settings_builder.build(),
         )
 
         delete_current.assert_called_once_with(
@@ -192,6 +192,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 ),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(
@@ -223,6 +224,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(
@@ -263,6 +265,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
             ),
             memory_service=make_test_memory_service(),
             persona_service=make_test_persona_service(),
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertIn(
@@ -322,6 +325,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 ),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertIn(
@@ -357,6 +361,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(
@@ -385,6 +390,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(
@@ -396,7 +402,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         operation_id = 604
         self._operation(operation_id, "local_committed", "regen")
         memory = object()
-        services = make_test_application_services(memory=memory)
+        services = make_test_application_services(memory=memory, app_settings=self.app_settings_builder.build())
 
         with (
             patch.object(
@@ -419,7 +425,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 side_effect=AssertionError("generic recovery ran first"),
             ),
         ):
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
@@ -440,7 +446,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         operation_id = 611
         self._operation(operation_id, "local_committed", "continue")
         memory = object()
-        services = make_test_application_services(memory=memory)
+        services = make_test_application_services(memory=memory, app_settings=self.app_settings_builder.build())
 
         with (
             patch.object(
@@ -463,7 +469,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 side_effect=AssertionError("generic recovery ran first"),
             ),
         ):
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
@@ -484,7 +490,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         operation_id = 612
         self._operation(operation_id, "local_committed", "edit")
         memory = object()
-        services = make_test_application_services(memory=memory)
+        services = make_test_application_services(memory=memory, app_settings=self.app_settings_builder.build())
 
         with (
             patch.object(
@@ -507,7 +513,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
                 side_effect=AssertionError("generic recovery ran first"),
             ),
         ):
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
@@ -572,7 +578,7 @@ class DurableRecoveryCharacterizationTests(unittest.TestCase):
         self.assertEqual(_m_message_commands.operation_phase(self.db, operation_id), "applied")
 
 
-class DurableRecoveryOwnershipTests(unittest.TestCase):
+class DurableRecoveryOwnershipTests(SettingsTestCase):
     def test_recovery_compatibility_file_is_absent(self):
         recovery = Path(__file__).parents[1] / "bridge" / "recovery.py"
         self.assertFalse(recovery.exists())
@@ -648,11 +654,11 @@ class DurableRecoveryOwnershipTests(unittest.TestCase):
                 )
 
 
-class OperationRecoveryUnitTests(unittest.TestCase):
+class OperationRecoveryUnitTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "adapter.sqlite3"
-        self.db = _m_memory_curator.db_connect(self.path)
+        self.db = _m_memory_curator.db_connect(self.path, app_settings=self.app_settings_builder.build())
         self.telegram = Mock(return_value={})
         self.log_info = Mock()
         self.adapter = OperationRecovery(

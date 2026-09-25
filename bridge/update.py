@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import unicodedata
 import urllib.request
@@ -14,48 +13,11 @@ from bridge.catalog import answer_callback
 from bridge.media import remove_inline_keyboard
 from bridge.network_security import EndpointPolicy, strict_urlopen
 from bridge.self_update import UpdateOutcome, UpdatePlan, UpdateStatus, apply_update, version_tuple
-from bridge.telegram import (
-    send_panel_request,
-    send_text,
-)
+from bridge.settings import AppSettings
+from bridge.telegram import send_panel_request, send_text
 
 UPDATE_REPO = "cepeter/SillyTavern-Telegram-Bridge"
 UPDATE_CANONICAL_GIT_URL = f"https://github.com/{UPDATE_REPO}.git"
-
-
-def _resolve_update_live_dir(environ) -> Path:
-    bridge_home = Path(
-        environ.get(
-            "SILLYTAVERN_BRIDGE_HOME",
-            str(Path.home() / ".local/share/sillytavern-telegram"),
-        )
-    )
-    return Path(
-        environ.get(
-            "SILLYTAVERN_LIVE_BRIDGE_DIR",
-            str(bridge_home / "live"),
-        )
-    )
-
-
-UPDATE_LIVE_DIR = _resolve_update_live_dir(os.environ)
-
-
-def _is_bridge_checkout(path: Path) -> bool:
-    return (path / ".git").exists() and (path / "CHANGELOG.md").is_file()
-
-
-def _resolve_update_repo_dir() -> Path:
-    configured = os.environ.get("SILLYTAVERN_BRIDGE_SOURCE_DIR")
-    candidates = [Path(configured).expanduser()] if configured else []
-    candidates.extend((Path(__file__).resolve().parents[1], Path.home() / "sillytavern-telegram-bridge"))
-    for candidate in candidates:
-        if _is_bridge_checkout(candidate):
-            return candidate
-    return candidates[0] if candidates else Path(__file__).resolve().parents[1]
-
-
-UPDATE_REPO_DIR = _resolve_update_repo_dir()
 
 
 def _changelog_version(path: Path) -> str:
@@ -84,16 +46,18 @@ def _changelog_has_unreleased(path: Path) -> bool:
     return any(line.strip() and not line.lstrip().startswith("### ") for line in match.group(1).splitlines())
 
 
-def installed_bridge_version() -> str:
-    live_version = _changelog_version(UPDATE_LIVE_DIR / "CHANGELOG.md")
-    return live_version if live_version != "unknown" else _changelog_version(UPDATE_REPO_DIR / "CHANGELOG.md")
+def installed_bridge_version(*, app_settings: AppSettings) -> str:
+    live_version = _changelog_version(app_settings.update_live_dir / "CHANGELOG.md")
+    return (
+        live_version if live_version != "unknown" else _changelog_version(app_settings.update_repo_dir / "CHANGELOG.md")
+    )
 
 
-def installed_bridge_has_unreleased() -> bool:
-    live_changelog = UPDATE_LIVE_DIR / "CHANGELOG.md"
+def installed_bridge_has_unreleased(*, app_settings: AppSettings) -> bool:
+    live_changelog = app_settings.update_live_dir / "CHANGELOG.md"
     if _changelog_version(live_changelog) != "unknown":
         return _changelog_has_unreleased(live_changelog)
-    return _changelog_has_unreleased(UPDATE_REPO_DIR / "CHANGELOG.md")
+    return _changelog_has_unreleased(app_settings.update_repo_dir / "CHANGELOG.md")
 
 
 def latest_bridge_release() -> tuple[str, str]:
@@ -148,8 +112,8 @@ def update_menu_text(current: str, latest: str, notes: str, unreleased: bool = F
 
 
 def send_update_menu(token: str, chat_id: str, message_id: int | None = None, *, request_context) -> None:
-    current = installed_bridge_version()
-    unreleased = installed_bridge_has_unreleased()
+    current = installed_bridge_version(app_settings=request_context.app_settings)
+    unreleased = installed_bridge_has_unreleased(app_settings=request_context.app_settings)
     available = False
     try:
         latest, notes = latest_bridge_release()
@@ -173,8 +137,8 @@ def send_update_menu(token: str, chat_id: str, message_id: int | None = None, *,
     send_panel_request(token, method, payload, request_context=request_context)
 
 
-def _run_update(expected_version: str | None = None) -> UpdateOutcome:
-    current = installed_bridge_version()
+def _run_update(expected_version: str | None = None, *, app_settings: AppSettings) -> UpdateOutcome:
+    current = installed_bridge_version(app_settings=app_settings)
     try:
         latest, _notes = latest_bridge_release()
         if latest == current:
@@ -185,14 +149,14 @@ def _run_update(expected_version: str | None = None) -> UpdateOutcome:
             return UpdateOutcome(UpdateStatus.REFUSED, code="version")
     except Exception:
         return UpdateOutcome(UpdateStatus.REFUSED, code="release_check")
-    trust = os.environ.get("SILLYTAVERN_UPDATE_ALLOWED_SIGNERS", "").strip()
+    trust = app_settings.update_allowed_signers
     return apply_update(
         UpdatePlan(
-            source=UPDATE_REPO_DIR,
-            live=UPDATE_LIVE_DIR,
-            trusted_signers=Path(trust).expanduser() if trust else None,
+            source=app_settings.update_repo_dir,
+            live=app_settings.update_live_dir,
+            trusted_signers=trust,
             release_version=latest,
-            unit=os.environ.get("SILLYTAVERN_UPDATE_SERVICE", "sillytavern-telegram.service"),
+            unit=app_settings.update_service,
         )
     )
 
@@ -241,7 +205,9 @@ def format_update_outcome(outcome: UpdateOutcome) -> str:
     return "Update refused: " + detail + ". Existing source and live deployment were not replaced."
 
 
-def handle_update_callback(db, token: str, callback: dict, data: str, chat_id: str) -> bool:
+def handle_update_callback(
+    db, token: str, callback: dict, data: str, chat_id: str, *, app_settings: AppSettings
+) -> bool:
     if not data.startswith("update:"):
         return False
     answer_callback(token, str(callback.get("id", "")), "Update")
@@ -252,7 +218,7 @@ def handle_update_callback(db, token: str, callback: dict, data: str, chat_id: s
         version = data.removeprefix("update:confirm:") if data.startswith("update:confirm:") else None
         remove_inline_keyboard(db, token, callback)
         try:
-            outcome = _run_update(expected_version=version)
+            outcome = _run_update(expected_version=version, app_settings=app_settings)
         except Exception:
             logging.error("Unexpected updater failure; deployment requires operator inspection")
             send_text(

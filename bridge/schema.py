@@ -1,12 +1,8 @@
 import sqlite3
 import time
 
-from bridge.migrations import (
-    Migration as _Migration,
-)
-from bridge.migrations import (
-    run_migrations as _run_migrations,
-)
+from bridge.migrations import Migration as _Migration
+from bridge.migrations import run_migrations as _run_migrations
 
 PROCESSED_UPDATE_RETENTION_SECONDS = 30 * 86400
 

@@ -8,10 +8,10 @@ import os
 import tempfile
 from pathlib import Path
 
-from bridge.config import WORLD_DIR
+from bridge.settings import AppSettings
 
 
-def install_world_info_document(filename: str, raw: bytes) -> Path:
+def install_world_info_document(filename: str, raw: bytes, *, app_settings: AppSettings) -> Path:
     name = Path(str(filename)).name
     if name != str(filename) or Path(name).suffix != ".json" or name in {"", ".", ".."}:
         raise ValueError("World Info upload must be a JSON file with a simple filename")
@@ -21,14 +21,14 @@ def install_world_info_document(filename: str, raw: bytes) -> Path:
         raise ValueError("World Info JSON is invalid") from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("entries"), dict):
         raise ValueError("World Info JSON must contain an entries object")
-    WORLD_DIR.mkdir(parents=True, exist_ok=True)
-    target = WORLD_DIR / name
+    app_settings.world_dir.mkdir(parents=True, exist_ok=True)
+    target = app_settings.world_dir / name
     if target.exists():
         raise FileExistsError(f"World Info file already exists: {name}")
     temporary = tempfile.NamedTemporaryFile(
         prefix=".world-",
         suffix=".tmp",
-        dir=WORLD_DIR,
+        dir=app_settings.world_dir,
         delete=False,
     )
     try:

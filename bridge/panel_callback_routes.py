@@ -7,14 +7,8 @@ import logging
 import time
 from pathlib import Path
 
-from bridge.callback_tokens import (
-    dynamic_callback_token,
-    resolve_dynamic_callback_token,
-)
-from bridge.callbacks import (
-    close_panel_message,
-    discard_panel_binding,
-)
+from bridge.callback_tokens import dynamic_callback_token, resolve_dynamic_callback_token
+from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.card_content import (
     active_world_files,
     card_fields_from_file,
@@ -40,13 +34,7 @@ from bridge.catalog import (
     send_world_menu,
 )
 from bridge.commands import send_note_menu
-from bridge.config import (
-    CARD_FILE,
-    DEFAULT_CHARACTER_FILE,
-    DEFAULT_MODEL,
-    DEFAULT_USER_NAME,
-    PENDING_SETTINGS_TTL_SECONDS,
-)
+from bridge.config import PENDING_SETTINGS_TTL_SECONDS
 from bridge.database import (
     begin_operation,
     clear_model_target_selection,
@@ -65,45 +53,19 @@ from bridge.expressions import (
     expression_mode_key,
     send_expression_menu,
 )
-from bridge.generation import (
-    edit_swipe_menu,
-    keep_swipe_variant,
-    last_user_variants,
-    swipe_state_key,
-)
-from bridge.greetings import (
-    greeting_choice_label,
-    greeting_options,
-    send_character_greeting,
-    send_greeting_menu,
-)
+from bridge.generation import edit_swipe_menu, keep_swipe_variant, last_user_variants, swipe_state_key
+from bridge.greetings import greeting_choice_label, greeting_options, send_character_greeting, send_greeting_menu
 from bridge.group_service import GroupService
-from bridge.groups import (
-    apply_group_setup_character,
-    send_group_menu,
-)
+from bridge.groups import apply_group_setup_character, send_group_menu
 from bridge.help import send_system_prompt_menu
 from bridge.help_details import handle_help_callback
-from bridge.input_flows import (
-    handle_persona_callback,
-    pending_character_for_session,
-)
-from bridge.language import (
-    response_language_label,
-    send_language_menu,
-    set_response_language,
-)
-from bridge.media import (
-    delete_outgoing_messages,
-    remove_inline_keyboard,
-)
+from bridge.input_flows import handle_persona_callback, pending_character_for_session
+from bridge.language import response_language_label, send_language_menu, set_response_language
+from bridge.media import delete_outgoing_messages, remove_inline_keyboard
 from bridge.message_commands import reset_session
 from bridge.provider_port import ProviderPort
 from bridge.session_naming import start_session_name_input
-from bridge.status_panels import (
-    handle_prompt_and_feature_callback,
-    send_sync_menu,
-)
+from bridge.status_panels import handle_prompt_and_feature_callback, send_sync_menu
 from bridge.sync_service import SyncService
 from bridge.telegram import (
     character_delete_references,
@@ -146,7 +108,7 @@ def handle_system_prompt_callback(
             remove_inline_keyboard(db, token, callback)
             send_text(token, chat_id, "Session System Prompt disabled.")
         else:
-            prompt = get_system_prompt_choice(value)
+            prompt = get_system_prompt_choice(value, app_settings=request_context.app_settings)
             if prompt is None:
                 answer_callback(token, str(callback.get("id", "")), "Choice not found")
             else:
@@ -376,7 +338,9 @@ def handle_expression_callback(
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
         remove_inline_keyboard(db, token, callback)
         return True
-    if value not in {"auto", "off"} and value not in discover_expression_assets(session["character_file"]):
+    if value not in {"auto", "off"} and value not in discover_expression_assets(
+        session["character_file"], app_settings=request_context.app_settings
+    ):
         answer_callback(token, str(callback.get("id", "")), "Expression unavailable")
         return True
     set_meta(db, expression_mode_key(chat_id, session_id), value)
@@ -490,10 +454,12 @@ def handle_greeting_callback(
     parts = data.split(":")
     action = parts[1] if len(parts) > 1 else ""
     message_id = message.get("message_id")
-    fields = card_fields_from_file(session["character_file"])
+    fields = card_fields_from_file(session["character_file"], app_settings=request_context.app_settings)
     options = greeting_options(fields)
     persona_id = str(session.get("persona_id") or "")
-    user_name = (persona_service.name(persona_id) if persona_id else "") or DEFAULT_USER_NAME
+    user_name = (
+        persona_service.name(persona_id) if persona_id else ""
+    ) or request_context.app_settings.default_user_name
 
     if action == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
@@ -563,6 +529,7 @@ def handle_greeting_callback(
             selected_index,
             operation_id,
             "start_greeting",
+            app_settings=request_context.app_settings,
         )
         answer_callback(
             token,
@@ -599,7 +566,7 @@ def handle_primary_panel_callback(
 ):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
-        return handle_update_callback(db, token, callback, data, chat_id)
+        return handle_update_callback(db, token, callback, data, chat_id, app_settings=request_context.app_settings)
     if handle_greeting_callback(
         db,
         token,
@@ -819,10 +786,10 @@ def handle_character_callback(
             )
             return True
         filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
-        if not safe_character_path(filename):
+        if not safe_character_path(filename, app_settings=request_context.app_settings):
             answer_callback(token, str(callback.get("id", "")), "Character choice expired")
             return True
-        info = card_fields_from_file(filename)
+        info = card_fields_from_file(filename, app_settings=request_context.app_settings)
         answer_callback(token, str(callback.get("id", "")), "Info")
         send_panel_request(
             token,
@@ -870,7 +837,10 @@ def handle_character_callback(
             )
             return True
         filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
-        if not safe_character_path(filename) or filename == session["character_file"]:
+        if (
+            not safe_character_path(filename, app_settings=request_context.app_settings)
+            or filename == session["character_file"]
+        ):
             answer_callback(token, str(callback.get("id", "")), "Character choice invalid")
             return True
         answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
@@ -880,16 +850,18 @@ def handle_character_callback(
         return True
     if data.startswith("characterdeleteconfirm:"):
         filename = resolve_dynamic_callback_token(data.split(":", 1)[1], "character", chat_id, db=db) or ""
-        path = safe_character_path(filename)
+        path = safe_character_path(filename, app_settings=request_context.app_settings)
         references = character_delete_references(db, filename) if path else []
-        is_default = filename == DEFAULT_CHARACTER_FILE or (path and path.resolve() == CARD_FILE.resolve())
+        is_default = filename == request_context.app_settings.default_character_file or (
+            path and path.resolve() == request_context.app_settings.card_file.resolve()
+        )
         if not path or filename == session["character_file"] or is_default or references:
             reason = "active/default/referenced character" if path else "character not found"
             answer_callback(token, str(callback.get("id", "")), f"Deletion refused: {reason}")
             send_character_menu(token, chat_id, session["character_file"], message_id, request_context=request_context)
             return True
         try:
-            verify_character_card_backup(path, path.read_bytes())
+            verify_character_card_backup(path, path.read_bytes(), app_settings=request_context.app_settings)
         except OSError:
             answer_callback(token, str(callback.get("id", "")), "Deletion refused: backup verification failed")
             return True
@@ -927,8 +899,8 @@ def handle_character_callback(
                 set_meta(db, f"character_session_input:{chat_id}", "")
             discard_panel_binding(db, chat_id, message.get("message_id"))
             close_panel_message(db, token, chat_id, callback)
-        elif safe_character_path(value):
-            character_name = card_fields_from_file(value)["name"]
+        elif safe_character_path(value, app_settings=request_context.app_settings):
+            character_name = card_fields_from_file(value, app_settings=request_context.app_settings)["name"]
             setup = group_service.setup_state(db, chat_id, session_id)
             if setup and setup.get("stage") == "character":
                 return apply_group_setup_character(
@@ -1088,13 +1060,23 @@ def handle_session_callback(
             remove_inline_keyboard(db, token, callback)
         elif value == "new":
             answer_callback(token, str(callback.get("id", "")), "Enter session name")
-            start_session_name_input(db, token, chat_id, session, message=message, group_service=group_service)
+            start_session_name_input(
+                db,
+                token,
+                chat_id,
+                session,
+                message=message,
+                group_service=group_service,
+                app_settings=request_context.app_settings,
+            )
         else:
             available = {item["session_id"] for item in list_sessions(db, chat_id)}
             if value in available:
                 set_meta(db, f"active_session:{chat_id}", value)
                 answer_callback(token, str(callback.get("id", "")), "Session selected")
-                pending_character = pending_character_for_session(db, chat_id)
+                pending_character = pending_character_for_session(
+                    db, chat_id, app_settings=request_context.app_settings
+                )
                 if pending_character:
                     target_title = next(
                         (item["title"] for item in list_sessions(db, chat_id) if item["session_id"] == value), value
@@ -1151,7 +1133,7 @@ def handle_world_callback(
     if data.startswith("worlddeleteconfirm:"):
         value = resolve_dynamic_callback_token(data.split(":", 1)[1], "world", chat_id, db=db) or ""
         try:
-            delete_world_info_file(db, chat_id, value)
+            delete_world_info_file(db, chat_id, value, app_settings=request_context.app_settings)
         except (ValueError, OSError) as exc:
             answer_callback(token, str(callback.get("id", "")), "Delete refused")
             send_text(token, chat_id, str(exc))
@@ -1161,7 +1143,7 @@ def handle_world_callback(
         return True
     if data.startswith("worlddelete:"):
         value = resolve_dynamic_callback_token(data.split(":", 1)[1], "world", chat_id, db=db) or ""
-        if not safe_world_path(value):
+        if not safe_world_path(value, app_settings=request_context.app_settings):
             answer_callback(token, str(callback.get("id", "")), "World Info file not found")
             return True
         answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
@@ -1228,8 +1210,8 @@ def handle_world_callback(
             session["world_file"] = ""
             answer_callback(token, str(callback.get("id", "")), "All World Info cleared")
             send_world_menu(token, chat_id, "", message.get("message_id"), 0, request_context=request_context)
-        elif safe_world_path(value):
-            selected = active_world_files(session["world_file"])
+        elif safe_world_path(value, app_settings=request_context.app_settings):
+            selected = active_world_files(session["world_file"], app_settings=request_context.app_settings)
             filename = Path(value).name
             if filename in selected:
                 selected.remove(filename)
@@ -1352,7 +1334,7 @@ def handle_provider_model_callback(
         send_model_menu(
             token,
             chat_id,
-            session["model_id"] or DEFAULT_MODEL,
+            session["model_id"] or request_context.app_settings.default_model,
             message_id=message_id,
             page=page,
             request_context=request_context,
@@ -1366,7 +1348,7 @@ def handle_provider_model_callback(
         send_model_menu(
             token,
             chat_id,
-            session["model_id"] or DEFAULT_MODEL,
+            session["model_id"] or request_context.app_settings.default_model,
             provider_id,
             message_id,
             page,
@@ -1378,8 +1360,8 @@ def handle_provider_model_callback(
         send_model_target_menu(
             token,
             chat_id,
-            session["model_id"] or DEFAULT_MODEL,
-            task_model_for_session(db, chat_id, session, "utility"),
+            session["model_id"] or request_context.app_settings.default_model,
+            task_model_for_session(db, chat_id, session, "utility", app_settings=request_context.app_settings),
             message_id,
             request_context=request_context,
         )
@@ -1391,7 +1373,11 @@ def handle_provider_model_callback(
     if data == "models:back":
         answer_callback(token, str(callback.get("id", "")), "Back to providers")
         send_model_menu(
-            token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context
+            token,
+            chat_id,
+            session["model_id"] or request_context.app_settings.default_model,
+            message_id=message_id,
+            request_context=request_context,
         )
         return True
     if data == "provider:health":
@@ -1399,16 +1385,24 @@ def handle_provider_model_callback(
         send_provider_health_menu(token, chat_id, message_id, request_context=request_context)
         return True
     if data == "provider:refresh":
-        _config, refreshed, failed = refresh_model_catalog(force=True)
+        _config, refreshed, failed = refresh_model_catalog(force=True, app_settings=request_context.app_settings)
         answer_callback(token, str(callback.get("id", "")), "Refreshed")
         send_text(token, chat_id, f"Model catalog refreshed: {refreshed} providers updated; {failed} failed.")
         send_model_menu(
-            token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context
+            token,
+            chat_id,
+            session["model_id"] or request_context.app_settings.default_model,
+            message_id=message_id,
+            request_context=request_context,
         )
         return True
     if data == "provider:back":
         send_model_menu(
-            token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context
+            token,
+            chat_id,
+            session["model_id"] or request_context.app_settings.default_model,
+            message_id=message_id,
+            request_context=request_context,
         )
         return True
     if data.startswith("provider:"):
@@ -1417,7 +1411,7 @@ def handle_provider_model_callback(
         send_model_menu(
             token,
             chat_id,
-            session["model_id"] or DEFAULT_MODEL,
+            session["model_id"] or request_context.app_settings.default_model,
             provider_id,
             message_id=message_id,
             request_context=request_context,
@@ -1440,7 +1434,11 @@ def handle_provider_model_callback(
         set_model_target_selection(db, chat_id, session_id, target)
         answer_callback(token, str(callback.get("id", "")), "Target selected")
         send_model_menu(
-            token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context
+            token,
+            chat_id,
+            session["model_id"] or request_context.app_settings.default_model,
+            message_id=message_id,
+            request_context=request_context,
         )
         return True
     if not data.startswith("model:"):
@@ -1455,8 +1453,8 @@ def handle_provider_model_callback(
         send_model_target_menu(
             token,
             chat_id,
-            session["model_id"] or DEFAULT_MODEL,
-            task_model_for_session(db, chat_id, session, "utility"),
+            session["model_id"] or request_context.app_settings.default_model,
+            task_model_for_session(db, chat_id, session, "utility", app_settings=request_context.app_settings),
             message_id,
             request_context=request_context,
         )
@@ -1475,8 +1473,8 @@ def handle_provider_model_callback(
     send_model_target_menu(
         token,
         chat_id,
-        model if target == "story" else session["model_id"] or DEFAULT_MODEL,
-        task_model_for_session(db, chat_id, session, "utility"),
+        model if target == "story" else session["model_id"] or request_context.app_settings.default_model,
+        task_model_for_session(db, chat_id, session, "utility", app_settings=request_context.app_settings),
         message_id,
         request_context=request_context,
     )

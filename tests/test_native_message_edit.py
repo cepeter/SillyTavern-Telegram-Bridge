@@ -12,6 +12,7 @@ from application_test_setup import (
     make_test_persona_service,
     make_test_provider_port,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -20,10 +21,12 @@ import bridge.database as database
 import bridge.telegram as telegram
 
 
-class NativeEditedMessageSessionTests(unittest.TestCase):
+class NativeEditedMessageSessionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = database.db_connect(Path(self.tmp.name) / "edit.sqlite3")
+        self.db = database.db_connect(
+            Path(self.tmp.name) / "edit.sqlite3", app_settings=self.app_settings_builder.build()
+        )
         self.model = "provider::model"
 
     def tearDown(self):
@@ -37,6 +40,7 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
             self.model,
             session_id="session-a",
             title="A",
+            app_settings=self.app_settings_builder.build(),
         )
         telegram.update_session(
             self.db,
@@ -58,6 +62,7 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
             self.model,
             session_id="session-b",
             title="B",
+            app_settings=self.app_settings_builder.build(),
         )
         telegram.update_session(
             self.db,
@@ -73,7 +78,7 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
         captured = {}
         sent = []
 
-        def fake_card_fields(filename):
+        def fake_card_fields(filename, *, app_settings=None):
             captured["character_file"] = filename
             return {"name": "Mira"}
 
@@ -86,6 +91,8 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
             _chat_id,
             rowid,
             new_text,
+            *,
+            app_settings=None,
             **kwargs,
         ):
             captured.update(
@@ -131,6 +138,7 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
                 provider_port=provider,
                 memory_service=memory,
                 persona_service=persona,
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(captured["session_id"], "session-a")

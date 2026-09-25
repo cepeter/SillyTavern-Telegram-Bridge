@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial as _partial
 
-from bridge.common import (
-    logging,
-    sqlite3,
-    submit_background,
-    time,
-)
+from bridge.common import logging, sqlite3, submit_background, time
 from bridge.config import (
     SUMMARY_MAX_CHARS,
     SUMMARY_MAX_OUTPUT_TOKENS,
@@ -15,24 +11,11 @@ from bridge.config import (
     SUMMARY_TRIGGER_MESSAGES,
     SUMMARY_UPDATE_INTERVAL,
 )
-from bridge.database import (
-    db_connect,
-    get_generation_settings,
-    set_meta,
-    task_model_for_session,
-)
-from bridge.extension_registry import (
-    apply_summary_context_hooks as _apply_summary_context_hooks,
-)
-from bridge.extension_registry import (
-    run_post_retain_hooks as _run_post_retain_hooks,
-)
-from bridge.extension_registry import (
-    run_summary_clear_hooks as _run_summary_clear_hooks,
-)
-from bridge.hindsight_integrity import (
-    HindsightStaleGuard as _HindsightStaleGuard,
-)
+from bridge.database import db_connect, get_generation_settings, set_meta, task_model_for_session
+from bridge.extension_registry import apply_summary_context_hooks as _apply_summary_context_hooks
+from bridge.extension_registry import run_post_retain_hooks as _run_post_retain_hooks
+from bridge.extension_registry import run_summary_clear_hooks as _run_summary_clear_hooks
+from bridge.hindsight_integrity import HindsightStaleGuard as _HindsightStaleGuard
 from bridge.memory_backend import (
     _memory_hindsight_conversation_snapshot,
     _memory_hindsight_epoch,
@@ -57,30 +40,33 @@ from bridge.memory_backend import memory_recall_filter as memory_recall_filter
 from bridge.memory_backend import recall_memory_context as recall_memory_context
 from bridge.memory_backend import remember_fact as remember_fact
 from bridge.provider_port import ProviderPort
+from bridge.settings import AppSettings
 
-_HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(
-    open_db=lambda: db_connect(),
-    session_lock=lambda chat_id, session_id: hindsight_session_lock(
-        chat_id,
-        session_id,
-    ),
-    memory_enabled=lambda db, chat_id: memory_mode(db, chat_id) == "on",
-    submit_background=(
-        lambda name, fn, *args, **kwargs: submit_background(
-            name,
-            fn,
-            *args,
-            **kwargs,
-        )
-    ),
-    session_exists=_memory_hindsight_session_exists,
-    read_epoch=_memory_hindsight_epoch,
-    snapshot=_memory_hindsight_conversation_snapshot,
-    retain_backend=_retain_session_memory_backend,
-    purge_backend=_purge_hindsight_session_backend,
-    write_successful_purge_state=(_write_hindsight_successful_purge_state),
-    run_post_retain_hooks=_run_post_retain_hooks,
-)
+
+def _make_hindsight_stale_guard(*, app_settings: AppSettings):
+    return _HindsightStaleGuard(
+        open_db=lambda: db_connect(app_settings=app_settings),
+        session_lock=lambda chat_id, session_id: hindsight_session_lock(
+            chat_id,
+            session_id,
+        ),
+        memory_enabled=lambda db, chat_id: memory_mode(db, chat_id) == "on",
+        submit_background=(
+            lambda name, fn, *args, **kwargs: submit_background(
+                name,
+                fn,
+                *args,
+                **kwargs,
+            )
+        ),
+        session_exists=_memory_hindsight_session_exists,
+        read_epoch=_memory_hindsight_epoch,
+        snapshot=_memory_hindsight_conversation_snapshot,
+        retain_backend=_partial(_retain_session_memory_backend, app_settings=app_settings),
+        purge_backend=_partial(_purge_hindsight_session_backend, app_settings=app_settings),
+        write_successful_purge_state=(_write_hindsight_successful_purge_state),
+        run_post_retain_hooks=_partial(_run_post_retain_hooks, app_settings=app_settings),
+    )
 
 
 def retain_session_memory(
@@ -90,8 +76,9 @@ def retain_session_memory(
     fields: dict[str, str],
     *,
     provider_port: ProviderPort,
+    app_settings: AppSettings,
 ) -> None:
-    _HINDSIGHT_STALE_GUARD.retain(
+    _make_hindsight_stale_guard(app_settings=app_settings).retain(
         db,
         chat_id,
         session,
@@ -100,12 +87,8 @@ def retain_session_memory(
     )
 
 
-def purge_hindsight_session(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session_id: str,
-) -> int:
-    return _HINDSIGHT_STALE_GUARD.purge(
+def purge_hindsight_session(db: sqlite3.Connection, chat_id: str, session_id: str, *, app_settings: AppSettings) -> int:
+    return _make_hindsight_stale_guard(app_settings=app_settings).purge(
         db,
         chat_id,
         session_id,
@@ -121,6 +104,7 @@ def handle_memory_command(
     command_text: str,
     *,
     send_text_fn: Callable[[str, str, str], object],
+    app_settings: AppSettings,
 ) -> None:
     parts = command_text.split(None, 2)
     argument = parts[1].casefold() if len(parts) > 1 else "status"
@@ -157,7 +141,9 @@ def handle_memory_command(
         if not query:
             send_text_fn(token, chat_id, "Use /memory search <query>.")
             return
-        results = recall_memory_results(db, chat_id, session, query, fields["name"], max_tokens=1600)
+        results = recall_memory_results(
+            db, chat_id, session, query, fields["name"], max_tokens=1600, app_settings=app_settings
+        )
         lines = [str(getattr(result, "text", "") or "").strip() for result in results]
         lines = [f"- {line}" for line in lines if line][:5]
         send_text_fn(
@@ -189,7 +175,13 @@ def transcript_for_summary(rows: list[tuple[int, str, str, float]]) -> str:
 
 
 def generate_session_summary(
-    db: sqlite3.Connection, chat_id: str, session: dict[str, str], force: bool = False, *, provider_port: ProviderPort
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    force: bool = False,
+    *,
+    provider_port: ProviderPort,
+    app_settings: AppSettings,
 ) -> str:
     rows = db.execute(
         "SELECT rowid,role,content,created_at FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
@@ -233,7 +225,7 @@ def generate_session_summary(
     settings = get_generation_settings(db, chat_id, session["session_id"])
     settings.update({"temperature": 0.2, "max_tokens": SUMMARY_MAX_OUTPUT_TOKENS, "reasoning_budget": 0})
     try:
-        summary_model = task_model_for_session(db, chat_id, session, "summary")
+        summary_model = task_model_for_session(db, chat_id, session, "summary", app_settings=app_settings)
         summary = provider_port.generate(
             "",
             summary_model,
@@ -258,12 +250,17 @@ def generate_session_summary(
 
 
 def session_summary_for_prompt(
-    db: sqlite3.Connection, chat_id: str, session: dict[str, str], *, provider_port: ProviderPort
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    *,
+    provider_port: ProviderPort,
+    app_settings: AppSettings,
 ) -> str:
     summary, _covered_until = get_session_summary(db, chat_id, session["session_id"])
     count = db.execute(
         "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"])
     ).fetchone()[0]
     if count >= SUMMARY_TRIGGER_MESSAGES:
-        summary = generate_session_summary(db, chat_id, session, provider_port=provider_port)
+        summary = generate_session_summary(db, chat_id, session, provider_port=provider_port, app_settings=app_settings)
     return _apply_summary_context_hooks(summary, db, chat_id, session)

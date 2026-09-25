@@ -6,6 +6,7 @@ from application_test_setup import (
     make_test_memory_service,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -16,7 +17,6 @@ from pathlib import Path
 import bridge.cards as _m_cards
 import bridge.catalog as _m_catalog
 import bridge.command_routes as _m_command_routes
-import bridge.config as config
 import bridge.director_goals as _m_director_goals
 import bridge.help as _m_help
 import bridge.help_details as _m_help_details
@@ -28,11 +28,11 @@ import bridge.status_panels as _m_status_panels
 import bridge.sync_core as _m_sync_core
 
 
-class HelpDrilldownTests(unittest.TestCase):
+class HelpDrilldownTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
@@ -53,7 +53,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 "chat",
                 "basic",
                 delivery_port=self._help_delivery(calls),
-                request_context=make_test_request_context(self.db, "panel-session"),
+                request_context=make_test_request_context(
+                    self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                ),
             )
             buttons = [button for row in calls[-1][1]["reply_markup"]["inline_keyboard"] for button in row]
             self.assertIn("help:cmd:basic:0", {button["callback_data"] for button in buttons})
@@ -65,7 +67,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 77,
                 0,
                 delivery_port=self._help_delivery(calls),
-                request_context=make_test_request_context(self.db, "panel-session"),
+                request_context=make_test_request_context(
+                    self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                ),
             )
             detail = calls[-1][1]
             self.assertEqual(calls[-1][0], "editMessageText")
@@ -87,7 +91,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 "token",
                 "chat",
                 delivery_port=self._help_delivery(calls),
-                request_context=make_test_request_context(self.db, "panel-session"),
+                request_context=make_test_request_context(
+                    self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                ),
             )
             root = calls[-1][1]
             self.assertIn("Choose a topic below", root["text"])
@@ -98,7 +104,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 "chat",
                 "basic",
                 delivery_port=self._help_delivery(calls),
-                request_context=make_test_request_context(self.db, "panel-session"),
+                request_context=make_test_request_context(
+                    self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                ),
             )
             category = calls[-1][1]
             self.assertIn("Start a conversation", category["text"])
@@ -110,7 +118,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 77,
                 0,
                 delivery_port=self._help_delivery(calls),
-                request_context=make_test_request_context(self.db, "panel-session"),
+                request_context=make_test_request_context(
+                    self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                ),
             )
             self.assertIn("What it does:", calls[-1][1]["text"])
         finally:
@@ -133,7 +143,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 "default",
                 None,
                 delivery_port=make_test_delivery_port(),
-                request_context=make_test_request_context(self.db, "panel-session"),
+                request_context=make_test_request_context(
+                    self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_catalog.answer_callback = original_answer
@@ -150,7 +162,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 "chat",
                 "generation",
                 delivery_port=self._help_delivery(calls),
-                request_context=make_test_request_context(self.db, "panel-session"),
+                request_context=make_test_request_context(
+                    self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -231,7 +245,9 @@ class HelpDrilldownTests(unittest.TestCase):
         self.assertEqual(commands["sync"], "Open Live API Sync controls")
 
     def test_sync_binding_is_stable_and_panel_is_scoped(self):
-        session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="sync-session")
+        session = _m_session_naming.create_session(
+            self.db, "chat", "provider/model", session_id="sync-session", app_settings=self.app_settings_builder.build()
+        )
         first = _m_sync_core.ensure_sync_binding(self.db, "chat", session["session_id"])
         second = _m_sync_core.ensure_sync_binding(self.db, "chat", session["session_id"])
         self.assertEqual(first["sync_id"], second["sync_id"])
@@ -244,8 +260,10 @@ class HelpDrilldownTests(unittest.TestCase):
                 "chat",
                 self.db,
                 session,
-                sync_service=make_native_test_sync_service(),
-                request_context=make_test_request_context(self.db, session["session_id"]),
+                sync_service=make_native_test_sync_service(app_settings=self.app_settings_builder.build()),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -370,7 +388,9 @@ class HelpDrilldownTests(unittest.TestCase):
                     "chat",
                     "/help scene refresh",
                     delivery_port=make_test_delivery_port(),
-                    request_context=make_test_request_context(self.db, "panel-session"),
+                    request_context=make_test_request_context(
+                        self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                    ),
                 )
             )
             expected_index = [command for command, _summary in _m_help_details.HELP_CATEGORIES["voice_group"]].index(
@@ -383,7 +403,9 @@ class HelpDrilldownTests(unittest.TestCase):
                     "chat",
                     "/help unknown",
                     delivery_port=make_test_delivery_port(),
-                    request_context=make_test_request_context(self.db, "panel-session"),
+                    request_context=make_test_request_context(
+                        self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                    ),
                 )
             )
             self.assertEqual(calls[-1][0], ("token", "chat"))
@@ -393,7 +415,9 @@ class HelpDrilldownTests(unittest.TestCase):
                     "chat",
                     "/helper",
                     delivery_port=make_test_delivery_port(),
-                    request_context=make_test_request_context(self.db, "panel-session"),
+                    request_context=make_test_request_context(
+                        self.db, "panel-session", app_settings=self.app_settings_builder.build()
+                    ),
                 )
             )
         finally:
@@ -406,13 +430,17 @@ class HelpDrilldownTests(unittest.TestCase):
 
     def test_read_only_and_feature_commands_render_panels(self):
         session = _m_session_naming.create_session(
-            self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="panel-session"
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="panel-session",
+            app_settings=self.app_settings_builder.build(),
         )
         calls = []
         original_panel = _m_status_panels.send_panel_message
         original_groups = _m_catalog.get_model_groups
         _m_status_panels.send_panel_message = lambda *args, **kwargs: calls.append((args, kwargs))
-        _m_catalog.get_model_groups = lambda: {}
+        _m_catalog.get_model_groups = lambda *, app_settings=None: {}
         try:
             _m_command_routes.send_prompt_menu(
                 "token",
@@ -420,9 +448,11 @@ class HelpDrilldownTests(unittest.TestCase):
                 self.db,
                 session,
                 {"name": "Test"},
-                group_service=make_test_group_service(),
+                group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
                 memory_service=make_test_memory_service(),
-                request_context=make_test_request_context(self.db, session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
             self.assertIn("prompt:budget", str(calls[-1]))
             scene_calls = []
@@ -435,8 +465,7 @@ class HelpDrilldownTests(unittest.TestCase):
                     send_panel_request=lambda *args, **kwargs: scene_calls.append((args, kwargs)) or {},
                 ),
                 request_context=make_test_request_context(
-                    self.db,
-                    session["session_id"],
+                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
                 ),
             )
             self.assertIn("scene:refresh", str(scene_calls[-1]))
@@ -446,7 +475,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 "chat",
                 self.db,
                 session,
-                request_context=make_test_request_context(self.db, session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
             self.assertIn("goal:set", str(calls[-1]))
             _m_status_panels.send_curated_memory_menu(
@@ -454,7 +485,9 @@ class HelpDrilldownTests(unittest.TestCase):
                 "chat",
                 self.db,
                 session,
-                request_context=make_test_request_context(self.db, session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
             self.assertIn("curated:refresh", str(calls[-1]))
         finally:

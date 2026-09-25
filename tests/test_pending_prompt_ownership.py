@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from application_test_setup import make_test_group_service
+from settings_test_support import SettingsTestCase
 
 import bridge.database as database
 import bridge.input_flows as input_flows
@@ -39,7 +40,7 @@ def imported_names(path: Path, module: str) -> set[str]:
     }
 
 
-class PendingPromptOwnershipTests(unittest.TestCase):
+class PendingPromptOwnershipTests(SettingsTestCase):
     def test_common_does_not_import_telegram(self):
         self.assertNotIn(
             "bridge.telegram",
@@ -127,7 +128,7 @@ class PendingPromptOwnershipTests(unittest.TestCase):
 
     def test_start_session_name_input_clears_conflicting_prompt_messages(self):
         with tempfile.TemporaryDirectory() as tmp:
-            db = database.db_connect(Path(tmp) / "prompt.sqlite3")
+            db = database.db_connect(Path(tmp) / "prompt.sqlite3", app_settings=self.app_settings_builder.build())
             state = {
                 "session_id": "default",
                 "expires_at": time.time() + 600,
@@ -148,7 +149,8 @@ class PendingPromptOwnershipTests(unittest.TestCase):
                     "token",
                     "chat",
                     {"session_id": "default", "model_id": "model"},
-                    group_service=make_test_group_service(),
+                    group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
+                    app_settings=self.app_settings_builder.build(),
                 )
             self.assertEqual(seen, [("token", "chat", state)])
             self.assertEqual(

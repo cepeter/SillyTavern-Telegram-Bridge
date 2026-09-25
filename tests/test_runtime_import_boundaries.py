@@ -5,10 +5,12 @@ import sys
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).parents[1]
 
 
-class RuntimeImportBoundaryTests(unittest.TestCase):
+class RuntimeImportBoundaryTests(SettingsTestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],

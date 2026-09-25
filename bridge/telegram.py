@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from bridge.callback_tokens import (
-    dynamic_callback_token,
-)
+from bridge.callback_tokens import dynamic_callback_token
 from bridge.card_content import (
     active_world_files,
     card_fields,
@@ -14,13 +12,11 @@ from bridge.card_content import (
     safe_world_path,
 )
 from bridge.common import (
-    DEFAULT_ALLOWED_USER,
     MAX_TELEGRAM_LENGTH,
     Path,
     hashlib,
     json,
     logging,
-    os,
     parse_topic_scope,
     re,
     sqlite3,
@@ -28,15 +24,7 @@ from bridge.common import (
     urllib,
 )
 from bridge.composition import RequestContext
-from bridge.config import (
-    CATALOG_MAX_ITEMS,
-    CHARACTER_BACKUP_DIR,
-    CHARACTER_DIR,
-    DEFAULT_CHARACTER_FILE,
-    RAG_MAX_FILE_BYTES,
-    RAG_SUPPORTED_SUFFIXES,
-    SYNC_MAX_BYTES,
-)
+from bridge.config import CATALOG_MAX_ITEMS, RAG_MAX_FILE_BYTES, RAG_SUPPORTED_SUFFIXES, SYNC_MAX_BYTES
 from bridge.database import (
     begin_operation,
     bind_panel_session,
@@ -48,34 +36,17 @@ from bridge.database import (
     set_meta,
 )
 from bridge.database import db_connect as db_connect
-from bridge.expressions import (
-    expression_last_key,
-    expression_mode_key,
-)
+from bridge.expressions import expression_last_key, expression_mode_key
 from bridge.generation import swipe_state_key
 from bridge.group_director_service import GroupDirectorService
-from bridge.memory_backend import (
-    hindsight_session_lock,
-)
+from bridge.memory_backend import hindsight_session_lock
 from bridge.memory_service import MemoryService
-from bridge.panel_utils import (
-    panel_label,
-    panel_message_request,
-    panel_navigation,
-    panel_page,
-)
+from bridge.panel_utils import panel_label, panel_message_request, panel_navigation, panel_page
 from bridge.persona_service import PersonaService
-from bridge.persona_sync import (
-    NATIVE_PERSONA_SETTINGS_FILE,
-    default_persona_id,
-    get_persona,
-)
-from bridge.rag_core import (
-    add_data_bank_document,
-    data_bank_document_versions,
-    rag_mode,
-)
+from bridge.persona_sync import default_persona_id, get_persona
+from bridge.rag_core import add_data_bank_document, data_bank_document_versions, rag_mode
 from bridge.session_titles import normalize_session_title
+from bridge.settings import AppSettings
 from bridge.world_storage import install_world_info_document
 
 _SESSION_COLUMNS = (
@@ -97,13 +68,13 @@ def _session_row_dict(row) -> dict[str, str]:
     return dict(zip(_SESSION_COLUMNS, row, strict=False))
 
 
-def _default_session_persona(db: sqlite3.Connection) -> str:
-    return default_persona_id()
+def _default_session_persona(db: sqlite3.Connection, *, app_settings: AppSettings) -> str:
+    return default_persona_id(app_settings=app_settings)
 
 
-def _native_default_world() -> str:
+def _native_default_world(*, app_settings: AppSettings) -> str:
     try:
-        settings = json.loads(NATIVE_PERSONA_SETTINGS_FILE.read_text(encoding="utf-8"))
+        settings = json.loads(app_settings.native_persona_settings_file.read_text(encoding="utf-8"))
         selected = ((settings.get("world_info_settings") or {}).get("world_info") or {}).get("globalSelect") or []
         if isinstance(selected, list):
             return encode_world_files([str(name) for name in selected])
@@ -112,18 +83,28 @@ def _native_default_world() -> str:
     return ""
 
 
-def _default_session_world(db: sqlite3.Connection) -> str:
-    return _native_default_world()
+def _default_session_world(db: sqlite3.Connection, *, app_settings: AppSettings) -> str:
+    return _native_default_world(app_settings=app_settings)
 
 
-def _normalize_session_defaults(db: sqlite3.Connection, session: dict[str, str]) -> dict[str, str]:
+def _normalize_session_defaults(
+    db: sqlite3.Connection, session: dict[str, str], *, app_settings: AppSettings
+) -> dict[str, str]:
     persona_id = session.get("persona_id") or ""
     world_file = session.get("world_file") or ""
-    replacement_persona = persona_id if not persona_id or get_persona(persona_id) else _default_session_persona(db)
+    replacement_persona = (
+        persona_id
+        if not persona_id or get_persona(persona_id, app_settings=app_settings)
+        else _default_session_persona(db, app_settings=app_settings)
+    )
     replacement_world = (
         world_file
-        if not world_file or any(safe_world_path(name) for name in active_world_files(world_file))
-        else _default_session_world(db)
+        if not world_file
+        or any(
+            safe_world_path(name, app_settings=app_settings)
+            for name in active_world_files(world_file, app_settings=app_settings)
+        )
+        else _default_session_world(db, app_settings=app_settings)
     )
     changes = {}
     if replacement_persona != persona_id:
@@ -141,7 +122,9 @@ def _normalize_session_defaults(db: sqlite3.Connection, session: dict[str, str])
     return session
 
 
-def load_session(db: sqlite3.Connection, chat_id: str, session_id: str, default_model: str) -> dict[str, str]:
+def load_session(
+    db: sqlite3.Connection, chat_id: str, session_id: str, default_model: str, *, app_settings: AppSettings
+) -> dict[str, str]:
     row = db.execute(
         f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?",  # noqa: S608 -- SQL structure uses fixed columns/placeholders; all values are bound
         (chat_id, session_id),
@@ -149,10 +132,12 @@ def load_session(db: sqlite3.Connection, chat_id: str, session_id: str, default_
     if row is None:
         raise ValueError(f"queued session no longer exists: {session_id}")
     get_generation_settings(db, chat_id, session_id)
-    return _normalize_session_defaults(db, _session_row_dict(row))
+    return _normalize_session_defaults(db, _session_row_dict(row), app_settings=app_settings)
 
 
-def ensure_session(db: sqlite3.Connection, chat_id: str, default_model: str) -> dict[str, str]:
+def ensure_session(
+    db: sqlite3.Connection, chat_id: str, default_model: str, *, app_settings: AppSettings
+) -> dict[str, str]:
     active_id = get_meta(db, f"active_session:{chat_id}", "default")
     row = db.execute(
         f"SELECT {_SESSION_COLUMN_SQL} FROM sessions WHERE chat_id=? AND session_id=?",  # noqa: S608 -- SQL structure uses fixed columns/placeholders; all values are bound
@@ -164,10 +149,10 @@ def ensure_session(db: sqlite3.Connection, chat_id: str, default_model: str) -> 
             chat_id,
             active_id,
             "Default session",
-            DEFAULT_CHARACTER_FILE,
+            app_settings.default_character_file,
             get_meta(db, "model", default_model),
-            _default_session_persona(db),
-            _default_session_world(db),
+            _default_session_persona(db, app_settings=app_settings),
+            _default_session_world(db, app_settings=app_settings),
             "",
             "",
             "auto",
@@ -182,7 +167,7 @@ def ensure_session(db: sqlite3.Connection, chat_id: str, default_model: str) -> 
         )
         db.commit()
     get_generation_settings(db, chat_id, active_id)
-    return _normalize_session_defaults(db, _session_row_dict(row))
+    return _normalize_session_defaults(db, _session_row_dict(row), app_settings=app_settings)
 
 
 def update_session(
@@ -220,7 +205,13 @@ def update_session(
 
 
 def create_session(
-    db: sqlite3.Connection, chat_id: str, default_model: str, session_id: str | None = None, title: str = "New session"
+    db: sqlite3.Connection,
+    chat_id: str,
+    default_model: str,
+    session_id: str | None = None,
+    title: str = "New session",
+    *,
+    app_settings: AppSettings,
 ) -> dict[str, str]:
     session_id = session_id or ("s" + str(int(time.time() * 1000)))
     title = normalize_session_title(title)
@@ -229,10 +220,10 @@ def create_session(
         chat_id,
         session_id,
         title,
-        DEFAULT_CHARACTER_FILE,
+        app_settings.default_character_file,
         get_meta(db, "model", default_model),
-        _default_session_persona(db),
-        _default_session_world(db),
+        _default_session_persona(db, app_settings=app_settings),
+        _default_session_world(db, app_settings=app_settings),
         "",
         "",
         "auto",
@@ -423,8 +414,8 @@ def delete_session_data(
     return True, "deleted"
 
 
-def allowed_users() -> set[str]:
-    value = os.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", DEFAULT_ALLOWED_USER)
+def allowed_users(*, app_settings: AppSettings) -> set[str]:
+    value = app_settings.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", app_settings.default_allowed_user)
     return {x.strip() for x in value.split(",") if x.strip()}
 
 
@@ -522,10 +513,10 @@ def download_telegram_file(token: str, file_id: str, max_bytes: int = SYNC_MAX_B
     return raw
 
 
-def verify_character_card_backup(target: Path, raw: bytes) -> Path:
-    CHARACTER_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    backup = CHARACTER_BACKUP_DIR / target.name
-    versioned = CHARACTER_BACKUP_DIR / f"{target.stem}.{time.time_ns()}{target.suffix}"
+def verify_character_card_backup(target: Path, raw: bytes, *, app_settings: AppSettings) -> Path:
+    app_settings.character_backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = app_settings.character_backup_dir / target.name
+    versioned = app_settings.character_backup_dir / f"{target.stem}.{time.time_ns()}{target.suffix}"
     for destination in (versioned, backup):
         temporary = destination.with_suffix(destination.suffix + ".tmp")
         temporary.write_bytes(raw)
@@ -536,9 +527,9 @@ def verify_character_card_backup(target: Path, raw: bytes) -> Path:
     return backup
 
 
-def character_backup_versions(name: str) -> list[Path]:
+def character_backup_versions(name: str, *, app_settings: AppSettings) -> list[Path]:
     target = Path(name)
-    return sorted(CHARACTER_BACKUP_DIR.glob(f"{target.stem}.*{target.suffix}"), reverse=True)
+    return sorted(app_settings.character_backup_dir.glob(f"{target.stem}.*{target.suffix}"), reverse=True)
 
 
 def character_delete_references(db: sqlite3.Connection, filename: str) -> list[str]:
@@ -559,8 +550,8 @@ def character_delete_references(db: sqlite3.Connection, filename: str) -> list[s
     return references
 
 
-def prune_character_backups(name: str, keep: int = 10) -> None:
-    versions = character_backup_versions(name)
+def prune_character_backups(name: str, keep: int = 10, *, app_settings: AppSettings) -> None:
+    versions = character_backup_versions(name, app_settings=app_settings)
     for stale in versions[keep:]:
         try:
             stale.unlink(missing_ok=True)
@@ -568,12 +559,14 @@ def prune_character_backups(name: str, keep: int = 10) -> None:
             logging.warning("Could not prune character backup %s", stale, exc_info=True)
 
 
-def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, filename: str, raw: bytes) -> None:
+def import_character_card(
+    db: sqlite3.Connection, token: str, chat_id: str, filename: str, raw: bytes, *, app_settings: AppSettings
+) -> None:
     if len(raw) > RAG_MAX_FILE_BYTES:
         send_text(token, chat_id, "Character card is too large. The limit is 10 MB.")
         return
     try:
-        fields = card_fields(parse_png_chara_bytes(raw))
+        fields = card_fields(parse_png_chara_bytes(raw), app_settings=app_settings)
     except Exception:
         send_text(token, chat_id, "This PNG is not a valid SillyTavern character card; chara metadata was not found.")
         return
@@ -586,12 +579,16 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
         stem = (
             stem.encode("utf-8")[:64].decode("utf-8", "ignore").rstrip("_-") + "-" + hashlib.sha256(raw).hexdigest()[:8]
         )
-    target = CHARACTER_DIR / f"{stem}.png"
+    target = app_settings.character_dir / f"{stem}.png"
     previous_target = target
     is_new_version = target.exists() and target.read_bytes() != raw
     if is_new_version:
-        target = CHARACTER_DIR / f"{stem}-{hashlib.sha256(raw).hexdigest()[:8]}.png"
-    installed_count = sum(1 for path in CHARACTER_DIR.glob("*.png") if path.is_file()) if CHARACTER_DIR.exists() else 0
+        target = app_settings.character_dir / f"{stem}-{hashlib.sha256(raw).hexdigest()[:8]}.png"
+    installed_count = (
+        sum(1 for path in app_settings.character_dir.glob("*.png") if path.is_file())
+        if app_settings.character_dir.exists()
+        else 0
+    )
     if not target.exists() and installed_count >= CATALOG_MAX_ITEMS:
         send_text(
             token,
@@ -599,12 +596,12 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
             f"Character catalog is full ({CATALOG_MAX_ITEMS} maximum). Delete one before uploading another.",
         )
         return
-    CHARACTER_DIR.mkdir(parents=True, exist_ok=True)
+    app_settings.character_dir.mkdir(parents=True, exist_ok=True)
     if target.exists():
         if target.read_bytes() == raw:
             try:
-                backup = verify_character_card_backup(target, raw)
-                prune_character_backups(target.name)
+                backup = verify_character_card_backup(target, raw, app_settings=app_settings)
+                prune_character_backups(target.name, app_settings=app_settings)
             except OSError:
                 send_text(token, chat_id, "Character card exists, but backup verification failed; no changes made.")
                 return
@@ -623,9 +620,9 @@ def import_character_card(db: sqlite3.Connection, token: str, chat_id: str, file
             )
             return
     try:
-        backup = verify_character_card_backup(target, raw)
+        backup = verify_character_card_backup(target, raw, app_settings=app_settings)
         target.write_bytes(raw)
-        prune_character_backups(target.name)
+        prune_character_backups(target.name, app_settings=app_settings)
     except OSError:
         send_text(token, chat_id, "Character card backup verification failed; card was not installed.")
         return
@@ -667,9 +664,11 @@ def _consume_world_upload(db: sqlite3.Connection, chat_id: str) -> bool:
     return True
 
 
-def import_world_info_document(db: sqlite3.Connection, token: str, chat_id: str, filename: str, raw: bytes) -> None:
+def import_world_info_document(
+    db: sqlite3.Connection, token: str, chat_id: str, filename: str, raw: bytes, *, app_settings: AppSettings
+) -> None:
     try:
-        target = install_world_info_document(filename, raw)
+        target = install_world_info_document(filename, raw, app_settings=app_settings)
     except FileExistsError:
         send_text(
             token, chat_id, f"World Info already exists: {Path(filename).name}. Delete it first, then upload again."
@@ -693,6 +692,7 @@ def import_telegram_document(
     memory_service: MemoryService,
     persona_service: PersonaService,
     group_director_service: GroupDirectorService,
+    app_settings: AppSettings,
 ) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
@@ -705,15 +705,15 @@ def import_telegram_document(
             send_text(token, chat_id, "World Info file is too large. The limit is 10 MB.")
             return
         raw = download_telegram_file(token, str(document.get("file_id") or ""), RAG_MAX_FILE_BYTES)
-        import_world_info_document(db, token, chat_id, filename, raw)
+        import_world_info_document(db, token, chat_id, filename, raw, app_settings=app_settings)
         return
     if suffix == ".png":
         raw = download_telegram_file(token, str(document.get("file_id") or ""), RAG_MAX_FILE_BYTES)
         try:
             parse_png_chara_bytes(raw)
         except Exception:
-            session = ensure_session(db, chat_id, default_model)
-            fields = card_fields_from_file(session["character_file"])
+            session = ensure_session(db, chat_id, default_model, app_settings=app_settings)
+            fields = card_fields_from_file(session["character_file"], app_settings=app_settings)
             process_image(
                 db,
                 token,
@@ -730,7 +730,7 @@ def import_telegram_document(
                 group_director_service=group_director_service,
             )
         else:
-            import_character_card(db, token, chat_id, filename, raw)
+            import_character_card(db, token, chat_id, filename, raw, app_settings=app_settings)
         return
     if suffix not in RAG_SUPPORTED_SUFFIXES:
         send_text(
@@ -741,7 +741,7 @@ def import_telegram_document(
         send_text(token, chat_id, "Data Bank file is too large. The limit is 10 MB.")
         return
     raw = download_telegram_file(token, str(document.get("file_id")), RAG_MAX_FILE_BYTES)
-    status, chunks = add_data_bank_document(db, chat_id, filename, raw)
+    status, chunks = add_data_bank_document(db, chat_id, filename, raw, app_settings=app_settings)
     if status == "duplicate":
         send_text(token, chat_id, f"Data Bank already contains {filename} ({chunks} chunks).")
     elif status == "versioned":

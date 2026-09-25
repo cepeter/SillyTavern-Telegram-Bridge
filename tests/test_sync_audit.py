@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -8,7 +9,6 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-import bridge.config as config
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.schema as _m_schema
@@ -19,16 +19,16 @@ import bridge.sync_core as _m_sync_core
 import bridge.telegram as _m_telegram
 
 
-class SyncAuditHardeningTests(unittest.TestCase):
+class SyncAuditHardeningTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def _binding(self, chat_id="chat", session_id="session"):
@@ -79,9 +79,11 @@ class SyncAuditHardeningTests(unittest.TestCase):
         calls = []
 
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
+            (chat_id, session_id)
+        )
         try:
-            _m_sync_api._SYNC_POLL_SAFETY.poll(
+            _m_sync_api._make_sync_poll_safety(app_settings=self.app_settings_builder.build()).poll(
                 self.db,
             )
         finally:
@@ -96,11 +98,13 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self._binding()
         calls = []
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
+            (chat_id, session_id)
+        )
         lock = _m_sync_api.chat_job_lock("chat")
         lock.acquire()
         try:
-            _m_sync_api.live_sync_poll(self.db)
+            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
             self.assertEqual(calls, [])
         finally:
             lock.release()
@@ -110,12 +114,14 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self._many_bindings()
         calls = []
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
+            (chat_id, session_id)
+        )
         locks = [_m_sync_api.chat_job_lock(f"a{index:02d}") for index in range(32)]
         for lock in locks:
             lock.acquire()
         try:
-            _m_sync_api.live_sync_poll(self.db)
+            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
         finally:
             for lock in locks:
                 lock.release()
@@ -143,7 +149,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
         seen = []
         original = _m_sync_api.live_sync_now
 
-        def fake_sync(db, chat_id, session_id):
+        def fake_sync(db, chat_id, session_id, *, app_settings=None):
             seen.append(session_id)
             db.execute(
                 "UPDATE sync_bindings SET last_checked_at=? WHERE chat_id=? AND session_id=?",
@@ -154,7 +160,7 @@ class SyncAuditHardeningTests(unittest.TestCase):
 
         _m_sync_api.live_sync_now = fake_sync
         try:
-            _m_sync_api.live_sync_poll(self.db)
+            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
         finally:
             _m_sync_api.live_sync_now = original
         self.assertEqual(len(seen), 32)
@@ -165,9 +171,9 @@ class SyncAuditHardeningTests(unittest.TestCase):
         self.db.execute("UPDATE sync_bindings SET realtime_failures=4 WHERE chat_id='chat' AND session_id='session'")
         self.db.commit()
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = lambda *_args: (_ for _ in ()).throw(RuntimeError("boom"))
+        _m_sync_api.live_sync_now = lambda *_args, app_settings=None: (_ for _ in ()).throw(RuntimeError("boom"))
         try:
-            _m_sync_api.live_sync_poll(self.db)
+            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
         finally:
             _m_sync_api.live_sync_now = original
         row = self.db.execute(
@@ -183,12 +189,14 @@ class SyncAuditHardeningTests(unittest.TestCase):
         calls = []
         original = _m_sync_api.live_sync_now
 
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
+            (chat_id, session_id)
+        )
         locks = [_m_sync_api.chat_job_lock(f"a{index:02d}") for index in range(32)]
         for lock in locks:
             lock.acquire()
         try:
-            _m_sync_api.live_sync_poll(self.db)
+            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
         finally:
             for lock in locks:
                 lock.release()
@@ -200,9 +208,15 @@ class SyncAuditHardeningTests(unittest.TestCase):
         )
 
     def test_session_delete_cascades_sync_binding_cleanup(self):
-        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         inactive = _m_session_naming.create_session(
-            self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive"
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="inactive",
+            app_settings=self.app_settings_builder.build(),
         )
         _m_session_naming.set_meta(self.db, "active_session:chat", active["session_id"])
         _m_sync_core.ensure_sync_binding(self.db, "chat", inactive["session_id"])
@@ -227,8 +241,9 @@ class SyncAuditHardeningTests(unittest.TestCase):
         valid = _m_session_naming.create_session(
             self.db,
             "valid-chat",
-            _m_memory_curator.DEFAULT_MODEL,
+            self.app_settings_builder.default_model,
             session_id="valid-session",
+            app_settings=self.app_settings_builder.build(),
         )
         _m_sync_core.ensure_sync_binding(
             self.db,

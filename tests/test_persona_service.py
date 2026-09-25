@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -10,7 +11,7 @@ import bridge.message_commands as _m_message_commands
 from bridge.persona_service import PersonaService
 
 
-class PersonaServiceTests(unittest.TestCase):
+class PersonaServiceTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.personas = {
@@ -351,13 +352,14 @@ class PersonaServiceTests(unittest.TestCase):
             "Hello",
             [],
             persona_service=FakePersonaService(),
+            app_settings=self.app_settings_builder.build(),
         )
         system = messages[0]["content"]
         self.assertIn("Name: Injected User", system)
         self.assertIn("Injected persona description", system)
 
 
-class PersonaSourceBoundaryTests(unittest.TestCase):
+class PersonaSourceBoundaryTests(SettingsTestCase):
     def _function_chunk(self, source, marker):
         start = source.index(marker)
         next_def = source.find("\ndef ", start + len(marker))

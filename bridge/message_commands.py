@@ -4,6 +4,7 @@ import json
 import logging
 import sqlite3
 import time
+from functools import partial as _partial
 from typing import TYPE_CHECKING
 
 from bridge.card_content import card_fields_from_file
@@ -11,7 +12,6 @@ from bridge.cards import send_session_menu
 from bridge.character_identity import reconcile_session_character
 from bridge.commands import edit_last_user
 from bridge.composition import RequestContext
-from bridge.config import DEFAULT_USER_NAME
 from bridge.context_compaction import context_history_candidate_limit
 from bridge.conversation_service import PreparedMessage
 from bridge.database import (
@@ -38,30 +38,16 @@ from bridge.generation import (
 )
 from bridge.group_service import GroupService
 from bridge.language import normalize_response_language
-from bridge.media import (
-    queue_user_quote_tts,
-    send_reply,
-    send_typing,
-)
+from bridge.media import queue_user_quote_tts, send_reply, send_typing
 from bridge.memory import clear_session_summary
 from bridge.memory_service import MemoryService
 from bridge.performance import timed_call
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
-from bridge.rag_core import (
-    rag_citation_footer,
-    rag_context_for_prompt,
-    rag_retrieval_bundle,
-)
+from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
 from bridge.reset_panel import reset_confirmation_request
-from bridge.telegram import (
-    ensure_session,
-    list_sessions,
-    load_session,
-    send_panel_request,
-    send_text,
-    telegram_request,
-)
+from bridge.settings import AppSettings
+from bridge.telegram import ensure_session, list_sessions, load_session, send_panel_request, send_text, telegram_request
 
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices
@@ -137,6 +123,7 @@ def generate_and_store_reply(
     provider_port: ProviderPort,
     memory_service: MemoryService,
     persona_service: PersonaService,
+    app_settings: AppSettings,
 ) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
     history_rows = timed_call(
@@ -146,10 +133,18 @@ def generate_and_store_reply(
             "SELECT role, content FROM messages WHERE chat_id=? AND session_id=? "
             "ORDER BY created_at DESC, rowid DESC LIMIT ?"
         ),
-        (chat_id, session_id, context_history_candidate_limit()),
+        (chat_id, session_id, context_history_candidate_limit(app_settings=app_settings)),
+        app_settings=app_settings,
     ).fetchall()
     history_rows = list(reversed(history_rows))
-    rag_bundle = timed_call("rag_retrieval", rag_retrieval_bundle, db, chat_id, text)
+    rag_bundle = timed_call(
+        "rag_retrieval",
+        _partial(rag_retrieval_bundle, app_settings=app_settings),
+        db,
+        chat_id,
+        text,
+        app_settings=app_settings,
+    )
     memory_prompt = memory_service.prompt_context(
         db,
         chat_id,
@@ -161,16 +156,17 @@ def generate_and_store_reply(
     session_summary = memory_prompt.summary
     messages = timed_call(
         "prompt_assembly",
-        build_chat_messages,
+        _partial(build_chat_messages, app_settings=app_settings),
         session,
         fields,
         text,
         history_rows,
         memory_context=memory_context,
         session_summary=session_summary,
-        rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle),
+        rag_context=rag_context_for_prompt(db, chat_id, text, rag_bundle, app_settings=app_settings),
         group_context=group_context,
         persona_service=persona_service,
+        app_settings=app_settings,
     )
     send_typing(token, chat_id)
     language = session.get("response_language") or "auto"
@@ -204,8 +200,9 @@ def generate_and_store_reply(
         session_id=generation_session_id,
         settings=generation_settings,
         stream_callback=stream_update if stream_message_id else None,
+        app_settings=app_settings,
     )
-    reply += rag_citation_footer(db, chat_id, text, rag_bundle)
+    reply += rag_citation_footer(db, chat_id, text, rag_bundle, app_settings=app_settings)
     reply = render_response_language(
         api_key, current_model, reply, language, generation_session_id, generation_settings, provider_port=provider_port
     )
@@ -275,8 +272,8 @@ def generate_and_store_reply(
                 )
             except Exception:
                 logging.info("Could not hide completed streaming preview", exc_info=True)
-    queue_user_quote_tts(token, chat_id, text, db, session_id, telegram_message_id)
-    send_reply(token, chat_id, stored_reply, db, session_id, assistant_rowid)
+    queue_user_quote_tts(token, chat_id, text, db, session_id, telegram_message_id, app_settings=app_settings)
+    send_reply(token, chat_id, stored_reply, db, session_id, assistant_rowid, app_settings=app_settings)
 
 
 def _operation_command(text):
@@ -322,15 +319,17 @@ def prepare_message(
         command_parts = [command_parts[0]]
     command = " ".join(command_parts)
     session = (
-        load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
+        load_session(db, chat_id, queued_session_id, model, app_settings=services.config)
+        if queued_session_id
+        else ensure_session(db, chat_id, model, app_settings=services.config)
     )
     session_id = session["session_id"]
-    request_context = RequestContext(db, session_id, actor_id)
+    request_context = RequestContext(db, session_id, actor_id, app_settings=services.config)
     memory_service = services.memory
     persona_service = services.persona
     if operation_id is not None and operation_phase(db, operation_id) == "local_committed":
         recovery_command = _operation_command(text)
-        recovery_fields = card_fields_from_file(session["character_file"])
+        recovery_fields = card_fields_from_file(session["character_file"], app_settings=services.config)
         if recovery_command == "/regen":
             regenerate_last(
                 db,
@@ -344,6 +343,7 @@ def prepare_message(
                 delivery_port=services.delivery,
                 memory_service=memory_service,
                 persona_service=persona_service,
+                app_settings=services.config,
             )
             return None
         if recovery_command == "/continue":
@@ -359,6 +359,7 @@ def prepare_message(
                 delivery_port=services.delivery,
                 memory_service=memory_service,
                 persona_service=persona_service,
+                app_settings=services.config,
             )
             return None
         if recovery_command == "/edit":
@@ -376,6 +377,7 @@ def prepare_message(
                 provider_port=services.provider,
                 memory_service=memory_service,
                 persona_service=persona_service,
+                app_settings=services.config,
             )
             return None
 
@@ -389,7 +391,9 @@ def prepare_message(
             (chat_id, session_id),
         ).fetchone()
         if committed:
-            send_reply(token, chat_id, str(committed[1]), db, session_id, int(committed[0]))
+            send_reply(
+                token, chat_id, str(committed[1]), db, session_id, int(committed[0]), app_settings=services.config
+            )
             set_operation_phase(db, operation_id, "recovery_delivery", "external_delivered")
             record_operation(db, operation_id, "recovery_delivery")
             db.commit()
@@ -422,8 +426,8 @@ def prepare_message(
     if command == "/session":
         send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, request_context=request_context)
         return
-    session = reconcile_session_character(db, chat_id, session)
-    fields = card_fields_from_file(session["character_file"])
+    session = reconcile_session_character(db, chat_id, session, app_settings=services.config)
+    fields = card_fields_from_file(session["character_file"], app_settings=services.config)
     director_plan = None
     group_director = services.group_director
     if not command.startswith("/"):
@@ -442,7 +446,7 @@ def prepare_message(
         group_turn = services.group.current_speaker(db, chat_id, session, text)
     group_context = ""
     if group_turn:
-        fields = card_fields_from_file(group_turn[0])
+        fields = card_fields_from_file(group_turn[0], app_settings=services.config)
         group_context = group_director.prompt_context(
             db,
             chat_id,
@@ -452,7 +456,7 @@ def prepare_message(
         )
     current_model = session["model_id"] or model
     current_persona = session["persona_id"]
-    user_name = persona_service.name(current_persona) if current_persona else DEFAULT_USER_NAME
+    user_name = persona_service.name(current_persona) if current_persona else services.config.default_user_name
     return PreparedMessage(
         stripped=stripped,
         command=command,

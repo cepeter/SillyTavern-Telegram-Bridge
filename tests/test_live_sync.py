@@ -3,12 +3,12 @@ from application_test_setup import (
     make_native_test_sync_service,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
 import copy
 import json
-import os
 import sqlite3
 import tempfile
 import threading
@@ -20,7 +20,6 @@ from typing import ClassVar
 from unittest.mock import patch
 
 import bridge.cards as _m_cards
-import bridge.config as config
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
@@ -127,22 +126,22 @@ class _FakeSyncService:
         return self.toggle_result
 
 
-class Phase3SyncTests(unittest.TestCase):
+class Phase3SyncTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        self.old_url = _m_sillytavern_api.LIVE_SYNC_API_URL
-        self.old_handle = _m_sillytavern_api.LIVE_SYNC_API_HANDLE
-        self.old_password = _m_sillytavern_api.LIVE_SYNC_API_PASSWORD
-        self.old_interval = _m_sync_api.LIVE_SYNC_INTERVAL_SECONDS
-        self.old_timeout = _m_sillytavern_api.LIVE_SYNC_TIMEOUT_SECONDS
+        self.old_db = self.app_settings_builder.db_file
+        self.old_url = self.app_settings_builder.live_sync_api_url
+        self.old_handle = self.app_settings_builder.live_sync_api_handle
+        self.old_password = self.app_settings_builder.live_sync_api_password
+        self.old_interval = self.app_settings_builder.live_sync_interval_seconds
+        self.old_timeout = self.app_settings_builder.live_sync_timeout_seconds
         self.old_client = _m_sillytavern_api.live_sync_client
         self.old_sync_api_card = _m_sync_api.card_fields_from_file
         self.old_sync_core_card = _m_sync_core.card_fields_from_file
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        _m_sillytavern_api.LIVE_SYNC_API_URL = "http://127.0.0.1:8000"
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.app_settings_builder.live_sync_api_url = "http://127.0.0.1:8000"
 
-        def card_stub(_name):
+        def card_stub(_name, *, app_settings=None):
             return {
                 "name": "Test",
                 "first_mes": "",
@@ -153,19 +152,21 @@ class Phase3SyncTests(unittest.TestCase):
 
         _m_sync_api.card_fields_from_file = card_stub
         _m_sync_core.card_fields_from_file = card_stub
-        self.db = _m_memory_curator.db_connect()
-        self.session = _m_session_naming.create_session(self.db, "chat", "provider/model", session_id="live-sync")
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.session = _m_session_naming.create_session(
+            self.db, "chat", "provider/model", session_id="live-sync", app_settings=self.app_settings_builder.build()
+        )
         self.fake = _FakeApi()
-        _m_sillytavern_api.live_sync_client = lambda: self.fake
+        _m_sillytavern_api.live_sync_client = lambda *, app_settings=None: self.fake
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
-        _m_sillytavern_api.LIVE_SYNC_API_URL = self.old_url
-        _m_sillytavern_api.LIVE_SYNC_API_HANDLE = self.old_handle
-        _m_sillytavern_api.LIVE_SYNC_API_PASSWORD = self.old_password
-        _m_sync_api.LIVE_SYNC_INTERVAL_SECONDS = self.old_interval
-        _m_sillytavern_api.LIVE_SYNC_TIMEOUT_SECONDS = self.old_timeout
+        self.app_settings_builder.db_file = self.old_db
+        self.app_settings_builder.live_sync_api_url = self.old_url
+        self.app_settings_builder.live_sync_api_handle = self.old_handle
+        self.app_settings_builder.live_sync_api_password = self.old_password
+        self.app_settings_builder.live_sync_interval_seconds = self.old_interval
+        self.app_settings_builder.live_sync_timeout_seconds = self.old_timeout
         _m_sillytavern_api.live_sync_client = self.old_client
         _m_sync_api.card_fields_from_file = self.old_sync_api_card
         _m_sync_core.card_fields_from_file = self.old_sync_core_card
@@ -191,24 +192,24 @@ class Phase3SyncTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 _m_sillytavern_api.validate_live_sync_api_url(value)
 
-    def test_live_sync_config_refreshes_after_env_load_and_bad_numbers_are_safe(self):
-        with patch.dict(
-            os.environ,
-            {
-                "SILLYTAVERN_SYNC_API_URL": "http://localhost:8123",
-                "SILLYTAVERN_SYNC_API_HANDLE": "tester",
-                "SILLYTAVERN_SYNC_API_PASSWORD": "secret",
-                "SILLYTAVERN_SYNC_API_INTERVAL_SECONDS": "bad",
-                "SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS": "bad",
-            },
-            clear=False,
-        ):
-            _m_sync_api.refresh_live_sync_config()
-        self.assertEqual(_m_sillytavern_api.LIVE_SYNC_API_URL, "http://localhost:8123")
-        self.assertEqual(_m_sillytavern_api.LIVE_SYNC_API_HANDLE, "tester")
-        self.assertEqual(_m_sillytavern_api.LIVE_SYNC_API_PASSWORD, "secret")
-        self.assertEqual(_m_sync_api.LIVE_SYNC_INTERVAL_SECONDS, 2.0)
-        self.assertEqual(_m_sillytavern_api.LIVE_SYNC_TIMEOUT_SECONDS, 10)
+    def test_live_sync_settings_are_loaded_explicitly_and_reject_bad_numbers(self):
+        from bridge.config_values import ConfigurationError
+        from bridge.settings import load_app_settings
+
+        values = {
+            "SILLYTAVERN_SYNC_API_URL": "http://localhost:8123",
+            "SILLYTAVERN_SYNC_API_HANDLE": "tester",
+            "SILLYTAVERN_SYNC_API_PASSWORD": "secret",
+        }
+        settings = load_app_settings(values, home=Path(self.tmp.name))
+        self.assertEqual(settings.live_sync_api_url, "http://localhost:8123")
+        self.assertEqual(settings.live_sync_api_handle, "tester")
+        self.assertEqual(settings.live_sync_api_password, "secret")
+        self.assertEqual(settings.live_sync_interval_seconds, 2.0)
+        self.assertEqual(settings.live_sync_timeout_seconds, 10)
+        for key in ("SILLYTAVERN_SYNC_API_INTERVAL_SECONDS", "SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS"):
+            with self.subTest(key=key), self.assertRaisesRegex(ConfigurationError, key):
+                load_app_settings(dict(values, **{key: "bad"}), home=Path(self.tmp.name))
 
     def test_http_client_uses_cookie_login_and_csrf(self):
         _ApiHandler.records, _ApiHandler.seen = [], []
@@ -251,20 +252,34 @@ class Phase3SyncTests(unittest.TestCase):
 
     def test_realtime_round_trip_and_conflict_stop(self):
         self._add("Original")
-        self.assertIn("realtime API sync enabled", _m_sync_api.live_sync_toggle_realtime(self.db, "chat", "live-sync"))
+        self.assertIn(
+            "realtime API sync enabled",
+            _m_sync_api.live_sync_toggle_realtime(
+                self.db, "chat", "live-sync", app_settings=self.app_settings_builder.build()
+            ),
+        )
         self.assertEqual(self.fake.saved, 1)
         self.fake.records[1]["mes"] = "Edited in SillyTavern"
-        self.assertEqual(_m_sync_api.live_sync_now(self.db, "chat", "live-sync"), "imported SillyTavern API changes")
+        self.assertEqual(
+            _m_sync_api.live_sync_now(self.db, "chat", "live-sync", app_settings=self.app_settings_builder.build()),
+            "imported SillyTavern API changes",
+        )
         stored = self.db.execute("SELECT content FROM messages WHERE session_id='live-sync'").fetchone()[0]
         self.assertEqual(stored, "Edited in SillyTavern")
         self.db.execute("UPDATE messages SET content='Edited in Telegram' WHERE session_id='live-sync'")
         self.db.commit()
-        self.assertEqual(_m_sync_api.live_sync_now(self.db, "chat", "live-sync"), "exported bridge changes through API")
+        self.assertEqual(
+            _m_sync_api.live_sync_now(self.db, "chat", "live-sync", app_settings=self.app_settings_builder.build()),
+            "exported bridge changes through API",
+        )
         self.assertEqual(self.fake.records[1]["mes"], "Edited in Telegram")
         self.db.execute("UPDATE messages SET content='Local conflict' WHERE session_id='live-sync'")
         self.db.commit()
         self.fake.records[1]["mes"] = "Remote conflict"
-        self.assertEqual(_m_sync_api.live_sync_now(self.db, "chat", "live-sync"), "conflict detected; realtime stopped")
+        self.assertEqual(
+            _m_sync_api.live_sync_now(self.db, "chat", "live-sync", app_settings=self.app_settings_builder.build()),
+            "conflict detected; realtime stopped",
+        )
         binding = _m_sync_api.sync_binding(self.db, "chat", "live-sync")
         self.assertEqual(binding["realtime_enabled"], 0)
         self.assertEqual(binding["conflict"], "conflict")
@@ -275,7 +290,7 @@ class Phase3SyncTests(unittest.TestCase):
         self.db.execute("UPDATE sync_bindings SET realtime_enabled=1 WHERE chat_id='chat' AND session_id='live-sync'")
         self.db.commit()
         self.fake.error = _m_sillytavern_api.SillyTavernApiError("authentication failed", status=403)
-        _m_sync_api.live_sync_poll(self.db)
+        _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
         binding = _m_sync_api.sync_binding(self.db, "chat", "live-sync")
         self.assertEqual(binding["realtime_enabled"], 0)
 
@@ -336,7 +351,9 @@ class Phase3SyncTests(unittest.TestCase):
                 "live-sync",
                 None,
                 sync_service=fake,
-                request_context=make_test_request_context(self.db, "live-sync"),
+                request_context=make_test_request_context(
+                    self.db, "live-sync", app_settings=self.app_settings_builder.build()
+                ),
             )
 
         self.assertTrue(handled)
@@ -375,7 +392,9 @@ class Phase3SyncTests(unittest.TestCase):
                 "live-sync",
                 None,
                 sync_service=fake,
-                request_context=make_test_request_context(self.db, "live-sync"),
+                request_context=make_test_request_context(
+                    self.db, "live-sync", app_settings=self.app_settings_builder.build()
+                ),
             )
 
         self.assertTrue(handled)
@@ -403,7 +422,9 @@ class Phase3SyncTests(unittest.TestCase):
                 "live-sync",
                 None,
                 sync_service=fake,
-                request_context=make_test_request_context(self.db, "live-sync"),
+                request_context=make_test_request_context(
+                    self.db, "live-sync", app_settings=self.app_settings_builder.build()
+                ),
             )
 
         self.assertTrue(handled)
@@ -428,15 +449,14 @@ class Phase3SyncTests(unittest.TestCase):
             self.db,
             "chat",
             "live-sync",
-            _m_memory_curator.DEFAULT_MODEL,
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
         )
 
         self.assertIn(
             "realtime API sync enabled",
             _m_sync_api.live_sync_toggle_realtime(
-                self.db,
-                "chat",
-                "live-sync",
+                self.db, "chat", "live-sync", app_settings=self.app_settings_builder.build()
             ),
         )
         metadata = self.fake.records[0]["chat_metadata"]
@@ -448,9 +468,9 @@ class Phase3SyncTests(unittest.TestCase):
         with patch.object(
             _m_sync_core,
             "retain_session_memory",
-            side_effect=lambda *args, **kwargs: retained.append((args, kwargs)),
+            side_effect=lambda *args, app_settings=None, **kwargs: retained.append((args, kwargs)),
         ):
-            result = make_native_test_sync_service().sync_now(
+            result = make_native_test_sync_service(app_settings=self.app_settings_builder.build()).sync_now(
                 self.db,
                 "chat",
                 "live-sync",
@@ -464,7 +484,8 @@ class Phase3SyncTests(unittest.TestCase):
             self.db,
             "chat",
             "live-sync",
-            _m_memory_curator.DEFAULT_MODEL,
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
         )
         self.assertEqual(refreshed["persona_id"], "")
         self.assertEqual(refreshed["world_file"], "")
@@ -486,7 +507,9 @@ class Phase3SyncTests(unittest.TestCase):
             patch.object(
                 _m_telegram,
                 "get_persona",
-                side_effect=lambda persona_id: {"name": "Existing"} if persona_id == "existing.png" else None,
+                side_effect=lambda persona_id, *, app_settings=None: (
+                    {"name": "Existing"} if persona_id == "existing.png" else None
+                ),
             ),
             patch.object(
                 _m_telegram,
@@ -513,7 +536,8 @@ class Phase3SyncTests(unittest.TestCase):
                 self.db,
                 "chat",
                 "live-sync",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
             )
             result = _m_sync_api.apply_sync_snapshot(
                 self.db,
@@ -522,12 +546,14 @@ class Phase3SyncTests(unittest.TestCase):
                 {"name": "Remote"},
                 [("user", "remote transcript")],
                 {},
+                app_settings=self.app_settings_builder.build(),
             )
             refreshed = _m_memory_curator.load_session(
                 self.db,
                 "chat",
                 "live-sync",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(
@@ -548,7 +574,8 @@ class Phase3SyncTests(unittest.TestCase):
             self.db,
             "chat",
             "live-sync",
-            _m_memory_curator.DEFAULT_MODEL,
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
         )
         retained = []
 
@@ -556,7 +583,7 @@ class Phase3SyncTests(unittest.TestCase):
             patch.object(
                 _m_sync_core,
                 "retain_session_memory",
-                side_effect=lambda db, chat_id, session, fields: retained.append(
+                side_effect=lambda db, chat_id, session, fields, *, app_settings=None: retained.append(
                     (
                         db,
                         chat_id,
@@ -578,6 +605,7 @@ class Phase3SyncTests(unittest.TestCase):
                 {},
                 [("user", "remote transcript")],
                 {},
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(
@@ -597,7 +625,8 @@ class Phase3SyncTests(unittest.TestCase):
             self.db,
             "chat",
             "live-sync",
-            _m_memory_curator.DEFAULT_MODEL,
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
         )
         retained = []
 
@@ -605,7 +634,7 @@ class Phase3SyncTests(unittest.TestCase):
             patch.object(
                 _m_sync_core,
                 "retain_session_memory",
-                side_effect=lambda db, chat_id, session, fields: retained.append(
+                side_effect=lambda db, chat_id, session, fields, *, app_settings=None: retained.append(
                     (
                         db,
                         chat_id,
@@ -620,7 +649,7 @@ class Phase3SyncTests(unittest.TestCase):
                 return_value={"name": "patched-card"},
             ),
         ):
-            _m_sync_core._SYNC_SNAPSHOT_INTEGRITY.apply(
+            _m_sync_core._make_sync_snapshot_integrity(app_settings=self.app_settings_builder.build()).apply(
                 self.db,
                 "chat",
                 current,
@@ -651,8 +680,10 @@ class Phase3SyncTests(unittest.TestCase):
                 "chat",
                 self.db,
                 self.session,
-                sync_service=make_native_test_sync_service(),
-                request_context=make_test_request_context(self.db, "live-sync"),
+                sync_service=make_native_test_sync_service(app_settings=self.app_settings_builder.build()),
+                request_context=make_test_request_context(
+                    self.db, "live-sync", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_cards.send_panel_request = original
@@ -669,7 +700,7 @@ class Phase3SyncTests(unittest.TestCase):
         self.db.commit()
         original_sync = _m_sync_api.live_sync_now
         original_menu = _m_panel_callback_routes.send_sync_menu
-        _m_sync_api.live_sync_now = lambda *_args: (_ for _ in ()).throw(
+        _m_sync_api.live_sync_now = lambda *_args, app_settings=None: (_ for _ in ()).throw(
             _m_sillytavern_api.SillyTavernApiError("API unavailable", transient=True)
         )
         _m_panel_callback_routes.send_sync_menu = lambda *_args, **_kwargs: None
@@ -687,8 +718,10 @@ class Phase3SyncTests(unittest.TestCase):
                 self.session,
                 "live-sync",
                 None,
-                sync_service=make_native_test_sync_service(),
-                request_context=make_test_request_context(self.db, "live-sync"),
+                sync_service=make_native_test_sync_service(app_settings=self.app_settings_builder.build()),
+                request_context=make_test_request_context(
+                    self.db, "live-sync", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_sync_api.live_sync_now = original_sync
@@ -698,16 +731,16 @@ class Phase3SyncTests(unittest.TestCase):
         self.assertEqual(_m_sync_api.sync_binding(self.db, "chat", "live-sync")["realtime_enabled"], 0)
 
 
-class SyncSnapshotOwnershipTests(unittest.TestCase):
+class SyncSnapshotOwnershipTests(SettingsTestCase):
     def test_sync_core_composes_snapshot_integrity_adapter(self):
         source = (Path(__file__).parents[1] / "bridge" / "sync_core.py").read_text(encoding="utf-8")
 
         self.assertIn(
-            "_SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(",
+            "return _SyncSnapshotIntegrityAdapter(",
             source,
         )
         self.assertIn(
-            "apply_backend=_apply_sync_snapshot_backend,",
+            "apply_backend=_partial(_apply_sync_snapshot_backend, app_settings=app_settings),",
             source,
         )
         self.assertIn(
@@ -734,7 +767,7 @@ class SyncSnapshotOwnershipTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
-class SyncPollOwnershipTests(unittest.TestCase):
+class SyncPollOwnershipTests(SettingsTestCase):
     def test_sync_api_composes_poll_safety_adapter(self):
         source = (Path(__file__).parents[1] / "bridge" / "sync_api.py").read_text(encoding="utf-8")
 
@@ -743,7 +776,7 @@ class SyncPollOwnershipTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "_SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(",
+            "return _SyncPollSafetyAdapter(",
             source,
         )
 
@@ -762,7 +795,7 @@ class SyncPollOwnershipTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
-class SyncWorkerInjectionTests(unittest.TestCase):
+class SyncWorkerInjectionTests(SettingsTestCase):
     class FakeStopEvent:
         def __init__(self, results):
             self.results = iter(results)
@@ -808,7 +841,7 @@ class SyncWorkerInjectionTests(unittest.TestCase):
                 side_effect=AssertionError("raw poll bypassed service"),
             ),
         ):
-            _m_sync_api._live_sync_worker_loop(sync_service=FakeSync())
+            _m_sync_api._live_sync_worker_loop(sync_service=FakeSync(), app_settings=self.app_settings_builder.build())
 
         self.assertEqual(calls, [db])
         self.assertTrue(db.closed)
@@ -834,10 +867,10 @@ class SyncWorkerInjectionTests(unittest.TestCase):
             patch.object(
                 _m_sync_api,
                 "db_connect",
-                side_effect=lambda: next(connections),
+                side_effect=lambda *, app_settings=None: next(connections),
             ),
         ):
-            _m_sync_api._live_sync_worker_loop(sync_service=FakeSync())
+            _m_sync_api._live_sync_worker_loop(sync_service=FakeSync(), app_settings=self.app_settings_builder.build())
 
         self.assertEqual(seen, [first, second])
         self.assertTrue(first.closed)
@@ -845,7 +878,7 @@ class SyncWorkerInjectionTests(unittest.TestCase):
 
     def test_worker_requires_injected_sync_service(self):
         with self.assertRaises(TypeError):
-            _m_sync_api._live_sync_worker_loop()
+            _m_sync_api._live_sync_worker_loop(app_settings=self.app_settings_builder.build())
 
 
 if __name__ == "__main__":

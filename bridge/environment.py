@@ -11,7 +11,6 @@ from pathlib import Path
 
 from bridge.config_values import ConfigurationError
 
-DEFAULT_BRIDGE_HOME = Path.home() / ".local/share/sillytavern-telegram"
 _ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
@@ -22,7 +21,7 @@ def environment_file(
     return Path(
         source.get(
             "SILLYTAVERN_ENV_FILE",
-            str(DEFAULT_BRIDGE_HOME / ".env"),
+            str(Path.home() / ".local/share/sillytavern-telegram/.env"),
         )
     ).expanduser()
 

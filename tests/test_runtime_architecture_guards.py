@@ -8,6 +8,8 @@ import unittest
 from dataclasses import MISSING
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 from bridge.composition import BridgeServices, build_bridge_services
 
 REPO_ROOT = Path(__file__).parents[1]
@@ -15,7 +17,7 @@ BRIDGE_DIR = REPO_ROOT / "bridge"
 TESTS_DIR = REPO_ROOT / "tests"
 
 
-class RuntimeArchitectureGuardTests(unittest.TestCase):
+class RuntimeArchitectureGuardTests(SettingsTestCase):
     def test_runtime_compatibility_module_is_deleted(self):
         self.assertFalse((BRIDGE_DIR / "runtime.py").exists())
 
@@ -173,40 +175,17 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
                 offenders[path.relative_to(REPO_ROOT).as_posix()] = hits
         self.assertEqual(offenders, {})
 
-    def test_startup_path_ownership_has_no_legacy_common_definitions(self):
-        common_source = (BRIDGE_DIR / "common.py").read_text(encoding="utf-8")
-        config_source = (BRIDGE_DIR / "config.py").read_text(encoding="utf-8")
-        for forbidden in (
-            "ENV_FILE =",
-            "PROVIDER_CONFIG_FILE =",
-            "MODEL_CACHE_FILE =",
-            "CHARACTER_BACKUP_DIR =",
-            "LOG_FILE =",
-        ):
-            self.assertNotIn(forbidden, common_source)
-
-        self.assertNotIn("ENV_FILE =", config_source)
-        for required in (
-            "PROVIDER_CONFIG_FILE =",
-            "MODEL_CACHE_FILE =",
-            "CHARACTER_BACKUP_DIR =",
-            "LOG_FILE =",
-        ):
-            self.assertIn(required, config_source)
-
+    def test_startup_paths_belong_to_immutable_settings_not_modules(self):
         import bridge.common as common
+        import bridge.config as config
+        from bridge.settings import AppSettings
 
-        for retired_export in (
-            "ENV_FILE",
-            "PROVIDER_CONFIG_FILE",
-            "MODEL_CACHE_FILE",
-            "CHARACTER_BACKUP_DIR",
-            "LOG_FILE",
-        ):
-            self.assertFalse(
-                hasattr(common, retired_export),
-                retired_export,
-            )
+        fields = ("provider_config_file", "model_cache_file", "character_backup_dir", "log_file", "db_file")
+        for field in fields:
+            self.assertIn(field, AppSettings.__dataclass_fields__)
+            self.assertFalse(hasattr(config, field.upper()), field)
+            self.assertFalse(hasattr(common, field.upper()), field)
+        self.assertFalse(hasattr(common, "ENV_FILE"))
 
     def test_single_file_system_prompt_fallback_is_deleted(self):
         offenders = {}
@@ -256,7 +235,7 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
         source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(encoding="utf-8")
         self.assertNotIn("def bootstrap_env(", source)
         self.assertIn(
-            "from bridge.environment import bootstrap_environment",
+            "from bridge.main import main",
             source,
         )
 

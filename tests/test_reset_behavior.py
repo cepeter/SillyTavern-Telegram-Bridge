@@ -4,6 +4,7 @@ from application_test_setup import (
     make_test_conversation_service,
     make_test_memory_service,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -15,7 +16,6 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.config as config
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -24,23 +24,25 @@ import bridge.session_naming as _m_session_naming
 import bridge.telegram as _m_telegram
 
 
-class ResetBehaviorTests(unittest.TestCase):
+class ResetBehaviorTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
+        self.old_db = self.app_settings_builder.db_file
         self.old_reset = _m_message_commands.reset_session
         self.old_send = _m_panel_callback_routes.send_text
         self.old_remove = _m_media.remove_inline_keyboard
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
-        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
 
     def tearDown(self):
         _m_panel_callback_routes.reset_session = self.old_reset
         _m_panel_callback_routes.send_text = self.old_send
         _m_panel_callback_routes.remove_inline_keyboard = self.old_remove
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def test_reset_command_preempts_pending_input(self):
@@ -61,15 +63,17 @@ class ResetBehaviorTests(unittest.TestCase):
             opened.append((method, payload)) or {}
         )
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 {},
                 "chat",
                 "/reset",
-                services=make_test_application_services(memory=make_test_memory_service()),
+                services=make_test_application_services(
+                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_message_commands.send_panel_request = original_request

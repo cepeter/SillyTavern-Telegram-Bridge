@@ -26,12 +26,7 @@ from bridge.card_content import system_prompt_callback_token as system_prompt_ca
 from bridge.card_content import system_prompt_choices as system_prompt_choices
 from bridge.card_content import system_prompt_label as system_prompt_label
 from bridge.card_content import world_file_paths as world_file_paths
-from bridge.panel_utils import (
-    panel_label,
-    panel_message_request,
-    panel_navigation,
-    panel_page,
-)
+from bridge.panel_utils import panel_label, panel_message_request, panel_navigation, panel_page
 from bridge.persona_service import PersonaService
 from bridge.telegram import send_panel_request
 
@@ -101,17 +96,20 @@ def send_persona_menu(
 def send_character_menu(
     token: str, chat_id: str, current_character: str, message_id: int | None = None, page: int = 0, *, request_context
 ) -> None:
-    options = [(path.name, character_display_name(path)) for path in character_card_paths()]
+    options = [
+        (path.name, character_display_name(path, app_settings=request_context.app_settings))
+        for path in character_card_paths(app_settings=request_context.app_settings)
+    ]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for filename, label in page_options:
         mark = "✅ " if filename == current_character else ""
         callback_token = dynamic_callback_token("character", filename, chat_id, db=request_context.db)
-        card_path = safe_character_path(filename)
+        card_path = safe_character_path(filename, app_settings=request_context.app_settings)
         protected = (
             filename == current_character
-            or filename == _config.DEFAULT_CHARACTER_FILE
-            or (card_path is not None and card_path.resolve() == _config.CARD_FILE.resolve())
+            or filename == request_context.app_settings.default_character_file
+            or (card_path is not None and card_path.resolve() == request_context.app_settings.card_file.resolve())
         )
         action = (
             {"text": "🔒", "callback_data": "character:protected"}
@@ -136,8 +134,8 @@ def send_character_menu(
     rows.append([{"text": "📤 Upload character card", "callback_data": "character:upload"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "character:cancel"}])
     current_label = current_character
-    if safe_character_path(current_character):
-        current_label = card_fields_from_file(current_character)["name"]
+    if safe_character_path(current_character, app_settings=request_context.app_settings):
+        current_label = card_fields_from_file(current_character, app_settings=request_context.app_settings)["name"]
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current character: {current_label}{page_label}\nChoose a character card:"
     try:
@@ -151,7 +149,10 @@ def send_character_menu(
 def send_character_info_menu(
     token: str, chat_id: str, message_id: int | None = None, page: int = 0, *, request_context
 ) -> None:
-    options = [(path.name, character_display_name(path)) for path in character_card_paths()]
+    options = [
+        (path.name, character_display_name(path, app_settings=request_context.app_settings))
+        for path in character_card_paths(app_settings=request_context.app_settings)
+    ]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = [
         [
@@ -180,7 +181,9 @@ def send_character_delete_menu(
     token: str, chat_id: str, active_character: str, message_id: int | None = None, page: int = 0, *, request_context
 ) -> None:
     options = [
-        (path.name, character_display_name(path)) for path in character_card_paths() if path.name != active_character
+        (path.name, character_display_name(path, app_settings=request_context.app_settings))
+        for path in character_card_paths(app_settings=request_context.app_settings)
+        if path.name != active_character
     ]
     page_options, current_page, total_pages = panel_page(options, page)
     rows = [

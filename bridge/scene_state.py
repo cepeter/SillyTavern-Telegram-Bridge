@@ -13,42 +13,22 @@ import logging
 import re
 import sqlite3
 import time
+from functools import partial as _partial
 
 from bridge.common import submit_background
-from bridge.config import DEFAULT_MODEL
-from bridge.database import (
-    db_connect,
-    get_generation_settings,
-    task_model_for_session,
-    write_transaction,
-)
+from bridge.database import db_connect, get_generation_settings, task_model_for_session, write_transaction
 from bridge.delivery_port import DeliveryPort
-from bridge.extension_registry import (
-    extension_registry_snapshot as _extension_registry_snapshot,
-)
-from bridge.extension_registry import (
-    register_command_route as _register_command_route,
-)
-from bridge.extension_registry import (
-    register_post_retain_hook as _register_post_retain_hook,
-)
-from bridge.extension_registry import (
-    register_summary_clear_hook as _register_summary_clear_hook,
-)
-from bridge.extension_registry import (
-    register_summary_context_hook as _register_summary_context_hook,
-)
+from bridge.extension_registry import extension_registry_snapshot as _extension_registry_snapshot
+from bridge.extension_registry import register_command_route as _register_command_route
+from bridge.extension_registry import register_post_retain_hook as _register_post_retain_hook
+from bridge.extension_registry import register_summary_clear_hook as _register_summary_clear_hook
+from bridge.extension_registry import register_summary_context_hook as _register_summary_context_hook
 from bridge.provider_port import ProviderPort
-from bridge.repositories import (
-    delete_scene_state as _repo_delete_scene_state,
-)
-from bridge.repositories import (
-    load_scene_state_row as _repo_load_scene_state_row,
-)
-from bridge.repositories import (
-    upsert_scene_state_if_fresh as _repo_upsert_scene_state_if_fresh,
-)
+from bridge.repositories import delete_scene_state as _repo_delete_scene_state
+from bridge.repositories import load_scene_state_row as _repo_load_scene_state_row
+from bridge.repositories import upsert_scene_state_if_fresh as _repo_upsert_scene_state_if_fresh
 from bridge.scene_panel import scene_panel
+from bridge.settings import AppSettings
 from bridge.telegram import load_session
 
 _SCENE_STATE_KEYS = ("location", "time", "weather", "participants", "objects", "facts", "goals")
@@ -157,6 +137,7 @@ def refresh_scene_state_now(
     through_rowid: int | None = None,
     *,
     provider_port: ProviderPort,
+    app_settings: AppSettings,
 ) -> dict[str, object] | None:
     session_id = str(session["session_id"])
     rows = _scene_state_source_rows(db, chat_id, session_id, through_rowid)
@@ -202,7 +183,7 @@ def refresh_scene_state_now(
         }
     )
     try:
-        model = task_model_for_session(db, chat_id, session, "scene_state")
+        model = task_model_for_session(db, chat_id, session, "scene_state", app_settings=app_settings)
         raw = provider_port.generate(
             api_key,
             model,
@@ -245,8 +226,10 @@ def _scene_state_refresh_worker(
     character_name: str,
     through_rowid: int,
     provider_port: ProviderPort,
+    *,
+    app_settings: AppSettings,
 ) -> None:
-    worker_db = db_connect()
+    worker_db = db_connect(app_settings=app_settings)
     try:
         exists = worker_db.execute(
             "SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?",
@@ -254,7 +237,9 @@ def _scene_state_refresh_worker(
         ).fetchone()
         if not exists:
             return
-        session = load_session(worker_db, str(chat_id), str(session_id), DEFAULT_MODEL)
+        session = load_session(
+            worker_db, str(chat_id), str(session_id), app_settings.default_model, app_settings=app_settings
+        )
         refresh_scene_state_now(
             worker_db,
             "",
@@ -263,6 +248,7 @@ def _scene_state_refresh_worker(
             character_name,
             through_rowid=int(through_rowid),
             provider_port=provider_port,
+            app_settings=app_settings,
         )
     finally:
         worker_db.close()
@@ -275,6 +261,7 @@ def queue_scene_state_refresh(
     character_name: str,
     *,
     provider_port: ProviderPort,
+    app_settings: AppSettings,
 ) -> bool:
     session_id = str(session["session_id"])
     row = db.execute(
@@ -289,7 +276,7 @@ def queue_scene_state_refresh(
         return False
     submit_background(
         "scene_state_refresh",
-        _scene_state_refresh_worker,
+        _partial(_scene_state_refresh_worker, app_settings=app_settings),
         str(chat_id),
         session_id,
         str(character_name),
@@ -305,10 +292,17 @@ def _scene_state_post_retain(
     session: dict[str, str],
     fields: dict[str, str],
     provider_port: ProviderPort,
+    *,
+    app_settings: AppSettings,
 ) -> None:
     try:
         queue_scene_state_refresh(
-            db, chat_id, session, str(fields.get("name") or "unknown"), provider_port=provider_port
+            db,
+            chat_id,
+            session,
+            str(fields.get("name") or "unknown"),
+            provider_port=provider_port,
+            app_settings=app_settings,
         )
     except Exception:
         logging.warning(
@@ -404,6 +398,7 @@ def handle_scene_command(
             session,
             str(fields.get("name") or "unknown"),
             provider_port=provider_port,
+            app_settings=request_context.app_settings,
         )
         delivery_port.send_text(
             token,

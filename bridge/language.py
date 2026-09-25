@@ -5,14 +5,9 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-from bridge.common import (
-    sqlite3,
-)
+from bridge.common import sqlite3
 from bridge.delivery_port import DeliveryPort
-from bridge.panel_utils import (
-    panel_navigation,
-    panel_page,
-)
+from bridge.panel_utils import panel_navigation, panel_page
 
 RESPONSE_LANGUAGES = (
     ("auto", "Auto — match user"),

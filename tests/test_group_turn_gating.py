@@ -8,6 +8,7 @@ from application_test_setup import (
     make_test_provider_port,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -20,7 +21,6 @@ from pathlib import Path
 import bridge.card_content as card_content
 import bridge.cards as _m_cards
 import bridge.command_routes as _m_command_routes
-import bridge.config as config
 import bridge.group_core as _m_group_core
 import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
@@ -31,12 +31,12 @@ import bridge.sync_core as _m_sync_core
 import bridge.telegram as _m_telegram
 
 
-class GroupTurnGatingTests(unittest.TestCase):
+class GroupTurnGatingTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
-        self.group = make_test_group_service()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.group = make_test_group_service(app_settings=self.app_settings_builder.build())
         self.group.save(
             self.db,
             "chat",
@@ -102,7 +102,9 @@ class GroupTurnGatingTests(unittest.TestCase):
                 "chat",
                 {"session_id": "session"},
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, "session", "user"),
+                request_context=make_test_request_context(
+                    self.db, "session", "user", app_settings=self.app_settings_builder.build()
+                ),
             )
             manual_callbacks = {
                 button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row
@@ -116,7 +118,9 @@ class GroupTurnGatingTests(unittest.TestCase):
                 "chat",
                 {"session_id": "session"},
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, "session", "user"),
+                request_context=make_test_request_context(
+                    self.db, "session", "user", app_settings=self.app_settings_builder.build()
+                ),
             )
             other_callbacks = {
                 button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row
@@ -138,7 +142,9 @@ class GroupTurnGatingTests(unittest.TestCase):
                 {"session_id": "session"},
                 message_id=10,
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, "session", "user"),
+                request_context=make_test_request_context(
+                    self.db, "session", "user", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -154,7 +160,9 @@ class GroupTurnGatingTests(unittest.TestCase):
                 "chat|topic:7",
                 {"session_id": "session"},
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, "session", "user"),
+                request_context=make_test_request_context(
+                    self.db, "session", "user", app_settings=self.app_settings_builder.build()
+                ),
             )
             topic_callbacks = {
                 button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row
@@ -166,7 +174,9 @@ class GroupTurnGatingTests(unittest.TestCase):
                 "chat",
                 {"session_id": "session"},
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, "session", "user"),
+                request_context=make_test_request_context(
+                    self.db, "session", "user", app_settings=self.app_settings_builder.build()
+                ),
             )
             dm_callbacks = {
                 button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row
@@ -182,7 +192,7 @@ class GroupTurnGatingTests(unittest.TestCase):
         session = {
             "session_id": "session",
             "persona_id": "",
-            "model_id": _m_memory_curator.DEFAULT_MODEL,
+            "model_id": self.app_settings_builder.default_model,
             "author_note": "",
             "world_file": "",
             "system_prompt": "",
@@ -193,18 +203,20 @@ class GroupTurnGatingTests(unittest.TestCase):
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 {},
                 "chat",
                 "/group",
                 "/group",
                 session,
                 "session",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 "",
                 "Test User",
-                request_context=make_test_request_context(self.db, "session", "user"),
-                services=make_test_application_services(),
+                request_context=make_test_request_context(
+                    self.db, "session", "user", app_settings=self.app_settings_builder.build()
+                ),
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_command_routes.send_text = original_send
@@ -213,7 +225,9 @@ class GroupTurnGatingTests(unittest.TestCase):
 
     def test_new_group_session_starts_character_wizard_in_topic(self):
         chat_id = "chat|topic:7"
-        session = _m_telegram.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, chat_id, self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         opened = []
         original_close = _m_session_naming.close_panel_message
         original_menu = _m_session_naming.send_character_menu
@@ -239,12 +253,14 @@ class GroupTurnGatingTests(unittest.TestCase):
                 callback["message"],
                 sender_id="user",
                 group_service=self.group,
-                input_flow_service=make_test_input_flow_service(),
-                request_context=make_test_request_context(self.db, session["session_id"], "user"),
+                input_flow_service=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], "user", app_settings=self.app_settings_builder.build()
+                ),
             )
             pending = _m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "")
             self.assertTrue(pending)
-            make_test_input_flow_service().handle_pending(
+            make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
                 "token",
                 chat_id,
@@ -255,7 +271,9 @@ class GroupTurnGatingTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
-                request_context=make_test_request_context(self.db, session["session_id"], "user"),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], "user", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_session_naming.close_panel_message = original_close
@@ -270,7 +288,9 @@ class GroupTurnGatingTests(unittest.TestCase):
 
     def test_group_wizard_chains_character_to_world_then_group(self):
         chat_id = "chat|topic:8"
-        session = _m_telegram.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, chat_id, self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_session_naming.set_meta(
             self.db,
             f"group_setup:{chat_id}",
@@ -292,11 +312,11 @@ class GroupTurnGatingTests(unittest.TestCase):
         _m_panel_callback_routes.resolve_dynamic_callback_token = lambda _value, kind, _chat, **_kwargs: (
             "chosen.png" if kind == "character" else "lore.json"
         )
-        _m_panel_callback_routes.safe_character_path = lambda _name: Path("/tmp/chosen.png")
-        _m_panel_callback_routes.safe_world_path = lambda _name: Path("/tmp/lore.json")
-        card_content.safe_world_path = lambda _name: Path("/tmp/lore.json")
-        _m_telegram.safe_world_path = lambda _name: Path("/tmp/lore.json")
-        _m_panel_callback_routes.card_fields_from_file = lambda _name: {"name": "Chosen"}
+        _m_panel_callback_routes.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
+        _m_panel_callback_routes.safe_world_path = lambda _name, *, app_settings=None: Path("/tmp/lore.json")
+        card_content.safe_world_path = lambda _name, *, app_settings=None: Path("/tmp/lore.json")
+        _m_telegram.safe_world_path = lambda _name, *, app_settings=None: Path("/tmp/lore.json")
+        _m_panel_callback_routes.card_fields_from_file = lambda _name, *, app_settings=None: {"name": "Chosen"}
         _m_panel_callback_routes.close_panel_message = lambda *_args, **_kwargs: None
         _m_panel_callback_routes.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
         _m_groups.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
@@ -316,13 +336,19 @@ class GroupTurnGatingTests(unittest.TestCase):
                 session["session_id"],
                 None,
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, session["session_id"], "user"),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], "user", app_settings=self.app_settings_builder.build()
+                ),
             )
             setup = self.group.setup_state(self.db, chat_id, session["session_id"])
             self.assertEqual(setup["stage"], "world")
             self.assertEqual(
                 _m_memory_curator.load_session(
-                    self.db, chat_id, session["session_id"], _m_memory_curator.DEFAULT_MODEL
+                    self.db,
+                    chat_id,
+                    session["session_id"],
+                    self.app_settings_builder.default_model,
+                    app_settings=self.app_settings_builder.build(),
                 )["character_file"],
                 "chosen.png",
             )
@@ -339,13 +365,20 @@ class GroupTurnGatingTests(unittest.TestCase):
                 session["session_id"],
                 None,
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, session["session_id"], "user"),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], "user", app_settings=self.app_settings_builder.build()
+                ),
             )
             self.assertEqual(
                 _m_sync_core.active_world_files(
                     _m_memory_curator.load_session(
-                        self.db, chat_id, session["session_id"], _m_memory_curator.DEFAULT_MODEL
-                    )["world_file"]
+                        self.db,
+                        chat_id,
+                        session["session_id"],
+                        self.app_settings_builder.default_model,
+                        app_settings=self.app_settings_builder.build(),
+                    )["world_file"],
+                    app_settings=self.app_settings_builder.build(),
                 ),
                 ["lore.json"],
             )
@@ -362,7 +395,9 @@ class GroupTurnGatingTests(unittest.TestCase):
                 session["session_id"],
                 None,
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, session["session_id"], "user"),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], "user", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_panel_callback_routes.resolve_dynamic_callback_token = original_resolve
@@ -382,7 +417,9 @@ class GroupTurnGatingTests(unittest.TestCase):
 
     def test_character_cancel_clears_new_group_wizard_state(self):
         chat_id = "chat|topic:9"
-        session = _m_telegram.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, chat_id, self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_session_naming.set_meta(
             self.db,
             f"group_setup:{chat_id}",
@@ -404,7 +441,9 @@ class GroupTurnGatingTests(unittest.TestCase):
                 session["session_id"],
                 None,
                 group_service=self.group,
-                request_context=make_test_request_context(self.db, session["session_id"], "user"),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], "user", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_session_naming.close_panel_message = original_close

@@ -101,12 +101,12 @@ def test_help_no_longer_imports_input_flows_and_enum_uses_service():
     assert kwargs["request_context"].db is db
 
 
-def test_callback_dispatch_forwards_exact_input_flow_service(monkeypatch):
+def test_callback_dispatch_forwards_exact_input_flow_service(monkeypatch, *, app_settings_builder):
     import bridge.callback_dispatch as dispatch
 
     captured = {}
     input_flow = object()
-    services = make_test_application_services(input_flow=input_flow)
+    services = make_test_application_services(input_flow=input_flow, app_settings=app_settings_builder.build())
 
     monkeypatch.setattr(
         dispatch,
@@ -131,7 +131,7 @@ def test_callback_dispatch_forwards_exact_input_flow_service(monkeypatch):
     monkeypatch.setattr(
         dispatch,
         "ensure_session",
-        lambda *_args, **_kwargs: {
+        lambda *_args, app_settings=None, **_kwargs: {
             "session_id": "session",
             "character_file": "mira.png",
         },
@@ -166,7 +166,7 @@ def test_input_flows_no_longer_imports_session_naming_or_status_panels():
     assert "bridge.status_panels" not in imports
 
 
-def test_pending_session_name_uses_injected_handler(monkeypatch):
+def test_pending_session_name_uses_injected_handler(monkeypatch, *, app_settings_builder):
     import bridge.input_flows as flows
 
     calls = []
@@ -199,15 +199,11 @@ def test_pending_session_name_uses_injected_handler(monkeypatch):
         "New Session",
         operation_id=77,
         handle_session_name=handler,
-        group_service=make_test_group_service(),
+        group_service=make_test_group_service(app_settings=app_settings_builder.build()),
         provider_port=make_test_provider_port(),
         memory_service=make_test_memory_service(),
         persona_service=make_test_persona_service(),
-        request_context=make_test_request_context(
-            db,
-            "session",
-            "user",
-        ),
+        request_context=make_test_request_context(db, "session", "user", app_settings=app_settings_builder.build()),
     )
 
     assert handled is True
@@ -226,7 +222,7 @@ def test_pending_session_name_uses_injected_handler(monkeypatch):
     assert kwargs["request_context"].session_id == "session"
 
 
-def test_director_goal_pending_action_uses_pure_panel_delivery(monkeypatch):
+def test_director_goal_pending_action_uses_pure_panel_delivery(monkeypatch, *, app_settings_builder):
     import bridge.input_flows as flows
 
     saved = []
@@ -265,11 +261,7 @@ def test_director_goal_pending_action_uses_pure_panel_delivery(monkeypatch):
         provider_port=make_test_provider_port(),
         memory_service=make_test_memory_service(),
         persona_service=make_test_persona_service(),
-        request_context=make_test_request_context(
-            db,
-            "session",
-            "user",
-        ),
+        request_context=make_test_request_context(db, "session", "user", app_settings=app_settings_builder.build()),
     )
 
     assert handled is True

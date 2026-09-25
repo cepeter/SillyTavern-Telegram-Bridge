@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -15,7 +16,7 @@ import bridge.memory_curator as _m_memory_curator
 from bridge.scheduler_safety import DatabaseConnectionGate, DurableWorkerGuard
 
 
-class DatabaseConnectionGateTests(unittest.TestCase):
+class DatabaseConnectionGateTests(SettingsTestCase):
     def test_first_open_initializes_then_same_path_uses_lightweight_open(self):
         calls = []
 
@@ -104,7 +105,7 @@ class DatabaseConnectionGateTests(unittest.TestCase):
         )
 
 
-class DurableWorkerGuardTests(unittest.TestCase):
+class DurableWorkerGuardTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "jobs.sqlite3"
@@ -230,7 +231,7 @@ class DurableWorkerGuardTests(unittest.TestCase):
         self.assertEqual(attempts, ["closed", "closed", "closed"])
 
 
-class CanonicalDatabaseConnectionTests(unittest.TestCase):
+class CanonicalDatabaseConnectionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "canonical.sqlite3"
@@ -281,11 +282,11 @@ class CanonicalDatabaseConnectionTests(unittest.TestCase):
             second.close()
 
 
-class CanonicalRecoveryTests(unittest.TestCase):
+class CanonicalRecoveryTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "recovery.sqlite3"
-        self.db = _m_memory_curator.db_connect(self.path)
+        self.db = _m_memory_curator.db_connect(self.path, app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
@@ -360,7 +361,7 @@ class CanonicalRecoveryTests(unittest.TestCase):
         )
 
 
-class DatabaseSourceBoundaryTests(unittest.TestCase):
+class DatabaseSourceBoundaryTests(SettingsTestCase):
     def test_canonical_db_connect_does_not_depend_on_legacy_readiness_globals(self):
         source = (Path(__file__).parents[1] / "bridge" / "database.py").read_text(encoding="utf-8")
         start = source.index("def db_connect(")
@@ -372,7 +373,7 @@ class DatabaseSourceBoundaryTests(unittest.TestCase):
         self.assertNotIn("_DB_SCHEMA_LOCK", chunk)
 
 
-class SchedulerSafetySourceBoundaryTests(unittest.TestCase):
+class SchedulerSafetySourceBoundaryTests(SettingsTestCase):
     def test_module_has_no_late_override_capture_or_compat_submitter(self):
         source = (Path(__file__).parents[1] / "bridge" / "scheduler_safety.py").read_text(encoding="utf-8")
         self.assertNotIn("_ORIGINAL_DB_CONNECT", source)

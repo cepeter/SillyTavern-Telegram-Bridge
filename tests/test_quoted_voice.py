@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -9,7 +10,7 @@ import bridge.media as _m_media
 import bridge.message_commands as _m_message_commands
 
 
-class QuotedVoiceTests(unittest.TestCase):
+class QuotedVoiceTests(SettingsTestCase):
     def test_extracts_only_double_quoted_dialogue(self):
         text = '*walks closer* "I am here." *smiles* "Are you ready?"'
         self.assertEqual(_m_media.quoted_speech_from_reply(text), "I am here. Are you ready?")
@@ -28,7 +29,13 @@ class QuotedVoiceTests(unittest.TestCase):
         _m_media.submit_background = lambda *args: calls.append(args) or True
         try:
             queued = _m_message_commands.queue_user_quote_tts(
-                "token", "chat", '*waves* "Hello there."', object(), "session", 44
+                "token",
+                "chat",
+                '*waves* "Hello there."',
+                object(),
+                "session",
+                44,
+                app_settings=self.app_settings_builder.build(),
             )
         finally:
             _m_media.get_meta = original_meta
@@ -45,7 +52,13 @@ class QuotedVoiceTests(unittest.TestCase):
         _m_media.submit_background = lambda *args: calls.append(args) or True
         try:
             queued = _m_message_commands.queue_user_quote_tts(
-                "token", "chat", '"Hello there."', object(), "session", 44
+                "token",
+                "chat",
+                '"Hello there."',
+                object(),
+                "session",
+                44,
+                app_settings=self.app_settings_builder.build(),
             )
         finally:
             _m_media.get_meta = original_meta
@@ -70,15 +83,21 @@ class QuotedVoiceTests(unittest.TestCase):
         original_send = _m_media.send_text
         original_meta = _m_media.get_meta
         original_submit = _m_media.submit_background
-        _m_media.deliver_expression = lambda *_args, **_kwargs: None
+        _m_media.deliver_expression = lambda *_args, app_settings=None, **_kwargs: None
         _m_media.send_text = lambda *_args, **_kwargs: [88]
         _m_media.get_meta = lambda *_args: "tts"
         _m_media.submit_background = lambda *args: calls.append(args) or True
         db = FakeDB()
         try:
-            _m_message_commands.send_reply("token", "chat", '"Hello there."', db, "session", 7)
-            _m_message_commands.send_reply("token", "chat", '"Hello there."', db, "session", 7)
-            _m_message_commands.send_reply("token", "chat", '"Changed reply."', db, "session", 7)
+            _m_message_commands.send_reply(
+                "token", "chat", '"Hello there."', db, "session", 7, app_settings=self.app_settings_builder.build()
+            )
+            _m_message_commands.send_reply(
+                "token", "chat", '"Hello there."', db, "session", 7, app_settings=self.app_settings_builder.build()
+            )
+            _m_message_commands.send_reply(
+                "token", "chat", '"Changed reply."', db, "session", 7, app_settings=self.app_settings_builder.build()
+            )
         finally:
             _m_media.deliver_expression = original_expression
             _m_media.send_text = original_send

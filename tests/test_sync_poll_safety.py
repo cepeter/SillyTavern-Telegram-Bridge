@@ -3,6 +3,8 @@ import threading
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 from bridge.sync_poll_safety import SyncPollSafetyAdapter
 
 
@@ -12,7 +14,7 @@ class ExpectedSyncError(RuntimeError):
         self.transient = transient
 
 
-class SyncPollSafetyAdapterTests(unittest.TestCase):
+class SyncPollSafetyAdapterTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.execute(
@@ -664,7 +666,7 @@ class SyncPollSafetyAdapterTests(unittest.TestCase):
         lock.release()
 
 
-class SyncPollSafetySourceBoundaryTests(unittest.TestCase):
+class SyncPollSafetySourceBoundaryTests(SettingsTestCase):
     def test_sync_poll_safety_has_no_runtime_sync_or_ui_imports(self):
         source = (Path(__file__).parents[1] / "bridge" / "sync_poll_safety.py").read_text(encoding="utf-8")
 

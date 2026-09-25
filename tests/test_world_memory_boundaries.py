@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from application_test_setup import make_test_delivery_port, make_test_provider_port
+from settings_test_support import make_test_settings
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -43,24 +44,24 @@ def test_world_storage_is_canonical_owner_and_low_level():
 
 def test_world_storage_preserves_validation_and_atomic_install(tmp_path, monkeypatch):
     module = importlib.import_module("bridge.world_storage")
-    monkeypatch.setattr(module, "WORLD_DIR", tmp_path)
+    settings = make_test_settings(world_dir=tmp_path)
 
     raw = b'{"entries":{"1":{"key":["dragon"],"content":"fire"}}}'
-    target = module.install_world_info_document("dragons.json", raw)
+    target = module.install_world_info_document("dragons.json", raw, app_settings=settings)
 
     assert target == tmp_path / "dragons.json"
     assert target.read_bytes() == raw
 
     with pytest.raises(FileExistsError, match="already exists"):
-        module.install_world_info_document("dragons.json", raw)
+        module.install_world_info_document("dragons.json", raw, app_settings=settings)
     with pytest.raises(ValueError, match="simple filename"):
-        module.install_world_info_document("../dragons.json", raw)
+        module.install_world_info_document("../dragons.json", raw, app_settings=settings)
     with pytest.raises(ValueError, match="JSON file"):
-        module.install_world_info_document("dragons.txt", raw)
+        module.install_world_info_document("dragons.txt", raw, app_settings=settings)
     with pytest.raises(ValueError, match="entries object"):
-        module.install_world_info_document("empty.json", b"{}")
+        module.install_world_info_document("empty.json", b"{}", app_settings=settings)
     with pytest.raises(ValueError, match="JSON is invalid"):
-        module.install_world_info_document("bad.json", b"{not-json")
+        module.install_world_info_document("bad.json", b"{not-json", app_settings=settings)
 
 
 def test_curated_memory_panel_is_pure_and_exact():

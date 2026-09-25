@@ -14,7 +14,6 @@ import hashlib as hashlib
 import io as io
 import json as json
 import logging
-import os
 import re as re
 import signal as signal
 import sqlite3 as sqlite3
@@ -27,34 +26,12 @@ from collections import deque
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from bridge.config import (
-    BRIDGE_HOME,
-    DB_FILE,
-    SYSTEM_PROMPTS_DIR,
-)
-from bridge.config import CHARACTER_BACKUP_DIR as _CHARACTER_BACKUP_DIR
-from bridge.config import CHARACTER_DIR as CHARACTER_DIR
-from bridge.config import DEFAULT_CHARACTER_FILE as DEFAULT_CHARACTER_FILE
-from bridge.config import (
-    DEFAULT_MAX_TOKENS as DEFAULT_MAX_TOKENS,
-)
-from bridge.config import DEFAULT_MODEL as DEFAULT_MODEL
-from bridge.config import (
-    GENERATION_DEFAULTS as GENERATION_DEFAULTS,
-)
-from bridge.config import LOG_FILE as _LOG_FILE
-from bridge.config import MODEL_CACHE_FILE as _MODEL_CACHE_FILE
-from bridge.config import (
-    PENDING_SETTINGS_TTL_SECONDS as PENDING_SETTINGS_TTL_SECONDS,
-)
-from bridge.config import PROVIDER_CONFIG_FILE as _PROVIDER_CONFIG_FILE
-from bridge.config import (
-    REASONING_LEVELS as REASONING_LEVELS,
-)
-from bridge.config import SILLYTAVERN_DIR as SILLYTAVERN_DIR
-from bridge.config import WORLD_DIR as WORLD_DIR
-from bridge.config_values import read_int
+from bridge.config import DEFAULT_MAX_TOKENS as DEFAULT_MAX_TOKENS
+from bridge.config import GENERATION_DEFAULTS as GENERATION_DEFAULTS
+from bridge.config import PENDING_SETTINGS_TTL_SECONDS as PENDING_SETTINGS_TTL_SECONDS
+from bridge.config import REASONING_LEVELS as REASONING_LEVELS
 from bridge.environment import environment_file
+from bridge.settings import AppSettings
 
 TOPIC_SCOPE_SEPARATOR = "|topic:"
 
@@ -81,20 +58,20 @@ def topic_scope_from_message(chat_id: str, message: dict | None) -> str:
     return topic_scope_id(chat_id, (message or {}).get("message_thread_id"))
 
 
-MODEL_REFRESH_SECONDS = read_int(os.environ, "SILLYTAVERN_MODEL_REFRESH_SECONDS", 3600, minimum=1, maximum=86400)
 IMAGE_MAX_BYTES = 8 * 1024 * 1024
 TTS_MAX_CHARS = 4000
 STT_MAX_BYTES = 20 * 1024 * 1024
 STT_DEFAULT_MODEL = "base"
-DEFAULT_ALLOWED_USER = os.environ.get("SILLYTAVERN_TELEGRAM_ALLOWED_USERS", "")
 DEFAULT_PROVIDER_URL = ""
 MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
 MODEL_CHOICES = []
 
 
-def configure_logging(log_file: Path = _LOG_FILE) -> None:
+def configure_logging(log_file: Path | None = None, *, app_settings: AppSettings) -> None:
     """Install the bridge rotating file handler and set root logging to INFO."""
+    if log_file is None:
+        log_file = app_settings.log_file
     target = Path(log_file).expanduser().resolve()
     root = logging.getLogger()
 
@@ -349,26 +326,39 @@ def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) 
     return True
 
 
-def enforce_runtime_permissions() -> None:
-    private_dirs = {DB_FILE.parent, _LOG_FILE.parent, BRIDGE_HOME / "backups", _CHARACTER_BACKUP_DIR}
-    enforce_prompt_permissions = os.environ.get("SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS", "false").casefold() == "true"
-    if SYSTEM_PROMPTS_DIR.exists() and (
-        enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)
+def enforce_runtime_permissions(*, app_settings: AppSettings) -> None:
+    private_dirs = {
+        app_settings.db_file.parent,
+        app_settings.log_file.parent,
+        app_settings.bridge_home / "backups",
+        app_settings.character_backup_dir,
+    }
+    enforce_prompt_permissions = (
+        app_settings.environ.get("SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS", "false").casefold() == "true"
+    )
+    if app_settings.system_prompts_dir.exists() and (
+        enforce_prompt_permissions or app_settings.system_prompts_dir.is_relative_to(app_settings.bridge_home.parent)
     ):
-        private_dirs.add(SYSTEM_PROMPTS_DIR)
+        private_dirs.add(app_settings.system_prompts_dir)
     for directory in private_dirs:
         try:
             directory.mkdir(parents=True, exist_ok=True)
             directory.chmod(0o700)
         except OSError:
             logging.warning("Could not protect runtime directory %s", directory, exc_info=True)
-    private_files = {environment_file(), DB_FILE, _LOG_FILE, _PROVIDER_CONFIG_FILE, _MODEL_CACHE_FILE}
-    if SYSTEM_PROMPTS_DIR.exists() and (
-        enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)
+    private_files = {
+        environment_file(),
+        app_settings.db_file,
+        app_settings.log_file,
+        app_settings.provider_config_file,
+        app_settings.model_cache_file,
+    }
+    if app_settings.system_prompts_dir.exists() and (
+        enforce_prompt_permissions or app_settings.system_prompts_dir.is_relative_to(app_settings.bridge_home.parent)
     ):
-        private_files.update(SYSTEM_PROMPTS_DIR.glob("*.txt"))
-        private_files.update(SYSTEM_PROMPTS_DIR.glob("*.json"))
-    private_files.update(DB_FILE.parent.glob(DB_FILE.name + "-*"))
+        private_files.update(app_settings.system_prompts_dir.glob("*.txt"))
+        private_files.update(app_settings.system_prompts_dir.glob("*.json"))
+    private_files.update(app_settings.db_file.parent.glob(app_settings.db_file.name + "-*"))
     for path in private_files:
         try:
             if path.is_file() and not path.is_symlink():

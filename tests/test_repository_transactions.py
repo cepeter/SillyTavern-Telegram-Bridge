@@ -6,6 +6,7 @@ from application_test_setup import (
     make_test_persona_service,
     make_test_provider_port,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -17,7 +18,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import bridge.commands as _m_commands
-import bridge.config as config
 import bridge.group_core as _m_group_core
 import bridge.group_core as group_core
 import bridge.memory as _m_memory
@@ -30,7 +30,7 @@ import bridge.sync_core as _m_sync_core
 from bridge import repositories
 
 
-class WriteTransactionTests(unittest.TestCase):
+class WriteTransactionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "tx.sqlite3"
@@ -104,7 +104,7 @@ class WriteTransactionTests(unittest.TestCase):
         self.db.rollback()
 
 
-class RepositorySourceInvariantTests(unittest.TestCase):
+class RepositorySourceInvariantTests(SettingsTestCase):
     def test_repository_module_contains_no_transaction_ownership_calls(self):
         source = (Path(__file__).parents[1] / "bridge" / "repositories.py").read_text(encoding="utf-8")
         for forbidden in (
@@ -117,7 +117,7 @@ class RepositorySourceInvariantTests(unittest.TestCase):
                 self.assertNotIn(forbidden, source)
 
 
-class RepositoryPrimitiveTests(unittest.TestCase):
+class RepositoryPrimitiveTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.executescript(
@@ -321,16 +321,16 @@ class RepositoryPrimitiveTests(unittest.TestCase):
         self.assertFalse(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 4.0))
 
 
-class GenerationSettingsTransactionTests(unittest.TestCase):
+class GenerationSettingsTransactionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "settings.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "settings.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def test_get_generation_settings_returns_defaults_without_inserting(self):
@@ -376,12 +376,12 @@ class GenerationSettingsTransactionTests(unittest.TestCase):
         self.assertEqual(row, (0.25,))
 
 
-class GroupTransactionTests(unittest.TestCase):
+class GroupTransactionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "group.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "group.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.chat_id = "group-chat"
         self.session_id = "group-session"
         self.initial = {
@@ -403,7 +403,7 @@ class GroupTransactionTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def test_group_persistence_helpers_no_longer_expose_commit_flag(self):
@@ -413,7 +413,9 @@ class GroupTransactionTests(unittest.TestCase):
         )
         self.assertNotIn(
             "commit",
-            inspect.signature(make_test_group_service().advance_turn).parameters,
+            inspect.signature(
+                make_test_group_service(app_settings=self.app_settings_builder.build()).advance_turn
+            ).parameters,
         )
 
     def test_save_group_state_joins_outer_transaction(self):
@@ -474,7 +476,7 @@ class GroupTransactionTests(unittest.TestCase):
 
     def _assert_group_reply_transaction_committed(self):
         self.assertFalse(self.db.in_transaction)
-        observer = sqlite3.connect(config.DB_FILE)
+        observer = sqlite3.connect(self.app_settings_builder.db_file)
         try:
             self.assertEqual(
                 observer.execute(
@@ -543,10 +545,11 @@ class GroupTransactionTests(unittest.TestCase):
                 "",
                 None,
                 None,
-                group_service=make_test_group_service(),
+                group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
                 provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "Reply"),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
+                app_settings=self.app_settings_builder.build(),
             )
 
         self._assert_group_reply_transaction_committed()
@@ -581,11 +584,14 @@ class GroupTransactionTests(unittest.TestCase):
                 self.chat_id,
                 "caption",
                 b"image",
-                group_service=make_test_group_service(),
+                group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
                 provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "Reply"),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
-                group_director_service=make_test_application_services().group_director,
+                group_director_service=make_test_application_services(
+                    app_settings=self.app_settings_builder.build()
+                ).group_director,
+                app_settings=self.app_settings_builder.build(),
             )
 
         self._assert_group_reply_transaction_committed()

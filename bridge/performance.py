@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from contextlib import contextmanager
 
+from bridge.settings import AppSettings
 
-def performance_enabled() -> bool:
-    return os.environ.get("SILLYTAVERN_PERF_LOG", "").casefold() in {"1", "true", "yes", "on"}
+
+def performance_enabled(*, app_settings: AppSettings) -> bool:
+    return app_settings.performance_log
 
 
 @contextmanager
-def perf_span(name: str, **fields: object):
-    if not performance_enabled():
+def perf_span(name: str, *, app_settings: AppSettings, **fields: object):
+    if not performance_enabled(app_settings=app_settings):
         yield
         return
     started = time.perf_counter()
@@ -26,6 +27,6 @@ def perf_span(name: str, **fields: object):
         logging.info("perf span=%s duration_ms=%.3f%s", name, elapsed_ms, f" {safe_fields}" if safe_fields else "")
 
 
-def timed_call(name: str, function, *args, **kwargs):
-    with perf_span(name):
+def timed_call(name: str, function, *args, app_settings: AppSettings, **kwargs):
+    with perf_span(name, app_settings=app_settings):
         return function(*args, **kwargs)
