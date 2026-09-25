@@ -61,15 +61,7 @@ HELP_CATEGORIES = {
             (
                 "Choose Story or Utility provider/model. Supported OpenAI-compatible, "
                 "Anthropic, and OpenCode transports can generate; catalog-only entries "
-                "stay view-only."
-            ),
-        ),
-        ("/providers refresh", "Open the provider panel and refresh discoverable model catalogs."),
-        (
-            "/providers health",
-            (
-                "Open the provider panel and run health checks. Providers without /models "
-                "use a bounded streaming chat probe."
+                "stay view-only. Open the provider list to use Provider health or Refresh models."
             ),
         ),
         ("/character", "Open the character panel — pick a card, view info, delete safely, or get upload guidance."),

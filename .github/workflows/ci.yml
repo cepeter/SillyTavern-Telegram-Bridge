@@ -18,26 +18,27 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.11'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: "0.12.19"
           enable-cache: true
           cache-dependency-glob: |
             requirements.lock
-            requirements-dev.txt
+            requirements-dev.lock
 
       - name: Install locked runtime dependencies
         run: uv pip install --system --python python --require-hashes -r requirements.lock
 
       - name: Install development test tooling
-        run: uv pip install --system --python python -r requirements-dev.txt
+        run: uv pip install --system --python python --require-hashes -r requirements-dev.lock
 
       - name: Validate dependency environment
         run: python -m pip check
@@ -50,7 +51,7 @@ jobs:
 
       - name: Publish application coverage
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: application-coverage
           path: |
@@ -64,47 +65,52 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.11'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: "0.12.19"
           enable-cache: true
           cache-dependency-glob: |
             requirements.lock
+            requirements-dev.lock
 
-      - name: Install pip-audit
-        run: uv pip install --system --python python pip-audit==2.10.1
+      - name: Install hash-locked audit tooling
+        run: uv pip install --system --python python --require-hashes -r requirements-dev.lock
 
       - name: Audit locked dependencies
-        run: python -m pip_audit --no-deps --disable-pip -r requirements.lock
+        run: |
+          python -m pip_audit --require-hashes --disable-pip -r requirements.lock
+          python -m pip_audit --require-hashes --disable-pip -r requirements-dev.lock
 
   static-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.11'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: "0.12.19"
           enable-cache: true
           cache-dependency-glob: |
-            requirements-dev.txt
+            requirements-dev.lock
 
       - name: Install static analysis tooling
-        run: uv pip install --system --python python -r requirements-dev.txt
+        run: uv pip install --system --python python --require-hashes -r requirements-dev.lock
 
       - name: Check runtime lock and manifests
         run: python tools/check_dependency_lock.py

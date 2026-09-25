@@ -22,8 +22,6 @@ LONG_RUNNING_COMMANDS = (
     "/continue",
     "/edit",
     "/summarize",
-    "/providers health",
-    "/providers refresh",
 )
 
 

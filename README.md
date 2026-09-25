@@ -532,11 +532,9 @@ endpoint, keep explicit `models`, set `discover_models: false`, and optionally s
 
 The provider panel is the normal user interface:
 
-```text
-/providers          Open providers and models
-/providers health   Run provider health checks
-/providers refresh  Refresh discoverable model catalogs
-```
+Open `/providers`, choose **Story** or **Utility**, then use **Provider health**
+or **Refresh models** in the provider list. These maintenance actions are
+panel-only; typing a provider subcommand returns guidance instead of running it.
 
 ### Outbound host policy
 
