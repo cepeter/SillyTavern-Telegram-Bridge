@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -8,7 +9,6 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.config as config
 import bridge.director_goals as _m_director_goals
 import bridge.memory_curator as _m_memory_curator
 import bridge.scene_state as _m_scene_state
@@ -17,7 +17,7 @@ import bridge.session_naming as _m_session_naming
 from bridge.migrations import Migration, MigrationError, run_migrations
 
 
-class MigrationEngineTests(unittest.TestCase):
+class MigrationEngineTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
 
@@ -186,7 +186,7 @@ class MigrationEngineTests(unittest.TestCase):
         )
 
 
-class ApplicationSchemaMigrationTests(unittest.TestCase):
+class ApplicationSchemaMigrationTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
 
@@ -325,23 +325,24 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
         )
 
 
-class RequestTimeSchemaRegressionTests(unittest.TestCase):
+class RequestTimeSchemaRegressionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.session = _m_session_naming.create_session(
             self.db,
             "chat",
             "primary::main",
             session_id="migration-request",
             title="Migration request",
+            app_settings=self.app_settings_builder.build(),
         )
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def _assert_no_structural_ddl(self, callback):
@@ -391,9 +392,7 @@ class RequestTimeSchemaRegressionTests(unittest.TestCase):
                 "Keep tension unresolved.",
             ),
             lambda: _m_director_goals.director_goal_policy(
-                self.db,
-                "chat",
-                self.session,
+                self.db, "chat", self.session, app_settings=self.app_settings_builder.build()
             ),
         )
         for operation in operations:

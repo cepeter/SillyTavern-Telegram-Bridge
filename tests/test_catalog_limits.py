@@ -3,6 +3,7 @@ from application_test_setup import (
     make_native_test_persona_service,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -16,77 +17,73 @@ import bridge.cards as _m_cards
 import bridge.catalog as _m_catalog
 import bridge.character_identity as _m_character_identity
 import bridge.command_routes as _m_command_routes
-import bridge.common as _m_common
-import bridge.config as config
 import bridge.input_flows as _m_input_flows
-import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.persona_sync as _m_persona_sync
 import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.status_panels as _m_status_panels
 import bridge.telegram as _m_telegram
 
 
-class CatalogLimitTests(unittest.TestCase):
+class CatalogLimitTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
-        self.old_character = _m_main.CHARACTER_DIR
-        self.old_config_character = config.CHARACTER_DIR
-        self.old_telegram_character = _m_telegram.CHARACTER_DIR
-        self.old_config_world = config.WORLD_DIR
-        self.old_prompts = _m_common.SYSTEM_PROMPTS_DIR
-        self.old_config_prompts = config.SYSTEM_PROMPTS_DIR
-        self.old_native_settings = _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE
-        self.old_native_avatars = _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR
-        self.old_native_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
-        self.old_native_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
+        self.old_character = self.app_settings_builder.character_dir
+        self.old_config_character = self.app_settings_builder.character_dir
+        self.old_telegram_character = self.app_settings_builder.character_dir
+        self.old_config_world = self.app_settings_builder.world_dir
+        self.old_prompts = self.app_settings_builder.system_prompts_dir
+        self.old_config_prompts = self.app_settings_builder.system_prompts_dir
+        self.old_native_settings = self.app_settings_builder.native_persona_settings_file
+        self.old_native_avatars = self.app_settings_builder.native_persona_avatar_dir
         self.old_phase3 = _m_sillytavern_api.live_sync_api_configured
-        self.old_db = config.DB_FILE
-        _m_main.CHARACTER_DIR = root / "characters"
-        config.CHARACTER_DIR = _m_main.CHARACTER_DIR
-        _m_telegram.CHARACTER_DIR = _m_main.CHARACTER_DIR
-        config.WORLD_DIR = root / "worlds"
-        _m_common.SYSTEM_PROMPTS_DIR = root / "prompts"
-        config.SYSTEM_PROMPTS_DIR = _m_common.SYSTEM_PROMPTS_DIR
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = root / "settings.json"
-        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = root / "avatars"
-        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR.mkdir()
-        (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / "user-default.png").write_bytes(b"avatar")
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.character_dir = root / "characters"
+        self.app_settings_builder.character_dir = self.app_settings_builder.character_dir
+        self.app_settings_builder.character_dir = self.app_settings_builder.character_dir
+        self.app_settings_builder.world_dir = root / "worlds"
+        self.app_settings_builder.system_prompts_dir = root / "prompts"
+        self.app_settings_builder.system_prompts_dir = self.app_settings_builder.system_prompts_dir
+        self.app_settings_builder.native_persona_settings_file = root / "settings.json"
+        self.app_settings_builder.native_persona_avatar_dir = root / "avatars"
+        self.app_settings_builder.native_persona_avatar_dir.mkdir()
+        (self.app_settings_builder.native_persona_avatar_dir / "user-default.png").write_bytes(b"avatar")
+        self.app_settings_builder.native_persona_settings_file.write_text(
             json.dumps({"power_user": {"personas": {}, "persona_descriptions": {}}}), encoding="utf-8"
         )
-        _m_persona_sync._NATIVE_PERSONA_CACHE = {}
-        _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        _m_sillytavern_api.live_sync_api_configured = lambda: False
-        config.DB_FILE = root / "bridge.sqlite3"
-        for directory in (_m_main.CHARACTER_DIR, config.WORLD_DIR, _m_common.SYSTEM_PROMPTS_DIR):
+        _m_sillytavern_api.live_sync_api_configured = lambda *, app_settings=None: False
+        self.app_settings_builder.db_file = root / "bridge.sqlite3"
+        for directory in (
+            self.app_settings_builder.character_dir,
+            self.app_settings_builder.world_dir,
+            self.app_settings_builder.system_prompts_dir,
+        ):
             directory.mkdir()
-        self.db = _m_memory_curator.db_connect()
-        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
 
     def tearDown(self):
         self.db.close()
-        _m_main.CHARACTER_DIR = self.old_character
-        config.CHARACTER_DIR = self.old_config_character
-        _m_telegram.CHARACTER_DIR = self.old_telegram_character
-        config.WORLD_DIR = self.old_config_world
-        _m_common.SYSTEM_PROMPTS_DIR = self.old_prompts
-        config.SYSTEM_PROMPTS_DIR = self.old_config_prompts
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.old_native_settings
-        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.old_native_avatars
-        _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_native_cache
-        _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_native_cache_time
+        self.app_settings_builder.character_dir = self.old_character
+        self.app_settings_builder.character_dir = self.old_config_character
+        self.app_settings_builder.character_dir = self.old_telegram_character
+        self.app_settings_builder.world_dir = self.old_config_world
+        self.app_settings_builder.system_prompts_dir = self.old_prompts
+        self.app_settings_builder.system_prompts_dir = self.old_config_prompts
+        self.app_settings_builder.native_persona_settings_file = self.old_native_settings
+        self.app_settings_builder.native_persona_avatar_dir = self.old_native_avatars
         _m_sillytavern_api.live_sync_api_configured = self.old_phase3
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def test_system_prompt_catalog_uses_directory_only(self):
-        directory_prompt = _m_common.SYSTEM_PROMPTS_DIR / "Only.txt"
+        directory_prompt = self.app_settings_builder.system_prompts_dir / "Only.txt"
         directory_prompt.write_text("directory prompt", encoding="utf-8")
 
-        prompts = _m_cards.load_system_prompts()
+        prompts = _m_cards.load_system_prompts(app_settings=self.app_settings_builder.build())
 
         self.assertEqual(
             prompts,
@@ -100,26 +97,41 @@ class CatalogLimitTests(unittest.TestCase):
 
     def test_file_catalogs_are_deterministically_capped_at_40(self):
         for index in range(41):
-            (_m_main.CHARACTER_DIR / f"{index:02}.png").write_bytes(b"x")
-            (config.WORLD_DIR / f"{index:02}.json").write_text("{}", encoding="utf-8")
-            (_m_common.SYSTEM_PROMPTS_DIR / f"{index:02}.txt").write_text(f"prompt {index}", encoding="utf-8")
-        self.assertEqual(len(_m_character_identity.character_card_paths()), 40)
-        self.assertEqual(len(_m_catalog.world_file_paths()), 40)
-        self.assertEqual(len(_m_cards.load_system_prompts()), 40)
-        self.assertEqual(_m_character_identity.character_card_paths()[-1].name, "39.png")
+            (self.app_settings_builder.character_dir / f"{index:02}.png").write_bytes(b"x")
+            (self.app_settings_builder.world_dir / f"{index:02}.json").write_text("{}", encoding="utf-8")
+            (self.app_settings_builder.system_prompts_dir / f"{index:02}.txt").write_text(
+                f"prompt {index}", encoding="utf-8"
+            )
+        self.assertEqual(
+            len(_m_character_identity.character_card_paths(app_settings=self.app_settings_builder.build())), 40
+        )
+        self.assertEqual(len(_m_catalog.world_file_paths(app_settings=self.app_settings_builder.build())), 40)
+        self.assertEqual(len(_m_cards.load_system_prompts(app_settings=self.app_settings_builder.build())), 40)
+        self.assertEqual(
+            _m_character_identity.character_card_paths(app_settings=self.app_settings_builder.build())[-1].name,
+            "39.png",
+        )
 
     def test_native_system_prompt_json_uses_content_and_name(self):
-        native = _m_common.SYSTEM_PROMPTS_DIR / "Native Prompt.json"
+        native = self.app_settings_builder.system_prompts_dir / "Native Prompt.json"
         native.write_text(
             json.dumps({"name": "Native Prompt", "content": "native content", "post_history": "ignored by bridge"}),
             encoding="utf-8",
         )
-        prompts = _m_cards.load_system_prompts()
+        prompts = _m_cards.load_system_prompts(app_settings=self.app_settings_builder.build())
         self.assertEqual(prompts["Native Prompt"]["name"], "Native Prompt")
         self.assertEqual(prompts["Native Prompt"]["prompt"], "native content")
-        self.assertEqual(_m_status_panels.system_prompt_label("native content"), "Native Prompt")
-        self.assertEqual(_m_status_panels.system_prompt_label(""), "off")
-        self.assertEqual(_m_status_panels.system_prompt_label("unrecognized prompt"), "custom")
+        self.assertEqual(
+            _m_status_panels.system_prompt_label("native content", app_settings=self.app_settings_builder.build()),
+            "Native Prompt",
+        )
+        self.assertEqual(
+            _m_status_panels.system_prompt_label("", app_settings=self.app_settings_builder.build()), "off"
+        )
+        self.assertEqual(
+            _m_status_panels.system_prompt_label("unrecognized prompt", app_settings=self.app_settings_builder.build()),
+            "custom",
+        )
         self.assertNotIn("name", prompts)
         self.assertNotIn("content", prompts)
         self.assertNotIn("post_history", prompts)
@@ -132,7 +144,7 @@ class CatalogLimitTests(unittest.TestCase):
                 "persona_descriptions": {key: {"description": "d"} for key in personas},
             }
         }
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(json.dumps(settings), encoding="utf-8")
+        self.app_settings_builder.native_persona_settings_file.write_text(json.dumps(settings), encoding="utf-8")
         calls = []
         original = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
@@ -141,8 +153,8 @@ class CatalogLimitTests(unittest.TestCase):
                 "token",
                 "chat",
                 "",
-                persona_service=make_native_test_persona_service(),
-                request_context=make_test_request_context(self.db),
+                persona_service=make_native_test_persona_service(app_settings=self.app_settings_builder.build()),
+                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_cards.send_panel_request = original
@@ -154,7 +166,7 @@ class CatalogLimitTests(unittest.TestCase):
 
     def test_persona_create_rejects_item_41(self):
         personas = {f"p{index:02}.png": f"Persona {index}" for index in range(40)}
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(
+        self.app_settings_builder.native_persona_settings_file.write_text(
             json.dumps(
                 {
                     "power_user": {
@@ -184,8 +196,10 @@ class CatalogLimitTests(unittest.TestCase):
                     "p40 | Persona 40 | description",
                     state,
                     None,
-                    persona_service=make_native_test_persona_service(),
-                    request_context=make_test_request_context(self.db, self.session["session_id"]),
+                    persona_service=make_native_test_persona_service(app_settings=self.app_settings_builder.build()),
+                    request_context=make_test_request_context(
+                        self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                    ),
                 )
             )
         finally:
@@ -194,7 +208,7 @@ class CatalogLimitTests(unittest.TestCase):
 
     def test_character_upload_rejects_item_41_without_deleting_existing(self):
         for index in range(40):
-            (_m_main.CHARACTER_DIR / f"{index:02}.png").write_bytes(b"existing")
+            (self.app_settings_builder.character_dir / f"{index:02}.png").write_bytes(b"existing")
         sent = []
         old_parse, old_fields, old_send = (
             _m_telegram.parse_png_chara_bytes,
@@ -202,17 +216,19 @@ class CatalogLimitTests(unittest.TestCase):
             _m_telegram.send_text,
         )
         _m_telegram.parse_png_chara_bytes = lambda _raw: {"name": "Forty One"}
-        _m_telegram.card_fields = lambda _card: {"name": "Forty One"}
+        _m_telegram.card_fields = lambda _card, *, app_settings=None: {"name": "Forty One"}
         _m_telegram.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
-            _m_telegram.import_character_card(self.db, "token", "chat", "new.png", b"new")
+            _m_telegram.import_character_card(
+                self.db, "token", "chat", "new.png", b"new", app_settings=self.app_settings_builder.build()
+            )
         finally:
             _m_telegram.parse_png_chara_bytes, _m_telegram.card_fields, _m_telegram.send_text = (
                 old_parse,
                 old_fields,
                 old_send,
             )
-        self.assertEqual(len(list(_m_main.CHARACTER_DIR.glob("*.png"))), 40)
+        self.assertEqual(len(list(self.app_settings_builder.character_dir.glob("*.png"))), 40)
         self.assertTrue(any("40 maximum" in text for text in sent))
 
 

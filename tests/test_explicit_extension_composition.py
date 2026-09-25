@@ -8,10 +8,12 @@ import sys
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).parents[1]
 
 
-class ExplicitExtensionCompositionTests(unittest.TestCase):
+class ExplicitExtensionCompositionTests(SettingsTestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -51,14 +53,19 @@ class ExplicitExtensionCompositionTests(unittest.TestCase):
             completed.stdout + completed.stderr,
         )
 
-    def test_main_invokes_composition_before_startup_work(self):
-        tree = ast.parse((REPO_ROOT / "bridge" / "main.py").read_text(encoding="utf-8"))
-        main_function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
-        first = main_function.body[0]
-        self.assertIsInstance(first, ast.Expr)
-        self.assertIsInstance(first.value, ast.Call)
-        self.assertIsInstance(first.value.func, ast.Name)
-        self.assertEqual(first.value.func.id, "_initialize_extensions")
+    def test_main_initializes_extensions_once_before_checks_or_runtime(self):
+        tree = ast.parse((REPO_ROOT / "bridge/main.py").read_text(encoding="utf-8"))
+        main_function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_main")
+        calls = [
+            (node.func.id, node.lineno)
+            for node in ast.walk(main_function)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        ]
+        init_lines = [line for name, line in calls if name == "_initialize_extensions"]
+        self.assertEqual(len(init_lines), 1)
+        self.assertLess(next(line for name, line in calls if name == "_load_startup_config"), init_lines[0])
+        for name in ("set_bot_commands", "run_check", "run_bridge_runtime"):
+            self.assertLess(init_lines[0], next(line for called, line in calls if called == name))
 
     def test_explicit_extension_composition_is_deterministic(self):
         completed = self._run_python(

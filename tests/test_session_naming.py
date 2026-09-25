@@ -9,6 +9,7 @@ from application_test_setup import (
     make_test_provider_port,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -19,7 +20,6 @@ import unittest
 from pathlib import Path
 
 import bridge.command_routes as _m_command_routes
-import bridge.config as config
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -30,14 +30,16 @@ import bridge.sync_api as _m_sync_api
 import bridge.telegram as _m_telegram
 
 
-class SessionNamingTests(unittest.TestCase):
+class SessionNamingTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
-        self.group = make_test_group_service()
-        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.group = make_test_group_service(app_settings=self.app_settings_builder.build())
+        self.session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         self.sent = []
         self.old_session_send = _m_session_naming.send_text
         self.old_pending_send = _m_message_commands.send_text
@@ -55,17 +57,24 @@ class SessionNamingTests(unittest.TestCase):
         _m_message_commands.send_text = self.old_pending_send
         _m_command_routes.send_text = self.old_route_send
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def _state(self, chat_id="chat"):
         return json.loads(_m_session_naming.get_meta(self.db, f"session_name_input:{chat_id}", "{}"))
 
     def test_standard_session_is_created_only_after_valid_name(self):
-        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session, group_service=self.group)
+        _m_session_naming.start_session_name_input(
+            self.db,
+            "token",
+            "chat",
+            self.session,
+            group_service=self.group,
+            app_settings=self.app_settings_builder.build(),
+        )
         self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
         self.assertTrue(
-            make_test_input_flow_service().handle_pending(
+            make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
                 "token",
                 "chat",
@@ -76,10 +85,18 @@ class SessionNamingTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
-                request_context=make_test_request_context(self.db, self.session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         )
-        created = _m_memory_curator.load_session(self.db, "chat", "job-42", _m_memory_curator.DEFAULT_MODEL)
+        created = _m_memory_curator.load_session(
+            self.db,
+            "chat",
+            "job-42",
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
+        )
         self.assertEqual(created["title"], "Project Alpha")
         self.assertEqual(_m_session_naming.get_meta(self.db, "active_session:chat", ""), "job-42")
         self.assertEqual(_m_session_naming.get_meta(self.db, "session_name_input:chat", ""), "")
@@ -87,17 +104,22 @@ class SessionNamingTests(unittest.TestCase):
     def test_status_displays_custom_session_title_with_technical_id(self):
         _m_session_naming.update_session(self.db, "chat", self.session["session_id"], title="Evening Story")
         original_card = _m_message_commands.card_fields_from_file
-        _m_message_commands.card_fields_from_file = lambda _filename: {"name": "Test", "post_history_instructions": ""}
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: {
+            "name": "Test",
+            "post_history_instructions": "",
+        }
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 {},
                 "chat",
                 "/status",
-                services=make_test_application_services(memory=make_test_memory_service()),
+                services=make_test_application_services(
+                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -106,9 +128,16 @@ class SessionNamingTests(unittest.TestCase):
         self.assertIn("• System Prompt: off", self.sent[-1])
 
     def test_invalid_name_reprompts_without_creating_session(self):
-        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session, group_service=self.group)
+        _m_session_naming.start_session_name_input(
+            self.db,
+            "token",
+            "chat",
+            self.session,
+            group_service=self.group,
+            app_settings=self.app_settings_builder.build(),
+        )
         self.assertTrue(
-            make_test_input_flow_service().handle_pending(
+            make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
                 "token",
                 "chat",
@@ -119,7 +148,9 @@ class SessionNamingTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
-                request_context=make_test_request_context(self.db, self.session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         )
         self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
@@ -132,9 +163,16 @@ class SessionNamingTests(unittest.TestCase):
             "character_session_input:chat",
             json.dumps({"character_file": "Chosen.png", "character_name": "Chosen", "expires_at": time.time() + 600}),
         )
-        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session, group_service=self.group)
+        _m_session_naming.start_session_name_input(
+            self.db,
+            "token",
+            "chat",
+            self.session,
+            group_service=self.group,
+            app_settings=self.app_settings_builder.build(),
+        )
         self.assertTrue(
-            make_test_input_flow_service().handle_pending(
+            make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
                 "token",
                 "chat",
@@ -145,7 +183,9 @@ class SessionNamingTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
-                request_context=make_test_request_context(self.db, self.session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         )
         self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
@@ -153,10 +193,16 @@ class SessionNamingTests(unittest.TestCase):
 
     def test_cancel_with_bot_mention_leaves_no_empty_session(self):
         _m_session_naming.start_session_name_input(
-            self.db, "token", "chat|topic:7", self.session, kind="group", group_service=self.group
+            self.db,
+            "token",
+            "chat|topic:7",
+            self.session,
+            kind="group",
+            group_service=self.group,
+            app_settings=self.app_settings_builder.build(),
         )
         self.assertTrue(
-            make_test_input_flow_service().handle_pending(
+            make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
                 "token",
                 "chat|topic:7",
@@ -167,7 +213,9 @@ class SessionNamingTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
-                request_context=make_test_request_context(self.db, self.session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         )
         self.assertEqual(_m_session_naming.get_meta(self.db, "session_name_input:chat|topic:7", ""), "")
@@ -179,11 +227,20 @@ class SessionNamingTests(unittest.TestCase):
             "character_session_input:chat",
             json.dumps({"character_file": "Chosen.png", "character_name": "Chosen", "expires_at": time.time() + 600}),
         )
-        _m_session_naming.start_session_name_input(self.db, "token", "chat", self.session, group_service=self.group)
+        _m_session_naming.start_session_name_input(
+            self.db,
+            "token",
+            "chat",
+            self.session,
+            group_service=self.group,
+            app_settings=self.app_settings_builder.build(),
+        )
         original_safe = _m_input_flows.safe_character_path
-        _m_input_flows.safe_character_path = lambda name: Path("/tmp/Chosen.png") if name == "Chosen.png" else None
+        _m_input_flows.safe_character_path = lambda name, *, app_settings=None: (
+            Path("/tmp/Chosen.png") if name == "Chosen.png" else None
+        )
         try:
-            make_test_input_flow_service().handle_pending(
+            make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
                 "token",
                 "chat",
@@ -194,17 +251,27 @@ class SessionNamingTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
-                request_context=make_test_request_context(self.db, self.session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_input_flows.safe_character_path = original_safe
-        created = _m_memory_curator.load_session(self.db, "chat", "job-45", _m_memory_curator.DEFAULT_MODEL)
+        created = _m_memory_curator.load_session(
+            self.db,
+            "chat",
+            "job-45",
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
+        )
         self.assertEqual(created["title"], "Chosen Story")
         self.assertEqual(created["character_file"], "Chosen.png")
 
     def test_group_session_waits_for_name_then_opens_character_stage(self):
         chat_id = "chat|topic:7"
-        session = _m_telegram.ensure_session(self.db, chat_id, _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, chat_id, self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         old_menu = _m_session_naming.send_character_menu
         opened = []
         _m_session_naming.send_character_menu = lambda _token, _chat, character, **kwargs: opened.append(
@@ -212,10 +279,16 @@ class SessionNamingTests(unittest.TestCase):
         )
         try:
             _m_session_naming.start_session_name_input(
-                self.db, "token", chat_id, session, kind="group", group_service=self.group
+                self.db,
+                "token",
+                chat_id,
+                session,
+                kind="group",
+                group_service=self.group,
+                app_settings=self.app_settings_builder.build(),
             )
             self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, chat_id)), 1)
-            make_test_input_flow_service().handle_pending(
+            make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
                 "token",
                 chat_id,
@@ -226,11 +299,19 @@ class SessionNamingTests(unittest.TestCase):
                 provider_port=make_test_provider_port(),
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
-                request_context=make_test_request_context(self.db, session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_session_naming.send_character_menu = old_menu
-        created = _m_memory_curator.load_session(self.db, chat_id, "group-46", _m_memory_curator.DEFAULT_MODEL)
+        created = _m_memory_curator.load_session(
+            self.db,
+            chat_id,
+            "group-46",
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
+        )
         self.assertEqual(created["title"], "Mystery Team")
         setup = self.group.setup_state(self.db, chat_id, "group-46")
         self.assertEqual(setup["stage"], "character")

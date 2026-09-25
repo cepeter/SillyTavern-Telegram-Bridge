@@ -5,15 +5,10 @@ from __future__ import annotations
 import sqlite3
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
-from bridge.callbacks import (
-    close_panel_message,
-    discard_panel_binding,
-    is_session_scoped_panel_callback,
-)
+from bridge.callbacks import close_panel_message, discard_panel_binding, is_session_scoped_panel_callback
 from bridge.catalog import answer_callback
 from bridge.common import parse_topic_scope
 from bridge.composition import BridgeServices, RequestContext
-from bridge.config import DEFAULT_MODEL
 from bridge.database import panel_owner_for_message, panel_session_for_message
 from bridge.groups import handle_group_panel_callback
 from bridge.help import handle_enum_callback
@@ -71,12 +66,12 @@ def process_callback(
         return
 
     session = (
-        load_session(db, chat_id, bound_session_id, DEFAULT_MODEL)
+        load_session(db, chat_id, bound_session_id, services.config.default_model, app_settings=services.config)
         if bound_session_id
-        else ensure_session(db, chat_id, DEFAULT_MODEL)
+        else ensure_session(db, chat_id, services.config.default_model, app_settings=services.config)
     )
     session_id = session["session_id"]
-    request_context = RequestContext(db, session_id, sender)
+    request_context = RequestContext(db, session_id, sender, app_settings=services.config)
     memory_service = services.memory
     persona_service = services.persona
     sync_service = services.sync

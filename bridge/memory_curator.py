@@ -14,38 +14,20 @@ import logging
 import re
 import sqlite3
 import time
+from functools import partial as _partial
 
 from bridge.common import submit_background
-from bridge.config import DEFAULT_MODEL
 from bridge.curated_memory_panel import curated_memory_panel
-from bridge.database import (
-    db_connect,
-    get_generation_settings,
-    task_model_for_session,
-    write_transaction,
-)
+from bridge.database import db_connect, get_generation_settings, task_model_for_session, write_transaction
 from bridge.delivery_port import DeliveryPort
-from bridge.extension_registry import (
-    extension_registry_snapshot as _extension_registry_snapshot,
-)
-from bridge.extension_registry import (
-    register_command_route as _register_command_route,
-)
-from bridge.extension_registry import (
-    register_post_retain_hook as _register_post_retain_hook,
-)
-from bridge.memory_backend import (
-    _retain_with_client,
-    hindsight_session_prefix,
-    memory_mode,
-)
+from bridge.extension_registry import extension_registry_snapshot as _extension_registry_snapshot
+from bridge.extension_registry import register_command_route as _register_command_route
+from bridge.extension_registry import register_post_retain_hook as _register_post_retain_hook
+from bridge.memory_backend import _retain_with_client, hindsight_session_prefix, memory_mode
 from bridge.provider_port import ProviderPort
-from bridge.repositories import (
-    load_meta_value as _repo_load_meta_value,
-)
-from bridge.repositories import (
-    store_meta_value as _repo_store_meta_value,
-)
+from bridge.repositories import load_meta_value as _repo_load_meta_value
+from bridge.repositories import store_meta_value as _repo_store_meta_value
+from bridge.settings import AppSettings
 from bridge.telegram import load_session
 
 _MEMORY_CURATOR_MAX_ITEMS = 24
@@ -174,6 +156,7 @@ def curate_memory_now(
     through_rowid: int | None = None,
     *,
     provider_port: ProviderPort,
+    app_settings: AppSettings,
 ) -> list[dict[str, object]] | None:
     session_id = str(session["session_id"])
     rows = _curator_source_rows(db, chat_id, session_id, through_rowid)
@@ -220,7 +203,7 @@ def curate_memory_now(
         }
     )
     try:
-        model = task_model_for_session(db, chat_id, session, "memory_curator")
+        model = task_model_for_session(db, chat_id, session, "memory_curator", app_settings=app_settings)
         raw = provider_port.generate(
             api_key,
             model,
@@ -269,6 +252,7 @@ def curate_memory_now(
             f"Curated durable memory for roleplay session with character {character_name}",
             "curated",
             "Hindsight curated-memory retain unavailable for chat %s",
+            app_settings=app_settings,
         )
     return items
 
@@ -279,8 +263,10 @@ def _memory_curator_worker(
     character_name: str,
     through_rowid: int,
     provider_port: ProviderPort,
+    *,
+    app_settings: AppSettings,
 ) -> None:
-    worker_db = db_connect()
+    worker_db = db_connect(app_settings=app_settings)
     try:
         exists = worker_db.execute(
             "SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?",
@@ -288,7 +274,9 @@ def _memory_curator_worker(
         ).fetchone()
         if not exists or memory_mode(worker_db, str(chat_id)) != "on":
             return
-        session = load_session(worker_db, str(chat_id), str(session_id), DEFAULT_MODEL)
+        session = load_session(
+            worker_db, str(chat_id), str(session_id), app_settings.default_model, app_settings=app_settings
+        )
         curate_memory_now(
             worker_db,
             "",
@@ -297,6 +285,7 @@ def _memory_curator_worker(
             character_name,
             through_rowid=int(through_rowid),
             provider_port=provider_port,
+            app_settings=app_settings,
         )
     finally:
         worker_db.close()
@@ -309,6 +298,7 @@ def queue_memory_curator(
     character_name: str,
     *,
     provider_port: ProviderPort,
+    app_settings: AppSettings,
 ) -> bool:
     if memory_mode(db, chat_id) != "on":
         return False
@@ -332,7 +322,7 @@ def queue_memory_curator(
             return False
     submit_background(
         "memory_curator",
-        _memory_curator_worker,
+        _partial(_memory_curator_worker, app_settings=app_settings),
         str(chat_id),
         session_id,
         str(character_name),
@@ -348,9 +338,18 @@ def _memory_curator_post_retain(
     session: dict[str, str],
     fields: dict[str, str],
     provider_port: ProviderPort,
+    *,
+    app_settings: AppSettings,
 ) -> None:
     try:
-        queue_memory_curator(db, chat_id, session, str(fields.get("name") or "unknown"), provider_port=provider_port)
+        queue_memory_curator(
+            db,
+            chat_id,
+            session,
+            str(fields.get("name") or "unknown"),
+            provider_port=provider_port,
+            app_settings=app_settings,
+        )
     except Exception:
         logging.warning("Could not queue memory curator for %s/%s", chat_id, session.get("session_id"), exc_info=True)
 
@@ -419,6 +418,7 @@ def handle_curated_memory_command(
             session,
             str(fields.get("name") or "unknown"),
             provider_port=provider_port,
+            app_settings=request_context.app_settings,
         )
         delivery_port.send_text(
             token,

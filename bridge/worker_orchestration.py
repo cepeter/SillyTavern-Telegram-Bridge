@@ -49,9 +49,9 @@ def process_message_job(
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 recovery_session = (
-                    load_session(db, chat_id, queued_session_id, model)
+                    load_session(db, chat_id, queued_session_id, model, app_settings=services.config)
                     if queued_session_id
-                    else ensure_session(db, chat_id, model)
+                    else ensure_session(db, chat_id, model, app_settings=services.config)
                 )
                 if services.group.current_speaker(db, chat_id, recovery_session, text):
                     services.group.advance_turn(
@@ -65,8 +65,18 @@ def process_message_job(
                     if job_id is not None:
                         jobs.complete(db, job_id)
                     return
-                delivery_session_id = queued_session_id or ensure_session(db, chat_id, model)["session_id"]
-                send_reply(token, chat_id, str(existing[1]), db, delivery_session_id, int(existing[0]))
+                delivery_session_id = (
+                    queued_session_id or ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+                )
+                send_reply(
+                    token,
+                    chat_id,
+                    str(existing[1]),
+                    db,
+                    delivery_session_id,
+                    int(existing[0]),
+                    app_settings=services.config,
+                )
                 clear_failed_turn(db, chat_id, message_id)
                 if job_id is not None:
                     jobs.complete(db, job_id)
@@ -133,8 +143,18 @@ def process_image_job(
                     if job_id is not None:
                         jobs.complete(db, job_id)
                     return
-                delivery_session_id = queued_session_id or ensure_session(db, chat_id, model)["session_id"]
-                send_reply(token, chat_id, str(existing[1]), db, delivery_session_id, int(existing[0]))
+                delivery_session_id = (
+                    queued_session_id or ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+                )
+                send_reply(
+                    token,
+                    chat_id,
+                    str(existing[1]),
+                    db,
+                    delivery_session_id,
+                    int(existing[0]),
+                    app_settings=services.config,
+                )
                 clear_failed_turn(db, chat_id, message_id)
                 if job_id is not None:
                     jobs.complete(db, job_id)
@@ -154,16 +174,11 @@ def process_image_job(
                 IMAGE_MAX_BYTES,
             )
             session = (
-                load_session(
-                    db,
-                    chat_id,
-                    queued_session_id,
-                    model,
-                )
+                load_session(db, chat_id, queued_session_id, model, app_settings=services.config)
                 if queued_session_id
-                else ensure_session(db, chat_id, model)
+                else ensure_session(db, chat_id, model, app_settings=services.config)
             )
-            image_fields = card_fields_from_file(session["character_file"])
+            image_fields = card_fields_from_file(session["character_file"], app_settings=services.config)
             process_image_message(
                 db,
                 token,
@@ -179,6 +194,7 @@ def process_image_job(
                 memory_service=services.memory,
                 persona_service=services.persona,
                 group_director_service=services.group_director,
+                app_settings=services.config,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)
@@ -274,6 +290,7 @@ def process_edit_job(
                 provider_port=services.provider,
                 memory_service=services.memory,
                 persona_service=services.persona,
+                app_settings=services.config,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)

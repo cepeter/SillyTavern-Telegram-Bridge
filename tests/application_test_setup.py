@@ -7,7 +7,10 @@ dependency binding.
 
 from __future__ import annotations
 
+from functools import partial as _partial
 from types import SimpleNamespace
+
+from settings_test_support import make_test_settings
 
 from bridge.application_composition import initialize_extensions
 from bridge.composition import RequestContext
@@ -31,12 +34,12 @@ def ensure_application_extensions() -> None:
 
 
 def make_test_request_context(
-    db=None,
-    session_id: str = "test-session",
-    actor_id: str = "test-user",
+    db=None, session_id: str = "test-session", actor_id: str = "test-user", *, app_settings=None
 ) -> RequestContext:
     """Return an explicit request context for panel/router tests."""
-    return RequestContext(db, session_id, actor_id)
+    if app_settings is None:
+        app_settings = make_test_settings()
+    return RequestContext(db, session_id, actor_id, app_settings=app_settings)
 
 
 def make_test_input_flow_service(
@@ -45,7 +48,10 @@ def make_test_input_flow_service(
     start_session_name_backend=None,
     start_text_action_backend=None,
     handle_session_name_backend=None,
+    app_settings=None,
 ) -> InputFlowService:
+    if app_settings is None:
+        app_settings = make_test_settings()
     if handle_pending_backend is None:
         from bridge.input_flows import handle_pending_input
 
@@ -55,13 +61,10 @@ def make_test_input_flow_service(
 
         start_text_action_backend = start_text_action_input
     if start_session_name_backend is None or handle_session_name_backend is None:
-        from bridge.session_naming import (
-            handle_session_name_input,
-            start_session_name_input,
-        )
+        from bridge.session_naming import handle_session_name_input, start_session_name_input
 
         if start_session_name_backend is None:
-            start_session_name_backend = start_session_name_input
+            start_session_name_backend = _partial(start_session_name_input, app_settings=app_settings)
         if handle_session_name_backend is None:
             handle_session_name_backend = handle_session_name_input
     return InputFlowService(
@@ -147,8 +150,10 @@ def make_test_persona_service(*, personas=None) -> PersonaService:
     )
 
 
-def make_native_test_persona_service() -> PersonaService:
+def make_native_test_persona_service(*, app_settings=None) -> PersonaService:
     """Compose PersonaService from the same canonical collaborators as startup."""
+    if app_settings is None:
+        app_settings = make_test_settings()
     from bridge.persona_sync import (
         PERSONA_EDIT_LOCK,
         default_persona_id,
@@ -160,10 +165,10 @@ def make_native_test_persona_service() -> PersonaService:
     from bridge.telegram import update_session
 
     return PersonaService(
-        load_personas=load_personas,
-        load_default_persona=default_persona_id,
-        upsert_persona=upsert_native_persona,
-        delete_persona=delete_native_persona,
+        load_personas=_partial(load_personas, app_settings=app_settings),
+        load_default_persona=_partial(default_persona_id, app_settings=app_settings),
+        upsert_persona=_partial(upsert_native_persona, app_settings=app_settings),
+        delete_persona=_partial(delete_native_persona, app_settings=app_settings),
         update_session_persona=update_session,
         persona_reference_count=count_persona_references,
         persona_edit_lock=lambda: PERSONA_EDIT_LOCK,
@@ -184,8 +189,10 @@ def make_test_sync_service() -> SyncService:
     )
 
 
-def make_test_group_service():
+def make_test_group_service(*, app_settings=None):
     """Compose GroupService from the canonical group-core implementation."""
+    if app_settings is None:
+        app_settings = make_test_settings()
     from bridge.group_core import (
         advance_group_turn,
         claim_group_user_turn,
@@ -208,10 +215,10 @@ def make_test_group_service():
         claim_user_turn_backend=claim_group_user_turn,
         pass_user_turn_backend=pass_group_user_turn,
         setup_state_backend=group_setup_state,
-        character_option_label_backend=group_character_option_label,
-        resolve_character_backend=resolve_character_file,
-        member_labels_backend=group_member_labels,
-        current_speaker_backend=group_current_speaker,
+        character_option_label_backend=_partial(group_character_option_label, app_settings=app_settings),
+        resolve_character_backend=_partial(resolve_character_file, app_settings=app_settings),
+        member_labels_backend=_partial(group_member_labels, app_settings=app_settings),
+        current_speaker_backend=_partial(group_current_speaker, app_settings=app_settings),
         advance_turn_backend=advance_group_turn,
     )
 
@@ -224,8 +231,10 @@ class _TestGroupDirector:
         return ""
 
 
-def make_test_conversation_service():
+def make_test_conversation_service(*, app_settings=None):
     """Compose the canonical conversation collaborators explicitly for tests."""
+    if app_settings is None:
+        app_settings = make_test_settings()
     from bridge.command_routes import handle_command_route
     from bridge.conversation_service import ConversationService
     from bridge.message_commands import generate_and_store_reply, prepare_message
@@ -233,7 +242,7 @@ def make_test_conversation_service():
     return ConversationService(
         prepare_message=prepare_message,
         dispatch_command=handle_command_route,
-        generate_reply=generate_and_store_reply,
+        generate_reply=_partial(generate_and_store_reply, app_settings=app_settings),
     )
 
 
@@ -249,41 +258,42 @@ def make_test_application_services(
     provider=None,
     conversation=None,
     delivery=None,
+    app_settings=None,
 ):
     """Return an explicit test-only application service graph for routers."""
+    if app_settings is None:
+        app_settings = make_test_settings()
     return SimpleNamespace(
+        config=app_settings,
         memory=memory or make_test_memory_service(),
         persona=persona or make_test_persona_service(),
         sync=sync or make_test_sync_service(),
-        group=group or make_test_group_service(),
+        group=group or make_test_group_service(app_settings=app_settings),
         group_director=group_director or _TestGroupDirector(),
-        input_flow=input_flow or make_test_input_flow_service(),
+        input_flow=input_flow or make_test_input_flow_service(app_settings=app_settings),
         model_router=model_router or make_test_model_router(),
         provider=provider or make_test_provider_port(),
-        conversation=conversation or make_test_conversation_service(),
+        conversation=conversation or make_test_conversation_service(app_settings=app_settings),
         delivery=delivery or make_test_delivery_port(),
     )
 
 
-def make_native_test_sync_service() -> SyncService:
+def make_native_test_sync_service(*, app_settings=None) -> SyncService:
     """Compose SyncService from the canonical collaborators used by startup."""
+    if app_settings is None:
+        app_settings = make_test_settings()
     import bridge.sillytavern_api as _st_api
     from bridge.repositories import count_session_messages
-    from bridge.sync_api import (
-        _live_sync_disable,
-        live_sync_now,
-        live_sync_poll,
-        live_sync_toggle_realtime,
-    )
+    from bridge.sync_api import _live_sync_disable, live_sync_now, live_sync_poll, live_sync_toggle_realtime
     from bridge.sync_core import sync_binding
 
     return SyncService(
         load_binding=sync_binding,
         count_messages=count_session_messages,
-        sync_now_backend=live_sync_now,
-        toggle_realtime_backend=live_sync_toggle_realtime,
-        poll_backend=live_sync_poll,
+        sync_now_backend=_partial(live_sync_now, app_settings=app_settings),
+        toggle_realtime_backend=_partial(live_sync_toggle_realtime, app_settings=app_settings),
+        poll_backend=_partial(live_sync_poll, app_settings=app_settings),
         disable_realtime=_live_sync_disable,
-        api_configured=_st_api.live_sync_api_configured,
+        api_configured=_partial(_st_api.live_sync_api_configured, app_settings=app_settings),
         expected_errors=(_st_api.SillyTavernApiError, ValueError),
     )

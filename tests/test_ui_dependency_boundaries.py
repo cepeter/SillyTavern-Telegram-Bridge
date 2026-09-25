@@ -6,10 +6,7 @@ from dataclasses import MISSING
 from pathlib import Path
 from types import SimpleNamespace
 
-from application_test_setup import (
-    make_test_delivery_port,
-    make_test_group_service,
-)
+from application_test_setup import make_test_delivery_port, make_test_group_service, make_test_request_context
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -37,6 +34,7 @@ def test_expression_menu_requires_and_uses_delivery_port(monkeypatch):
     assert param is not None
     assert param.default is inspect.Parameter.empty
 
+    context = make_test_request_context()
     calls = []
     delivery = make_test_delivery_port(
         send_panel_request=lambda token, method, payload, **kwargs: (
@@ -47,7 +45,7 @@ def test_expression_menu_requires_and_uses_delivery_port(monkeypatch):
     monkeypatch.setattr(
         expressions,
         "discover_expression_assets",
-        lambda *_args: {"joy": Path("joy.png")},
+        lambda *_args, app_settings=None: {"joy": Path("joy.png")},
     )
 
     expressions.send_expression_menu(
@@ -56,7 +54,7 @@ def test_expression_menu_requires_and_uses_delivery_port(monkeypatch):
         {"session_id": "session", "character_file": "mira.png"},
         object(),
         delivery_port=delivery,
-        request_context="ctx",
+        request_context=context,
     )
 
     assert len(calls) == 1
@@ -65,7 +63,7 @@ def test_expression_menu_requires_and_uses_delivery_port(monkeypatch):
     assert method == "sendMessage"
     assert payload["chat_id"] == "chat"
     assert payload["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == "expression:joy"
-    assert kwargs["request_context"] == "ctx"
+    assert kwargs["request_context"] is context
 
 
 def test_expression_callback_requires_delivery_port():
@@ -99,11 +97,11 @@ def test_groups_no_longer_imports_session_naming():
     assert "bridge.session_naming" not in imported_modules("groups.py")
 
 
-def test_group_new_session_uses_injected_input_flow_service():
+def test_group_new_session_uses_injected_input_flow_service(*, app_settings_builder):
     import bridge.groups as groups
 
     calls = []
-    group_service = make_test_group_service()
+    group_service = make_test_group_service(app_settings=app_settings_builder.build())
     input_flow = SimpleNamespace(start_session_name=lambda *args, **kwargs: calls.append((args, kwargs)))
     db = object()
     session = {"session_id": "session", "character_file": "mira.png"}

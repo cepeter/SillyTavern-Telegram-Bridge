@@ -4,10 +4,12 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 from bridge.job_service import DurableJob, JobService, JobSubmission
 
 
-class JobServiceTests(unittest.TestCase):
+class JobServiceTests(SettingsTestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.calls = []
@@ -416,7 +418,7 @@ def function_chunk(source: str, function_name: str) -> str:
     return source[start:next_function]
 
 
-class JobServiceSourceBoundaryTests(unittest.TestCase):
+class JobServiceSourceBoundaryTests(SettingsTestCase):
     def test_worker_orchestration_backlog_uses_injected_job_service(self):
         source = (Path(__file__).parents[1] / "bridge" / "worker_orchestration.py").read_text(encoding="utf-8")
         chunk = function_chunk(

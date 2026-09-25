@@ -4,6 +4,7 @@ from application_test_setup import (
     make_test_conversation_service,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -17,7 +18,6 @@ import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.callbacks as _m_callbacks
 import bridge.cards as _m_cards
 import bridge.command_routes as _m_command_routes
-import bridge.config as config
 import bridge.database as _m_database
 import bridge.help as _m_help
 import bridge.input_flows as _m_input_flows
@@ -29,18 +29,20 @@ import bridge.sync_core as _m_sync_core
 import bridge.telegram as _m_telegram
 
 
-class PanelLifecycleTests(unittest.TestCase):
+class PanelLifecycleTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
         self.tmp.cleanup()
 
     def test_enum_close_deletes_panel_message(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_telegram.bind_panel_session(self.db, "chat", 104, session["session_id"])
         calls = []
         original_answer = _m_callback_dispatch.answer_callback
@@ -56,7 +58,12 @@ class PanelLifecycleTests(unittest.TestCase):
             "message": {"message_id": 104, "chat": {"id": "chat"}},
         }
         try:
-            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(
+                self.db,
+                "token",
+                callback,
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+            )
         finally:
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
@@ -64,7 +71,9 @@ class PanelLifecycleTests(unittest.TestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 104))
 
     def test_settings_text_route_opens_panel_without_mutating(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         fields = {
             "name": "Test",
             "first_mes": "",
@@ -78,18 +87,18 @@ class PanelLifecycleTests(unittest.TestCase):
         opened = []
         original_card = _m_message_commands.card_fields_from_file
         original_menu = _m_input_flows.send_settings_menu
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_command_routes.send_settings_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/settings temperature 0.7",
-                services=make_test_application_services(),
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -98,7 +107,9 @@ class PanelLifecycleTests(unittest.TestCase):
         settings = _m_memory_curator.get_generation_settings(self.db, "chat", session["session_id"])
         self.assertEqual(settings["temperature"], 0.85)
 
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         original_answer = _m_callback_dispatch.answer_callback
         original_request = _m_callbacks.telegram_request
         original_send = _m_input_flows.send_text
@@ -125,7 +136,10 @@ class PanelLifecycleTests(unittest.TestCase):
                     "message": {"message_id": message_id, "chat": {"id": "chat"}},
                 }
                 _m_callback_dispatch.process_callback(
-                    self.db, "token", callback, services=make_test_application_services()
+                    self.db,
+                    "token",
+                    callback,
+                    services=make_test_application_services(app_settings=self.app_settings_builder.build()),
                 )
                 self.assertEqual(calls[0][0], "deleteMessage", data)
                 self.assertEqual(calls[1][0], "sendText", data)
@@ -136,7 +150,9 @@ class PanelLifecycleTests(unittest.TestCase):
             _m_help.send_text = original_send
 
     def test_settings_panel_displays_current_field_values(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_sync_core.update_generation_settings(
             self.db,
             "chat",
@@ -157,7 +173,9 @@ class PanelLifecycleTests(unittest.TestCase):
                 "chat",
                 self.db,
                 session["session_id"],
-                request_context=make_test_request_context(self.db, session["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -173,7 +191,9 @@ class PanelLifecycleTests(unittest.TestCase):
             self.assertIn(value, text)
 
     def test_settings_invalid_feedback_is_deleted_by_cancel(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_session_naming.set_meta(
             self.db,
             "settings_input:chat",
@@ -201,32 +221,32 @@ class PanelLifecycleTests(unittest.TestCase):
         original_send = _m_message_commands.send_text
         original_request = _m_telegram.telegram_request
         deleted = []
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_input_flows.send_settings_menu = lambda *_args, **_kwargs: None
         _m_message_commands.send_text = lambda *_args, **_kwargs: [91]
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "99",
-                services=make_test_application_services(),
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
             pending = json.loads(_m_session_naming.get_meta(self.db, "settings_input:chat", "{}"))
             self.assertEqual(pending["prompt_message_ids"], [90, 91])
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/cancel",
-                services=make_test_application_services(),
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -242,7 +262,9 @@ class PanelLifecycleTests(unittest.TestCase):
         )
 
     def test_character_upload_uses_closable_guidance_panel(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_telegram.bind_panel_session(self.db, "chat", 105, session["session_id"])
         calls = []
         original_answer = _m_callback_dispatch.answer_callback
@@ -258,7 +280,12 @@ class PanelLifecycleTests(unittest.TestCase):
             "message": {"message_id": 105, "chat": {"id": "chat"}},
         }
         try:
-            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(
+                self.db,
+                "token",
+                callback,
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+            )
         finally:
             _m_callback_dispatch.answer_callback = original_answer
             _m_panel_callback_routes.send_panel_request = original_request
@@ -268,7 +295,9 @@ class PanelLifecycleTests(unittest.TestCase):
         self.assertEqual(buttons[-1][1]["callback_data"], "character:cancel")
 
     def test_character_cancel_deletes_panel_message(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_telegram.bind_panel_session(self.db, "chat", 106, session["session_id"])
         calls = []
         original_answer = _m_callback_dispatch.answer_callback
@@ -284,7 +313,12 @@ class PanelLifecycleTests(unittest.TestCase):
             "message": {"message_id": 106, "chat": {"id": "chat"}},
         }
         try:
-            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(
+                self.db,
+                "token",
+                callback,
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+            )
         finally:
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
@@ -292,7 +326,9 @@ class PanelLifecycleTests(unittest.TestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 106))
 
     def test_owned_panel_rejects_different_user_without_closing_it(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_session_naming.update_session(self.db, "chat", session["session_id"], author_note="keep me")
         _m_telegram.bind_panel_session(self.db, "chat", 107, session["session_id"], "user-1")
         answers = []
@@ -305,14 +341,23 @@ class PanelLifecycleTests(unittest.TestCase):
             "message": {"message_id": 107, "chat": {"id": "chat"}},
         }
         try:
-            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(
+                self.db,
+                "token",
+                callback,
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+            )
         finally:
             _m_callback_dispatch.answer_callback = original_answer
         self.assertEqual(answers, ["This panel belongs to another user"])
         self.assertEqual(
-            _m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)[
-                "author_note"
-            ],
+            _m_memory_curator.load_session(
+                self.db,
+                "chat",
+                session["session_id"],
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
+            )["author_note"],
             "keep me",
         )
         self.assertEqual(_m_database.panel_owner_for_message(self.db, "chat", 107), "user-1")

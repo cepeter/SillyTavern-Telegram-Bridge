@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).parents[1]
 
 
@@ -56,7 +58,7 @@ DATABASE_PUBLIC_FUNCTIONS = (
 )
 
 
-class PersistenceImportBoundaryTests(unittest.TestCase):
+class PersistenceImportBoundaryTests(SettingsTestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -90,9 +92,9 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
         completed = self._run_python(
             "import bridge.config as config\n"
             "import bridge.common as common\n"
-            "assert common.BRIDGE_HOME == config.BRIDGE_HOME\n"
-            "assert common.DB_FILE == config.DB_FILE\n"
-            "assert common.DEFAULT_MODEL == config.DEFAULT_MODEL\n"
+            "assert not hasattr(common, 'BRIDGE_HOME')\n"
+            "assert not hasattr(common, 'DB_FILE')\n"
+            "assert not hasattr(common, 'DEFAULT_MODEL')\n"
             "assert common.DEFAULT_MAX_TOKENS == config.DEFAULT_MAX_TOKENS\n"
             "assert common.PENDING_SETTINGS_TTL_SECONDS == "
             "config.PENDING_SETTINGS_TTL_SECONDS\n"
@@ -137,13 +139,12 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
         self.assertNotIn("from bridge.common import", source)
 
     def test_database_default_path_follows_canonical_config(self):
-        import bridge.config as config
         import bridge.database as database
 
         with tempfile.TemporaryDirectory() as directory:
             expected = Path(directory) / "default.sqlite3"
-            with patch.object(config, "DB_FILE", expected):
-                db = database.db_connect()
+            with patch.object(self.app_settings_builder, "db_file", expected):
+                db = database.db_connect(app_settings=self.app_settings_builder.build())
                 try:
                     self.assertEqual(
                         Path(db.execute("PRAGMA database_list").fetchone()[2]).resolve(),
@@ -153,14 +154,13 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                     db.close()
 
     def test_database_explicit_path_overrides_canonical_default(self):
-        import bridge.config as config
         import bridge.database as database
 
         with tempfile.TemporaryDirectory() as directory:
             configured = Path(directory) / "configured.sqlite3"
             explicit = Path(directory) / "explicit.sqlite3"
-            with patch.object(config, "DB_FILE", configured):
-                db = database.db_connect(explicit)
+            with patch.object(self.app_settings_builder, "db_file", configured):
+                db = database.db_connect(explicit, app_settings=self.app_settings_builder.build())
                 try:
                     self.assertEqual(
                         Path(db.execute("PRAGMA database_list").fetchone()[2]).resolve(),
@@ -170,7 +170,6 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                     db.close()
 
     def test_task_model_default_reads_current_canonical_config(self):
-        import bridge.config as config
         import bridge.database as database
 
         class EmptyMetaDb:
@@ -182,25 +181,21 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                 return Cursor()
 
         session = {"session_id": "s", "model_id": ""}
-        with patch.object(config, "DEFAULT_MODEL", "patched::model"):
+        with patch.object(self.app_settings_builder, "default_model", "patched::model"):
             self.assertEqual(
                 database.task_model_for_session(
-                    EmptyMetaDb(),
-                    "chat",
-                    session,
-                    "summary",
+                    EmptyMetaDb(), "chat", session, "summary", app_settings=self.app_settings_builder.build()
                 ),
                 "patched::model",
             )
 
     def test_database_maintenance_uses_current_canonical_default_path(self):
-        import bridge.config as config
         import bridge.database as database
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "maintenance.sqlite3"
-            with patch.object(config, "DB_FILE", path):
-                db = database.db_connect()
+            with patch.object(self.app_settings_builder, "db_file", path):
+                db = database.db_connect(app_settings=self.app_settings_builder.build())
                 try:
                     db.execute("CREATE TABLE persistence_churn(id INTEGER PRIMARY KEY, payload TEXT)")
                     db.executemany(
@@ -214,7 +209,7 @@ class PersistenceImportBoundaryTests(unittest.TestCase):
                     db.close()
 
                 database.run_database_maintenance(
-                    vacuum_freelist_threshold=1,
+                    vacuum_freelist_threshold=1, app_settings=self.app_settings_builder.build()
                 )
                 self.assertTrue(path.is_file())
 

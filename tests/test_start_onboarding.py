@@ -4,6 +4,7 @@ from application_test_setup import (
     make_test_provider_port,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -13,7 +14,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import bridge.command_routes as _m_command_routes
-import bridge.config as config
 import bridge.memory_curator as _m_memory_curator
 import bridge.telegram as _m_telegram
 
@@ -21,12 +21,14 @@ PLACEHOLDER_MODEL = "provider-one::provider-one/model-a"
 REAL_MODEL = "real-provider::real-model"
 
 
-class StartOnboardingTests(unittest.TestCase):
+class StartOnboardingTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
-        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         self.fields = {
             "name": "Test Character",
             "first_mes": "Hello from the character.",
@@ -55,7 +57,8 @@ class StartOnboardingTests(unittest.TestCase):
         services = make_test_application_services(
             provider=(
                 make_test_provider_port(generate_backend=generate_backend) if generate_backend is not None else None
-            )
+            ),
+            app_settings=self.app_settings_builder.build(),
         )
         return _m_command_routes._handle_basic(
             self.db,
@@ -73,7 +76,9 @@ class StartOnboardingTests(unittest.TestCase):
             "User",
             None,
             services,
-            request_context=make_test_request_context(self.db, active_session["session_id"]),
+            request_context=make_test_request_context(
+                self.db, active_session["session_id"], app_settings=self.app_settings_builder.build()
+            ),
         )
 
     def test_slash_start_rejects_installation_placeholder_before_probe(self):

@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_request_context
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -12,12 +13,14 @@ import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.status_panels as _m_status_panels
 
 
-class SyncUiBehaviorTests(unittest.TestCase):
+class SyncUiBehaviorTests(SettingsTestCase):
     def setUp(self):
         self.db = object()
         self.session = {"session_id": "session"}
         self.service = Mock()
-        self.request_context = make_test_request_context(self.db, "session")
+        self.request_context = make_test_request_context(
+            self.db, "session", app_settings=self.app_settings_builder.build()
+        )
         self.service.status.return_value = SimpleNamespace(
             session_id="session",
             message_count=7,
@@ -390,7 +393,7 @@ class SyncUiBehaviorTests(unittest.TestCase):
         self.service.sync_now.assert_not_called()
 
 
-class SyncUiOwnershipTests(unittest.TestCase):
+class SyncUiOwnershipTests(SettingsTestCase):
     def test_status_panels_owns_sync_status_and_menu(self):
         source = (Path(__file__).parents[1] / "bridge" / "status_panels.py").read_text(encoding="utf-8")
         self.assertIn(

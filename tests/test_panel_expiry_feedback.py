@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_application_services
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -8,26 +9,27 @@ import unittest
 from pathlib import Path
 
 import bridge.callback_dispatch as _m_callback_dispatch
-import bridge.config as config
 import bridge.memory_curator as _m_memory_curator
 import bridge.session_naming as _m_session_naming
 import bridge.telegram as _m_telegram
 
 
-class PanelExpiryFeedbackTests(unittest.TestCase):
+class PanelExpiryFeedbackTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.original_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.original_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.original_db
+        self.app_settings_builder.db_file = self.original_db
         self.tmp.cleanup()
 
     def test_queued_expired_panel_sends_visible_feedback_and_purges_binding(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_session_naming.update_session(self.db, "chat", session["session_id"], author_note="keep me")
         _m_telegram.bind_panel_session(self.db, "chat", 501, session["session_id"])
         self.db.execute(
@@ -51,7 +53,12 @@ class PanelExpiryFeedbackTests(unittest.TestCase):
             "message": {"message_id": 501, "chat": {"id": "chat"}},
         }
         try:
-            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(
+                self.db,
+                "token",
+                callback,
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+            )
         finally:
             (
                 _m_callback_dispatch.send_text,
@@ -65,14 +72,20 @@ class PanelExpiryFeedbackTests(unittest.TestCase):
             self.db.execute("SELECT 1 FROM panel_sessions WHERE chat_id=? AND message_id=?", ("chat", "501")).fetchone()
         )
         self.assertEqual(
-            _m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)[
-                "author_note"
-            ],
+            _m_memory_curator.load_session(
+                self.db,
+                "chat",
+                session["session_id"],
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
+            )["author_note"],
             "keep me",
         )
 
     def test_nonqueued_expired_panel_keeps_callback_toast_behavior(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_telegram.bind_panel_session(self.db, "chat", 502, session["session_id"])
         self.db.execute(
             "UPDATE panel_sessions SET expires_at=? WHERE chat_id=? AND message_id=?", (time.time() - 1, "chat", "502")
@@ -94,7 +107,12 @@ class PanelExpiryFeedbackTests(unittest.TestCase):
             "message": {"message_id": 502, "chat": {"id": "chat"}},
         }
         try:
-            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(
+                self.db,
+                "token",
+                callback,
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+            )
         finally:
             (
                 _m_callback_dispatch.send_text,

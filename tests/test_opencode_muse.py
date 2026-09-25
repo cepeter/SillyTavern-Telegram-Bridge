@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -25,7 +26,7 @@ class _Response:
         return json.dumps(self.payload).encode()
 
 
-class OpenCodeMuseTests(unittest.TestCase):
+class OpenCodeMuseTests(SettingsTestCase):
     def setUp(self):
         self.old_urlopen = _m_provider_transport.strict_urlopen
         self.old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
@@ -46,7 +47,11 @@ class OpenCodeMuseTests(unittest.TestCase):
     def test_startup_allows_keyless_muse_transport(self):
         old_key = os.environ.pop("LLM_API_KEY", None)
         try:
-            _m_main.validate_startup_credential("opencode-free::muse-spark-1.3-contributor-free", self.router)
+            _m_main.validate_startup_credential(
+                "opencode-free::muse-spark-1.3-contributor-free",
+                self.router,
+                app_settings=self.app_settings_builder.build(),
+            )
         finally:
             if old_key is not None:
                 os.environ["LLM_API_KEY"] = old_key
@@ -56,7 +61,9 @@ class OpenCodeMuseTests(unittest.TestCase):
         router = ModelRouter(load_catalog=lambda: {"provider": {"transport": "openai_compatible"}})
         try:
             with self.assertRaisesRegex(RuntimeError, "required provider credential"):
-                _m_main.validate_startup_credential("provider::model", router)
+                _m_main.validate_startup_credential(
+                    "provider::model", router, app_settings=self.app_settings_builder.build()
+                )
         finally:
             if old_key is not None:
                 os.environ["LLM_API_KEY"] = old_key
@@ -64,7 +71,7 @@ class OpenCodeMuseTests(unittest.TestCase):
     def test_muse_uses_responses_and_canonical_keyless_headers(self):
         captured = []
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             captured.append((request, timeout))
             return _Response({"output_text": "OPENCODE_BRIDGE_OK"})
 
@@ -76,6 +83,7 @@ class OpenCodeMuseTests(unittest.TestCase):
             [{"role": "user", "content": "hello"}],
             session_id="telegram:chat:session",
             settings={"max_tokens": 128},
+            app_settings=self.app_settings_builder.build(),
         )
         request, timeout = captured[0]
         body = json.loads(request.data.decode())
@@ -101,7 +109,7 @@ class OpenCodeMuseTests(unittest.TestCase):
     def test_muse_reads_required_responses_sse(self):
         captured = []
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             captured.append((request, timeout))
             response = _Response({})
             response.read = lambda: (
@@ -125,6 +133,7 @@ class OpenCodeMuseTests(unittest.TestCase):
             {"max_tokens": 128},
             {"api_endpoint": "https://opencode.ai/zen/v1"},
             "telegram:chat:session",
+            app_settings=self.app_settings_builder.build(),
         )
         self.assertEqual(result, "streamed ok")
         self.assertEqual(captured[0][1], 240)

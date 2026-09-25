@@ -8,6 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from settings_test_support import SettingsTestCase, make_test_settings
+
 BRIDGE_DIR = Path(__file__).parents[1] / "bridge"
 
 
@@ -22,7 +24,7 @@ def imported_modules(path: Path) -> set[str]:
     return modules
 
 
-class CallbackDispatchBoundaryTests(unittest.TestCase):
+class CallbackDispatchBoundaryTests(SettingsTestCase):
     def test_callbacks_does_not_import_panel_callback_routes(self):
         self.assertNotIn(
             "bridge.panel_callback_routes",
@@ -60,6 +62,7 @@ class CallbackDispatchBoundaryTests(unittest.TestCase):
         external_answer = Mock()
         routed = Mock(return_value=True)
         services = SimpleNamespace(
+            config=make_test_settings(),
             group=object(),
             provider=object(),
             delivery=object(),

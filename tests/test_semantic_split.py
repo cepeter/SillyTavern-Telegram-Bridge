@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -7,7 +8,7 @@ import unittest
 import bridge.telegram as _m_telegram
 
 
-class SemanticTelegramSplitTests(unittest.TestCase):
+class SemanticTelegramSplitTests(SettingsTestCase):
     def test_prefers_paragraph_boundary(self):
         text = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
         chunks = _m_telegram.split_telegram_text(text, limit=24)

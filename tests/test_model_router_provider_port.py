@@ -101,9 +101,9 @@ def test_provider_port_is_pure_and_delegates_exact_call_shape():
     ]
 
 
-def test_provider_catalog_returns_empty_mapping_on_read_failure(tmp_path):
+def test_provider_catalog_returns_empty_mapping_on_read_failure(tmp_path, app_settings_builder):
     module = importlib.import_module("bridge.provider_catalog")
-    assert module.load_provider_catalog(tmp_path / "missing.yaml") == {}
+    assert module.load_provider_catalog(tmp_path / "missing.yaml", app_settings=app_settings_builder.build()) == {}
 
 
 def test_model_router_and_provider_are_required_by_composition():
@@ -121,7 +121,7 @@ def test_startup_composes_model_router_and_provider_port():
     source = (BRIDGE / "main.py").read_text(encoding="utf-8")
     assert "_ModelRouter(" in source
     assert "_ProviderPort(" in source
-    assert "load_catalog=load_provider_catalog" in source
+    assert "load_catalog=_partial(load_provider_catalog, app_settings=config)" in source
 
 
 def test_provider_transport_is_infrastructure_only():

@@ -8,7 +8,6 @@ import io
 import json
 import logging
 import math
-import os
 import re
 import sqlite3
 import subprocess
@@ -24,35 +23,21 @@ from defusedxml import ElementTree as ET
 from bridge.config import (
     RAG_CHUNK_CHARS,
     RAG_CHUNK_OVERLAP,
-    RAG_EMBEDDING_DIMENSIONS,
-    RAG_EMBEDDING_MODEL,
-    RAG_EMBEDDING_URL,
     RAG_MAX_CONTEXT_CHARS,
-    RAG_MAX_EXTRACTED_CHARS,
     RAG_MAX_FILE_BYTES,
-    RAG_MAX_PDF_PAGES,
-    RAG_PDF_PARSE_TIMEOUT_SECONDS,
     RAG_SUPPORTED_SUFFIXES,
 )
-from bridge.database import (
-    get_meta,
-    optimize_database,
-    write_transaction,
-)
-from bridge.network_security import (
-    strict_urlopen,
-    validate_provider_endpoint,
-)
+from bridge.database import get_meta, optimize_database, write_transaction
+from bridge.network_security import strict_urlopen, validate_provider_endpoint
 from bridge.rag_retrieval import (
-    DEFAULT_SEMANTIC_CANDIDATE_LIMIT,
-    MAX_SEMANTIC_CANDIDATE_LIMIT,
     cosine_similarity,
     embedding_signature,
     semantic_candidate_chunk_ids,
 )
+from bridge.settings import AppSettings
 
 
-def extract_pdf_data_bank_text(raw: bytes) -> str:
+def extract_pdf_data_bank_text(raw: bytes, *, app_settings: AppSettings) -> str:
     parser = Path(__file__).with_name("pdf_parser.py")
     try:
         completed = subprocess.run(  # noqa: S603 -- fixed interpreter and parser; document passed on stdin
@@ -63,14 +48,14 @@ def extract_pdf_data_bank_text(raw: bytes) -> str:
                 "--max-bytes",
                 str(RAG_MAX_FILE_BYTES),
                 "--max-pages",
-                str(RAG_MAX_PDF_PAGES),
+                str(app_settings.rag_max_pdf_pages),
                 "--max-chars",
-                str(RAG_MAX_EXTRACTED_CHARS),
+                str(app_settings.rag_max_extracted_chars),
             ],
             input=raw,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            timeout=RAG_PDF_PARSE_TIMEOUT_SECONDS,
+            timeout=app_settings.rag_pdf_parse_timeout_seconds,
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
@@ -86,7 +71,7 @@ def extract_pdf_data_bank_text(raw: bytes) -> str:
     return str(result.get("text") or "")
 
 
-def extract_data_bank_text(filename: str, raw: bytes) -> str:
+def extract_data_bank_text(filename: str, raw: bytes, *, app_settings: AppSettings) -> str:
     suffix = Path(filename).suffix.casefold()
     if suffix not in RAG_SUPPORTED_SUFFIXES:
         raise ValueError("unsupported Data Bank format")
@@ -106,7 +91,7 @@ def extract_data_bank_text(filename: str, raw: bytes) -> str:
         except Exception as exc:
             raise ValueError("invalid DOCX file") from exc
     elif suffix == ".pdf":
-        text = extract_pdf_data_bank_text(raw)
+        text = extract_pdf_data_bank_text(raw, app_settings=app_settings)
     else:
         text = raw.decode("utf-8", errors="replace")
         if suffix in {".html", ".htm", ".xml"}:
@@ -115,8 +100,8 @@ def extract_data_bank_text(filename: str, raw: bytes) -> str:
     text = re.sub(r"\r\n?", "\n", text)
     text = re.sub(r"[ \t]+", " ", text)
     normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip()).strip()
-    if len(normalized) > RAG_MAX_EXTRACTED_CHARS:
-        raise ValueError(f"extracted document text exceeds {RAG_MAX_EXTRACTED_CHARS} characters")
+    if len(normalized) > app_settings.rag_max_extracted_chars:
+        raise ValueError(f"extracted document text exceeds {app_settings.rag_max_extracted_chars} characters")
     return normalized
 
 
@@ -138,9 +123,12 @@ def split_data_bank_chunks(text: str) -> list[str]:
     return chunks
 
 
-def rag_embedding_namespace() -> str:
-    revision = os.environ.get("SILLYTAVERN_RAG_EMBEDDING_REVISION", "1")
-    identity = f"{RAG_EMBEDDING_URL}|{RAG_EMBEDDING_MODEL}|{RAG_EMBEDDING_DIMENSIONS}|{revision}"
+def rag_embedding_namespace(*, app_settings: AppSettings) -> str:
+    revision = app_settings.rag_embedding_revision
+    identity = (
+        f"{app_settings.rag_embedding_url}|{app_settings.rag_embedding_model}|"
+        f"{app_settings.rag_embedding_dimensions}|{revision}"
+    )
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
 
 
@@ -159,12 +147,14 @@ def _embedding_row(namespace: str, vector: list[float]) -> tuple:
     )
 
 
-def rag_embedding_headers() -> dict[str, str]:
-    parsed = urllib.parse.urlparse(RAG_EMBEDDING_URL)
+def rag_embedding_headers(*, app_settings: AppSettings) -> dict[str, str]:
+    parsed = urllib.parse.urlparse(app_settings.rag_embedding_url)
     host = (parsed.hostname or "").casefold()
     loopback = host in {"localhost", "127.0.0.1", "::1"}
-    validate_provider_endpoint(RAG_EMBEDDING_URL, "SILLYTAVERN_RAG_ALLOWED_HOSTS")
-    key = os.environ.get("SILLYTAVERN_RAG_EMBEDDING_API_KEY", "")
+    validate_provider_endpoint(
+        app_settings.rag_embedding_url, "SILLYTAVERN_RAG_ALLOWED_HOSTS", environ=app_settings.environ
+    )
+    key = app_settings.environ.get("SILLYTAVERN_RAG_EMBEDDING_API_KEY", "")
     if not key and not loopback:
         raise RuntimeError("dedicated SILLYTAVERN_RAG_EMBEDDING_API_KEY is required for external embedding endpoints")
     headers = {"Content-Type": "application/json"}
@@ -173,19 +163,26 @@ def rag_embedding_headers() -> dict[str, str]:
     return headers
 
 
-def _post_embedding_request(payload: dict, timeout: float):
+def _post_embedding_request(payload: dict, timeout: float, *, app_settings: AppSettings):
     request = urllib.request.Request(  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
-        RAG_EMBEDDING_URL, data=json.dumps(payload).encode("utf-8"), headers=rag_embedding_headers(), method="POST"
+        app_settings.rag_embedding_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=rag_embedding_headers(app_settings=app_settings),
+        method="POST",
     )
-    with strict_urlopen(request, timeout=timeout, allowed_env="SILLYTAVERN_RAG_ALLOWED_HOSTS") as response:
+    with strict_urlopen(
+        request, timeout=timeout, allowed_env="SILLYTAVERN_RAG_ALLOWED_HOSTS", environ=app_settings.environ
+    ) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
-def embed_rag_text(text: str) -> list[float] | None:
+def embed_rag_text(text: str, *, app_settings: AppSettings) -> list[float] | None:
     try:
-        result = _post_embedding_request({"model": RAG_EMBEDDING_MODEL, "input": text[:6000]}, 60)
+        result = _post_embedding_request(
+            {"model": app_settings.rag_embedding_model, "input": text[:6000]}, 60, app_settings=app_settings
+        )
         vector = (result.get("data") or [{}])[0].get("embedding") or []
-        if len(vector) != RAG_EMBEDDING_DIMENSIONS:
+        if len(vector) != app_settings.rag_embedding_dimensions:
             logging.warning("Unexpected RAG embedding dimensions: %s", len(vector))
             return None
         return [float(value) for value in vector]
@@ -194,36 +191,37 @@ def embed_rag_text(text: str) -> list[float] | None:
         return None
 
 
-def embed_rag_batch(texts: list[str]) -> list[list[float] | None]:
+def embed_rag_batch(texts: list[str], *, app_settings: AppSettings) -> list[list[float] | None]:
     if not texts:
         return []
     try:
-        result = _post_embedding_request({"model": RAG_EMBEDDING_MODEL, "input": [text[:6000] for text in texts]}, 120)
+        result = _post_embedding_request(
+            {"model": app_settings.rag_embedding_model, "input": [text[:6000] for text in texts]},
+            120,
+            app_settings=app_settings,
+        )
         vectors = [None] * len(texts)
         for item in result.get("data") or []:
             index = int(item.get("index", 0))
             vector = item.get("embedding") or []
-            if 0 <= index < len(vectors) and len(vector) == RAG_EMBEDDING_DIMENSIONS:
+            if 0 <= index < len(vectors) and len(vector) == app_settings.rag_embedding_dimensions:
                 vectors[index] = [float(value) for value in vector]
         return vectors
     except Exception:
         logging.warning("Batch RAG embedding unavailable; falling back to single requests", exc_info=True)
-        return [embed_rag_text(text) for text in texts]
+        return [embed_rag_text(text, app_settings=app_settings) for text in texts]
 
 
-def rag_semantic_candidate_limit() -> int:
-    raw = os.environ.get("SILLYTAVERN_RAG_SEMANTIC_CANDIDATES", str(DEFAULT_SEMANTIC_CANDIDATE_LIMIT))
-    try:
-        value = int(raw)
-    except ValueError:
-        value = DEFAULT_SEMANTIC_CANDIDATE_LIMIT
-    return max(64, min(value, MAX_SEMANTIC_CANDIDATE_LIMIT))
+def rag_semantic_candidate_limit(*, app_settings: AppSettings) -> int:
+    return app_settings.rag_semantic_candidates
 
 
-def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, raw: bytes) -> tuple[str, int]:
+def add_data_bank_document(
+    db: sqlite3.Connection, chat_id: str, filename: str, raw: bytes, *, app_settings: AppSettings
+) -> tuple[str, int]:
     if len(raw) > RAG_MAX_FILE_BYTES:
         raise ValueError("Data Bank file exceeds 10 MB")
-    text = extract_data_bank_text(filename, raw)
+    text = extract_data_bank_text(filename, raw, app_settings=app_settings)
     if not text:
         raise ValueError("Data Bank file contains no readable text")
     document_id = hashlib.sha256(raw).hexdigest()
@@ -235,7 +233,7 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
         return "duplicate", int(existing[0])
 
     chunks = split_data_bank_chunks(text)
-    namespace = rag_embedding_namespace()
+    namespace = rag_embedding_namespace(app_settings=app_settings)
     cache_keys = [namespace + ":content:" + hashlib.sha256(content.encode("utf-8")).hexdigest() for content in chunks]
     vector_cache = {}
     pending_cache_rows = []
@@ -259,7 +257,7 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
             selected = missing[batch_start : batch_start + 32]
             # Embedding may involve external model/network work. Do it before
             # opening the short SQLite write transaction below.
-            vectors = embed_rag_batch([item[1] for item in selected])
+            vectors = embed_rag_batch([item[1] for item in selected], app_settings=app_settings)
             for (index, _), vector in zip(selected, vectors, strict=False):
                 if vector:
                     cache_key = cache_keys[index]
@@ -340,19 +338,23 @@ def add_data_bank_document(db: sqlite3.Connection, chat_id: str, filename: str, 
     return ("versioned" if version_number > 1 else "added"), len(chunks)
 
 
-def cached_rag_embedding(db: sqlite3.Connection, text: str) -> list[float] | None:
-    cache_key = rag_embedding_namespace() + ":query:" + hashlib.sha256(text[:6000].encode("utf-8")).hexdigest()
+def cached_rag_embedding(db: sqlite3.Connection, text: str, *, app_settings: AppSettings) -> list[float] | None:
+    cache_key = (
+        rag_embedding_namespace(app_settings=app_settings)
+        + ":query:"
+        + hashlib.sha256(text[:6000].encode("utf-8")).hexdigest()
+    )
     row = db.execute(
         "SELECT vector_json,vector_norm FROM rag_embedding_cache WHERE cache_key=?", (cache_key,)
     ).fetchone()
     if row:
         try:
             vector = json.loads(row[0])
-            if len(vector) == RAG_EMBEDDING_DIMENSIONS:
+            if len(vector) == app_settings.rag_embedding_dimensions:
                 return [float(value) for value in vector]
         except (TypeError, ValueError, json.JSONDecodeError):
             pass
-    vector = embed_rag_text(text)
+    vector = embed_rag_text(text, app_settings=app_settings)
     if vector:
         db.execute(
             (
@@ -365,7 +367,9 @@ def cached_rag_embedding(db: sqlite3.Connection, text: str) -> list[float] | Non
     return vector
 
 
-def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: int = 5) -> list[tuple[str, str, str]]:
+def retrieve_data_bank(
+    db: sqlite3.Connection, chat_id: str, query: str, limit: int = 5, *, app_settings: AppSettings
+) -> list[tuple[str, str, str]]:
     terms = re.findall(r"[^\W_]{2,}", query.casefold(), flags=re.UNICODE)[:12]
     if not terms:
         return []
@@ -385,17 +389,17 @@ def retrieve_data_bank(db: sqlite3.Connection, chat_id: str, query: str, limit: 
     for rank, (chunk_id, filename, content, document_id, _score) in enumerate(lexical_rows):
         lexical_score = 1.0 / (1.0 + rank)
         candidates[int(chunk_id)] = [str(filename), str(content), str(document_id), 0.35 * lexical_score]
-    query_vector = cached_rag_embedding(db, query)
+    query_vector = cached_rag_embedding(db, query, app_settings=app_settings)
     if query_vector:
         query_norm = embedding_norm(query_vector)
-        namespace = rag_embedding_namespace()
+        namespace = rag_embedding_namespace(app_settings=app_settings)
         semantic_ids = semantic_candidate_chunk_ids(
             db,
             chat_id,
             namespace,
             [int(row[0]) for row in lexical_rows],
             query_signature=embedding_signature(query_vector),
-            candidate_limit=rag_semantic_candidate_limit(),
+            candidate_limit=rag_semantic_candidate_limit(app_settings=app_settings),
         )
         if semantic_ids:
             placeholders = ",".join("?" for _ in semantic_ids)
@@ -428,10 +432,12 @@ def rag_mode(db: sqlite3.Connection, chat_id: str) -> str:
     return get_meta(db, f"rag_mode:{chat_id}", "on")
 
 
-def rag_retrieval_bundle(db: sqlite3.Connection, chat_id: str, query: str, limit: int = 5) -> dict[str, object]:
+def rag_retrieval_bundle(
+    db: sqlite3.Connection, chat_id: str, query: str, limit: int = 5, *, app_settings: AppSettings
+) -> dict[str, object]:
     if rag_mode(db, chat_id) != "on":
         return {"results": [], "context": "", "sources": []}
-    results = retrieve_data_bank(db, chat_id, query, limit=limit)
+    results = retrieve_data_bank(db, chat_id, query, limit=limit, app_settings=app_settings)
     context_parts = []
     sources = []
     remaining = RAG_MAX_CONTEXT_CHARS
@@ -450,15 +456,25 @@ def rag_retrieval_bundle(db: sqlite3.Connection, chat_id: str, query: str, limit
 
 
 def rag_context_for_prompt(
-    db: sqlite3.Connection, chat_id: str, query: str, bundle: dict[str, object] | None = None
+    db: sqlite3.Connection,
+    chat_id: str,
+    query: str,
+    bundle: dict[str, object] | None = None,
+    *,
+    app_settings: AppSettings,
 ) -> str:
-    return str((bundle or rag_retrieval_bundle(db, chat_id, query)).get("context") or "")
+    return str((bundle or rag_retrieval_bundle(db, chat_id, query, app_settings=app_settings)).get("context") or "")
 
 
 def rag_citation_footer(
-    db: sqlite3.Connection, chat_id: str, query: str, bundle: dict[str, object] | None = None
+    db: sqlite3.Connection,
+    chat_id: str,
+    query: str,
+    bundle: dict[str, object] | None = None,
+    *,
+    app_settings: AppSettings,
 ) -> str:
-    sources = list((bundle or rag_retrieval_bundle(db, chat_id, query)).get("sources") or [])
+    sources = list((bundle or rag_retrieval_bundle(db, chat_id, query, app_settings=app_settings)).get("sources") or [])
     return "\n\nSources: " + ", ".join(f"[{name}]" for name in sources) if sources else ""
 
 
@@ -529,7 +545,7 @@ def delete_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: s
     return len(documents)
 
 
-def rag_embedding_coverage(db: sqlite3.Connection, chat_id: str) -> tuple[int, int]:
+def rag_embedding_coverage(db: sqlite3.Connection, chat_id: str, *, app_settings: AppSettings) -> tuple[int, int]:
     total = int(
         db.execute(
             "SELECT COALESCE(SUM(chunk_count),0) FROM data_bank_documents WHERE chat_id=? AND active=1",
@@ -542,14 +558,16 @@ def rag_embedding_coverage(db: sqlite3.Connection, chat_id: str) -> tuple[int, i
             "JOIN data_bank_chunks c ON c.chunk_id=e.chunk_id "
             "JOIN data_bank_documents d ON d.chat_id=c.chat_id AND d.document_id=c.document_id "
             "WHERE c.chat_id=? AND d.active=1 AND e.embedding_namespace=?",
-            (chat_id, rag_embedding_namespace()),
+            (chat_id, rag_embedding_namespace(app_settings=app_settings)),
         ).fetchone()[0]
     )
     return total, indexed
 
 
-def reindex_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: str | None = None) -> tuple[int, int]:
-    namespace = rag_embedding_namespace()
+def reindex_data_bank_documents(
+    db: sqlite3.Connection, chat_id: str, filename: str | None = None, *, app_settings: AppSettings
+) -> tuple[int, int]:
+    namespace = rag_embedding_namespace(app_settings=app_settings)
     params = [chat_id]
     query = "SELECT document_id,filename FROM data_bank_documents WHERE chat_id=? AND active=1"
     if filename:
@@ -573,7 +591,7 @@ def reindex_data_bank_documents(db: sqlite3.Connection, chat_id: str, filename: 
         for offset in range(0, len(missing), 32):
             batch = missing[offset : offset + 32]
             # Keep the potentially slow embedding call outside the write lock.
-            vectors = embed_rag_batch([content for _, content in batch])
+            vectors = embed_rag_batch([content for _, content in batch], app_settings=app_settings)
             rows_to_store = [
                 (chunk_id, *_embedding_row(namespace, vector))
                 for (chunk_id, _content), vector in zip(batch, vectors, strict=False)

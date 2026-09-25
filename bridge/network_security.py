@@ -117,9 +117,14 @@ class EndpointPolicy:
             raise EndpointPolicyError(f"non-public destination requires explicit {self.private_label}: {host}")
 
 
-def validate_provider_endpoint(endpoint: str, allowed_env: str = "SILLYTAVERN_PROVIDER_ALLOWED_HOSTS") -> None:
+def validate_provider_endpoint(
+    endpoint: str,
+    allowed_env: str = "SILLYTAVERN_PROVIDER_ALLOWED_HOSTS",
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> None:
     """Validate URL syntax and explicit host trust without a DNS side effect."""
-    EndpointPolicy.from_environment(allowed_env).validate(endpoint)
+    EndpointPolicy.from_environment(allowed_env, environ=environ).validate(endpoint)
 
 
 def resolve_endpoint_addresses(host: str, port: int, policy: EndpointPolicy) -> list[tuple[Any, ...]]:
@@ -247,8 +252,9 @@ def strict_urlopen(
     allowed_env: str = "SILLYTAVERN_PROVIDER_ALLOWED_HOSTS",
     *,
     policy: EndpointPolicy | None = None,
+    environ: Mapping[str, str] | None = None,
 ) -> Any:
-    active_policy = policy if policy is not None else EndpointPolicy.from_environment(allowed_env)
+    active_policy = policy if policy is not None else EndpointPolicy.from_environment(allowed_env, environ=environ)
     active_policy.validate(request.full_url)
     if request.has_proxy() or getattr(request, "_tunnel_host", None):
         raise EndpointPolicyError("implicit or request-level proxy routing is forbidden")

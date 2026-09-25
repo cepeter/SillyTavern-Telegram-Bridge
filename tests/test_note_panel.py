@@ -5,6 +5,7 @@ from application_test_setup import (
     make_test_provider_port,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -18,7 +19,6 @@ import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
-import bridge.config as config
 import bridge.database as _m_database
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
@@ -28,11 +28,11 @@ import bridge.session_naming as _m_session_naming
 import bridge.telegram as _m_telegram
 
 
-class NotePanelTests(unittest.TestCase):
+class NotePanelTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
@@ -58,7 +58,10 @@ class NotePanelTests(unittest.TestCase):
         )
         try:
             _m_panel_callback_routes.send_note_menu(
-                "token", "chat", "existing note", request_context=make_test_request_context(self.db)
+                "token",
+                "chat",
+                "existing note",
+                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_commands.send_panel_request = original_request
@@ -71,37 +74,45 @@ class NotePanelTests(unittest.TestCase):
         self.assertIn("Author's Note — on", calls[0][1]["text"])
 
     def test_note_text_command_opens_panel_without_mutating(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         fields = self._fields()
         opened = []
         original_card = _m_message_commands.card_fields_from_file
         original_menu = _m_command_routes.send_note_menu
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_command_routes.send_note_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/note new text",
-                services=make_test_application_services(),
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_note_menu = original_menu
         self.assertEqual(opened, [True])
         self.assertEqual(
-            _m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)[
-                "author_note"
-            ],
+            _m_memory_curator.load_session(
+                self.db,
+                "chat",
+                session["session_id"],
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
+            )["author_note"],
             "",
         )
 
     def test_note_user_input_updates_session_and_expires_state(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         fields = self._fields()
         _m_session_naming.set_meta(
             self.db,
@@ -113,37 +124,45 @@ class NotePanelTests(unittest.TestCase):
         original_card = _m_message_commands.card_fields_from_file
         original_menu = _m_input_flows.send_note_menu
         original_send = _m_input_flows.send_text
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_input_flows.send_note_menu = lambda *_args, **_kwargs: None
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         original_request = _m_telegram.telegram_request
         deleted = []
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "remember this",
                 operation_id=701,
-                services=make_test_application_services(),
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_input_flows.send_note_menu = original_menu
             _m_input_flows.send_text = original_send
             _m_telegram.telegram_request = original_request
-        loaded = _m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)
+        loaded = _m_memory_curator.load_session(
+            self.db,
+            "chat",
+            session["session_id"],
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
+        )
         self.assertEqual(loaded["author_note"], "remember this")
         self.assertEqual(_m_session_naming.get_meta(self.db, "note_input:chat", ""), "")
         self.assertEqual(_m_message_commands.operation_phase(self.db, 701), "applied")
         self.assertEqual(deleted, [("deleteMessage", {"chat_id": "chat", "message_id": 90})])
 
     def test_note_cancel_deletes_text_prompt(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         fields = self._fields()
         _m_session_naming.set_meta(
             self.db,
@@ -157,20 +176,20 @@ class NotePanelTests(unittest.TestCase):
         original_send = _m_input_flows.send_text
         original_request = _m_telegram.telegram_request
         deleted = []
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_input_flows.send_note_menu = lambda *_args, **_kwargs: None
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/cancel",
-                services=make_test_application_services(),
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -181,7 +200,9 @@ class NotePanelTests(unittest.TestCase):
         self.assertEqual(_m_session_naming.get_meta(self.db, "note_input:chat", ""), "")
 
     def test_note_user_input_closes_original_panel(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_telegram.bind_panel_session(self.db, "chat", 78, session["session_id"])
         calls = []
         original_answer = _m_callback_dispatch.answer_callback
@@ -199,7 +220,12 @@ class NotePanelTests(unittest.TestCase):
             "message": {"message_id": 78, "chat": {"id": "chat"}},
         }
         try:
-            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(
+                self.db,
+                "token",
+                callback,
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+            )
         finally:
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
@@ -212,7 +238,9 @@ class NotePanelTests(unittest.TestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 78))
 
     def test_note_cancel_closes_previous_panel(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_telegram.bind_panel_session(self.db, "chat", 77, session["session_id"])
         calls = []
         original_answer = _m_callback_dispatch.answer_callback
@@ -226,7 +254,12 @@ class NotePanelTests(unittest.TestCase):
             "message": {"message_id": 77, "chat": {"id": "chat"}},
         }
         try:
-            _m_callback_dispatch.process_callback(self.db, "token", callback, services=make_test_application_services())
+            _m_callback_dispatch.process_callback(
+                self.db,
+                "token",
+                callback,
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+            )
         finally:
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
@@ -235,7 +268,9 @@ class NotePanelTests(unittest.TestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 77))
 
     def test_note_close_uses_valid_marker_when_delete_is_rejected(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_telegram.bind_panel_session(self.db, "chat", 79, session["session_id"])
         calls = []
         original_request = _m_callbacks.telegram_request
@@ -258,19 +293,21 @@ class NotePanelTests(unittest.TestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 79))
 
     def test_removed_authornote_alias_does_not_generate(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         fields = self._fields()
         sent = []
         original_card = _m_message_commands.card_fields_from_file
         original_send = _m_command_routes.send_text
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/authornote old text",
@@ -279,7 +316,8 @@ class NotePanelTests(unittest.TestCase):
                         generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(
                             AssertionError("removed alias must not generate")
                         )
-                    )
+                    ),
+                    app_settings=self.app_settings_builder.build(),
                 ),
             )
         finally:
@@ -287,9 +325,13 @@ class NotePanelTests(unittest.TestCase):
             _m_command_routes.send_text = original_send
         self.assertEqual(sent, ["Unknown or removed command. Use /help to see available commands."])
         self.assertEqual(
-            _m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)[
-                "author_note"
-            ],
+            _m_memory_curator.load_session(
+                self.db,
+                "chat",
+                session["session_id"],
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
+            )["author_note"],
             "",
         )
 

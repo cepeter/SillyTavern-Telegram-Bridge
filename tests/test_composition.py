@@ -10,6 +10,10 @@ from application_test_setup import (
     make_test_provider_port,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase, make_test_settings
+
+from bridge.config_values import ConfigurationError
+from bridge.settings import validate_app_settings
 
 ensure_application_extensions()
 
@@ -25,7 +29,6 @@ from unittest.mock import Mock, patch
 
 import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.command_routes as _m_command_routes
-import bridge.config as bridge_config
 import bridge.help as _m_help
 import bridge.main as _m_main
 import bridge.media as _m_media
@@ -35,15 +38,7 @@ import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.telegram as _m_telegram
 import bridge.update_callback_routing as _m_update_callback_routing
 import bridge.worker_orchestration as _m_workers
-from bridge.composition import (
-    BackgroundRuntime,
-    BridgeConfig,
-    BridgeServices,
-    TelegramRuntime,
-    build_bridge_services,
-    load_bridge_config,
-    validate_bridge_config,
-)
+from bridge.composition import BackgroundRuntime, BridgeServices, TelegramRuntime, build_bridge_services
 from bridge.group_director_service import GroupDirectorService
 from bridge.job_service import DurableJob, JobService, JobSubmission
 from bridge.memory_service import MemoryService
@@ -51,7 +46,7 @@ from bridge.persona_service import PersonaService
 from bridge.sync_service import SyncService
 
 
-class CompositionConfigTests(unittest.TestCase):
+class CompositionConfigTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -77,7 +72,7 @@ class CompositionConfigTests(unittest.TestCase):
         environ = self._environ()
         before = dict(environ)
 
-        config = load_bridge_config(
+        config = make_test_settings(
             environ,
             character_dir=self.character_dir,
             db_file=self.db_file,
@@ -93,7 +88,7 @@ class CompositionConfigTests(unittest.TestCase):
         self.assertEqual(config.allowed_users, frozenset({"100", "200"}))
 
     def test_config_and_services_are_immutable_and_hide_credentials(self):
-        config = load_bridge_config(
+        config = make_test_settings(
             self._environ(),
             character_dir=self.character_dir,
             db_file=self.db_file,
@@ -131,9 +126,9 @@ class CompositionConfigTests(unittest.TestCase):
             db_factory=lambda: sqlite3.connect(":memory:"),
             telegram=telegram,
             background=background,
-            group=make_test_group_service(),
+            group=make_test_group_service(app_settings=self.app_settings_builder.build()),
             group_director=group_director,
-            input_flow=make_test_input_flow_service(),
+            input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
@@ -141,7 +136,7 @@ class CompositionConfigTests(unittest.TestCase):
             persona=persona,
             sync=sync,
             jobs=jobs,
-            conversation=make_test_conversation_service(),
+            conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
         )
 
         self.assertIs(services.config, config)
@@ -175,13 +170,13 @@ class CompositionConfigTests(unittest.TestCase):
             with self.subTest(key=key):
                 environ = dict(base)
                 environ[key] = ""
-                config = load_bridge_config(
+                config = make_test_settings(
                     environ,
                     character_dir=self.character_dir,
                     db_file=self.db_file,
                 )
-                with self.assertRaisesRegex(ValueError, message):
-                    validate_bridge_config(config)
+                with self.assertRaisesRegex(ConfigurationError, message):
+                    validate_app_settings(config)
 
     def test_missing_configuration_errors_do_not_claim_values_come_from_dotenv(self):
         base = self._environ()
@@ -194,14 +189,14 @@ class CompositionConfigTests(unittest.TestCase):
             with self.subTest(key=key):
                 environ = dict(base)
                 environ[key] = ""
-                config = load_bridge_config(
+                config = make_test_settings(
                     environ,
                     character_dir=self.character_dir,
                     db_file=self.db_file,
                 )
 
-                with self.assertRaises(ValueError) as raised:
-                    validate_bridge_config(config)
+                with self.assertRaises(ConfigurationError) as raised:
+                    validate_app_settings(config)
 
                 message = str(raised.exception)
                 self.assertNotIn(".env", message)
@@ -210,34 +205,34 @@ class CompositionConfigTests(unittest.TestCase):
     def test_validate_bridge_config_rejects_empty_allowlist(self):
         environ = self._environ()
         environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = ""
-        config = load_bridge_config(
+        config = make_test_settings(
             environ,
             character_dir=self.character_dir,
             db_file=self.db_file,
         )
 
         with self.assertRaisesRegex(
-            ValueError,
+            ConfigurationError,
             "SILLYTAVERN_TELEGRAM_ALLOWED_USERS",
         ):
-            validate_bridge_config(config)
+            validate_app_settings(config)
 
     def test_validate_bridge_config_rejects_non_numeric_allowlist_member(self):
         environ = self._environ()
         environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = "100, invalid-user, 200,100"
-        config = load_bridge_config(
+        config = make_test_settings(
             environ,
             character_dir=self.character_dir,
             db_file=self.db_file,
         )
 
-        with self.assertRaisesRegex(ValueError, "invalid-user"):
-            validate_bridge_config(config)
+        with self.assertRaisesRegex(ConfigurationError, "numeric Telegram user IDs"):
+            validate_app_settings(config)
 
     def test_validate_bridge_config_accepts_trimmed_duplicate_numeric_ids(self):
         environ = self._environ()
         environ["SILLYTAVERN_TELEGRAM_ALLOWED_USERS"] = " 100,200,100 ,, "
-        config = load_bridge_config(
+        config = make_test_settings(
             environ,
             character_dir=self.character_dir,
             db_file=self.db_file,
@@ -247,53 +242,53 @@ class CompositionConfigTests(unittest.TestCase):
             config.allowed_users,
             frozenset({"100", "200"}),
         )
-        self.assertIsNone(validate_bridge_config(config))
+        self.assertIsNone(validate_app_settings(config))
 
     def test_validate_bridge_config_rejects_missing_card(self):
         environ = self._environ()
         environ["SILLYTAVERN_DEFAULT_CHARACTER"] = "missing.png"
-        config = load_bridge_config(
+        config = make_test_settings(
             environ,
             character_dir=self.character_dir,
             db_file=self.db_file,
         )
-        with self.assertRaisesRegex(ValueError, "does not exist"):
-            validate_bridge_config(config)
+        with self.assertRaisesRegex(ConfigurationError, "does not exist"):
+            validate_app_settings(config)
 
     def test_validate_bridge_config_accepts_valid_config(self):
-        config = load_bridge_config(
+        config = make_test_settings(
             self._environ(),
             character_dir=self.character_dir,
             db_file=self.db_file,
         )
-        self.assertIsNone(validate_bridge_config(config))
+        self.assertIsNone(validate_app_settings(config))
 
 
-class DatabaseFactoryPathTests(unittest.TestCase):
+class DatabaseFactoryPathTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.old_db_file = bridge_config.DB_FILE
+        self.old_db_file = self.app_settings_builder.db_file
 
     def tearDown(self):
-        bridge_config.DB_FILE = self.old_db_file
+        self.app_settings_builder.db_file = self.old_db_file
         self.tmp.cleanup()
 
     def test_explicit_database_paths_initialize_independently(self):
         default_path = self.root / "default.sqlite3"
         explicit_a = self.root / "a.sqlite3"
         explicit_b = self.root / "b.sqlite3"
-        bridge_config.DB_FILE = default_path
+        self.app_settings_builder.db_file = default_path
 
-        default_db = _m_memory_curator.db_connect()
+        default_db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         default_db.close()
 
-        a = _m_memory_curator.db_connect(explicit_a)
+        a = _m_memory_curator.db_connect(explicit_a, app_settings=self.app_settings_builder.build())
         a.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('which','a')")
         a.commit()
         a.close()
 
-        b = _m_memory_curator.db_connect(explicit_b)
+        b = _m_memory_curator.db_connect(explicit_b, app_settings=self.app_settings_builder.build())
         self.assertIsNone(b.execute("SELECT value FROM meta WHERE key='which'").fetchone())
         b.close()
 
@@ -301,18 +296,18 @@ class DatabaseFactoryPathTests(unittest.TestCase):
         self.assertTrue(explicit_b.is_file())
 
     def test_explicit_factory_does_not_mutate_global_db_file(self):
-        original = bridge_config.DB_FILE
+        original = self.app_settings_builder.db_file
         explicit = self.root / "factory.sqlite3"
-        db = _m_memory_curator.db_connect(explicit)
+        db = _m_memory_curator.db_connect(explicit, app_settings=self.app_settings_builder.build())
         db.close()
-        self.assertEqual(bridge_config.DB_FILE, original)
+        self.assertEqual(self.app_settings_builder.db_file, original)
 
 
-class WorkerInjectionTests(unittest.TestCase):
+class WorkerInjectionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.db_path = Path(self.tmp.name) / "workers.sqlite3"
-        self.db = _m_memory_curator.db_connect(self.db_path)
+        self.db = _m_memory_curator.db_connect(self.db_path, app_settings=self.app_settings_builder.build())
         self.db.close()
         self.opened = 0
         self.sent = []
@@ -322,7 +317,7 @@ class WorkerInjectionTests(unittest.TestCase):
         self.persona_service = object()
         self.sync_service = object()
 
-        config = BridgeConfig(
+        config = make_test_settings(
             bot_token="injected-token",
             api_key="injected-key",
             default_model="injected::model",
@@ -330,6 +325,7 @@ class WorkerInjectionTests(unittest.TestCase):
             card_file=Path(self.tmp.name) / "mira.png",
             db_file=self.db_path,
             allowed_users=frozenset({"100"}),
+            base=self.app_settings_builder.build(),
         )
         self.services = BridgeServices(
             config=config,
@@ -349,12 +345,12 @@ class WorkerInjectionTests(unittest.TestCase):
             memory=self.memory_service,
             persona=self.persona_service,
             sync=self.sync_service,
-            conversation=make_test_conversation_service(),
-            group=make_test_group_service(),
+            conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
+            group=make_test_group_service(app_settings=self.app_settings_builder.build()),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
-            input_flow=make_test_input_flow_service(),
+            input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
         )
 
     def tearDown(self):
@@ -362,7 +358,7 @@ class WorkerInjectionTests(unittest.TestCase):
 
     def _db_factory(self):
         self.opened += 1
-        return _m_memory_curator.db_connect(self.db_path)
+        return _m_memory_curator.db_connect(self.db_path, app_settings=self.app_settings_builder.build())
 
     def test_all_worker_signatures_receive_services_not_startup_bundle(self):
         expectations = {
@@ -478,10 +474,11 @@ class WorkerInjectionTests(unittest.TestCase):
             self.services,
             input_flow=make_test_input_flow_service(
                 handle_pending_backend=lambda *_args, **kwargs: captured.update(kwargs) or True,
+                app_settings=self.app_settings_builder.build(),
             ),
         )
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 db,
                 "injected-token",
                 "injected-key",
@@ -509,9 +506,7 @@ class WorkerInjectionTests(unittest.TestCase):
         db = self._db_factory()
         try:
             session = _m_telegram.ensure_session(
-                db,
-                "chat",
-                "injected::model",
+                db, "chat", "injected::model", app_settings=self.app_settings_builder.build()
             )
             with patch.object(
                 _m_command_routes,
@@ -532,7 +527,9 @@ class WorkerInjectionTests(unittest.TestCase):
                     session["model_id"],
                     session.get("persona_id") or "",
                     "User",
-                    request_context=make_test_request_context(db, session["session_id"]),
+                    request_context=make_test_request_context(
+                        db, session["session_id"], app_settings=self.app_settings_builder.build()
+                    ),
                     services=self.services,
                 )
         finally:
@@ -576,7 +573,7 @@ class WorkerInjectionTests(unittest.TestCase):
     def test_edit_worker_propagates_injected_memory_service(self):
         captured = {}
 
-        def fake_edit(*args, **kwargs):
+        def fake_edit(*args, app_settings=None, **kwargs):
             captured.update(kwargs)
 
         with patch.object(
@@ -645,7 +642,9 @@ class WorkerInjectionTests(unittest.TestCase):
                     "Mira",
                     None,
                     self.services,
-                    request_context=make_test_request_context(db, "active-session"),
+                    request_context=make_test_request_context(
+                        db, "active-session", app_settings=self.app_settings_builder.build()
+                    ),
                 )
         finally:
             db.close()
@@ -698,7 +697,7 @@ class WorkerInjectionTests(unittest.TestCase):
             patch.object(
                 _m_workers,
                 "process_image_message",
-                side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+                side_effect=lambda *_args, app_settings=None, **kwargs: captured.update(kwargs),
             ),
         ):
             _m_workers.process_image_job(
@@ -721,7 +720,7 @@ class WorkerInjectionTests(unittest.TestCase):
         with patch.object(
             _m_help,
             "import_telegram_document",
-            side_effect=lambda *_args, **kwargs: captured.update(kwargs),
+            side_effect=lambda *_args, app_settings=None, **kwargs: captured.update(kwargs),
         ):
             _m_help.process_document_job(
                 self.services,
@@ -787,13 +786,13 @@ class WorkerInjectionTests(unittest.TestCase):
         self.assertEqual(self.global_sent, [])
 
 
-class RecoveryCompositionTests(unittest.TestCase):
+class RecoveryCompositionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "recovery.sqlite3"
-        self.db = _m_memory_curator.db_connect(self.path)
+        self.db = _m_memory_curator.db_connect(self.path, app_settings=self.app_settings_builder.build())
         self.submitted = []
-        config = BridgeConfig(
+        config = make_test_settings(
             bot_token="token",
             api_key="key",
             default_model="current::model",
@@ -801,6 +800,7 @@ class RecoveryCompositionTests(unittest.TestCase):
             card_file=Path(self.tmp.name) / "mira.png",
             db_file=self.path,
             allowed_users=frozenset(),
+            base=self.app_settings_builder.build(),
         )
         self.background = BackgroundRuntime(
             submit_chat=self._submit,
@@ -809,7 +809,7 @@ class RecoveryCompositionTests(unittest.TestCase):
         )
         self.services = BridgeServices(
             config=config,
-            db_factory=lambda: _m_memory_curator.db_connect(self.path),
+            db_factory=lambda: _m_memory_curator.db_connect(self.path, app_settings=self.app_settings_builder.build()),
             telegram=TelegramRuntime(
                 request=lambda *_args, **_kwargs: {},
                 send_text=lambda *_args, **_kwargs: None,
@@ -821,12 +821,12 @@ class RecoveryCompositionTests(unittest.TestCase):
             memory=object(),
             persona=object(),
             sync=object(),
-            conversation=make_test_conversation_service(),
-            group=make_test_group_service(),
+            conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
+            group=make_test_group_service(app_settings=self.app_settings_builder.build()),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
-            input_flow=make_test_input_flow_service(),
+            input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
         )
 
     def tearDown(self):
@@ -990,7 +990,7 @@ class RecoveryCompositionTests(unittest.TestCase):
         fake_jobs = Mock()
 
         def factory():
-            db = _m_memory_curator.db_connect(self.path)
+            db = _m_memory_curator.db_connect(self.path, app_settings=self.app_settings_builder.build())
             opened.append(db)
             return db
 
@@ -1004,12 +1004,12 @@ class RecoveryCompositionTests(unittest.TestCase):
             memory=self.services.memory,
             persona=self.services.persona,
             sync=self.services.sync,
-            conversation=make_test_conversation_service(),
-            group=make_test_group_service(),
+            conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
+            group=make_test_group_service(app_settings=self.app_settings_builder.build()),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
-            input_flow=make_test_input_flow_service(),
+            input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
         )
 
         dispatcher = _m_workers.make_durable_backlog_dispatcher(
@@ -1085,13 +1085,13 @@ class RecordingJobs:
         return None
 
 
-class StartupCompositionTests(unittest.TestCase):
+class StartupCompositionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.card = root / "mira.png"
         self.card.write_bytes(b"card")
-        self.config = BridgeConfig(
+        self.config = make_test_settings(
             bot_token="token",
             api_key="key",
             default_model="provider::model",
@@ -1099,11 +1099,14 @@ class StartupCompositionTests(unittest.TestCase):
             card_file=self.card,
             db_file=root / "bridge.sqlite3",
             allowed_users=frozenset({"100"}),
+            base=self.app_settings_builder.build(),
         )
         self.requests = []
         self.services = BridgeServices(
             config=self.config,
-            db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
+            db_factory=lambda: _m_memory_curator.db_connect(
+                self.config.db_file, app_settings=self.app_settings_builder.build()
+            ),
             telegram=TelegramRuntime(
                 request=self._request,
                 send_text=lambda *_args, **_kwargs: None,
@@ -1119,12 +1122,12 @@ class StartupCompositionTests(unittest.TestCase):
             memory=object(),
             persona=object(),
             sync=object(),
-            conversation=make_test_conversation_service(),
-            group=make_test_group_service(),
+            conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
+            group=make_test_group_service(app_settings=self.app_settings_builder.build()),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
-            input_flow=make_test_input_flow_service(),
+            input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
         )
 
     def tearDown(self):
@@ -1225,14 +1228,15 @@ class StartupCompositionTests(unittest.TestCase):
                 model_router=make_test_model_router(),
             )
 
+        self.assertIs(services.persona.load_personas.keywords["app_settings"], self.config)
         self.assertIsInstance(services.persona, PersonaService)
-        self.assertIs(services.persona.load_personas, load_personas)
+        self.assertIs(services.persona.load_personas.func, load_personas)
         self.assertIs(
-            services.persona.load_default_persona,
+            services.persona.load_default_persona.func,
             default_persona,
         )
-        self.assertIs(services.persona.upsert_persona, upsert_persona)
-        self.assertIs(services.persona.delete_persona, delete_persona)
+        self.assertIs(services.persona.upsert_persona.func, upsert_persona)
+        self.assertIs(services.persona.delete_persona.func, delete_persona)
         self.assertIs(
             services.persona.update_session_persona,
             update_session,
@@ -1270,13 +1274,14 @@ class StartupCompositionTests(unittest.TestCase):
                 model_router=make_test_model_router(),
             )
 
+        self.assertIs(services.sync.sync_now_backend.keywords["app_settings"], self.config)
         self.assertIsInstance(services.sync, SyncService)
         self.assertIs(services.sync.load_binding, binding)
-        self.assertIs(services.sync.sync_now_backend, sync_now)
-        self.assertIs(services.sync.toggle_realtime_backend, toggle)
-        self.assertIs(services.sync.poll_backend, poll)
+        self.assertIs(services.sync.sync_now_backend.func, sync_now)
+        self.assertIs(services.sync.toggle_realtime_backend.func, toggle)
+        self.assertIs(services.sync.poll_backend.func, poll)
         self.assertIs(services.sync.disable_realtime, disable)
-        self.assertIs(services.sync.api_configured, configured)
+        self.assertIs(services.sync.api_configured.func, configured)
 
     def test_startup_builds_job_service_from_final_job_collaborators(self):
         with (
@@ -1323,10 +1328,8 @@ class StartupCompositionTests(unittest.TestCase):
         self.assertIs(services.jobs.recover_backend, recover)
         self.assertIs(services.jobs.submit_chat, submit_chat)
         self.assertIsNotNone(services.jobs.prepare_worker)
-        self.assertIs(
-            services.jobs.prepare_worker.__self__,
-            _m_main._DURABLE_WORKER_GUARD,
-        )
+        self.assertIsInstance(services.jobs.prepare_worker.__self__, _m_main._DurableWorkerGuard)
+        self.assertNotIn("_DURABLE_WORKER_GUARD", vars(_m_main))
 
     def test_runtime_starts_sync_worker_with_injected_sync_service(self):
         sync_service = object()
@@ -1339,7 +1342,9 @@ class StartupCompositionTests(unittest.TestCase):
 
         services = BridgeServices(
             config=self.config,
-            db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
+            db_factory=lambda: _m_memory_curator.db_connect(
+                self.config.db_file, app_settings=self.app_settings_builder.build()
+            ),
             telegram=TelegramRuntime(
                 request=request,
                 send_text=lambda *_args, **_kwargs: None,
@@ -1355,12 +1360,12 @@ class StartupCompositionTests(unittest.TestCase):
             group_director=object(),
             memory=object(),
             persona=object(),
-            conversation=make_test_conversation_service(),
-            group=make_test_group_service(),
+            conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
+            group=make_test_group_service(app_settings=self.app_settings_builder.build()),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
-            input_flow=make_test_input_flow_service(),
+            input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
         )
         with (
             patch.object(_m_runtime, "install_bridge_signal_handlers"),
@@ -1370,7 +1375,7 @@ class StartupCompositionTests(unittest.TestCase):
             patch.object(_m_runtime, "run_database_maintenance"),
         ):
             self.assertEqual(_m_runtime.run_bridge_runtime(services, {"name": "Mira"}), 0)
-        start_sync.assert_called_once_with(sync_service=sync_service)
+        start_sync.assert_called_once_with(sync_service=sync_service, app_settings=self.config)
         services.jobs.recover.assert_called_once()
         self.assertTrue(services.jobs.recover.call_args.kwargs["recover_running"])
         _m_runtime._SHUTDOWN_EVENT.clear()
@@ -1392,7 +1397,9 @@ class StartupCompositionTests(unittest.TestCase):
 
         services = BridgeServices(
             config=self.config,
-            db_factory=lambda: _m_memory_curator.db_connect(self.config.db_file),
+            db_factory=lambda: _m_memory_curator.db_connect(
+                self.config.db_file, app_settings=self.app_settings_builder.build()
+            ),
             telegram=TelegramRuntime(
                 request=request,
                 send_text=lambda *args, **_kwargs: sent.append(args),
@@ -1408,12 +1415,12 @@ class StartupCompositionTests(unittest.TestCase):
             group_director=object(),
             memory=object(),
             persona=object(),
-            conversation=make_test_conversation_service(),
-            group=make_test_group_service(),
+            conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
+            group=make_test_group_service(app_settings=self.app_settings_builder.build()),
             model_router=make_test_model_router(),
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
-            input_flow=make_test_input_flow_service(),
+            input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
         )
         try:
             with (
@@ -1644,14 +1651,14 @@ class StartupCompositionTests(unittest.TestCase):
 
         seen_router = []
 
-        def validate_credential(_model, model_router):
+        def validate_credential(_model, model_router, *, app_settings=None):
             calls.append("validate_credential")
             seen_router.append(model_router)
 
-        def enforce_permissions():
+        def enforce_permissions(*, app_settings=None):
             calls.append("enforce_permissions")
 
-        def configure_logging():
+        def configure_logging(*, app_settings=None):
             calls.append("configure_logging")
 
         def build_services(config, *, model_router):
@@ -1668,7 +1675,7 @@ class StartupCompositionTests(unittest.TestCase):
             ),
             patch.object(
                 _m_main,
-                "refresh_live_sync_config",
+                "bootstrap_environment",
             ),
             patch.object(
                 _m_main,
@@ -1728,7 +1735,7 @@ class StartupCompositionTests(unittest.TestCase):
             ),
             patch.object(
                 _m_main,
-                "refresh_live_sync_config",
+                "bootstrap_environment",
             ),
             patch.object(
                 _m_main,
@@ -1764,7 +1771,7 @@ class StartupCompositionTests(unittest.TestCase):
         ):
             self.assertEqual(_m_main.main(), 0)
 
-        configure_logging.assert_called_once_with()
+        configure_logging.assert_called_once_with(app_settings=self.config)
         load_config.assert_called_once()
         build_services.assert_called_once()
         args, kwargs = build_services.call_args
@@ -1773,11 +1780,12 @@ class StartupCompositionTests(unittest.TestCase):
         validate_credential.assert_called_once_with(
             self.config.default_model,
             model_router,
+            app_settings=self.config,
         )
         run_check.assert_called_once_with(self.services)
 
 
-class CompositionSourceBoundaryTests(unittest.TestCase):
+class CompositionSourceBoundaryTests(SettingsTestCase):
     def test_migrated_worker_and_check_sources_do_not_rediscover_environment(self):
         root = Path(__file__).parents[1] / "bridge"
         files = {
@@ -1830,7 +1838,7 @@ class CompositionSourceBoundaryTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "prepare_worker=_DURABLE_WORKER_GUARD.prepare",
+            "prepare_worker=durable_worker_guard.prepare",
             source,
         )
 

@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -6,7 +7,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import bridge.config as config
 import bridge.language as _m_language
 import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
@@ -14,11 +14,11 @@ import bridge.session_naming as _m_session_naming
 import bridge.telegram as _m_telegram
 
 
-class PdfWorkerTests(unittest.TestCase):
+class PdfWorkerTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
@@ -47,11 +47,16 @@ class PdfWorkerTests(unittest.TestCase):
         pdf.extend(b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:]))
         pdf.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
 
-        self.assertIn(text, _m_rag.extract_data_bank_text("fixture.pdf", bytes(pdf)))
+        self.assertIn(
+            text,
+            _m_rag.extract_data_bank_text("fixture.pdf", bytes(pdf), app_settings=self.app_settings_builder.build()),
+        )
         with self.assertRaises(ValueError):
-            _m_rag.extract_data_bank_text("fixture.pdf", b"not a pdf")
+            _m_rag.extract_data_bank_text("fixture.pdf", b"not a pdf", app_settings=self.app_settings_builder.build())
 
-        first = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        first = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_language.set_response_language(
             self.db,
             "chat",
@@ -59,12 +64,22 @@ class PdfWorkerTests(unittest.TestCase):
             "id",
             update_session=_m_telegram.update_session,
         )
-        second = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="second")
+        second = _m_session_naming.create_session(
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="second",
+            app_settings=self.app_settings_builder.build(),
+        )
 
         self.assertEqual(
-            _m_memory_curator.load_session(self.db, "chat", first["session_id"], _m_memory_curator.DEFAULT_MODEL)[
-                "response_language"
-            ],
+            _m_memory_curator.load_session(
+                self.db,
+                "chat",
+                first["session_id"],
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
+            )["response_language"],
             "id",
         )
         self.assertEqual(second["response_language"], "auto")

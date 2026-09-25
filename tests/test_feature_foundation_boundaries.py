@@ -5,6 +5,8 @@ import sys
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).parents[1]
 
 NETWORK_EXPORTS = (
@@ -69,7 +71,7 @@ GROUP_CORE_EXPORTS = (
 )
 
 
-class FeatureFoundationBoundaryTests(unittest.TestCase):
+class FeatureFoundationBoundaryTests(SettingsTestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -95,7 +97,7 @@ class FeatureFoundationBoundaryTests(unittest.TestCase):
         self.assertEqual(config.RAG_CHUNK_CHARS, 1800)
         self.assertEqual(config.RAG_CHUNK_OVERLAP, 220)
         self.assertEqual(config.RAG_MAX_CONTEXT_CHARS, 6000)
-        self.assertEqual(config.RAG_EMBEDDING_MODEL, "text-embedding-3-small")
+        self.assertEqual(self.app_settings_builder.rag_embedding_model, "text-embedding-3-small")
 
     def test_common_no_longer_defines_memory_or_rag_defaults(self):
         source = (REPO_ROOT / "bridge" / "common.py").read_text(encoding="utf-8")

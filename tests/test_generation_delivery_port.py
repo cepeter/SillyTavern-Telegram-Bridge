@@ -52,7 +52,7 @@ def test_startup_binds_delivery_port_to_canonical_concrete_owners():
     for binding in (
         "request=telegram_request",
         "send_text=send_text",
-        "send_reply=send_reply",
+        "send_reply=_partial(send_reply, app_settings=config)",
         "send_typing=send_typing",
         "send_panel_request=send_panel_request",
         "delete_outgoing_message_row=delete_outgoing_message_row",
@@ -78,7 +78,7 @@ def test_generation_has_no_module_global_recovery_binding():
     assert "_GENERATION_OPERATION_RECOVERY" not in assigned
 
 
-def test_regen_and_continue_require_delivery_port():
+def test_regen_and_continue_require_delivery_port(*, app_settings_builder):
     import bridge.generation as generation
 
     for fn in (generation.regenerate_last, generation.continue_last):

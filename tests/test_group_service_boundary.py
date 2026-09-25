@@ -158,7 +158,7 @@ def test_conversation_forwards_group_service_to_generation():
     assert generated["persona_service"] is persona
 
 
-def test_image_processing_requires_group_service_parameter():
+def test_image_processing_requires_group_service_parameter(*, app_settings_builder):
     from bridge.commands import process_image_message
 
     param = inspect.signature(process_image_message).parameters.get("group_service")
@@ -217,9 +217,9 @@ def test_committed_recovery_uses_group_service_for_advance(monkeypatch):
     monkeypatch.setattr(
         workers,
         "load_session",
-        lambda *_args: {"session_id": "session"},
+        lambda *_args, app_settings=None: {"session_id": "session"},
     )
-    monkeypatch.setattr(workers, "send_reply", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(workers, "send_reply", lambda *_args, app_settings=None, **_kwargs: None)
     monkeypatch.setattr(workers, "clear_failed_turn", lambda *_args: None)
 
     workers.process_message_job(
@@ -242,7 +242,7 @@ def test_only_composition_and_sync_backend_import_group_core():
     assert importers == {"main.py", "sync_api.py"}
 
 
-def test_group_ui_session_and_status_contracts_require_group_service():
+def test_group_ui_session_and_status_contracts_require_group_service(*, app_settings_builder):
     import bridge.groups as groups
     import bridge.session_naming as session_naming
     import bridge.status_panels as status_panels

@@ -13,10 +13,7 @@ from bridge.composition import BridgeServices
 from bridge.database import get_meta, run_database_maintenance
 from bridge.sync_api import start_live_sync_worker, stop_live_sync_worker
 from bridge.update_routing import route_update
-from bridge.worker_orchestration import (
-    make_durable_backlog_dispatcher,
-    resolve_recovered_job_submission,
-)
+from bridge.worker_orchestration import make_durable_backlog_dispatcher, resolve_recovered_job_submission
 
 _SHUTDOWN_EVENT = threading.Event()
 
@@ -60,7 +57,7 @@ def run_bridge_runtime(services: BridgeServices, fields: dict) -> int:
     _SHUTDOWN_EVENT.clear()
     install_bridge_signal_handlers(services.background.begin_shutdown)
     db = services.db_factory()
-    start_live_sync_worker(sync_service=services.sync)
+    start_live_sync_worker(sync_service=services.sync, app_settings=services.config)
     services.background.register_backlog_dispatcher(make_durable_backlog_dispatcher(services, fields))
     services.jobs.recover(
         db,
@@ -119,7 +116,7 @@ def run_bridge_runtime(services: BridgeServices, fields: dict) -> int:
     db.close()
     # Explicit maintenance on a dedicated connection after executors drained:
     # VACUUM never competes with durable job transitions on the live handle.
-    run_database_maintenance()
+    run_database_maintenance(app_settings=services.config)
     if not sync_stopped:
         logging.warning("Realtime sync worker did not stop before shutdown deadline")
     if not drained:

@@ -7,7 +7,6 @@ import hashlib
 import inspect
 import json
 import logging
-import os
 import re
 import sqlite3
 import threading
@@ -21,6 +20,7 @@ from bridge.config import (
 )
 from bridge.database import db_connect, get_meta, run_write_txn
 from bridge.network_security import validate_provider_endpoint
+from bridge.settings import AppSettings
 
 
 def hindsight_bank_id(chat_id: str) -> str:
@@ -33,12 +33,12 @@ def hindsight_tags(chat_id: str, session_id: str, character_name: str) -> list[s
     return [f"user:telegram-{user_key}", f"session:{session_id}", f"character:{character_key}"]
 
 
-def hindsight_client():
+def hindsight_client(*, app_settings: AppSettings):
     from hindsight_client import Hindsight
 
-    base_url = os.environ.get("HINDSIGHT_API_URL", HINDSIGHT_DEFAULT_URL).rstrip("/")
-    validate_provider_endpoint(base_url, "SILLYTAVERN_HINDSIGHT_ALLOWED_HOSTS")
-    api_key = os.environ.get("HINDSIGHT_API_KEY") or None
+    base_url = app_settings.environ.get("HINDSIGHT_API_URL", HINDSIGHT_DEFAULT_URL).rstrip("/")
+    validate_provider_endpoint(base_url, "SILLYTAVERN_HINDSIGHT_ALLOWED_HOSTS", environ=app_settings.environ)
+    api_key = app_settings.environ.get("HINDSIGHT_API_KEY") or None
     return Hindsight(base_url=base_url, api_key=api_key, timeout=30.0, user_agent="SillyTavernTelegramBridge/1.0")
 
 
@@ -97,8 +97,10 @@ def hindsight_explicit_document_id(session_id: str, fact: str) -> str:
     return hindsight_session_prefix(session_id) + "-explicit-" + digest
 
 
-def _record_hindsight_document(chat_id: str, session_id: str, document_id: str, kind: str) -> None:
-    mapping_db = db_connect()
+def _record_hindsight_document(
+    chat_id: str, session_id: str, document_id: str, kind: str, *, app_settings: AppSettings
+) -> None:
+    mapping_db = db_connect(app_settings=app_settings)
     try:
 
         def write_mapping():
@@ -174,7 +176,9 @@ async def _delete_hindsight_session_documents_and_close(
         await _close_hindsight_client_async(client)
 
 
-def _purge_hindsight_session_backend(db: sqlite3.Connection, chat_id: str, session_id: str) -> int:
+def _purge_hindsight_session_backend(
+    db: sqlite3.Connection, chat_id: str, session_id: str, *, app_settings: AppSettings
+) -> int:
     """Delete only documents attributable to one session, failing closed."""
     with hindsight_session_lock(chat_id, session_id):
         mapped_ids = {
@@ -187,7 +191,7 @@ def _purge_hindsight_session_backend(db: sqlite3.Connection, chat_id: str, sessi
         try:
             return asyncio.run(
                 _delete_hindsight_session_documents_and_close(
-                    hindsight_client(),
+                    hindsight_client(app_settings=app_settings),
                     hindsight_bank_id(chat_id),
                     str(session_id),
                     mapped_ids,
@@ -220,12 +224,14 @@ def recall_memory_results(
     query: str,
     character_name: str = "",
     max_tokens: int = HINDSIGHT_RECALL_MAX_TOKENS,
+    *,
+    app_settings: AppSettings,
 ):
     if memory_mode(db, chat_id) != "on" or not query.strip():
         return []
     client = None
     try:
-        client = hindsight_client()
+        client = hindsight_client(app_settings=app_settings)
         results = client.recall(
             bank_id=hindsight_bank_id(chat_id),
             query=query[:4000],
@@ -243,9 +249,15 @@ def recall_memory_results(
 
 
 def recall_memory_context(
-    db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], query: str
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+    query: str,
+    *,
+    app_settings: AppSettings,
 ) -> str:
-    results = recall_memory_results(db, chat_id, session, query, fields["name"])
+    results = recall_memory_results(db, chat_id, session, query, fields["name"], app_settings=app_settings)
     sections = []
     for result in results:
         text = str(getattr(result, "text", "") or "").strip()
@@ -263,11 +275,13 @@ def _retain_with_client(
     context: str,
     kind: str,
     log_message: str,
+    *,
+    app_settings: AppSettings,
 ) -> bool:
     """Retain one document via a short-lived Hindsight client; failures are logged, not raised."""
     client = None
     try:
-        client = hindsight_client()
+        client = hindsight_client(app_settings=app_settings)
         client.retain(
             bank_id=hindsight_bank_id(chat_id),
             content=content,
@@ -277,7 +291,7 @@ def _retain_with_client(
             tags=hindsight_tags(chat_id, session_id, character_name),
             retain_async=False,
         )
-        _record_hindsight_document(chat_id, session_id, document_id, kind)
+        _record_hindsight_document(chat_id, session_id, document_id, kind, app_settings=app_settings)
         return True
     except Exception:
         logging.warning(log_message, chat_id, exc_info=True)
@@ -407,11 +421,11 @@ def _write_hindsight_successful_purge_state(
 
 
 def _retain_session_memory_backend(
-    chat_id: str, session: dict[str, str], character_name: str, conversation: str
+    chat_id: str, session: dict[str, str], character_name: str, conversation: str, *, app_settings: AppSettings
 ) -> None:
     session_id = str(session["session_id"])
     with hindsight_session_lock(chat_id, session_id):
-        session_db = db_connect()
+        session_db = db_connect(app_settings=app_settings)
         try:
             exists = session_db.execute(
                 "SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?",
@@ -431,11 +445,18 @@ def _retain_session_memory_backend(
             f"SillyTavern Telegram roleplay session with character {character_name}",
             "conversation",
             "Hindsight retain unavailable for chat %s",
+            app_settings=app_settings,
         )
 
 
 def remember_fact(
-    db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], fact: str
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+    fact: str,
+    *,
+    app_settings: AppSettings,
 ) -> bool:
     if not fact.strip():
         return False
@@ -455,4 +476,5 @@ def remember_fact(
             f"Explicit user memory request for character {fields['name']}",
             "explicit",
             "Hindsight explicit retain unavailable for chat %s",
+            app_settings=app_settings,
         )

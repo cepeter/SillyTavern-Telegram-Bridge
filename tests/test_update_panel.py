@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -9,25 +10,23 @@ from pathlib import Path
 import bridge.update as _m_update
 
 
-class UpdatePanelTests(unittest.TestCase):
+class UpdatePanelTests(SettingsTestCase):
     def test_update_live_dir_defaults_under_bridge_home(self):
+        from bridge.settings import load_app_settings
+
         self.assertEqual(
-            _m_update._resolve_update_live_dir({}),
+            load_app_settings({}, home=Path.home()).update_live_dir,
             Path.home() / ".local/share/sillytavern-telegram/live",
         )
         self.assertEqual(
-            _m_update._resolve_update_live_dir({"SILLYTAVERN_BRIDGE_HOME": "/tmp/bridge-home"}),
+            load_app_settings({"SILLYTAVERN_BRIDGE_HOME": "/tmp/bridge-home"}, home=Path.home()).update_live_dir,
             Path("/tmp/bridge-home/live"),
         )
-        self.assertEqual(
-            _m_update._resolve_update_live_dir(
-                {
-                    "SILLYTAVERN_BRIDGE_HOME": "/tmp/bridge-home",
-                    "SILLYTAVERN_LIVE_BRIDGE_DIR": "/tmp/custom-live",
-                }
-            ),
-            Path("/tmp/custom-live"),
+        settings = load_app_settings(
+            {"SILLYTAVERN_BRIDGE_HOME": "/tmp/bridge-home", "SILLYTAVERN_LIVE_BRIDGE_DIR": "/tmp/custom-live"},
+            home=Path.home(),
         )
+        self.assertEqual(settings.update_live_dir, Path("/tmp/custom-live"))
 
     def test_user_systemd_template_uses_writable_update_staging(self):
         root = Path(__file__).parents[1]
@@ -86,8 +85,8 @@ class UpdatePanelTests(unittest.TestCase):
         self.assertNotIn("Confirm update", text)
 
     def test_empty_unreleased_changelog_uses_latest_released_heading(self):
-        old_live = _m_update.UPDATE_LIVE_DIR
-        old_repo = _m_update.UPDATE_REPO_DIR
+        old_live = self.app_settings_builder.update_live_dir
+        old_repo = self.app_settings_builder.update_repo_dir
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             live = root / "live"
@@ -95,14 +94,18 @@ class UpdatePanelTests(unittest.TestCase):
             live.mkdir()
             repo.mkdir()
             (live / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [0.2.013] - 2026-09-18\n", encoding="utf-8")
-            _m_update.UPDATE_LIVE_DIR = live
-            _m_update.UPDATE_REPO_DIR = repo
+            self.app_settings_builder.update_live_dir = live
+            self.app_settings_builder.update_repo_dir = repo
             try:
-                self.assertEqual(_m_update.installed_bridge_version(), "0.2.013")
-                self.assertFalse(_m_update.installed_bridge_has_unreleased())
+                self.assertEqual(
+                    _m_update.installed_bridge_version(app_settings=self.app_settings_builder.build()), "0.2.013"
+                )
+                self.assertFalse(
+                    _m_update.installed_bridge_has_unreleased(app_settings=self.app_settings_builder.build())
+                )
             finally:
-                _m_update.UPDATE_LIVE_DIR = old_live
-                _m_update.UPDATE_REPO_DIR = old_repo
+                self.app_settings_builder.update_live_dir = old_live
+                self.app_settings_builder.update_repo_dir = old_repo
 
     def test_update_noop_skips_subprocess_when_latest(self):
         from unittest.mock import patch
@@ -112,7 +115,7 @@ class UpdatePanelTests(unittest.TestCase):
             patch.object(_m_update, "latest_bridge_release", return_value=("0.2.024", "")),
             patch.object(_m_update, "apply_update") as apply,
         ):
-            result = _m_update._run_update()
+            result = _m_update._run_update(app_settings=self.app_settings_builder.build())
         self.assertIs(result.status, _m_update.UpdateStatus.ALREADY_LATEST)
         apply.assert_not_called()
         self.assertIn("Already latest", _m_update.format_update_outcome(result))

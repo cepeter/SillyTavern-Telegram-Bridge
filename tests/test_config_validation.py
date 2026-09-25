@@ -36,7 +36,14 @@ def test_float_configuration_is_finite_and_bounded(value):
 def test_imported_config_uses_named_numeric_error():
     env = dict(os.environ, SILLYTAVERN_RAG_MAX_PDF_PAGES="not-a-number")
     result = subprocess.run(
-        [sys.executable, "-c", "import bridge.config"],
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os; from pathlib import Path; from bridge.settings import load_app_settings; "
+                "load_app_settings(os.environ, home=Path.home())"
+            ),
+        ],
         env=env,
         capture_output=True,
         text=True,

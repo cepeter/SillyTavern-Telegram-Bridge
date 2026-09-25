@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_request_context
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -9,7 +10,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import bridge.cards as _m_cards
-import bridge.config as config
 import bridge.memory as _m_memory
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -18,14 +18,14 @@ import bridge.session_naming as _m_session_naming
 import bridge.telegram as _m_telegram
 
 
-class SessionDeletionTests(unittest.TestCase):
+class SessionDeletionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.original_purge = _m_memory.purge_hindsight_session
         self.purged = []
-        _m_memory.purge_hindsight_session = lambda _db, chat_id, session_id: (
+        _m_memory.purge_hindsight_session = lambda _db, chat_id, session_id, *, app_settings=None: (
             self.purged.append((chat_id, session_id)) or 0
         )
 
@@ -35,9 +35,15 @@ class SessionDeletionTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_inactive_session_deletes_all_local_data(self):
-        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         inactive = _m_session_naming.create_session(
-            self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive"
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="inactive",
+            app_settings=self.app_settings_builder.build(),
         )
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
@@ -63,14 +69,26 @@ class SessionDeletionTests(unittest.TestCase):
         self.assertTrue(deleted, reason)
         self.assertEqual(_m_message_commands.operation_phase(self.db, 701), "applied")
         self.assertIsNone(
-            _m_memory_curator.load_session(self.db, "chat", inactive["session_id"], _m_memory_curator.DEFAULT_MODEL)
+            _m_memory_curator.load_session(
+                self.db,
+                "chat",
+                inactive["session_id"],
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
+            )
             if self.db.execute(
                 "SELECT 1 FROM sessions WHERE chat_id=? AND session_id=?", ("chat", inactive["session_id"])
             ).fetchone()
             else None
         )
         self.assertIsNotNone(
-            _m_memory_curator.load_session(self.db, "chat", active["session_id"], _m_memory_curator.DEFAULT_MODEL)
+            _m_memory_curator.load_session(
+                self.db,
+                "chat",
+                active["session_id"],
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
+            )
         )
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages WHERE session_id='inactive'").fetchone()[0], 0)
         self.assertEqual(
@@ -79,9 +97,15 @@ class SessionDeletionTests(unittest.TestCase):
         self.assertEqual(self.purged, [("chat", "inactive")])
 
     def test_hindsight_cleanup_failure_preserves_local_session(self):
-        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         inactive = _m_session_naming.create_session(
-            self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="preserved"
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="preserved",
+            app_settings=self.app_settings_builder.build(),
         )
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
@@ -109,13 +133,21 @@ class SessionDeletionTests(unittest.TestCase):
         )
 
     def test_active_session_and_busy_session_are_protected(self):
-        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         denied, reason = _m_panel_callback_routes.delete_session_data(
             self.db, "chat", active["session_id"], active["session_id"], memory_service=make_test_memory_service()
         )
         self.assertFalse(denied)
         self.assertEqual(reason, "active session")
-        inactive = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="busy")
+        inactive = _m_session_naming.create_session(
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="busy",
+            app_settings=self.app_settings_builder.build(),
+        )
         self.db.execute(
             (
                 "INSERT INTO jobs(update_id,chat_id,session_id,telegram_message_id,kind,p"
@@ -131,9 +163,15 @@ class SessionDeletionTests(unittest.TestCase):
         self.assertEqual(reason, "session has active jobs")
 
     def test_session_panel_has_inline_delete_actions_and_protects_active_selection(self):
-        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        active = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         inactive = _m_session_naming.create_session(
-            self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="inactive"
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="inactive",
+            app_settings=self.app_settings_builder.build(),
         )
         calls = []
         original_request = _m_cards.send_panel_request
@@ -144,7 +182,9 @@ class SessionDeletionTests(unittest.TestCase):
                 "chat",
                 [active, inactive],
                 active["session_id"],
-                request_context=make_test_request_context(self.db, active["session_id"]),
+                request_context=make_test_request_context(
+                    self.db, active["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_cards.send_panel_request = original_request

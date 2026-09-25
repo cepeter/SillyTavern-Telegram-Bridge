@@ -1,48 +1,24 @@
 from __future__ import annotations
 
-from bridge.callback_tokens import (
-    dynamic_callback_token,
-    resolve_dynamic_callback_token,
-)
-from bridge.callbacks import (
-    close_panel_message,
-    discard_panel_binding,
-)
+from bridge.callback_tokens import dynamic_callback_token, resolve_dynamic_callback_token
+from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.card_content import card_fields_from_file as card_fields_from_file
 from bridge.card_content import character_card_paths
 from bridge.card_content import safe_character_path as safe_character_path
 from bridge.cards import send_panel_message
 from bridge.catalog import send_world_menu
-from bridge.common import (
-    Path,
-    json,
-    logging,
-    parse_topic_scope,
-    sqlite3,
-    time,
-)
-from bridge.config import DEFAULT_CHARACTER_FILE, PENDING_SETTINGS_TTL_SECONDS
-from bridge.config import DEFAULT_MODEL as DEFAULT_MODEL
+from bridge.common import Path, json, logging, parse_topic_scope, sqlite3, time
+from bridge.config import PENDING_SETTINGS_TTL_SECONDS
 from bridge.database import get_generation_settings as get_generation_settings
 from bridge.database import set_meta
 from bridge.group_service import GroupService
 from bridge.input_flow_service import InputFlowService
-from bridge.media import (
-    remove_inline_keyboard,
-    send_typing,
-)
+from bridge.media import remove_inline_keyboard, send_typing
 from bridge.memory import generate_session_summary
-from bridge.panel_utils import (
-    panel_label,
-    panel_page,
-)
+from bridge.panel_utils import panel_label, panel_page
 from bridge.provider_port import ProviderPort
-from bridge.telegram import (
-    create_session,
-    load_session,
-    send_text,
-    update_session,
-)
+from bridge.settings import AppSettings
+from bridge.telegram import create_session, load_session, send_text, update_session
 
 
 def send_group_menu(
@@ -131,11 +107,12 @@ def start_group_session(
     session_id: str | None = None,
     *,
     group_service: GroupService,
+    app_settings: AppSettings,
 ) -> dict[str, str]:
     """Create a clean topic-local session for the New group session wizard."""
     session_id = session_id or f"group-{time.time_ns()}"
-    create_session(db, chat_id, default_model, session_id=session_id, title=title)
-    update_session(db, chat_id, session_id, character_file=DEFAULT_CHARACTER_FILE, world_file="")
+    create_session(db, chat_id, default_model, session_id=session_id, title=title, app_settings=app_settings)
+    update_session(db, chat_id, session_id, character_file=app_settings.default_character_file, world_file="")
     group_service.save(
         db,
         chat_id,
@@ -158,7 +135,7 @@ def start_group_session(
             {"session_id": session_id, "stage": "character", "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
         ),
     )
-    return load_session(db, chat_id, session_id, default_model)
+    return load_session(db, chat_id, session_id, default_model, app_settings=app_settings)
 
 
 def apply_group_setup_character(
@@ -212,7 +189,7 @@ def send_group_character_menu(
     if action == "add":
         options = [
             (path.name, group_service.character_option_label(path))
-            for path in character_card_paths()
+            for path in character_card_paths(app_settings=request_context.app_settings)
             if path.name not in members
         ]
     else:
@@ -626,10 +603,18 @@ def handle_group_command(
 
 
 def handle_summary_command(
-    db: sqlite3.Connection, token: str, chat_id: str, session: dict[str, str], *, provider_port: ProviderPort
+    db: sqlite3.Connection,
+    token: str,
+    chat_id: str,
+    session: dict[str, str],
+    *,
+    provider_port: ProviderPort,
+    app_settings: AppSettings,
 ) -> None:
     send_typing(token, chat_id)
-    summary = generate_session_summary(db, chat_id, session, force=True, provider_port=provider_port)
+    summary = generate_session_summary(
+        db, chat_id, session, force=True, provider_port=provider_port, app_settings=app_settings
+    )
     if summary:
         send_text(token, chat_id, "Session summary updated:\n\n" + summary)
     else:

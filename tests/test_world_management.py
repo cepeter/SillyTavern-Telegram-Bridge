@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_request_context
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -9,7 +10,6 @@ import unittest
 from pathlib import Path
 
 import bridge.cards as _m_cards
-import bridge.config as config
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
@@ -17,44 +17,56 @@ import bridge.telegram as _m_telegram
 import bridge.world_storage as _m_world_storage
 
 
-class WorldManagementTests(unittest.TestCase):
+class WorldManagementTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
-        self.old_world = _m_world_storage.WORLD_DIR
-        self.old_config_world = config.WORLD_DIR
-        self.old_db = config.DB_FILE
+        self.old_world = self.app_settings_builder.world_dir
+        self.old_config_world = self.app_settings_builder.world_dir
+        self.old_db = self.app_settings_builder.db_file
         world_dir = root / "worlds"
-        _m_world_storage.WORLD_DIR = world_dir
-        config.WORLD_DIR = world_dir
+        self.app_settings_builder.world_dir = world_dir
+        self.app_settings_builder.world_dir = world_dir
         world_dir.mkdir()
-        config.DB_FILE = root / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
-        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.app_settings_builder.db_file = root / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
 
     def tearDown(self):
         self.db.close()
-        _m_world_storage.WORLD_DIR = self.old_world
-        config.WORLD_DIR = self.old_config_world
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.world_dir = self.old_world
+        self.app_settings_builder.world_dir = self.old_config_world
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def test_upload_accepts_world_info_and_refuses_duplicate(self):
         raw = json.dumps({"entries": {"0": {"key": ["dragon"], "content": "A dragon."}}}).encode()
-        installed = _m_world_storage.install_world_info_document("dragons.json", raw)
+        installed = _m_world_storage.install_world_info_document(
+            "dragons.json", raw, app_settings=self.app_settings_builder.build()
+        )
         self.assertEqual(installed.name, "dragons.json")
         self.assertEqual(installed.read_bytes(), raw)
         with self.assertRaises(FileExistsError):
-            _m_world_storage.install_world_info_document("dragons.json", raw)
+            _m_world_storage.install_world_info_document(
+                "dragons.json", raw, app_settings=self.app_settings_builder.build()
+            )
         with self.assertRaises(ValueError):
-            _m_world_storage.install_world_info_document("not-world.txt", raw)
+            _m_world_storage.install_world_info_document(
+                "not-world.txt", raw, app_settings=self.app_settings_builder.build()
+            )
         with self.assertRaises(ValueError):
-            _m_world_storage.install_world_info_document("bad.json", b"{}")
+            _m_world_storage.install_world_info_document(
+                "bad.json", b"{}", app_settings=self.app_settings_builder.build()
+            )
 
     def test_delete_removes_inactive_world_info_and_protects_references(self):
-        path = config.WORLD_DIR / "lore.json"
+        path = self.app_settings_builder.world_dir / "lore.json"
         path.write_text(json.dumps({"entries": {}}), encoding="utf-8")
-        _m_panel_callback_routes.delete_world_info_file(self.db, "chat", "lore.json")
+        _m_panel_callback_routes.delete_world_info_file(
+            self.db, "chat", "lore.json", app_settings=self.app_settings_builder.build()
+        )
         self.assertFalse(path.exists())
 
         path.write_text(json.dumps({"entries": {}}), encoding="utf-8")
@@ -64,17 +76,24 @@ class WorldManagementTests(unittest.TestCase):
         )
         self.db.commit()
         with self.assertRaises(ValueError):
-            _m_panel_callback_routes.delete_world_info_file(self.db, "chat", "lore.json")
+            _m_panel_callback_routes.delete_world_info_file(
+                self.db, "chat", "lore.json", app_settings=self.app_settings_builder.build()
+            )
         self.assertTrue(path.exists())
 
     def test_world_panel_has_upload_and_delete_actions(self):
-        (config.WORLD_DIR / "lore.json").write_text(json.dumps({"entries": {}}), encoding="utf-8")
+        (self.app_settings_builder.world_dir / "lore.json").write_text(json.dumps({"entries": {}}), encoding="utf-8")
         calls = []
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
             _m_panel_callback_routes.send_world_menu(
-                "token", "chat", "", request_context=make_test_request_context(self.db, self.session["session_id"])
+                "token",
+                "chat",
+                "",
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -103,8 +122,10 @@ class WorldManagementTests(unittest.TestCase):
                 self.session,
                 self.session["session_id"],
                 None,
-                group_service=make_test_group_service(),
-                request_context=make_test_request_context(self.db, self.session["session_id"]),
+                group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_panel_callback_routes.send_text = original_send

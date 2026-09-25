@@ -1,10 +1,12 @@
 import unittest
 from unittest.mock import patch
 
+from settings_test_support import SettingsTestCase
+
 import bridge.extension_registry as registry
 
 
-class ExtensionRegistryTests(unittest.TestCase):
+class ExtensionRegistryTests(SettingsTestCase):
     def test_none_summary_hook_preserves_accumulated_summary(self):
         with patch.dict(registry._SUMMARY_CONTEXT_HOOKS, clear=True):
             registry.register_summary_context_hook(
@@ -24,11 +26,11 @@ class ExtensionRegistryTests(unittest.TestCase):
     def test_post_retain_failure_does_not_block_later_hook(self):
         calls = []
 
-        def fail(*_args):
+        def fail(*_args, app_settings):
             calls.append("first")
             raise RuntimeError("boom")
 
-        def succeed(*_args):
+        def succeed(*_args, app_settings):
             calls.append("second")
 
         with patch.dict(registry._POST_RETAIN_HOOKS, clear=True):
@@ -41,6 +43,7 @@ class ExtensionRegistryTests(unittest.TestCase):
                     {"session_id": "session"},
                     {"name": "Character"},
                     object(),
+                    app_settings=self.app_settings_builder.build(),
                 )
         self.assertEqual(calls, ["first", "second"])
 

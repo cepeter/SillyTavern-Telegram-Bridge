@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 import logging
-import os
 import sqlite3
 import threading
 import time
+from functools import partial as _partial
 
 import bridge.sillytavern_api as _st_api
 from bridge.card_content import card_fields_from_file
 from bridge.common import chat_job_lock
-from bridge.config import DEFAULT_MODEL
-from bridge.database import (
-    db_connect,
-    run_write_txn,
-    sync_transcript_hash,
-)
+from bridge.database import db_connect, run_write_txn, sync_transcript_hash
 from bridge.group_core import group_state
+from bridge.settings import AppSettings
 from bridge.sync_core import (
     apply_sync_snapshot,
     build_sync_records,
@@ -26,13 +22,10 @@ from bridge.sync_core import (
     sync_file_id,
     sync_local_rows,
 )
-from bridge.sync_poll_safety import (
-    SyncPollSafetyAdapter as _SyncPollSafetyAdapter,
-)
+from bridge.sync_poll_safety import SyncPollSafetyAdapter as _SyncPollSafetyAdapter
 from bridge.sync_service import SyncService as _SyncService
 from bridge.telegram import load_session
 
-LIVE_SYNC_INTERVAL_SECONDS = 2.0
 _LIVE_SYNC_WORKER_LOCK = threading.Lock()
 _LIVE_SYNC_WORKER = None
 _LIVE_SYNC_STOP_EVENT = threading.Event()
@@ -45,29 +38,6 @@ _LIVE_SYNC_MAX_MESSAGE_CHARS = 12000
 _LIVE_SYNC_MAX_TOTAL_CHARS = 200000
 
 
-def _bounded_number(raw: str, default, low, high, cast):
-    try:
-        return min(high, max(low, cast(raw)))
-    except (TypeError, ValueError):
-        return default
-
-
-def refresh_live_sync_config() -> None:
-    """Refresh realtime polling and loopback API configuration."""
-    global LIVE_SYNC_INTERVAL_SECONDS
-    LIVE_SYNC_INTERVAL_SECONDS = _bounded_number(
-        os.environ.get("SILLYTAVERN_SYNC_API_INTERVAL_SECONDS", "2"),
-        2.0,
-        1.0,
-        30.0,
-        float,
-    )
-    _st_api.refresh_sillytavern_api_config()
-
-
-refresh_live_sync_config()
-
-
 def _live_sync_records(
     db: sqlite3.Connection,
     chat_id: str,
@@ -75,8 +45,10 @@ def _live_sync_records(
     fields: dict[str, str],
     binding: dict[str, object],
     rows: list[tuple],
+    *,
+    app_settings: AppSettings,
 ) -> list[dict]:
-    return build_sync_records(db, chat_id, session, fields, str(binding["sync_id"]), rows)
+    return build_sync_records(db, chat_id, session, fields, str(binding["sync_id"]), rows, app_settings=app_settings)
 
 
 def _live_sync_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]], dict[int, tuple[list[str], int]]]:
@@ -143,10 +115,10 @@ def _live_sync_disable(db: sqlite3.Connection, chat_id: str, session_id: str, er
     run_write_txn(db, write)
 
 
-def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
+def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str, *, app_settings: AppSettings) -> str:
     """Synchronize one binding through SillyTavern's supported chat API."""
-    client = _st_api.live_sync_client()
-    session = load_session(db, chat_id, session_id, DEFAULT_MODEL)
+    client = _st_api.live_sync_client(app_settings=app_settings)
+    session = load_session(db, chat_id, session_id, app_settings.default_model, app_settings=app_settings)
     binding = sync_binding(db, chat_id, session_id)
     file_id = sync_file_id(binding)
     group = group_state(db, chat_id, session_id)
@@ -154,10 +126,14 @@ def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
     rows = sync_local_rows(db, chat_id, session_id)
     local_hash = sync_transcript_hash([(role, content) for _rowid, role, content, _created_at in rows])
     remote_records = client.get_chat(session, file_id, is_group)
-    fields = card_fields_from_file(session["character_file"])
+    fields = card_fields_from_file(session["character_file"], app_settings=app_settings)
     if not remote_records:
         client.save_chat(
-            session, fields, file_id, is_group, _live_sync_records(db, chat_id, session, fields, binding, rows)
+            session,
+            fields,
+            file_id,
+            is_group,
+            _live_sync_records(db, chat_id, session, fields, binding, rows, app_settings=app_settings),
         )
         set_sync_state(db, chat_id, session_id, local_hash, "bridge_to_sillytavern_api")
         _live_sync_reset_failures(db, chat_id, session_id)
@@ -183,13 +159,19 @@ def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
         _live_sync_disable(db, chat_id, session_id, "initial divergence")
         return "initial divergence; realtime stopped"
     if local_hash == baseline and remote_hash != baseline:
-        imported_hash = apply_sync_snapshot(db, chat_id, session, metadata, remote_messages, remote_variants)
+        imported_hash = apply_sync_snapshot(
+            db, chat_id, session, metadata, remote_messages, remote_variants, app_settings=app_settings
+        )
         set_sync_state(db, chat_id, session_id, imported_hash, "sillytavern_api_to_bridge")
         _live_sync_reset_failures(db, chat_id, session_id)
         return "imported SillyTavern API changes"
     if remote_hash == baseline and local_hash != baseline:
         client.save_chat(
-            session, fields, file_id, is_group, _live_sync_records(db, chat_id, session, fields, binding, rows)
+            session,
+            fields,
+            file_id,
+            is_group,
+            _live_sync_records(db, chat_id, session, fields, binding, rows, app_settings=app_settings),
         )
         set_sync_state(db, chat_id, session_id, local_hash, "bridge_to_sillytavern_api")
         _live_sync_reset_failures(db, chat_id, session_id)
@@ -199,15 +181,17 @@ def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
     return "conflict detected; realtime stopped"
 
 
-def live_sync_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
+def live_sync_toggle_realtime(
+    db: sqlite3.Connection, chat_id: str, session_id: str, *, app_settings: AppSettings
+) -> str:
     binding = sync_binding(db, chat_id, session_id)
     if binding.get("realtime_enabled"):
         _live_sync_disable(db, chat_id, session_id, "")
         return "realtime API sync disabled"
-    if not _st_api.live_sync_api_configured():
+    if not _st_api.live_sync_api_configured(app_settings=app_settings):
         return "realtime API sync is not configured"
     try:
-        result = live_sync_now(db, chat_id, session_id)
+        result = live_sync_now(db, chat_id, session_id, app_settings=app_settings)
     except (_st_api.SillyTavernApiError, ValueError) as exc:
         _live_sync_disable(db, chat_id, session_id, str(exc))
         return f"realtime API unavailable: {exc}"
@@ -229,59 +213,52 @@ def live_sync_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: 
     return "realtime API sync enabled; " + result
 
 
-def live_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
+def live_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: str, *, app_settings: AppSettings) -> str:
     binding = sync_binding(db, chat_id, session_id)
     enabled = "on" if binding.get("realtime_enabled") else "off"
-    configured = "configured" if _st_api.live_sync_api_configured() else "not configured"
+    configured = "configured" if _st_api.live_sync_api_configured(app_settings=app_settings) else "not configured"
     return f"Live API sync: {enabled} ({configured})"
 
 
-_SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
-    sync_now=(
-        lambda db, chat_id, session_id: live_sync_now(
-            db,
-            chat_id,
-            session_id,
-        )
-    ),
-    chat_lock=(lambda chat_id: chat_job_lock(chat_id)),
-    disable_realtime=(
-        lambda db, chat_id, session_id, error: _live_sync_disable(
-            db,
-            chat_id,
-            session_id,
-            error,
-        )
-    ),
-    expected_errors=(
-        _st_api.SillyTavernApiError,
-        ValueError,
-    ),
-    sync_interval=(lambda: LIVE_SYNC_INTERVAL_SECONDS),
-    now=(lambda: time.time()),
-    log_warning=(
-        lambda message, *args, **kwargs: logging.warning(
-            message,
-            *args,
-            **kwargs,
-        )
-    ),
-)
+def _make_sync_poll_safety(*, app_settings: AppSettings):
+    return _SyncPollSafetyAdapter(
+        sync_now=(lambda db, chat_id, session_id: live_sync_now(db, chat_id, session_id, app_settings=app_settings)),
+        chat_lock=(lambda chat_id: chat_job_lock(chat_id)),
+        disable_realtime=(
+            lambda db, chat_id, session_id, error: _live_sync_disable(
+                db,
+                chat_id,
+                session_id,
+                error,
+            )
+        ),
+        expected_errors=(
+            _st_api.SillyTavernApiError,
+            ValueError,
+        ),
+        sync_interval=(lambda: app_settings.live_sync_interval_seconds),
+        now=(lambda: time.time()),
+        log_warning=(
+            lambda message, *args, **kwargs: logging.warning(
+                message,
+                *args,
+                **kwargs,
+            )
+        ),
+    )
 
 
-def live_sync_poll(
-    db: sqlite3.Connection,
-) -> None:
-    _SYNC_POLL_SAFETY.poll(db)
+def live_sync_poll(db: sqlite3.Connection, *, app_settings: AppSettings) -> None:
+    _make_sync_poll_safety(app_settings=app_settings).poll(db)
 
 
-def _live_sync_worker_loop(sync_service: _SyncService) -> None:
+def _live_sync_worker_loop(sync_service: _SyncService, *, app_settings: AppSettings) -> None:
     db = None
     try:
-        while not _LIVE_SYNC_STOP_EVENT.wait(LIVE_SYNC_INTERVAL_SECONDS):
+        while not _LIVE_SYNC_STOP_EVENT.wait(app_settings.live_sync_interval_seconds):
             try:
                 if db is None:
-                    db = db_connect()
+                    db = db_connect(app_settings=app_settings)
                 sync_service.poll(db)
             except Exception as exc:
                 if db is not None and db.in_transaction:
@@ -300,17 +277,17 @@ def _live_sync_worker_loop(sync_service: _SyncService) -> None:
             db.close()
 
 
-def start_live_sync_worker(*, sync_service: _SyncService) -> bool:
+def start_live_sync_worker(*, sync_service: _SyncService, app_settings: AppSettings) -> bool:
     """Start one daemon worker when the loopback API is configured."""
     global _LIVE_SYNC_WORKER
-    if not _st_api.live_sync_api_configured():
+    if not _st_api.live_sync_api_configured(app_settings=app_settings):
         return False
     with _LIVE_SYNC_WORKER_LOCK:
         if _LIVE_SYNC_WORKER is not None and _LIVE_SYNC_WORKER.is_alive():
             return True
         _LIVE_SYNC_STOP_EVENT.clear()
         _LIVE_SYNC_WORKER = threading.Thread(
-            target=_live_sync_worker_loop,
+            target=_partial(_live_sync_worker_loop, app_settings=app_settings),
             args=(sync_service,),
             name="sillytavern-live-sync",
             daemon=True,

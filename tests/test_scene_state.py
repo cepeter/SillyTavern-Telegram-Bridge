@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -8,7 +9,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import bridge.config as config
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -18,24 +18,25 @@ import bridge.session_naming as _m_session_naming
 import bridge.sync_core as _m_sync_core
 
 
-class SceneStateEngineTests(unittest.TestCase):
+class SceneStateEngineTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.old_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.session = _m_session_naming.create_session(
             self.db,
             "chat",
             "primary::main",
             session_id="scene-state",
             title="Scene",
+            app_settings=self.app_settings_builder.build(),
         )
         _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def _add_turn(self):
@@ -70,12 +71,10 @@ class SceneStateEngineTests(unittest.TestCase):
             self.session,
             "Mira",
             provider_port=provider,
+            app_settings=self.app_settings_builder.build(),
         )
         prompt_state = _m_main.session_summary_for_prompt(
-            self.db,
-            "chat",
-            self.session,
-            provider_port=provider,
+            self.db, "chat", self.session, provider_port=provider, app_settings=self.app_settings_builder.build()
         )
 
         self.assertEqual(seen, ["utility::model"])
@@ -97,7 +96,12 @@ class SceneStateEngineTests(unittest.TestCase):
         _m_scene_state.submit_background = lambda name, fn, *args, **kwargs: queued.append((name, fn, args))
         try:
             _m_sync_core.retain_session_memory(
-                self.db, "chat", self.session, {"name": "Mira"}, provider_port=make_test_provider_port()
+                self.db,
+                "chat",
+                self.session,
+                {"name": "Mira"},
+                provider_port=make_test_provider_port(),
+                app_settings=self.app_settings_builder.build(),
             )
         finally:
             _m_scene_state.submit_background = original_submit
@@ -184,6 +188,7 @@ class SceneStateEngineTests(unittest.TestCase):
                 self.session,
                 "Mira",
                 provider_port=provider,
+                app_settings=self.app_settings_builder.build(),
             )
 
         self.assertEqual(calls, ["generate", "upsert"])

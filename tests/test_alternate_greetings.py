@@ -3,6 +3,7 @@ from application_test_setup import (
     make_test_application_services,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -12,7 +13,6 @@ import unittest
 from pathlib import Path
 
 import bridge.callbacks as _m_callbacks
-import bridge.config as config
 import bridge.greetings as _m_greetings
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
@@ -20,12 +20,14 @@ import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.telegram as _m_telegram
 
 
-class AlternateGreetingTests(unittest.TestCase):
+class AlternateGreetingTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
-        self.session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+        self.session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
 
     def tearDown(self):
         self.db.close()
@@ -39,7 +41,8 @@ class AlternateGreetingTests(unittest.TestCase):
                     "first_mes": "Primary {{user}}",
                     "alternate_greetings": ["Alt one", "Alt two"],
                 }
-            }
+            },
+            app_settings=self.app_settings_builder.build(),
         )
         self.assertEqual(_m_greetings.greeting_options(fields), ["Primary {{user}}", "Alt one", "Alt two"])
 
@@ -53,7 +56,14 @@ class AlternateGreetingTests(unittest.TestCase):
             fields = {"name": "Character", "first_mes": "Primary", "alternate_greetings": json.dumps(["Alt {{user}}"])}
             self.assertTrue(
                 _m_greetings.send_character_greeting(
-                    self.db, "token", "chat", fields, self.session["session_id"], "User", None
+                    self.db,
+                    "token",
+                    "chat",
+                    fields,
+                    self.session["session_id"],
+                    "User",
+                    None,
+                    app_settings=self.app_settings_builder.build(),
                 )
             )
         finally:
@@ -81,7 +91,9 @@ class AlternateGreetingTests(unittest.TestCase):
                     "chat",
                     fields,
                     "User",
-                    request_context=make_test_request_context(self.db, self.session["session_id"]),
+                    request_context=make_test_request_context(
+                        self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                    ),
                 )
             )
         finally:
@@ -116,7 +128,9 @@ class AlternateGreetingTests(unittest.TestCase):
                     "chat",
                     fields,
                     "User",
-                    request_context=make_test_request_context(self.db, self.session["session_id"]),
+                    request_context=make_test_request_context(
+                        self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                    ),
                 )
             )
         finally:
@@ -126,7 +140,7 @@ class AlternateGreetingTests(unittest.TestCase):
                 _m_greetings.send_panel_request = original_request
 
     def test_greeting_callback_uses_selected_alternate_once(self):
-        services = make_test_application_services()
+        services = make_test_application_services(app_settings=self.app_settings_builder.build())
         fields = {
             "name": "Character",
             "first_mes": "Primary",
@@ -137,7 +151,7 @@ class AlternateGreetingTests(unittest.TestCase):
         original_fields = _m_panel_callback_routes.card_fields_from_file
         original_send = _m_greetings.send_text
         original_close = _m_panel_callback_routes.close_panel_message
-        _m_panel_callback_routes.card_fields_from_file = lambda _filename: fields
+        _m_panel_callback_routes.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_greetings.send_text = lambda _token, _chat_id, text: sent.append(text) or [99]
         _m_panel_callback_routes.close_panel_message = lambda *_args, **_kwargs: None
         callback = {
@@ -159,7 +173,9 @@ class AlternateGreetingTests(unittest.TestCase):
                 self.session["session_id"],
                 123,
                 persona_service=services.persona,
-                request_context=make_test_request_context(self.db, self.session["session_id"], "user"),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], "user", app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_panel_callback_routes.card_fields_from_file = original_fields

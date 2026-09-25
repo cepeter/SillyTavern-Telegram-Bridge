@@ -6,10 +6,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).parents[1]
 
 
-class StartupPurityTests(unittest.TestCase):
+class StartupPurityTests(SettingsTestCase):
     def _run(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -32,6 +34,9 @@ root = Path({str(root)!r})
 os.environ["SILLYTAVERN_BRIDGE_HOME"] = str(root)
 
 import bridge.common as common
+import os
+from bridge.settings import load_app_settings
+settings = load_app_settings(dict(os.environ), home=Path.home())
 
 assert not (root / "logs").exists()
 assert common._GENERATION_EXECUTOR is None
@@ -60,11 +65,14 @@ from pathlib import Path
 import stat
 
 import bridge.common as common
+import os
+from bridge.settings import load_app_settings
+settings = load_app_settings(dict(os.environ), home=Path.home())
 
 assert hasattr(common, "configure_logging")
 target = Path({str(log_file)!r})
-common.configure_logging(target)
-common.configure_logging(target)
+common.configure_logging(target, app_settings=settings)
+common.configure_logging(target, app_settings=settings)
 
 matching = [
     handler
@@ -92,8 +100,11 @@ if os.name == "posix":
             source = f"""
 from pathlib import Path
 import bridge.common as common
+import os
+from bridge.settings import load_app_settings
+settings = load_app_settings(dict(os.environ), home=Path.home())
 
-common.configure_logging(Path({str(log_file)!r}))
+common.configure_logging(Path({str(log_file)!r}), app_settings=settings)
 assert common._GENERATION_EXECUTOR is None
 assert common._UTILITY_EXECUTOR is None
 """
@@ -114,12 +125,15 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import bridge.common as common
+import os
+from bridge.settings import load_app_settings
+settings = load_app_settings(dict(os.environ), home=Path.home())
 
 assert hasattr(common, "configure_logging")
 target = Path({str(log_file)!r})
-common.configure_logging(target)
+common.configure_logging(target, app_settings=settings)
 before = tuple(logging.getLogger().handlers)
-common.configure_logging(target)
+common.configure_logging(target, app_settings=settings)
 after = tuple(logging.getLogger().handlers)
 
 assert before == after

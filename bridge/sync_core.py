@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+from functools import partial as _partial
 from pathlib import Path
 
 from bridge.card_content import (
@@ -14,12 +15,7 @@ from bridge.card_content import (
     safe_character_path,
     safe_world_path,
 )
-from bridge.config import (
-    DEFAULT_MODEL,
-    DEFAULT_USER_NAME,
-    GENERATION_DEFAULTS,
-    SYNC_MAX_BYTES,
-)
+from bridge.config import GENERATION_DEFAULTS, SYNC_MAX_BYTES
 from bridge.database import (
     ensure_sync_binding,
     get_generation_settings,
@@ -29,21 +25,11 @@ from bridge.database import (
 )
 from bridge.generation import save_response_variant
 from bridge.language import normalize_response_language
-from bridge.memory import (
-    get_session_summary,
-    retain_session_memory,
-)
-from bridge.persona_sync import (
-    get_persona,
-    persona_name,
-)
-from bridge.sync_integrity import (
-    SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter,
-)
-from bridge.telegram import (
-    load_session,
-    update_session,
-)
+from bridge.memory import get_session_summary, retain_session_memory
+from bridge.persona_sync import get_persona, persona_name
+from bridge.settings import AppSettings
+from bridge.sync_integrity import SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter
+from bridge.telegram import load_session, update_session
 
 SYNC_MAX_PAYLOAD_BYTES = SYNC_MAX_BYTES
 
@@ -107,9 +93,15 @@ def build_sync_records(
     fields: dict[str, str],
     sync_id: str,
     rows: list[tuple[int, str, str, float]],
+    *,
+    app_settings: AppSettings,
 ) -> list[dict]:
     """Build API chat records with compatible SillyTavern swipes."""
-    user_name = persona_name(session["persona_id"]) if session["persona_id"] else DEFAULT_USER_NAME
+    user_name = (
+        persona_name(session["persona_id"], app_settings=app_settings)
+        if session["persona_id"]
+        else app_settings.default_user_name
+    )
     transcript_hash = sync_transcript_hash([(role, content) for _rowid, role, content, _created_at in rows])
     header = {
         "chat_metadata": {
@@ -120,7 +112,7 @@ def build_sync_records(
             "model": session["model_id"],
             "response_language": session.get("response_language") or "auto",
             "persona": session["persona_id"],
-            "world_info": active_world_files(session["world_file"]),
+            "world_info": active_world_files(session["world_file"], app_settings=app_settings),
             "author_note": session["author_note"],
             "generation_settings": get_generation_settings(db, chat_id, session["session_id"]),
             "session_summary": get_session_summary(db, chat_id, session["session_id"])[0],
@@ -165,20 +157,24 @@ def _apply_sync_snapshot_backend(
     metadata: dict,
     messages: list[tuple[str, str]],
     variants: dict[int, tuple[list[str], int]],
+    *,
+    app_settings: AppSettings,
 ) -> str:
     """Replace one bridge transcript from a validated Live API snapshot."""
     values = {"title": str(metadata.get("name") or session["title"])[:120]}
     character_file = str(metadata.get("character_file") or "")
-    if character_file and safe_character_path(character_file):
+    if character_file and safe_character_path(character_file, app_settings=app_settings):
         values["character_file"] = Path(character_file).name
     if metadata.get("model"):
         values["model_id"] = str(metadata["model"])[:200]
     persona_id = str(metadata.get("persona") or "")
-    if persona_id and get_persona(persona_id):
+    if persona_id and get_persona(persona_id, app_settings=app_settings):
         values["persona_id"] = persona_id
     raw_worlds = metadata.get("world_info")
     candidates = raw_worlds if isinstance(raw_worlds, list) else ([raw_worlds] if raw_worlds else [])
-    valid_worlds = [Path(str(name)).name for name in candidates if safe_world_path(str(name))]
+    valid_worlds = [
+        Path(str(name)).name for name in candidates if safe_world_path(str(name), app_settings=app_settings)
+    ]
     if valid_worlds:
         values["world_file"] = encode_world_files(valid_worlds)
     values["author_note"] = str(metadata.get("author_note") or "")[:2000]
@@ -229,36 +225,31 @@ def _apply_sync_snapshot_backend(
     return sync_transcript_hash(messages)
 
 
-_SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
-    apply_backend=_apply_sync_snapshot_backend,
-    update_session=(
-        lambda db, chat_id, session_id, **updates: update_session(
-            db,
-            chat_id,
-            session_id,
-            **updates,
-        )
-    ),
-    load_session=(
-        lambda db, chat_id, session_id, default_model: load_session(
-            db,
-            chat_id,
-            session_id,
-            default_model,
-        )
-    ),
-    retain_memory=(
-        lambda db, chat_id, session, fields: retain_session_memory(
-            db,
-            chat_id,
-            session,
-            fields,
-        )
-    ),
-    card_fields=(lambda character_file: card_fields_from_file(character_file)),
-    default_model=DEFAULT_MODEL,
-    log_warning=(lambda message, **kwargs: logging.warning(message, **kwargs)),
-)
+def _make_sync_snapshot_integrity(*, app_settings: AppSettings):
+    return _SyncSnapshotIntegrityAdapter(
+        apply_backend=_partial(_apply_sync_snapshot_backend, app_settings=app_settings),
+        update_session=(
+            lambda db, chat_id, session_id, **updates: update_session(
+                db,
+                chat_id,
+                session_id,
+                **updates,
+            )
+        ),
+        load_session=(
+            lambda db, chat_id, session_id, default_model: load_session(
+                db, chat_id, session_id, default_model, app_settings=app_settings
+            )
+        ),
+        retain_memory=(
+            lambda db, chat_id, session, fields: retain_session_memory(
+                db, chat_id, session, fields, app_settings=app_settings
+            )
+        ),
+        card_fields=(lambda character_file: card_fields_from_file(character_file, app_settings=app_settings)),
+        default_model=app_settings.default_model,
+        log_warning=(lambda message, **kwargs: logging.warning(message, **kwargs)),
+    )
 
 
 def apply_sync_snapshot(
@@ -268,8 +259,10 @@ def apply_sync_snapshot(
     metadata: dict,
     messages: list[tuple[str, str]],
     variants: dict[int, tuple[list[str], int]],
+    *,
+    app_settings: AppSettings,
 ) -> str:
-    return _SYNC_SNAPSHOT_INTEGRITY.apply(
+    return _make_sync_snapshot_integrity(app_settings=app_settings).apply(
         db,
         chat_id,
         session,

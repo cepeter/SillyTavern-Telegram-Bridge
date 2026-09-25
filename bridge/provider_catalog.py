@@ -8,10 +8,12 @@ from pathlib import Path
 
 import yaml
 
-from bridge.config import PROVIDER_CONFIG_FILE
+from bridge.settings import AppSettings
 
 
-def load_provider_catalog(path: Path = PROVIDER_CONFIG_FILE) -> Mapping[str, object]:
+def load_provider_catalog(path: Path | None = None, *, app_settings: AppSettings) -> Mapping[str, object]:
+    if path is None:
+        path = app_settings.provider_config_file
     try:
         config = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     except Exception:

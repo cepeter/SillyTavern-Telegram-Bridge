@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_persona_service
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -8,7 +9,7 @@ import bridge.generation as _m_generation
 import bridge.message_commands as _m_message_commands
 
 
-class UserDialogueActionTests(unittest.TestCase):
+class UserDialogueActionTests(SettingsTestCase):
     def test_dialogue_and_action_are_labeled(self):
         result = _m_generation.format_user_dialogue_action("I am coming *walking toward the door*")
         self.assertEqual(result, "User dialogue:\nI am coming\n\nUser action:\nwalking toward the door")
@@ -44,6 +45,7 @@ class UserDialogueActionTests(unittest.TestCase):
             "I am coming *walking toward the door*",
             [("user", "*waits quietly* Ready?")],
             persona_service=make_test_persona_service(),
+            app_settings=self.app_settings_builder.build(),
         )
         self.assertEqual(messages[-2]["content"], "User dialogue:\nReady?\n\nUser action:\nwaits quietly")
         self.assertEqual(

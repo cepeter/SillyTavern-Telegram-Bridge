@@ -1,4 +1,7 @@
+from functools import partial
+
 from application_test_setup import ensure_application_extensions, make_test_memory_service
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -8,7 +11,6 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-import bridge.config as config
 import bridge.input_flows as _m_input_flows
 import bridge.main as _m_main
 import bridge.memory as _m_memory
@@ -72,18 +74,18 @@ class _FakeHindsight:
         return SimpleNamespace(success=True)
 
 
-class HindsightSessionCleanupTests(unittest.TestCase):
+class HindsightSessionCleanupTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
+        self.old_db = self.app_settings_builder.db_file
         self.old_client = memory_backend.hindsight_client
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         memory_backend.hindsight_client = self.old_client
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def test_document_ids_are_deterministic_and_session_prefixed(self):
@@ -97,13 +99,28 @@ class HindsightSessionCleanupTests(unittest.TestCase):
 
     def test_explicit_and_conversation_retain_are_mapped_synchronously(self):
         session = _m_session_naming.create_session(
-            self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="memory-session"
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="memory-session",
+            app_settings=self.app_settings_builder.build(),
         )
         fake = _FakeHindsight()
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
-        self.assertTrue(_m_input_flows.remember_fact(self.db, "chat", session, {"name": "Alisha"}, "remember this"))
-        _m_memory._retain_session_memory_backend("chat", session, "Alisha", "conversation")
+        self.assertTrue(
+            _m_input_flows.remember_fact(
+                self.db,
+                "chat",
+                session,
+                {"name": "Alisha"},
+                "remember this",
+                app_settings=self.app_settings_builder.build(),
+            )
+        )
+        _m_memory._retain_session_memory_backend(
+            "chat", session, "Alisha", "conversation", app_settings=self.app_settings_builder.build()
+        )
 
         self.assertEqual(len(fake.retained), 2)
         self.assertTrue(all(item["retain_async"] is False for item in fake.retained))
@@ -123,11 +140,23 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         )
 
     def test_delete_removes_mapped_tagged_prefixed_and_legacy_documents_only(self):
-        active = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
-        target = _m_session_naming.create_session(
-            self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="delete-me"
+        active = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
-        other = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="keep-me")
+        target = _m_session_naming.create_session(
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="delete-me",
+            app_settings=self.app_settings_builder.build(),
+        )
+        other = _m_session_naming.create_session(
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="keep-me",
+            app_settings=self.app_settings_builder.build(),
+        )
         prefix = _m_memory_curator.hindsight_session_prefix(target["session_id"])
         mapped_id = prefix + "-mapped"
         tagged_id = "old-explicit-target"
@@ -143,7 +172,7 @@ class HindsightSessionCleanupTests(unittest.TestCase):
                 other_id: ["session:keep-me"],
             }
         )
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
         self.db.execute(
             "INSERT INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
             ("chat", "delete-me", mapped_id, "conversation", time.time()),
@@ -156,7 +185,9 @@ class HindsightSessionCleanupTests(unittest.TestCase):
             target["session_id"],
             active["session_id"],
             memory_service=make_test_memory_service(
-                purge_session_memory=_m_memory.purge_hindsight_session,
+                purge_session_memory=partial(
+                    _m_memory.purge_hindsight_session, app_settings=self.app_settings_builder.build()
+                ),
             ),
         )
 
@@ -175,13 +206,21 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         )
 
     def test_late_background_retain_skips_deleted_session(self):
-        session = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="gone")
+        session = _m_session_naming.create_session(
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="gone",
+            app_settings=self.app_settings_builder.build(),
+        )
         fake = _FakeHindsight()
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
         self.db.execute("DELETE FROM sessions WHERE chat_id='chat' AND session_id='gone'")
         self.db.commit()
 
-        _m_memory._retain_session_memory_backend("chat", session, "Alisha", "must not return")
+        _m_memory._retain_session_memory_backend(
+            "chat", session, "Alisha", "must not return", app_settings=self.app_settings_builder.build()
+        )
 
         self.assertEqual(fake.retained, [])
         self.assertEqual(
@@ -189,12 +228,20 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         )
 
     def test_real_purge_helper_fails_closed_when_document_api_is_unavailable(self):
-        _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="unavailable")
+        _m_session_naming.create_session(
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="unavailable",
+            app_settings=self.app_settings_builder.build(),
+        )
         fake = _FakeHindsight(fail_list=True)
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
         with self.assertRaisesRegex(RuntimeError, "Hindsight session memory cleanup failed"):
-            _m_main.purge_hindsight_session(self.db, "chat", "unavailable")
+            _m_main.purge_hindsight_session(
+                self.db, "chat", "unavailable", app_settings=self.app_settings_builder.build()
+            )
 
         self.assertTrue(fake.documents.closed)
         self.assertIsNotNone(
@@ -202,13 +249,21 @@ class HindsightSessionCleanupTests(unittest.TestCase):
         )
 
     def test_document_discovery_paginates_past_one_thousand_items(self):
-        _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="many")
+        _m_session_naming.create_session(
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="many",
+            app_settings=self.app_settings_builder.build(),
+        )
         target_docs = {f"legacy-explicit-{index}": ["session:many", "character:shared"] for index in range(1005)}
         target_docs["other-session"] = ["session:other", "character:shared"]
         fake = _FakeHindsight(target_docs)
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
-        deleted = _m_main.purge_hindsight_session(self.db, "chat", "many")
+        deleted = _m_main.purge_hindsight_session(
+            self.db, "chat", "many", app_settings=self.app_settings_builder.build()
+        )
 
         self.assertGreaterEqual(deleted, 1005)
         self.assertTrue(fake.documents.closed)

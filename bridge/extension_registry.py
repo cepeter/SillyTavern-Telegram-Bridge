@@ -12,8 +12,10 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from bridge.settings import AppSettings
+
 CommandRoute = Callable[..., bool]
-PostRetainHook = Callable[[Any, str, dict[str, str], dict[str, str], Any], None]
+PostRetainHook = Callable[..., None]
 SummaryContextHook = Callable[[str, Any, str, dict[str, str]], str | None]
 SummaryClearHook = Callable[[Any, str, str], None]
 
@@ -70,10 +72,12 @@ def run_post_retain_hooks(
     session: dict[str, str],
     fields: dict[str, str],
     provider_port: Any,
+    *,
+    app_settings: AppSettings,
 ) -> None:
     for name, handler in tuple(_POST_RETAIN_HOOKS.items()):
         try:
-            handler(db, chat_id, session, fields, provider_port)
+            handler(db, chat_id, session, fields, provider_port, app_settings=app_settings)
         except Exception:
             logging.exception("Post-retain extension hook failed: %s", name)
 

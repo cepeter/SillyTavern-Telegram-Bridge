@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -9,26 +10,25 @@ import types
 import unittest
 from pathlib import Path
 
-import bridge.config as config
 import bridge.database as database
 import bridge.message_commands as _m_message_commands
 import bridge.sync_api as _m_sync_api
 
 
-class DatabaseOptimizationTests(unittest.TestCase):
+class DatabaseOptimizationTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.original_db = config.DB_FILE
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = database.db_connect()
+        self.original_db = self.app_settings_builder.db_file
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = database.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
-        config.DB_FILE = self.original_db
+        self.app_settings_builder.db_file = self.original_db
         self.tmp.cleanup()
 
     def test_connection_pragmas_on_primary_and_lightweight_connect(self):
-        worker = database._lightweight_db_connect(timeout=15.0)
+        worker = database._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=15.0)
         for conn, expected_cache_kib in (
             (self.db, database._DB_PRIMARY_CACHE_KIB),
             (worker, database._DB_WORKER_CACHE_KIB),
@@ -55,16 +55,16 @@ class DatabaseOptimizationTests(unittest.TestCase):
         # Worker startup must stay connection-local: a brand-new database file
         # touched only by _lightweight_db_connect must not be switched to WAL.
         fresh = Path(self.tmp.name) / "fresh.sqlite3"
-        config.DB_FILE = fresh
+        self.app_settings_builder.db_file = fresh
         try:
-            conn = database._lightweight_db_connect(timeout=5.0)
+            conn = database._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
             try:
                 journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
                 self.assertEqual(journal_mode.casefold(), "delete")
             finally:
                 conn.close()
         finally:
-            config.DB_FILE = self.original_db
+            self.app_settings_builder.db_file = self.original_db
 
     def test_auto_vacuum_incremental_initialized(self):
         auto_vacuum = self.db.execute("PRAGMA auto_vacuum").fetchone()[0]
@@ -103,10 +103,12 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.db.execute("DELETE FROM test_churn")
         self.db.commit()
 
-        reclaimed = database.run_database_maintenance(vacuum_freelist_threshold=1)
+        reclaimed = database.run_database_maintenance(
+            vacuum_freelist_threshold=1, app_settings=self.app_settings_builder.build()
+        )
         self.assertTrue(reclaimed)
 
-        conn = database._lightweight_db_connect(timeout=5.0)
+        conn = database._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
         try:
             freelist = conn.execute("PRAGMA freelist_count").fetchone()[0]
             self.assertEqual(freelist, 0)
@@ -122,7 +124,9 @@ class DatabaseOptimizationTests(unittest.TestCase):
         self.db.commit()
         self.assertGreater(self.db.execute("PRAGMA freelist_count").fetchone()[0], 0)
 
-        reclaimed = database.run_database_maintenance(vacuum_freelist_threshold=500)
+        reclaimed = database.run_database_maintenance(
+            vacuum_freelist_threshold=500, app_settings=self.app_settings_builder.build()
+        )
 
         self.assertFalse(reclaimed)
         # A full VACUUM would have reclaimed every free page.
@@ -155,7 +159,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
             def poll(self, db):
                 polls.append(db)
 
-        def connect():
+        def connect(*, app_settings=None):
             connection = FakeDb()
             connections.append(connection)
             return connection
@@ -163,7 +167,7 @@ class DatabaseOptimizationTests(unittest.TestCase):
         _m_sync_api._LIVE_SYNC_STOP_EVENT = stop_event
         _m_sync_api.db_connect = connect
         try:
-            _m_sync_api._live_sync_worker_loop(FakeSync())
+            _m_sync_api._live_sync_worker_loop(FakeSync(), app_settings=self.app_settings_builder.build())
         finally:
             _m_sync_api._LIVE_SYNC_STOP_EVENT = original_event
             _m_sync_api.db_connect = original_connect
@@ -201,12 +205,12 @@ class DatabaseOptimizationTests(unittest.TestCase):
 
     def test_db_connect_runs_database_wide_schema_setup_once_per_process(self):
         self.assertIn(
-            Path(config.DB_FILE).expanduser().resolve(),
+            Path(self.app_settings_builder.db_file).expanduser().resolve(),
             database._DB_CONNECTION_GATE._ready_paths,
         )
 
         traced = []
-        second = database._lightweight_db_connect(timeout=5.0)
+        second = database._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
         second.set_trace_callback(traced.append)
         try:
             self.assertEqual(

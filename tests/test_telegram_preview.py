@@ -1,9 +1,11 @@
 import unittest
 
+from settings_test_support import SettingsTestCase
+
 import bridge.telegram as telegram
 
 
-class TelegramPreviewTests(unittest.TestCase):
+class TelegramPreviewTests(SettingsTestCase):
     def test_send_text_disables_link_previews(self):
         calls = []
         original_request = telegram.telegram_request

@@ -9,6 +9,7 @@ from application_test_setup import (
     make_test_provider_port,
     make_test_request_context,
 )
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -24,7 +25,6 @@ import bridge.callbacks as _m_callbacks
 import bridge.cards as _m_cards
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
-import bridge.config as config
 import bridge.generation as _m_generation
 import bridge.input_flows as _m_input_flows
 import bridge.language as _m_language
@@ -43,11 +43,11 @@ import bridge.telegram as _m_telegram
 from bridge.model_router import ModelRouter
 
 
-class AuditRegressionTests(unittest.TestCase):
+class AuditRegressionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
@@ -80,7 +80,7 @@ class AuditRegressionTests(unittest.TestCase):
             }
         )
 
-        def fake_urlopen(request, timeout):
+        def fake_urlopen(request, timeout, *, environ=None):
             captured.append(json.loads(request.data.decode()))
             return FakeResponse()
 
@@ -97,6 +97,7 @@ class AuditRegressionTests(unittest.TestCase):
                     "test",
                     [{"role": "user", "content": "hello"}],
                     settings=settings,
+                    app_settings=self.app_settings_builder.build(),
                 ),
                 "visible",
             )
@@ -108,6 +109,7 @@ class AuditRegressionTests(unittest.TestCase):
                     "test",
                     [{"role": "user", "content": "hello"}],
                     settings=settings,
+                    app_settings=self.app_settings_builder.build(),
                 ),
                 "visible",
             )
@@ -128,7 +130,7 @@ class AuditRegressionTests(unittest.TestCase):
     def test_begin_operation_commits_prepared_marker(self):
         self.assertTrue(_m_panel_callback_routes.begin_operation(self.db, 101, "test"))
 
-        second = _m_memory_curator.db_connect()
+        second = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         try:
             self.assertEqual(_m_message_commands.operation_phase(second, 101), "in_progress")
             second.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('writer_probe','ok')")
@@ -179,7 +181,7 @@ class AuditRegressionTests(unittest.TestCase):
         self.db.commit()
         job_id = int(self.db.execute("SELECT job_id FROM jobs WHERE update_id=999").fetchone()[0])
 
-        guarded = _m_main._DURABLE_WORKER_GUARD.prepare(
+        guarded = _m_main._DurableWorkerGuard(_m_main._database._lightweight_db_connect).prepare(
             self.db,
             job_id,
             lambda: (_ for _ in ()).throw(sqlite3.OperationalError("database is locked")),
@@ -194,7 +196,9 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(state, "queued")
 
     def test_selection_commands_open_panels(self):
-        _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         fields = {
             "name": "Test",
             "first_mes": "",
@@ -212,21 +216,23 @@ class AuditRegressionTests(unittest.TestCase):
             "preset": _m_command_routes.send_preset_menu,
             "branch": _m_command_routes.send_swipe_menu,
         }
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_command_routes.send_persona_menu = lambda *_args, **_kwargs: opened.append("persona")
         _m_command_routes.send_preset_menu = lambda *_args, **_kwargs: opened.append("preset")
         _m_command_routes.send_swipe_menu = lambda *_args, **_kwargs: opened.append("branch")
         try:
             for command in ("/persona user", "/preset use creative", "/branch 2"):
-                make_test_conversation_service().process_message(
+                make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                     self.db,
                     "token",
                     "key",
-                    _m_memory_curator.DEFAULT_MODEL,
+                    self.app_settings_builder.default_model,
                     fields,
                     "chat",
                     command,
-                    services=make_test_application_services(memory=make_test_memory_service()),
+                    services=make_test_application_services(
+                        memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
+                    ),
                 )
         finally:
             _m_message_commands.card_fields_from_file = originals["card"]
@@ -250,14 +256,14 @@ class AuditRegressionTests(unittest.TestCase):
         sent = []
         original_card = _m_message_commands.card_fields_from_file
         original_send = _m_command_routes.send_text
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/providers unknown",
@@ -268,6 +274,7 @@ class AuditRegressionTests(unittest.TestCase):
                             AssertionError("unknown provider action must not generate")
                         )
                     ),
+                    app_settings=self.app_settings_builder.build(),
                 ),
             )
         finally:
@@ -276,7 +283,9 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(sent, ["Unknown /providers action. Use /providers, /providers health, or /providers refresh."])
 
     def test_stscript_reset_opens_confirmation_panel(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", session["session_id"], "user", "keep this", time.time()),
@@ -295,18 +304,20 @@ class AuditRegressionTests(unittest.TestCase):
         opened = []
         original_card = _m_message_commands.card_fields_from_file
         original_panel = _m_command_routes.send_stscript_menu
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_command_routes.send_stscript_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/stscript",
-                services=make_test_application_services(memory=make_test_memory_service()),
+                services=make_test_application_services(
+                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -320,7 +331,10 @@ class AuditRegressionTests(unittest.TestCase):
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_stt_language_menu(
-                "token", "chat", self.db, request_context=make_test_request_context(self.db)
+                "token",
+                "chat",
+                self.db,
+                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -331,7 +345,9 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertIn("enum:stt:language_input", callbacks)
 
     def test_text_commands_open_scoped_input_and_cancel_clears_it(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         original_send = _m_input_flows.send_text
         sent = []
         _m_input_flows.send_text = lambda _token, _chat, text: sent.append(text) or [101]
@@ -341,7 +357,7 @@ class AuditRegressionTests(unittest.TestCase):
             )
             self.assertIn("edit", _m_session_naming.get_meta(self.db, "text_action_input:chat", ""))
             self.assertTrue(
-                make_test_input_flow_service().handle_pending(
+                make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                     self.db,
                     "token",
                     "chat",
@@ -349,11 +365,15 @@ class AuditRegressionTests(unittest.TestCase):
                     "/cancel",
                     api_key="key",
                     fields={},
-                    group_service=make_test_group_service(),
-                    provider_port=make_test_application_services().provider,
+                    group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
+                    provider_port=make_test_application_services(
+                        app_settings=self.app_settings_builder.build()
+                    ).provider,
                     memory_service=make_test_memory_service(),
                     persona_service=make_test_persona_service(),
-                    request_context=make_test_request_context(self.db, session["session_id"]),
+                    request_context=make_test_request_context(
+                        self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                    ),
                 )
             )
         finally:
@@ -373,12 +393,22 @@ class AuditRegressionTests(unittest.TestCase):
         _m_commands.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
             _m_command_routes.send_memory_menu(
-                "token", "chat", self.db, request_context=make_test_request_context(self.db)
+                "token",
+                "chat",
+                self.db,
+                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
             _m_command_routes.send_databank_menu(
-                "token", "chat", self.db, request_context=make_test_request_context(self.db)
+                "token",
+                "chat",
+                self.db,
+                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
-            _m_command_routes.send_stscript_menu("token", "chat", request_context=make_test_request_context(self.db))
+            _m_command_routes.send_stscript_menu(
+                "token",
+                "chat",
+                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
+            )
         finally:
             _m_cards.send_panel_request = original_request
             _m_commands.send_panel_request = original_stscript_request
@@ -394,7 +424,9 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertNotIn("enum:stscript:note", callbacks)
 
     def test_stt_language_user_input_is_session_scoped(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_session_naming.set_meta(
             self.db,
             "stt_language_input:chat",
@@ -413,15 +445,15 @@ class AuditRegressionTests(unittest.TestCase):
         original_card = _m_message_commands.card_fields_from_file
         original_menu = _m_input_flows.send_voice_input_menu
         original_send = _m_input_flows.send_text
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_input_flows.send_voice_input_menu = lambda *_args, **_kwargs: None
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "id",
@@ -432,6 +464,7 @@ class AuditRegressionTests(unittest.TestCase):
                             AssertionError("removed command must not generate")
                         )
                     ),
+                    app_settings=self.app_settings_builder.build(),
                 ),
             )
         finally:
@@ -441,7 +474,9 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language:chat", ""), "id")
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language_input:chat", ""), "")
 
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         fields = {
             "name": "Test",
             "first_mes": "",
@@ -455,27 +490,33 @@ class AuditRegressionTests(unittest.TestCase):
         sent = []
         original_card = _m_message_commands.card_fields_from_file
         original_send = _m_command_routes.send_text
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_command_routes.send_text = lambda _token, _chat_id, text: sent.append(text) or []
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/model provider/model",
-                services=make_test_application_services(memory=make_test_memory_service()),
+                services=make_test_application_services(
+                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
             _m_command_routes.send_text = original_send
         self.assertEqual(sent, ["Unknown or removed command. Use /help to see available commands."])
         self.assertEqual(
-            _m_memory_curator.load_session(self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL)[
-                "model_id"
-            ],
+            _m_memory_curator.load_session(
+                self.db,
+                "chat",
+                session["session_id"],
+                self.app_settings_builder.default_model,
+                app_settings=self.app_settings_builder.build(),
+            )["model_id"],
             session["model_id"],
         )
 
@@ -485,7 +526,10 @@ class AuditRegressionTests(unittest.TestCase):
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_preset_menu(
-                "token", "chat", self.db, request_context=make_test_request_context(self.db)
+                "token",
+                "chat",
+                self.db,
+                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -495,7 +539,9 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertIn("enum:preset:save", callbacks)
 
     def test_preset_save_two_step_input(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         fields = {
             "name": "Test",
             "first_mes": "",
@@ -514,19 +560,21 @@ class AuditRegressionTests(unittest.TestCase):
         original_card = _m_message_commands.card_fields_from_file
         original_menu = _m_input_flows.send_preset_menu
         original_send = _m_input_flows.send_text
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_input_flows.send_preset_menu = lambda *_args, **_kwargs: None
         _m_input_flows.send_text = lambda *_args, **_kwargs: []
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "creative",
-                services=make_test_application_services(memory=make_test_memory_service()),
+                services=make_test_application_services(
+                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -535,7 +583,9 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertIsNotNone(_m_commands.load_generation_preset(self.db, "chat", "creative"))
         self.assertEqual(_m_session_naming.get_meta(self.db, "preset_save_input:chat", ""), "")
 
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         self.db.execute(
             "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", session["session_id"], "user", "old conversation", time.time()),
@@ -557,18 +607,18 @@ class AuditRegressionTests(unittest.TestCase):
         original_purge = _m_memory.purge_hindsight_session
         original_reply = _m_message_commands.send_reply
         panel = []
-        _m_message_commands.card_fields_from_file = lambda _filename: fields
+        _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_message_commands.send_panel_request = lambda _token, method, payload, **_kwargs: (
             panel.append((method, payload)) or {}
         )
-        _m_memory.purge_hindsight_session = lambda _db, _chat_id, _session_id: None
-        _m_message_commands.send_reply = lambda _token, _chat_id, text, *_args: sent.append(text)
+        _m_memory.purge_hindsight_session = lambda _db, _chat_id, _session_id, *, app_settings=None: None
+        _m_message_commands.send_reply = lambda _token, _chat_id, text, *_args, app_settings=None: sent.append(text)
         try:
-            make_test_conversation_service().process_message(
+            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
                 "token",
                 "key",
-                _m_memory_curator.DEFAULT_MODEL,
+                self.app_settings_builder.default_model,
                 fields,
                 "chat",
                 "/reset",
@@ -579,6 +629,7 @@ class AuditRegressionTests(unittest.TestCase):
                             AssertionError("reset must not generate")
                         )
                     ),
+                    app_settings=self.app_settings_builder.build(),
                 ),
             )
             self.assertEqual(panel[0][0], "sendMessage")
@@ -616,11 +667,15 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(callbacks, {"reset:confirm", "reset:cancel"})
 
     def test_reset_uses_session_scoped_purge_not_whole_bank(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         calls = []
         original_purge = _m_memory.purge_hindsight_session
         original_reply = _m_message_commands.send_text
-        _m_memory.purge_hindsight_session = lambda _db, chat_id, session_id: calls.append((chat_id, session_id))
+        _m_memory.purge_hindsight_session = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
+            (chat_id, session_id)
+        )
         _m_message_commands.send_text = lambda *_args, **_kwargs: None
         try:
             _m_panel_callback_routes.reset_session(
@@ -638,10 +693,16 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(calls, [("chat", session["session_id"])])
 
     def test_response_language_is_added_to_prompt(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_session_naming.update_session(self.db, "chat", session["session_id"], response_language="en")
         session = _m_memory_curator.load_session(
-            self.db, "chat", session["session_id"], _m_memory_curator.DEFAULT_MODEL
+            self.db,
+            "chat",
+            session["session_id"],
+            self.app_settings_builder.default_model,
+            app_settings=self.app_settings_builder.build(),
         )
         fields = {
             "name": "Test",
@@ -655,7 +716,12 @@ class AuditRegressionTests(unittest.TestCase):
         }
 
         messages = _m_message_commands.build_chat_messages(
-            session, fields, "Halo", [], persona_service=make_test_persona_service()
+            session,
+            fields,
+            "Halo",
+            [],
+            persona_service=make_test_persona_service(),
+            app_settings=self.app_settings_builder.build(),
         )
 
         system = messages[0]["content"]
@@ -673,7 +739,9 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertEqual(messages[-1]["role"], "user")
 
     def test_hindsight_recall_is_hard_session_scoped(self):
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         _m_session_naming.set_meta(self.db, "memory_scope:chat", "user")
         calls = []
 
@@ -683,10 +751,15 @@ class AuditRegressionTests(unittest.TestCase):
                 return type("Result", (), {"results": []})()
 
         original_client = memory_backend.hindsight_client
-        memory_backend.hindsight_client = FakeClient
+        memory_backend.hindsight_client = lambda *, app_settings: FakeClient()
         try:
             self.assertEqual(_m_status_panels.memory_scope(self.db, "chat"), "session")
-            self.assertEqual(_m_memory.recall_memory_results(self.db, "chat", session, "old fact", "Test"), [])
+            self.assertEqual(
+                _m_memory.recall_memory_results(
+                    self.db, "chat", session, "old fact", "Test", app_settings=self.app_settings_builder.build()
+                ),
+                [],
+            )
         finally:
             memory_backend.hindsight_client = original_client
         self.assertEqual(calls[0]["tags"], [f"session:{session['session_id']}"])
@@ -698,7 +771,10 @@ class AuditRegressionTests(unittest.TestCase):
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
             _m_command_routes.send_memory_menu(
-                "token", "chat", self.db, request_context=make_test_request_context(self.db)
+                "token",
+                "chat",
+                self.db,
+                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_cards.send_panel_request = original_request
@@ -707,10 +783,14 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertNotIn("enum:memory:scope", callbacks)
         self.assertIn("active session only (fixed)", payload["text"])
 
-        session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
+        session = _m_telegram.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
         sent = []
         original_recall = _m_memory.recall_memory_results
-        _m_memory.recall_memory_results = lambda *_args, **_kwargs: [type("Result", (), {"text": "session fact"})()]
+        _m_memory.recall_memory_results = lambda *_args, app_settings=None, **_kwargs: [
+            type("Result", (), {"text": "session fact"})()
+        ]
         try:
             _m_command_routes.handle_memory_command(
                 self.db,
@@ -720,6 +800,7 @@ class AuditRegressionTests(unittest.TestCase):
                 {"name": "Test"},
                 "/memory search session fact",
                 send_text_fn=lambda _token, _chat_id, text: sent.append(text),
+                app_settings=self.app_settings_builder.build(),
             )
         finally:
             _m_memory.recall_memory_results = original_recall

@@ -8,26 +8,25 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 from unittest.mock import patch
 
-from application_test_setup import (
-    ensure_application_extensions,
-    make_test_application_services,
-)
+from application_test_setup import ensure_application_extensions, make_test_application_services
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
 import bridge.callback_dispatch as callback_dispatch
 import bridge.callbacks as callbacks
 import bridge.composition as composition
-import bridge.config as config
 import bridge.database as database
 import bridge.telegram as telegram
 import bridge.update as update
 
 
-class PanelContextOwnershipTests(unittest.TestCase):
+class PanelContextOwnershipTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = database.db_connect(Path(self.tmp.name) / "panel.sqlite3")
+        self.db = database.db_connect(
+            Path(self.tmp.name) / "panel.sqlite3", app_settings=self.app_settings_builder.build()
+        )
         self.db.execute(
             "INSERT INTO panel_sessions(chat_id,message_id,session_id,owner_user_id,expires_at) VALUES(?,?,?,?,?)",
             ("chat", "77", "session-a", "user-a", time.time() + 300),
@@ -68,9 +67,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
 
     def test_update_cancel_through_callback_uses_caller_database(self):
         session = telegram.ensure_session(
-            self.db,
-            "chat",
-            config.DEFAULT_MODEL,
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         telegram.bind_panel_session(
             self.db,
@@ -105,7 +102,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
                 self.db,
                 "token",
                 callback,
-                services=make_test_application_services(),
+                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
 
         row = self.db.execute(
@@ -117,9 +114,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
     def test_request_context_is_immutable(self):
         self.assertTrue(hasattr(composition, "RequestContext"))
         context = composition.RequestContext(
-            self.db,
-            "session-a",
-            "user-a",
+            self.db, "session-a", "user-a", app_settings=self.app_settings_builder.build()
         )
 
         with self.assertRaises(FrozenInstanceError):
@@ -128,9 +123,7 @@ class PanelContextOwnershipTests(unittest.TestCase):
     def test_panel_request_binds_explicit_session_and_actor(self):
         self.assertTrue(hasattr(telegram, "send_panel_request"))
         context = composition.RequestContext(
-            self.db,
-            "session-explicit",
-            "user-explicit",
+            self.db, "session-explicit", "user-explicit", app_settings=self.app_settings_builder.build()
         )
         with patch.object(
             telegram,

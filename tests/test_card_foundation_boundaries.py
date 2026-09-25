@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from settings_test_support import SettingsTestCase
+
 REPO_ROOT = Path(__file__).parents[1]
 
 
@@ -46,7 +48,7 @@ CALLBACK_TOKEN_EXPORTS = (
 )
 
 
-class CardFoundationBoundaryTests(unittest.TestCase):
+class CardFoundationBoundaryTests(SettingsTestCase):
     def _run_python(self, source: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", source],
@@ -59,28 +61,26 @@ class CardFoundationBoundaryTests(unittest.TestCase):
     def test_config_exposes_card_foundation_defaults(self):
         import bridge.config as config
 
-        self.assertIsInstance(config.SILLYTAVERN_DIR, Path)
-        self.assertIsInstance(config.CHARACTER_DIR, Path)
-        self.assertIsInstance(config.CARD_FILE, Path)
-        self.assertIsInstance(config.WORLD_DIR, Path)
-        self.assertIsInstance(config.SYSTEM_PROMPTS_DIR, Path)
-        self.assertIsInstance(config.DEFAULT_CHARACTER_FILE, str)
+        self.assertIsInstance(self.app_settings_builder.sillytavern_dir, Path)
+        self.assertIsInstance(self.app_settings_builder.character_dir, Path)
+        self.assertIsInstance(self.app_settings_builder.card_file, Path)
+        self.assertIsInstance(self.app_settings_builder.world_dir, Path)
+        self.assertIsInstance(self.app_settings_builder.system_prompts_dir, Path)
+        self.assertIsInstance(self.app_settings_builder.default_character_file, str)
         self.assertFalse(hasattr(config, "SYSTEM_PROMPTS_FILE"))
-        self.assertIsInstance(config.DEFAULT_USER_NAME, str)
+        self.assertIsInstance(self.app_settings_builder.default_user_name, str)
         self.assertEqual(config.CATALOG_MAX_ITEMS, 40)
         self.assertEqual(config.CARD_FIELD_MAX_CHARS, 20000)
         self.assertEqual(config.CARD_TOTAL_MAX_CHARS, 60000)
 
-    def test_card_file_remains_startup_derived(self):
-        import bridge.config as config
-
-        original_card = config.CARD_FILE
-        with patch.object(
-            config,
-            "DEFAULT_CHARACTER_FILE",
-            "temporary.png",
-        ):
-            self.assertEqual(config.CARD_FILE, original_card)
+    def test_card_file_is_fixed_in_each_explicit_settings_snapshot(self):
+        first = self.app_settings_builder.build()
+        original_card = first.card_file
+        self.app_settings_builder.default_character_file = "temporary.png"
+        second = self.app_settings_builder.build()
+        self.assertEqual(first.card_file, original_card)
+        self.assertEqual(second.card_file, second.character_dir / "temporary.png")
+        self.assertIsNot(first, second)
 
     def test_common_no_longer_owns_extracted_context_state(self):
         source = (REPO_ROOT / "bridge" / "common.py").read_text(encoding="utf-8")
@@ -177,19 +177,17 @@ class CardFoundationBoundaryTests(unittest.TestCase):
 
     def test_card_fields_default_name_follows_canonical_config(self):
         import bridge.card_content as card_content
-        import bridge.config as config
 
         with patch.object(
-            config,
-            "DEFAULT_CHARACTER_FILE",
+            self.app_settings_builder,
+            "default_character_file",
             "Seraphina.png",
         ):
-            fields = card_content.card_fields({"data": {"name": ""}})
+            fields = card_content.card_fields({"data": {"name": ""}}, app_settings=self.app_settings_builder.build())
         self.assertEqual(fields["name"], "Seraphina")
 
     def test_character_and_world_paths_follow_canonical_config(self):
         import bridge.card_content as card_content
-        import bridge.config as config
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -204,23 +202,29 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             )
 
             with (
-                patch.object(config, "CHARACTER_DIR", characters),
-                patch.object(config, "WORLD_DIR", worlds),
+                patch.object(self.app_settings_builder, "character_dir", characters),
+                patch.object(self.app_settings_builder, "world_dir", worlds),
             ):
                 self.assertEqual(
-                    [path.name for path in card_content.character_card_paths()],
+                    [
+                        path.name
+                        for path in card_content.character_card_paths(app_settings=self.app_settings_builder.build())
+                    ],
                     ["one.png"],
                 )
                 self.assertEqual(
-                    [path.name for path in card_content.world_file_paths()],
+                    [
+                        path.name
+                        for path in card_content.world_file_paths(app_settings=self.app_settings_builder.build())
+                    ],
                     ["lore.json"],
                 )
                 self.assertEqual(
-                    card_content.safe_character_path("one.png"),
+                    card_content.safe_character_path("one.png", app_settings=self.app_settings_builder.build()),
                     characters / "one.png",
                 )
                 self.assertEqual(
-                    card_content.safe_world_path("lore.json"),
+                    card_content.safe_world_path("lore.json", app_settings=self.app_settings_builder.build()),
                     worlds / "lore.json",
                 )
 
@@ -246,10 +250,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             "cached_text",
             side_effect=fake_cached_text,
         ):
-            result = card_content.build_system_prompt(
-                fields,
-                "User",
-            )
+            result = card_content.build_system_prompt(fields, "User", app_settings=self.app_settings_builder.build())
 
         self.assertEqual(result, "Hello Mira")
         self.assertEqual(len(calls), 1)
@@ -271,10 +272,7 @@ class CardFoundationBoundaryTests(unittest.TestCase):
             "cached_text",
             side_effect=AssertionError("dynamic prompt used cache"),
         ):
-            result = card_content.build_system_prompt(
-                fields,
-                "User",
-            )
+            result = card_content.build_system_prompt(fields, "User", app_settings=self.app_settings_builder.build())
 
         self.assertRegex(result, r"^\d{2}:\d{2}$")
 

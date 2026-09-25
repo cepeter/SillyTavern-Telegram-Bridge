@@ -6,50 +6,19 @@ import sqlite3
 import time
 from functools import partial
 
-from bridge.callback_tokens import (
-    dynamic_callback_token,
-    resolve_dynamic_callback_token,
-)
-from bridge.callbacks import (
-    close_panel_message,
-    discard_panel_binding,
-)
-from bridge.card_content import (
-    get_system_prompt_choice,
-    system_prompt_callback_token,
-    system_prompt_choices,
-)
+from bridge.callback_tokens import dynamic_callback_token, resolve_dynamic_callback_token
+from bridge.callbacks import close_panel_message, discard_panel_binding
+from bridge.card_content import get_system_prompt_choice, system_prompt_callback_token, system_prompt_choices
 from bridge.cards import send_panel_message
 from bridge.commands import apply_preset_action, process_image_message
-from bridge.common import (
-    STT_DEFAULT_MODEL,
-    chat_job_lock,
-)
+from bridge.common import STT_DEFAULT_MODEL, chat_job_lock
 from bridge.composition import BridgeServices as _BridgeServices
-from bridge.config import (
-    GENERATION_DEFAULTS,
-    PENDING_SETTINGS_TTL_SECONDS,
-    REASONING_LEVELS,
-)
-from bridge.database import (
-    get_generation_settings,
-    get_meta,
-    preset_names,
-    set_meta,
-    update_generation_settings,
-)
+from bridge.config import GENERATION_DEFAULTS, PENDING_SETTINGS_TTL_SECONDS, REASONING_LEVELS
+from bridge.database import get_generation_settings, get_meta, preset_names, set_meta, update_generation_settings
 from bridge.input_flow_service import InputFlowService
-from bridge.language import (
-    RESPONSE_LANGUAGES,
-    normalize_stt_language,
-    stt_language_label,
-)
+from bridge.language import RESPONSE_LANGUAGES, normalize_stt_language, stt_language_label
 from bridge.memory_backend import memory_mode
-from bridge.panel_utils import (
-    panel_label,
-    panel_navigation,
-    panel_page,
-)
+from bridge.panel_utils import panel_label, panel_navigation, panel_page
 from bridge.rag import handle_data_bank_command
 from bridge.rag_core import (
     activate_data_bank_version,
@@ -60,25 +29,22 @@ from bridge.rag_core import (
     reindex_data_bank_documents,
 )
 from bridge.reset_panel import reset_confirmation_request
-from bridge.telegram import (
-    import_telegram_document,
-    send_text,
-    telegram_request,
-)
+from bridge.settings import AppSettings
+from bridge.telegram import import_telegram_document, send_text, telegram_request
 
 
-def _system_prompt_key(current: str) -> str:
-    if current and current in dict(system_prompt_choices()):
+def _system_prompt_key(current: str, *, app_settings: AppSettings) -> str:
+    if current and current in dict(system_prompt_choices(app_settings=app_settings)):
         return current
-    for key, _name in system_prompt_choices():
-        if get_system_prompt_choice(key) == current:
+    for key, _name in system_prompt_choices(app_settings=app_settings):
+        if get_system_prompt_choice(key, app_settings=app_settings) == current:
             return key
     return ""
 
 
-def system_prompt_menu_markup(current: str, page: int = 0) -> dict:
-    current_key = _system_prompt_key(current)
-    options = system_prompt_choices()
+def system_prompt_menu_markup(current: str, page: int = 0, *, app_settings: AppSettings) -> dict:
+    current_key = _system_prompt_key(current, app_settings=app_settings)
+    options = system_prompt_choices(app_settings=app_settings)
     page_options, current_page, total_pages = panel_page(options, page)
     rows = []
     for key, name in page_options:
@@ -99,12 +65,17 @@ def system_prompt_menu_markup(current: str, page: int = 0) -> dict:
 def send_system_prompt_menu(
     token: str, chat_id: str, current: str, message_id: int | None = None, page: int = 0, *, request_context
 ) -> None:
-    current_key = _system_prompt_key(current)
-    labels = dict(system_prompt_choices())
+    current_key = _system_prompt_key(current, app_settings=request_context.app_settings)
+    labels = dict(system_prompt_choices(app_settings=request_context.app_settings))
     current_label = labels.get(current_key, "off")
     text = f"System Prompt choice\nCurrent: {current_label}\nChoose a TXT prompt:"
     send_panel_message(
-        token, chat_id, text, system_prompt_menu_markup(current, page), message_id, request_context=request_context
+        token,
+        chat_id,
+        text,
+        system_prompt_menu_markup(current, page, app_settings=request_context.app_settings),
+        message_id,
+        request_context=request_context,
     )
 
 
@@ -420,7 +391,7 @@ def send_databank_menu(
 ) -> None:
     mode = rag_mode(db, chat_id)
     docs = data_bank_documents(db, chat_id)
-    total_chunks, indexed_chunks = rag_embedding_coverage(db, chat_id)
+    total_chunks, indexed_chunks = rag_embedding_coverage(db, chat_id, app_settings=request_context.app_settings)
     options = []
     seen = set()
     for row in docs:
@@ -815,7 +786,13 @@ def handle_enum_callback(
     elif data.startswith("enum:ragremoveconfirm:"):
         filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id, db=request_context.db) or ""
         if filename:
-            handle_data_bank_command(db, token, chat_id, "/databank remove " + filename + " confirm")
+            handle_data_bank_command(
+                db,
+                token,
+                chat_id,
+                "/databank remove " + filename + " confirm",
+                app_settings=request_context.app_settings,
+            )
         send_databank_menu(token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:ragremove:"):
         filename = resolve_dynamic_callback_token(parts[2], "rag_document", chat_id, db=request_context.db) or ""
@@ -824,7 +801,7 @@ def handle_enum_callback(
         else:
             send_databank_menu(token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:rag:reindex":
-        total, indexed = reindex_data_bank_documents(db, chat_id)
+        total, indexed = reindex_data_bank_documents(db, chat_id, app_settings=request_context.app_settings)
         send_text(token, chat_id, f"Data Bank reindex complete: {indexed}/{total} chunks indexed.")
         send_databank_menu(token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:rag:"):
@@ -832,7 +809,7 @@ def handle_enum_callback(
         if value in {"on", "off"}:
             set_meta(db, f"rag_mode:{chat_id}", value)
         elif value == "list":
-            handle_data_bank_command(db, token, chat_id, "/databank list")
+            handle_data_bank_command(db, token, chat_id, "/databank list", app_settings=request_context.app_settings)
         send_databank_menu(token, chat_id, db, message_id, request_context=request_context)
 
 
@@ -861,12 +838,12 @@ def process_document_job(
                 telegram_message_id=message_id,
                 api_key=services.config.api_key,
                 process_image=partial(
-                    process_image_message,
-                    provider_port=services.provider,
+                    process_image_message, provider_port=services.provider, app_settings=services.config
                 ),
                 memory_service=services.memory,
                 persona_service=services.persona,
                 group_director_service=services.group_director,
+                app_settings=services.config,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)

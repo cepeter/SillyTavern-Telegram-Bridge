@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -9,7 +10,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import bridge.config as config
 import bridge.extension_registry as registry
 import bridge.main as _m_main
 import bridge.memory as _m_memory
@@ -78,18 +78,19 @@ class _FakeHindsight:
         return SimpleNamespace(success=True)
 
 
-class MemoryNativeBackendTests(unittest.TestCase):
+class MemoryNativeBackendTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.old_db = config.DB_FILE
+        self.old_db = self.app_settings_builder.db_file
         self.old_hindsight = memory_backend.hindsight_client
-        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = _m_memory_curator.db_connect()
+        self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.session = _m_session_naming.create_session(
             self.db,
             "chat",
-            _m_memory_curator.DEFAULT_MODEL,
+            self.app_settings_builder.default_model,
             session_id="memory-native",
+            app_settings=self.app_settings_builder.build(),
         )
         self.fields = {"name": "Mira"}
         self.provider = make_test_provider_port()
@@ -97,7 +98,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
     def tearDown(self):
         memory_backend.hindsight_client = self.old_hindsight
         self.db.close()
-        config.DB_FILE = self.old_db
+        self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
 
     def _add_message(self, content="old text"):
@@ -118,7 +119,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         backend_source = (Path(__file__).parents[1] / "bridge" / "memory_backend.py").read_text(encoding="utf-8")
 
         self.assertIn(
-            "_HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(",
+            "return _HindsightStaleGuard(",
             shell_source,
         )
         for name in (
@@ -134,7 +135,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
         _m_session_naming.set_meta(self.db, key, "not-an-int")
         self.assertEqual(
-            _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
+            _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).read_epoch(
                 self.db,
                 "chat",
                 self.session["session_id"],
@@ -144,7 +145,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
         _m_session_naming.set_meta(self.db, key, "-9")
         self.assertEqual(
-            _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
+            _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).read_epoch(
                 self.db,
                 "chat",
                 self.session["session_id"],
@@ -156,14 +157,14 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self._add_message()
         queued = []
         fake = _FakeHindsight()
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
         with patch.object(
             _m_memory,
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: queued.append((name, fn, args, kwargs)),
         ):
-            _m_memory._HINDSIGHT_STALE_GUARD.retain(
+            _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).retain(
                 self.db,
                 "chat",
                 self.session,
@@ -201,15 +202,15 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
         fake = _FakeHindsight()
         fake.documents.documents[mapped] = [f"session:{self.session['session_id']}"]
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
-        old_epoch = _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
+        old_epoch = _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).read_epoch(
             self.db,
             "chat",
             self.session["session_id"],
         )
 
-        deleted = _m_memory._HINDSIGHT_STALE_GUARD.purge(
+        deleted = _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).purge(
             self.db,
             "chat",
             self.session["session_id"],
@@ -217,7 +218,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
         self.assertGreaterEqual(deleted, 1)
         self.assertEqual(
-            _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
+            _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).read_epoch(
                 self.db,
                 "chat",
                 self.session["session_id"],
@@ -255,13 +256,13 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
         fake = _FakeHindsight()
         fake.documents = BrokenDocuments()
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
         with self.assertRaisesRegex(
             RuntimeError,
             "Hindsight session memory cleanup failed",
         ):
-            _m_memory._HINDSIGHT_STALE_GUARD.purge(
+            _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).purge(
                 self.db,
                 "chat",
                 self.session["session_id"],
@@ -283,7 +284,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self._add_message()
         queued = []
         fake = _FakeHindsight()
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
         with patch.object(
             _m_memory,
@@ -296,6 +297,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 self.session,
                 self.fields,
                 provider_port=self.provider,
+                app_settings=self.app_settings_builder.build(),
             )
 
         hindsight_jobs = [item for item in queued if item[0] == "hindsight_retain"]
@@ -316,7 +318,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self._add_message()
         queued = []
         fake = _FakeHindsight()
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
         with patch.object(
             _m_memory,
@@ -329,15 +331,14 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 self.session,
                 self.fields,
                 provider_port=self.provider,
+                app_settings=self.app_settings_builder.build(),
             )
 
         hindsight_jobs = [item for item in queued if item[0] == "hindsight_retain"]
         self.assertEqual(len(hindsight_jobs), 1)
 
         _m_main.purge_hindsight_session(
-            self.db,
-            "chat",
-            self.session["session_id"],
+            self.db, "chat", self.session["session_id"], app_settings=self.app_settings_builder.build()
         )
 
         _name, fn, args, kwargs = hindsight_jobs[0]
@@ -349,7 +350,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self._add_message()
         queued = []
         fake = _FakeHindsight()
-        memory_backend.hindsight_client = lambda: fake
+        memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
         with patch.object(
             _m_memory,
@@ -362,6 +363,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 self.session,
                 self.fields,
                 provider_port=self.provider,
+                app_settings=self.app_settings_builder.build(),
             )
 
         hindsight_jobs = [item for item in queued if item[0] == "hindsight_retain"]
@@ -381,7 +383,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
     def test_direct_guard_runs_post_retain_hook_when_memory_off(self):
         calls = []
 
-        def hook(db, chat_id, session, fields, provider_port):
+        def hook(db, chat_id, session, fields, provider_port, *, app_settings):
             calls.append(
                 (
                     db,
@@ -402,7 +404,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 "memory_mode:chat",
                 "off",
             )
-            _m_memory._HINDSIGHT_STALE_GUARD.retain(
+            _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).retain(
                 self.db,
                 "chat",
                 self.session,
@@ -424,7 +426,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         )
 
 
-class HindsightSourceBoundaryTests(unittest.TestCase):
+class HindsightSourceBoundaryTests(SettingsTestCase):
     def test_state_integrity_no_longer_owns_hindsight_safety(self):
         path = Path(__file__).parents[1] / "bridge" / "state_integrity.py"
         self.assertFalse(path.exists())

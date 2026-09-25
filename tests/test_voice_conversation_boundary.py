@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+from settings_test_support import make_test_settings
+
 from bridge import media
 
 
@@ -12,12 +14,12 @@ def test_transcript_uses_injected_service_and_preserves_request_identity(monkeyp
         def process_message(self, *args, **kwargs):
             delivered.append((args, kwargs))
 
-    services = SimpleNamespace(conversation=ConversationRecorder())
+    services = SimpleNamespace(config=make_test_settings(), conversation=ConversationRecorder())
     db = object()
     fields = {"name": "character"}
     monkeypatch.setattr(media, "get_meta", lambda _db, _key, default: default)
     monkeypatch.setattr(media, "download_telegram_file", lambda *_args: b"audio")
-    monkeypatch.setattr(media, "transcribe_audio_bytes", lambda *_args: "spoken message")
+    monkeypatch.setattr(media, "transcribe_audio_bytes", lambda *_args, app_settings=None: "spoken message")
     media.process_voice_message(
         db,
         "token",

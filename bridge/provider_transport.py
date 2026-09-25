@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import time
 import urllib.parse
 import urllib.request
@@ -14,6 +13,7 @@ from bridge.common import DEFAULT_PROVIDER_URL
 from bridge.config import DEFAULT_MAX_TOKENS, GENERATION_DEFAULTS
 from bridge.model_router import ModelRouter
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
+from bridge.settings import AppSettings
 
 
 def anthropic_content(value):
@@ -131,11 +131,13 @@ def _parse_stop_sequences(raw: object) -> list[str]:
     return [item for item in str(raw or "").split("\n") if item]
 
 
-def _resolve_provider_credential(spec: dict, api_key: str, default_env: str, label: str) -> str:
+def _resolve_provider_credential(
+    spec: dict, api_key: str, default_env: str, label: str, *, app_settings: AppSettings
+) -> str:
     """Prefer the provider-specific env key; fall back to the caller-supplied key."""
     configured_env = spec.get("api_key_env")
     key_env = str(configured_env or default_env)
-    resolved = os.environ.get(key_env, "")
+    resolved = app_settings.environ.get(key_env, "")
     if not resolved and (not configured_env or key_env == "LLM_API_KEY"):
         resolved = api_key
     if not resolved:
@@ -151,6 +153,8 @@ def anthropic_generate(
     spec: dict,
     session_id: str,
     request_timeout: float | None = None,
+    *,
+    app_settings: AppSettings,
 ) -> str:
     system_parts = [str(message.get("content") or "") for message in messages if message.get("role") == "system"]
     conversation = []
@@ -192,7 +196,7 @@ def anthropic_generate(
     if stops:
         body["stop_sequences"] = stops[:4]
     endpoint = str(spec.get("api_endpoint") or spec.get("api") or "").rstrip("/")
-    validate_provider_endpoint(endpoint)
+    validate_provider_endpoint(endpoint, environ=app_settings.environ)
     endpoint = endpoint if endpoint.endswith("/messages") else endpoint + "/messages"
     headers = {
         "x-api-key": api_key,
@@ -203,7 +207,9 @@ def anthropic_generate(
     }
     headers.update(spec.get("extra_headers") or {})
     request = urllib.request.Request(endpoint, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
-    with strict_urlopen(request, timeout=240 if request_timeout is None else request_timeout) as response:
+    with strict_urlopen(
+        request, timeout=240 if request_timeout is None else request_timeout, environ=app_settings.environ
+    ) as response:
         parts = []
         for raw_line in response:
             line = raw_line.decode("utf-8", "replace").strip()
@@ -222,13 +228,13 @@ def anthropic_generate(
         return content
 
 
-def opencode_muse_headers(session_id: str) -> dict[str, str]:
+def opencode_muse_headers(session_id: str, *, app_settings: AppSettings) -> dict[str, str]:
     base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
     digest = hashlib.sha256(f"opencode\\0{session_id}".encode("utf-8")).digest()
     session_key = f"ses_{digest[:6].hex()}" + "".join(base62[value % 62] for value in digest[6:20])
     request_digest = hashlib.sha256(f"opencode-request\\0{session_key}\\0{time.time_ns()}".encode("utf-8")).digest()
     request_id = f"msg_{request_digest[:6].hex()}" + "".join(base62[value % 62] for value in request_digest[6:20])
-    version = os.environ.get("OPENCODE_CLIENT_VERSION", "1.18.31")
+    version = app_settings.environ.get("OPENCODE_CLIENT_VERSION", "1.18.31")
     return {
         "Authorization": "",
         "x-opencode-session": session_key,
@@ -328,9 +334,11 @@ def opencode_muse_generate(
     spec: dict,
     session_id: str,
     request_timeout: float | None = None,
+    *,
+    app_settings: AppSettings,
 ) -> str:
     endpoint = str(spec.get("api_endpoint") or spec.get("api") or "https://opencode.ai/zen/v1").rstrip("/")
-    validate_provider_endpoint(endpoint)
+    validate_provider_endpoint(endpoint, environ=app_settings.environ)
     inputs = []
     for message in messages:
         content = message.get("content")
@@ -359,10 +367,12 @@ def opencode_muse_generate(
     request = urllib.request.Request(  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
         endpoint + "/responses",
         data=json.dumps(body).encode("utf-8"),
-        headers={**opencode_muse_headers(session_id), "Accept": "text/event-stream"},
+        headers={**opencode_muse_headers(session_id, app_settings=app_settings), "Accept": "text/event-stream"},
         method="POST",
     )
-    with strict_urlopen(request, timeout=240 if request_timeout is None else request_timeout) as response:
+    with strict_urlopen(
+        request, timeout=240 if request_timeout is None else request_timeout, environ=app_settings.environ
+    ) as response:
         raw = response.read().decode("utf-8", "replace")
     output_text = _opencode_responses_text(raw)
     if not output_text:
@@ -382,6 +392,8 @@ def generate_provider_text(
     force_non_stream: bool = False,
     request_timeout: float | None = None,
     _recovery_attempt: int = 0,
+    *,
+    app_settings: AppSettings,
 ) -> str:
     """Generate through the selected bridge provider adapter."""
     route = model_router.route(model)
@@ -393,21 +405,36 @@ def generate_provider_text(
     generation.update(settings or {})
     if transport == "opencode_muse":
         return opencode_muse_generate(
-            actual_model, messages, generation, spec, session_id, request_timeout=request_timeout
+            actual_model,
+            messages,
+            generation,
+            spec,
+            session_id,
+            request_timeout=request_timeout,
+            app_settings=app_settings,
         )
     if transport == "anthropic_messages":
-        anthropic_key = _resolve_provider_credential(spec, api_key, "ANTHROPIC_API_KEY", "Anthropic")
+        anthropic_key = _resolve_provider_credential(
+            spec, api_key, "ANTHROPIC_API_KEY", "Anthropic", app_settings=app_settings
+        )
         return anthropic_generate(
-            anthropic_key, actual_model, messages, generation, spec, session_id, request_timeout=request_timeout
+            anthropic_key,
+            actual_model,
+            messages,
+            generation,
+            spec,
+            session_id,
+            request_timeout=request_timeout,
+            app_settings=app_settings,
         )
     if transport not in {"chat_completions", "openai", "openai_compatible"}:
         raise RuntimeError(f"Provider transport '{transport}' is not supported")
     endpoint_base = str(
         spec.get("api_endpoint") or spec.get("api") or DEFAULT_PROVIDER_URL.rsplit("/chat/completions", 1)[0]
     ).rstrip("/")
-    validate_provider_endpoint(endpoint_base)
+    validate_provider_endpoint(endpoint_base, environ=app_settings.environ)
     endpoint = endpoint_base + "/chat/completions"
-    request_key = _resolve_provider_credential(spec, api_key, "LLM_API_KEY", "provider")
+    request_key = _resolve_provider_credential(spec, api_key, "LLM_API_KEY", "provider", app_settings=app_settings)
     is_streaming = bool(spec.get("streaming") or spec.get("stream")) and not force_non_stream
     body = {
         "model": actual_model,
@@ -442,7 +469,9 @@ def generate_provider_text(
         method="POST",
     )
     with strict_urlopen(
-        request, timeout=(240 if is_streaming else 180) if request_timeout is None else request_timeout
+        request,
+        timeout=(240 if is_streaming else 180) if request_timeout is None else request_timeout,
+        environ=app_settings.environ,
     ) as response:
         if not is_streaming:
             result = json.loads(response.read().decode("utf-8"))
@@ -463,6 +492,7 @@ def generate_provider_text(
                             force_non_stream=True,
                             request_timeout=request_timeout,
                             _recovery_attempt=_recovery_attempt + 1,
+                            app_settings=app_settings,
                         )
                 http_status = getattr(response, "status", None)
                 if http_status is None:
@@ -506,7 +536,9 @@ def generate_provider_text(
                 )
                 try:
                     with strict_urlopen(
-                        continuation_request, timeout=180 if request_timeout is None else request_timeout
+                        continuation_request,
+                        timeout=180 if request_timeout is None else request_timeout,
+                        environ=app_settings.environ,
                     ) as continuation_response:
                         continuation_result = json.loads(continuation_response.read().decode("utf-8"))
                     continuation_choices = _openai_response_choices(continuation_result)
@@ -553,6 +585,7 @@ def generate_provider_text(
                         force_non_stream=False,
                         request_timeout=request_timeout,
                         _recovery_attempt=_recovery_attempt + 1,
+                        app_settings=app_settings,
                     )
             raise RuntimeError(f"{provider_id} returned no visible content (finish_reason={finish_reason})")
 
@@ -589,6 +622,7 @@ def generate_provider_text(
                 with strict_urlopen(
                     continuation_request,
                     timeout=(240 if request_timeout is None else request_timeout),
+                    environ=app_settings.environ,
                 ) as continuation_response:
                     prefix = " ".join(segment for segment in segments if segment)
                     (

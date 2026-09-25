@@ -1,4 +1,5 @@
 from application_test_setup import ensure_application_extensions, make_native_test_persona_service
+from settings_test_support import SettingsTestCase
 
 ensure_application_extensions()
 
@@ -13,22 +14,20 @@ import bridge.session_naming as _m_session_naming
 import bridge.sillytavern_api as _m_sillytavern_api
 
 
-class NativePersonaStorageTests(unittest.TestCase):
+class NativePersonaStorageTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.old_settings = _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE
-        self.old_avatars = _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR
-        self.old_backups = _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR
-        self.old_cache = _m_persona_sync._NATIVE_PERSONA_CACHE
-        self.old_cache_time = _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH
+        self.old_settings = self.app_settings_builder.native_persona_settings_file
+        self.old_avatars = self.app_settings_builder.native_persona_avatar_dir
+        self.old_backups = self.app_settings_builder.native_persona_backup_dir
         self.old_phase3 = _m_sillytavern_api.live_sync_api_configured
 
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.root / "settings.json"
-        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.root / "avatars"
-        _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR = self.root / "backups"
-        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR.mkdir()
-        (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / "source.webp").write_bytes(b"webp-source-bytes")
+        self.app_settings_builder.native_persona_settings_file = self.root / "settings.json"
+        self.app_settings_builder.native_persona_avatar_dir = self.root / "avatars"
+        self.app_settings_builder.native_persona_backup_dir = self.root / "backups"
+        self.app_settings_builder.native_persona_avatar_dir.mkdir()
+        (self.app_settings_builder.native_persona_avatar_dir / "source.webp").write_bytes(b"webp-source-bytes")
         self.settings = {
             "user_avatar": "source.webp",
             "power_user": {
@@ -43,28 +42,24 @@ class NativePersonaStorageTests(unittest.TestCase):
             },
             "unrelated": {"keep": True},
         }
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.write_text(
+        self.app_settings_builder.native_persona_settings_file.write_text(
             json.dumps(self.settings),
             encoding="utf-8",
         )
-        _m_persona_sync._NATIVE_PERSONA_CACHE = {}
-        _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = 0
-        _m_sillytavern_api.live_sync_api_configured = lambda: False
+        _m_sillytavern_api.live_sync_api_configured = lambda *, app_settings=None: False
 
     def tearDown(self):
         _m_sillytavern_api.live_sync_api_configured = self.old_phase3
-        _m_persona_sync._NATIVE_PERSONA_CACHE = self.old_cache
-        _m_persona_sync._NATIVE_PERSONA_CACHE_LAST_REFRESH = self.old_cache_time
-        _m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE = self.old_settings
-        _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR = self.old_avatars
-        _m_persona_sync.NATIVE_PERSONA_BACKUP_DIR = self.old_backups
+        self.app_settings_builder.native_persona_settings_file = self.old_settings
+        self.app_settings_builder.native_persona_avatar_dir = self.old_avatars
+        self.app_settings_builder.native_persona_backup_dir = self.old_backups
         self.tmp.cleanup()
 
     def _settings(self):
-        return json.loads(_m_persona_sync.NATIVE_PERSONA_SETTINGS_FILE.read_text(encoding="utf-8"))
+        return json.loads(self.app_settings_builder.native_persona_settings_file.read_text(encoding="utf-8"))
 
     def test_explicit_persona_store_preserves_source_extension_and_bytes(self):
-        avatar = _m_persona_sync._PERSONA_STORE.upsert(
+        avatar = _m_persona_sync._persona_store(app_settings=self.app_settings_builder.build()).upsert(
             "writer",
             "Writer",
             "Writer description",
@@ -72,7 +67,7 @@ class NativePersonaStorageTests(unittest.TestCase):
 
         self.assertEqual(avatar, "bridge-writer.webp")
         self.assertEqual(
-            (_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / avatar).read_bytes(),
+            (self.app_settings_builder.native_persona_avatar_dir / avatar).read_bytes(),
             b"webp-source-bytes",
         )
         settings = self._settings()
@@ -86,7 +81,7 @@ class NativePersonaStorageTests(unittest.TestCase):
         )
 
     def test_explicit_persona_store_rejects_duplicate_bridge_stem(self):
-        first = _m_persona_sync._PERSONA_STORE.upsert(
+        first = _m_persona_sync._persona_store(app_settings=self.app_settings_builder.build()).upsert(
             "writer",
             "Writer",
             "Writer description",
@@ -97,21 +92,21 @@ class NativePersonaStorageTests(unittest.TestCase):
             ValueError,
             "Persona ID already exists",
         ):
-            _m_persona_sync._PERSONA_STORE.upsert(
+            _m_persona_sync._persona_store(app_settings=self.app_settings_builder.build()).upsert(
                 "writer",
                 "Writer 2",
                 "Another description",
             )
 
     def test_delete_preserves_avatar_media(self):
-        avatar = _m_persona_sync._PERSONA_STORE.upsert(
+        avatar = _m_persona_sync._persona_store(app_settings=self.app_settings_builder.build()).upsert(
             "writer",
             "Writer",
             "Writer description",
         )
-        path = _m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / avatar
+        path = self.app_settings_builder.native_persona_avatar_dir / avatar
 
-        self.assertTrue(_m_persona_sync._PERSONA_STORE.delete(avatar))
+        self.assertTrue(_m_persona_sync._persona_store(app_settings=self.app_settings_builder.build()).delete(avatar))
 
         self.assertTrue(path.is_file())
         self.assertNotIn(
@@ -121,23 +116,21 @@ class NativePersonaStorageTests(unittest.TestCase):
 
     def test_public_persona_functions_use_explicit_store(self):
         avatar = _m_persona_sync.upsert_native_persona(
-            "public",
-            "Public",
-            "Public description",
+            "public", "Public", "Public description", app_settings=self.app_settings_builder.build()
         )
         self.assertTrue(Path(avatar).stem.startswith("bridge-public"))
 
-        self.assertTrue(_m_persona_sync.delete_native_persona(avatar))
-        self.assertTrue((_m_persona_sync.NATIVE_PERSONA_AVATAR_DIR / avatar).is_file())
+        self.assertTrue(_m_persona_sync.delete_native_persona(avatar, app_settings=self.app_settings_builder.build()))
+        self.assertTrue((self.app_settings_builder.native_persona_avatar_dir / avatar).is_file())
 
     def test_persona_service_lock_can_nest_into_integrity_store(self):
-        service = make_native_test_persona_service()
-        db = _m_memory_curator.db_connect(self.root / "persona-service.sqlite3")
+        service = make_native_test_persona_service(app_settings=self.app_settings_builder.build())
+        db = _m_memory_curator.db_connect(
+            self.root / "persona-service.sqlite3", app_settings=self.app_settings_builder.build()
+        )
         try:
             session = _m_session_naming.create_session(
-                db,
-                "chat",
-                _m_memory_curator.DEFAULT_MODEL,
+                db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
             )
             avatar = service.create_and_select(
                 db,
@@ -153,13 +146,13 @@ class NativePersonaStorageTests(unittest.TestCase):
         self.assertTrue(Path(avatar).stem.startswith("bridge-nested"))
 
 
-class NativePersonaSourceBoundaryTests(unittest.TestCase):
+class NativePersonaSourceBoundaryTests(SettingsTestCase):
     def test_persona_sync_owns_avatar_allocator_and_explicit_store(self):
         source = (Path(__file__).parents[1] / "bridge" / "persona_sync.py").read_text(encoding="utf-8")
 
         self.assertIn("def _choose_native_avatar(", source)
         self.assertIn(
-            "_PERSONA_STORE = _IntegrityCheckedPersonaStore(",
+            "return _IntegrityCheckedPersonaStore(",
             source,
         )
         self.assertIn(

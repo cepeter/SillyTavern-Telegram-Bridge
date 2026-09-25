@@ -12,28 +12,16 @@ import sqlite3
 import time
 
 from bridge.common import parse_topic_scope
-from bridge.database import (
-    task_model_for_session,
-    write_transaction,
-)
+from bridge.database import task_model_for_session, write_transaction
 from bridge.delivery_port import DeliveryPort
 from bridge.director_goal_panel import director_goal_panel
-from bridge.extension_registry import (
-    extension_registry_snapshot as _extension_registry_snapshot,
-)
-from bridge.extension_registry import (
-    register_command_route as _register_command_route,
-)
+from bridge.extension_registry import extension_registry_snapshot as _extension_registry_snapshot
+from bridge.extension_registry import register_command_route as _register_command_route
 from bridge.group_director_service import DirectorCustomization
-from bridge.repositories import (
-    delete_director_goal as _repo_delete_director_goal,
-)
-from bridge.repositories import (
-    load_director_goal as _repo_load_director_goal,
-)
-from bridge.repositories import (
-    store_director_goal as _repo_store_director_goal,
-)
+from bridge.repositories import delete_director_goal as _repo_delete_director_goal
+from bridge.repositories import load_director_goal as _repo_load_director_goal
+from bridge.repositories import store_director_goal as _repo_store_director_goal
+from bridge.settings import AppSettings
 
 _DIRECTOR_GOAL_MAX_CHARS = 1200
 
@@ -68,12 +56,10 @@ def set_director_goal(
 
 
 def director_goal_policy(
-    db: sqlite3.Connection,
-    chat_id: str,
-    session: dict[str, str],
+    db: sqlite3.Connection, chat_id: str, session: dict[str, str], *, app_settings: AppSettings
 ) -> DirectorCustomization:
     goal = get_director_goal(db, chat_id, session["session_id"])
-    model = task_model_for_session(db, chat_id, session, "director")
+    model = task_model_for_session(db, chat_id, session, "director", app_settings=app_settings)
     if not goal:
         return DirectorCustomization(
             model=model,

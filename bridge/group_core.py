@@ -15,18 +15,11 @@ from bridge.card_content import (
     safe_character_path,
 )
 from bridge.database import get_meta, set_meta, write_transaction
-from bridge.repositories import (
-    load_group_state_row as _repo_load_group_state_row,
-)
-from bridge.repositories import (
-    mark_group_operation_applied as _repo_mark_group_operation_applied,
-)
-from bridge.repositories import (
-    store_group_state_row as _repo_store_group_state_row,
-)
-from bridge.repositories import (
-    try_claim_group_operation as _repo_try_claim_group_operation,
-)
+from bridge.repositories import load_group_state_row as _repo_load_group_state_row
+from bridge.repositories import mark_group_operation_applied as _repo_mark_group_operation_applied
+from bridge.repositories import store_group_state_row as _repo_store_group_state_row
+from bridge.repositories import try_claim_group_operation as _repo_try_claim_group_operation
+from bridge.settings import AppSettings
 
 
 def group_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
@@ -131,9 +124,9 @@ def group_setup_state(db: sqlite3.Connection, chat_id: str, session_id: str) -> 
     return state
 
 
-def group_character_option_label(path: Path) -> str:
+def group_character_option_label(path: Path, *, app_settings: AppSettings) -> str:
     try:
-        return str(card_fields(read_png_chara(path)).get("name") or path.stem)
+        return str(card_fields(read_png_chara(path), app_settings=app_settings).get("name") or path.stem)
     except Exception:
         return path.stem
 
@@ -177,11 +170,11 @@ def save_group_state(
     return True
 
 
-def resolve_character_file(requested: str) -> str | None:
+def resolve_character_file(requested: str, *, app_settings: AppSettings) -> str | None:
     wanted = requested.strip().casefold()
-    for path in character_card_paths():
+    for path in character_card_paths(app_settings=app_settings):
         try:
-            label = card_fields(read_png_chara(path))["name"]
+            label = card_fields(read_png_chara(path), app_settings=app_settings)["name"]
         except Exception:
             label = path.stem
         if wanted in {path.name.casefold(), path.stem.casefold(), label.casefold()}:
@@ -189,21 +182,21 @@ def resolve_character_file(requested: str) -> str | None:
     return None
 
 
-def group_member_labels(member_files: list[str]) -> list[str]:
+def group_member_labels(member_files: list[str], *, app_settings: AppSettings) -> list[str]:
     labels = []
     for filename in member_files:
         try:
-            labels.append(card_fields_from_file(filename)["name"])
+            labels.append(card_fields_from_file(filename, app_settings=app_settings)["name"])
         except Exception:
             labels.append(Path(filename).stem)
     return labels
 
 
 def group_current_speaker(
-    db: sqlite3.Connection, chat_id: str, session: dict[str, str], user_text: str = ""
+    db: sqlite3.Connection, chat_id: str, session: dict[str, str], user_text: str = "", *, app_settings: AppSettings
 ) -> tuple[str, dict[str, object]] | None:
     state = group_state(db, chat_id, session["session_id"])
-    members = [name for name in state["members"] if safe_character_path(name)]
+    members = [name for name in state["members"] if safe_character_path(name, app_settings=app_settings)]
     if not state["enabled"] or len(members) < 2:
         return None
     forced = str(state.get("forced_speaker") or "")
@@ -212,7 +205,7 @@ def group_current_speaker(
     if state.get("mode") == "contextual" and user_text:
         lowered = user_text.casefold()
         for filename in members:
-            label = card_fields_from_file(filename)["name"]
+            label = card_fields_from_file(filename, app_settings=app_settings)["name"]
             if label.casefold() in lowered or Path(filename).stem.casefold() in lowered:
                 return filename, state
     index = int(state["turn_index"]) % len(members)
