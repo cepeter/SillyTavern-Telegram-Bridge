@@ -14,6 +14,7 @@ from bridge.card_content import card_fields_from_file
 from bridge.database import sync_transcript_hash
 from bridge.group_core import group_state
 from bridge.port_contracts import RetainSessionMemory
+from bridge.session_core import load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import db_connect, run_write_txn
 from bridge.sync_core import (
@@ -26,7 +27,6 @@ from bridge.sync_core import (
 )
 from bridge.sync_poll_safety import SyncPollSafetyAdapter as _SyncPollSafetyAdapter
 from bridge.sync_service import SyncService as _SyncService
-from bridge.telegram import load_session
 
 _LIVE_SYNC_WORKER_LOCK = threading.Lock()
 _LIVE_SYNC_WORKER = None

@@ -63,23 +63,14 @@ from bridge.language import response_language_label, send_language_menu, set_res
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.media import delete_outgoing_messages, remove_inline_keyboard
 from bridge.message_commands import reset_session
+from bridge.native_imports import character_delete_references, verify_character_card_backup
 from bridge.provider_port import ProviderPort
+from bridge.session_core import delete_session_data, list_sessions, update_session
 from bridge.session_naming import start_session_name_input
+from bridge.session_panels import send_session_delete_confirm, send_session_delete_menu
 from bridge.status_panels import handle_prompt_and_feature_callback, send_sync_menu
 from bridge.sync_service import SyncService
-from bridge.telegram import (
-    character_delete_references,
-    delete_session_data,
-    list_sessions,
-    send_panel_photo,
-    send_panel_request,
-    send_session_delete_confirm,
-    send_session_delete_menu,
-    send_text,
-    telegram_request,
-    update_session,
-    verify_character_card_backup,
-)
+from bridge.telegram import send_panel_photo, send_panel_request, send_text, telegram_request
 from bridge.update import handle_update_callback
 
 

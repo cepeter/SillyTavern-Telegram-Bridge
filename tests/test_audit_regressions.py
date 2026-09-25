@@ -13,6 +13,7 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
+import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
 
 ensure_application_extensions()
@@ -200,7 +201,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertEqual(state, "queued")
 
     def test_selection_commands_open_panels(self):
-        _m_telegram.ensure_session(
+        _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         fields = {
@@ -275,7 +276,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertEqual(sent, ["Use /providers and choose an action from the panel."])
 
     def test_stscript_reset_opens_confirmation_panel(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         self.db.execute(
@@ -334,7 +335,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertIn("enum:stt:language_input", callbacks)
 
     def test_text_commands_open_scoped_input_and_cancel_clears_it(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         deletions = Mock(return_value={})
@@ -418,7 +419,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertNotIn("enum:stscript:note", callbacks)
 
     def test_stt_language_user_input_is_session_scoped(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_session_naming.set_meta(
@@ -459,7 +460,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language:chat", ""), "id")
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language_input:chat", ""), "")
 
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         fields = {
@@ -521,7 +522,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertIn("enum:preset:save", callbacks)
 
     def test_preset_save_two_step_input(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         fields = {
@@ -562,7 +563,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertIsNotNone(_m_commands.load_generation_preset(self.db, "chat", "creative"))
         self.assertEqual(_m_session_naming.get_meta(self.db, "preset_save_input:chat", ""), "")
 
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         self.db.execute(
@@ -637,7 +638,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertEqual(callbacks, {"reset:confirm", "reset:cancel"})
 
     def test_reset_uses_session_scoped_purge_not_whole_bank(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         calls = []
@@ -663,7 +664,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertEqual(calls, [("chat", session["session_id"])])
 
     def test_response_language_is_added_to_prompt(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_session_naming.update_session(self.db, "chat", session["session_id"], response_language="en")
@@ -709,7 +710,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertEqual(messages[-1]["role"], "user")
 
     def test_hindsight_recall_is_hard_session_scoped(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_session_naming.set_meta(self.db, "memory_scope:chat", "user")
@@ -753,7 +754,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertNotIn("enum:memory:scope", callbacks)
         self.assertIn("active session only (fixed)", payload["text"])
 
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         sent = []

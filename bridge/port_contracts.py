@@ -197,3 +197,49 @@ class RetainSessionMemory(Protocol):
 
 class PurgeSessionMemory(Protocol):
     def __call__(self, db: sqlite3.Connection, chat_id: str, session_id: str) -> int: ...
+
+
+class LoadSession(Protocol):
+    def __call__(self, db: sqlite3.Connection, chat_id: str, session_id: str, default_model: str) -> dict[str, str]: ...
+
+
+class EnsureSession(Protocol):
+    def __call__(self, db: sqlite3.Connection, chat_id: str, default_model: str) -> dict[str, str]: ...
+
+
+class CreateSession(Protocol):
+    def __call__(
+        self,
+        db: sqlite3.Connection,
+        chat_id: str,
+        default_model: str,
+        session_id: str | None = None,
+        title: str = "New session",
+    ) -> dict[str, str]: ...
+
+
+class UpdateSession(Protocol):
+    def __call__(
+        self,
+        db: sqlite3.Connection,
+        chat_id: str,
+        session_id: str,
+        operation_id: int | str | None = None,
+        operation_kind: str = "session_update",
+        **values: object,
+    ) -> None: ...
+
+
+class ListSessions(Protocol):
+    def __call__(self, db: sqlite3.Connection, chat_id: str) -> list[dict[str, str]]: ...
+
+
+class DeleteSession(Protocol):
+    def __call__(
+        self,
+        db: sqlite3.Connection,
+        chat_id: str,
+        target_session_id: str,
+        active_session_id: str,
+        operation_id: int | str | None = None,
+    ) -> tuple[bool, str]: ...

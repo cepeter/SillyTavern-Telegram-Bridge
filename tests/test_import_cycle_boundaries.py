@@ -120,11 +120,11 @@ def test_pure_panel_message_request_builds_exact_send_and_edit_payloads():
     assert "message_id" not in payload
 
 
-def test_cards_and_telegram_use_shared_panel_request_builder():
+def test_cards_and_session_panels_use_shared_panel_request_builder():
     cards_source = (BRIDGE / "cards.py").read_text(encoding="utf-8")
-    telegram_source = (BRIDGE / "telegram.py").read_text(encoding="utf-8")
+    session_source = (BRIDGE / "session_panels.py").read_text(encoding="utf-8")
     assert "panel_message_request" in cards_source
-    assert "panel_message_request" in telegram_source
+    assert "panel_message_request" in session_source
 
 
 def test_persona_identity_consumers_use_persona_sync_owner():
@@ -132,7 +132,7 @@ def test_persona_identity_consumers_use_persona_sync_owner():
         "commands.py",
         "main.py",
         "sync_core.py",
-        "telegram.py",
+        "session_core.py",
     ):
         imports = imported_modules(filename)
         assert "bridge.persona_sync" in imports
@@ -140,4 +140,4 @@ def test_persona_identity_consumers_use_persona_sync_owner():
     assert "bridge.cards" not in imported_modules("commands.py")
     assert "bridge.cards" not in imported_modules("main.py")
     assert "bridge.cards" not in imported_modules("sync_core.py")
-    assert "bridge.cards" not in imported_modules("telegram.py")
+    assert "bridge.cards" not in imported_modules("session_core.py")

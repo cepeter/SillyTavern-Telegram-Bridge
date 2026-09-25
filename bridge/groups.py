@@ -22,8 +22,9 @@ from bridge.media import remove_inline_keyboard, send_typing
 from bridge.memory import generate_session_summary
 from bridge.panel_utils import panel_label, panel_page
 from bridge.provider_port import ProviderPort
+from bridge.session_core import create_session, load_session, update_session
 from bridge.settings import AppSettings
-from bridge.telegram import create_session, load_session, send_text, update_session
+from bridge.telegram import send_text
 from bridge.topic_scope import parse_topic_scope
 
 

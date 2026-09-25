@@ -121,6 +121,7 @@ def test_static_target_manifest_is_expected_service_port_surface():
         "bridge/persona_service.py",
         "bridge/provider_port.py",
         "bridge/sync_service.py",
+        "bridge/session_service.py",
     }
 
 
@@ -275,3 +276,25 @@ def test_quality_manifest_cli_and_graph_cli_work():
     graph = subprocess.run(command, capture_output=True, text=True)
     assert graph.returncode == 0, graph.stderr
     assert "cyclic_modules=0" in graph.stdout
+
+
+def test_session_repository_cannot_import_adapter_or_service(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "session_repository", "import bridge.telegram\n")
+    write_module(bridge, "telegram", "")
+    report = policy.check_dependency_direction(bridge, static_targets=())
+    assert any("session_repository" in error and "bridge.telegram" in error for error in report.errors)
+
+
+def test_telegram_transport_cannot_reabsorb_session_or_import_owners(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "telegram", "import bridge.session_core\nimport bridge.native_imports\n")
+    write_module(bridge, "session_core", "")
+    write_module(bridge, "native_imports", "")
+    report = policy.check_dependency_direction(bridge, static_targets=())
+    assert any("session_core" in error for error in report.errors)
+    assert any("native_imports" in error for error in report.errors)

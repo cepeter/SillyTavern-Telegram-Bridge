@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_request_context
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import tempfile
@@ -15,7 +17,6 @@ import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
-import bridge.telegram as _m_telegram
 
 
 class SessionDeletionTests(SettingsTestCase):
@@ -35,7 +36,7 @@ class SessionDeletionTests(SettingsTestCase):
         self.tmp.cleanup()
 
     def test_inactive_session_deletes_all_local_data(self):
-        active = _m_telegram.ensure_session(
+        active = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         inactive = _m_session_naming.create_session(
@@ -97,7 +98,7 @@ class SessionDeletionTests(SettingsTestCase):
         self.assertEqual(self.purged, [("chat", "inactive")])
 
     def test_hindsight_cleanup_failure_preserves_local_session(self):
-        active = _m_telegram.ensure_session(
+        active = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         inactive = _m_session_naming.create_session(
@@ -133,7 +134,7 @@ class SessionDeletionTests(SettingsTestCase):
         )
 
     def test_active_session_and_busy_session_are_protected(self):
-        active = _m_telegram.ensure_session(
+        active = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         denied, reason = _m_panel_callback_routes.delete_session_data(
@@ -163,7 +164,7 @@ class SessionDeletionTests(SettingsTestCase):
         self.assertEqual(reason, "session has active jobs")
 
     def test_session_panel_has_inline_delete_actions_and_protects_active_selection(self):
-        active = _m_telegram.ensure_session(
+        active = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         inactive = _m_session_naming.create_session(

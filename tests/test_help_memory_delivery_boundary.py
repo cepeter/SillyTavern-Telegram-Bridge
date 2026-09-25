@@ -6,9 +6,10 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
-from application_test_setup import make_test_delivery_port, make_test_request_context
+from application_test_setup import make_test_delivery_port, make_test_request_context, make_test_session_service
 
 import bridge.command_panels as _command_panels
+from bridge.session_service import SessionService
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -169,11 +170,12 @@ def test_update_routing_help_callback_fast_path_forwards_delivery_and_context(mo
     services = SimpleNamespace(
         config=SimpleNamespace(bot_token="token", default_model="model"),
         delivery=delivery,
+        session=make_test_session_service(app_settings=SimpleNamespace(bot_token="token", default_model="model")),
     )
     monkeypatch.setattr(callback_routing, "is_help_callback", lambda _data: True)
     monkeypatch.setattr(
-        callback_routing,
-        "ensure_session",
+        SessionService,
+        "ensure",
         lambda *_args, app_settings=None, **_kwargs: {"session_id": "session"},
     )
     monkeypatch.setattr(
@@ -224,10 +226,11 @@ def test_update_routing_help_text_fast_path_forwards_delivery_and_context(monkey
     services = SimpleNamespace(
         config=SimpleNamespace(bot_token="token", default_model="model"),
         delivery=delivery,
+        session=make_test_session_service(app_settings=SimpleNamespace(bot_token="token", default_model="model")),
     )
     monkeypatch.setattr(
-        message_routing,
-        "ensure_session",
+        SessionService,
+        "ensure",
         lambda *_args, app_settings=None, **_kwargs: {"session_id": "session"},
     )
     monkeypatch.setattr(

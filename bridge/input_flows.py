@@ -45,8 +45,9 @@ from bridge.persona_delete_panel import send_persona_delete_menu
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.rag import handle_data_bank_command
+from bridge.session_core import update_session
 from bridge.settings import AppSettings
-from bridge.telegram import delete_pending_input_prompts, send_panel_request, send_text, update_session
+from bridge.telegram import delete_pending_input_prompts, send_panel_request, send_text
 from bridge.telegram import telegram_request as telegram_request
 
 

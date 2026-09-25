@@ -20,8 +20,9 @@ from bridge.input_flows import handle_inline_text_action, start_text_action_inpu
 from bridge.language import handle_language_command, send_language_menu
 from bridge.memory import handle_memory_command
 from bridge.rag import handle_data_bank_command
+from bridge.session_core import update_session
 from bridge.status_panels import send_summary_menu, send_sync_menu
-from bridge.telegram import send_text, update_session
+from bridge.telegram import send_text
 from bridge.topic_scope import parse_topic_scope
 from bridge.update import send_update_menu
 

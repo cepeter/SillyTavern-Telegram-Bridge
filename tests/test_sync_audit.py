@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import tempfile
@@ -16,7 +18,6 @@ import bridge.schema as schema
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
-import bridge.telegram as _m_telegram
 
 
 class SyncAuditHardeningTests(SettingsTestCase):
@@ -205,7 +206,7 @@ class SyncAuditHardeningTests(SettingsTestCase):
         self.assertEqual(row[2], "unexpected Live Sync polling failure")
 
     def test_session_delete_cascades_sync_binding_cleanup(self):
-        active = _m_telegram.ensure_session(
+        active = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         inactive = _m_session_naming.create_session(

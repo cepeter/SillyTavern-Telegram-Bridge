@@ -7,6 +7,7 @@ from dataclasses import MISSING
 from pathlib import Path
 from types import SimpleNamespace
 
+from application_test_setup import make_test_session_service
 from settings_test_support import make_test_settings
 
 ROOT = Path(__file__).parents[1]
@@ -107,6 +108,7 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
         provider=provider,
         memory=memory,
         persona=persona,
+        session=make_test_session_service(app_settings=make_test_settings()),
     )
 
     monkeypatch.setattr(

@@ -42,9 +42,10 @@ from bridge.provider_port import ProviderPort
 from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
 from bridge.request_types import PreparedMessage, RequestContext
 from bridge.reset_panel import reset_confirmation_request
+from bridge.session_core import ensure_session, list_sessions, load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import optimize_database, run_write_txn, write_transaction
-from bridge.telegram import ensure_session, list_sessions, load_session, send_panel_request, send_text, telegram_request
+from bridge.telegram import send_panel_request, send_text, telegram_request
 
 if TYPE_CHECKING:
     pass

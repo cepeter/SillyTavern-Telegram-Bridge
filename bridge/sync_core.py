@@ -29,9 +29,9 @@ from bridge.limits import SYNC_MAX_BYTES
 from bridge.memory import get_session_summary
 from bridge.persona_sync import get_persona, persona_name
 from bridge.port_contracts import RetainSessionMemory
+from bridge.session_core import load_session, update_session
 from bridge.settings import AppSettings
 from bridge.sync_integrity import SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter
-from bridge.telegram import load_session, update_session
 
 SYNC_MAX_PAYLOAD_BYTES = SYNC_MAX_BYTES
 

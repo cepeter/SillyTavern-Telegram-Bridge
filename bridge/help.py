@@ -19,6 +19,7 @@ from bridge.input_flow_service import InputFlowService
 from bridge.language import RESPONSE_LANGUAGES, normalize_stt_language, stt_language_label
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.memory_backend import memory_mode
+from bridge.native_imports import import_telegram_document
 from bridge.panel_utils import panel_label, panel_navigation, panel_page
 from bridge.rag import handle_data_bank_command
 from bridge.rag_core import (
@@ -31,7 +32,7 @@ from bridge.rag_core import (
 )
 from bridge.reset_panel import reset_confirmation_request
 from bridge.settings import AppSettings
-from bridge.telegram import import_telegram_document, send_text, telegram_request
+from bridge.telegram import send_text, telegram_request
 
 
 def _system_prompt_key(current: str, *, app_settings: AppSettings) -> str:

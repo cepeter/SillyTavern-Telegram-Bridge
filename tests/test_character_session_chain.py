@@ -6,6 +6,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import json
@@ -18,7 +20,6 @@ import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
-import bridge.telegram as _m_telegram
 
 
 class CharacterSessionChainTests(SettingsTestCase):
@@ -41,7 +42,7 @@ class CharacterSessionChainTests(SettingsTestCase):
         }
 
     def test_character_selection_opens_session_panel(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         opened = []
@@ -96,7 +97,7 @@ class CharacterSessionChainTests(SettingsTestCase):
         self.assertEqual(pending["character_name"], "Chosen")
 
     def test_session_selection_applies_pending_character(self):
-        current = _m_telegram.ensure_session(
+        current = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         target = _m_session_naming.create_session(

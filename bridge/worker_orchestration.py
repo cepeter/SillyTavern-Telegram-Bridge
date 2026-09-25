@@ -25,7 +25,6 @@ from bridge.job_service import DurableJob, JobSubmission
 from bridge.limits import IMAGE_MAX_BYTES
 from bridge.media import process_voice_job, send_reply
 from bridge.sqlite_store import run_write_txn
-from bridge.telegram import ensure_session, load_session
 
 
 def process_message_job(
@@ -51,9 +50,9 @@ def process_message_job(
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 recovery_session = (
-                    load_session(db, chat_id, queued_session_id, model, app_settings=services.config)
+                    services.session.load(db, chat_id, queued_session_id, model)
                     if queued_session_id
-                    else ensure_session(db, chat_id, model, app_settings=services.config)
+                    else services.session.ensure(db, chat_id, model)
                 )
                 if services.group.current_speaker(db, chat_id, recovery_session, text):
                     services.group.advance_turn(
@@ -67,9 +66,7 @@ def process_message_job(
                     if job_id is not None:
                         jobs.complete(db, job_id)
                     return
-                delivery_session_id = (
-                    queued_session_id or ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
-                )
+                delivery_session_id = queued_session_id or services.session.ensure(db, chat_id, model)["session_id"]
                 send_reply(
                     token,
                     chat_id,
@@ -144,9 +141,7 @@ def process_image_job(
                     if job_id is not None:
                         jobs.complete(db, job_id)
                     return
-                delivery_session_id = (
-                    queued_session_id or ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
-                )
+                delivery_session_id = queued_session_id or services.session.ensure(db, chat_id, model)["session_id"]
                 send_reply(
                     token,
                     chat_id,
@@ -175,9 +170,9 @@ def process_image_job(
                 IMAGE_MAX_BYTES,
             )
             session = (
-                load_session(db, chat_id, queued_session_id, model, app_settings=services.config)
+                services.session.load(db, chat_id, queued_session_id, model)
                 if queued_session_id
-                else ensure_session(db, chat_id, model, app_settings=services.config)
+                else services.session.ensure(db, chat_id, model)
             )
             image_fields = card_fields_from_file(session["character_file"], app_settings=services.config)
             process_image_message(

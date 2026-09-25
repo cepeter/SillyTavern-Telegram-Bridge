@@ -3,10 +3,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from application_test_setup import make_native_test_persona_service, make_test_provider_port
+from application_test_setup import make_native_test_persona_service, make_test_provider_port, make_test_session_service
 from settings_test_support import SettingsBuilder, make_test_settings
 
+import bridge.native_imports as _owner_native_imports
 from bridge.limits import IMAGE_MAX_BYTES
+from bridge.session_service import SessionService
 
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
@@ -108,6 +110,9 @@ def _image_services(download_file, sent):
         memory=object(),
         persona=object(),
         group_director=object(),
+        session=make_test_session_service(
+            app_settings=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="queue-model")
+        ),
     )
 
 
@@ -165,7 +170,7 @@ def test_image_worker_uses_injected_download_and_forwards_identity(monkeypatch):
         "model_id": "resolved-model",
     }
     monkeypatch.setattr(workers, "committed_assistant_for_message", lambda *_args: None)
-    monkeypatch.setattr(workers, "load_session", lambda *_args, app_settings=None: session)
+    monkeypatch.setattr(SessionService, "load", lambda *_args, app_settings=None: session)
     monkeypatch.setattr(
         workers,
         "card_fields_from_file",
@@ -229,8 +234,8 @@ def test_committed_image_recovery_returns_before_download(monkeypatch):
         lambda *_args: (7, "already committed", "[]"),
     )
     monkeypatch.setattr(
-        workers,
-        "load_session",
+        SessionService,
+        "load",
         lambda *_args, app_settings=None: {"session_id": "queued-session"},
     )
     monkeypatch.setattr(
@@ -259,9 +264,7 @@ def _assert_document_injection_signature(*, app_settings_builder=None):
         app_settings_builder = SettingsBuilder()
     import inspect
 
-    import bridge.telegram as telegram
-
-    params = inspect.signature(telegram.import_telegram_document).parameters
+    params = inspect.signature(_owner_native_imports.import_telegram_document).parameters
     assert "api_key" in params
     assert "process_image" in params
 
@@ -269,27 +272,27 @@ def _assert_document_injection_signature(*, app_settings_builder=None):
 def _run_document_import(monkeypatch, document, *, parse_card, add_document=None, app_settings_builder=None):
     if app_settings_builder is None:
         app_settings_builder = SettingsBuilder()
-    import bridge.telegram as telegram
+    import bridge.native_imports as native_imports
 
     _assert_document_injection_signature(app_settings_builder=app_settings_builder)
     image_calls = []
     sent = []
-    monkeypatch.setattr(telegram, "_consume_world_upload", lambda *_args: False)
+    monkeypatch.setattr(_owner_native_imports, "_consume_world_upload", lambda *_args: False)
     monkeypatch.setattr(
-        telegram,
+        native_imports,
         "download_telegram_file",
         lambda *_args, **_kwargs: b"raw-document",
     )
     if isinstance(parse_card, BaseException):
         monkeypatch.setattr(
-            telegram,
+            native_imports,
             "parse_png_chara_bytes",
             lambda *_args: (_ for _ in ()).throw(parse_card),
         )
     else:
-        monkeypatch.setattr(telegram, "parse_png_chara_bytes", lambda *_args: parse_card)
+        monkeypatch.setattr(native_imports, "parse_png_chara_bytes", lambda *_args: parse_card)
     monkeypatch.setattr(
-        telegram,
+        native_imports,
         "ensure_session",
         lambda *_args, app_settings=None: {
             "session_id": "session",
@@ -298,17 +301,19 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
         },
     )
     monkeypatch.setattr(
-        telegram,
+        native_imports,
         "card_fields_from_file",
         lambda filename, *, app_settings=None: {"name": "Mira", "source": filename},
     )
-    monkeypatch.setattr(telegram, "import_character_card", lambda *_args, app_settings=None, **_kwargs: None)
-    monkeypatch.setattr(telegram, "send_text", lambda *args, **_kwargs: sent.append(args))
+    monkeypatch.setattr(
+        _owner_native_imports, "import_character_card", lambda *_args, app_settings=None, **_kwargs: None
+    )
+    monkeypatch.setattr(native_imports, "send_text", lambda *args, **_kwargs: sent.append(args))
     if add_document is not None:
-        monkeypatch.setattr(telegram, "add_data_bank_document", add_document)
-        monkeypatch.setattr(telegram, "rag_mode", lambda *_args: "on")
+        monkeypatch.setattr(native_imports, "add_data_bank_document", add_document)
+        monkeypatch.setattr(native_imports, "rag_mode", lambda *_args: "on")
 
-    telegram.import_telegram_document(
+    _owner_native_imports.import_telegram_document(
         object(),
         "token",
         "chat",
@@ -391,6 +396,9 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
         memory="memory",
         persona="persona",
         group_director="director",
+        session=make_test_session_service(
+            app_settings=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="model")
+        ),
     )
     monkeypatch.setattr(
         help_module,
@@ -414,7 +422,7 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
 def test_document_image_collaborator_has_explicit_callable_contract(*, app_settings_builder):
     import inspect
 
-    import bridge.telegram as telegram
-
-    annotation = inspect.signature(telegram.import_telegram_document).parameters["process_image"].annotation
+    annotation = (
+        inspect.signature(_owner_native_imports.import_telegram_document).parameters["process_image"].annotation
+    )
     assert str(annotation) == "Callable[..., None]"

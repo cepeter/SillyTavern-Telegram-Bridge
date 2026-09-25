@@ -16,8 +16,9 @@ from bridge.input_flows import _cancel_pending, pending_character_for_session
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.message_commands import send_pending_input_message
 from bridge.request_types import RequestContext
+from bridge.session_core import create_session, update_session
 from bridge.settings import AppSettings
-from bridge.telegram import create_session, delete_pending_input_prompts, send_text, update_session
+from bridge.telegram import delete_pending_input_prompts, send_text
 
 _SESSION_PENDING_PREFIXES = (
     "settings_input",

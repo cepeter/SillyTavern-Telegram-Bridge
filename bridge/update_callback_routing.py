@@ -9,7 +9,6 @@ from bridge.composition import BridgeServices
 from bridge.help_details import handle_help_callback, is_help_callback
 from bridge.job_service import JobSubmission
 from bridge.request_types import RequestContext
-from bridge.telegram import ensure_session
 from bridge.topic_scope import topic_scope_from_message
 from bridge.worker_orchestration import process_callback_job
 
@@ -37,7 +36,7 @@ def route_callback_update(
         return
 
     if is_help_callback(str(callback.get("data") or "")):
-        help_session_id = ensure_session(db, callback_chat_id, model, app_settings=services.config)["session_id"]
+        help_session_id = services.session.ensure(db, callback_chat_id, model)["session_id"]
         help_request_context = RequestContext(db, help_session_id, sender, app_settings=services.config)
         handle_help_callback(
             db,
@@ -56,7 +55,7 @@ def route_callback_update(
         return
 
     callback["_queued"] = True
-    callback_session = ensure_session(db, callback_chat_id, model, app_settings=services.config)["session_id"]
+    callback_session = services.session.ensure(db, callback_chat_id, model)["session_id"]
     callback_message_id = int(callback_message.get("message_id") or 0)
     job_id = services.jobs.enqueue(
         db,

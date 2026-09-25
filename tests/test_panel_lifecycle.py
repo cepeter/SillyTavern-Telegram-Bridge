@@ -7,6 +7,7 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
+import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
 
@@ -41,7 +42,7 @@ class PanelLifecycleTests(SettingsTestCase):
         self.tmp.cleanup()
 
     def test_enum_close_deletes_panel_message(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_telegram.bind_panel_session(self.db, "chat", 104, session["session_id"])
@@ -72,7 +73,7 @@ class PanelLifecycleTests(SettingsTestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 104))
 
     def test_settings_text_route_opens_panel_without_mutating(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         fields = {
@@ -107,7 +108,7 @@ class PanelLifecycleTests(SettingsTestCase):
         settings = _m_memory_curator.get_generation_settings(self.db, "chat", session["session_id"])
         self.assertEqual(settings["temperature"], 0.85)
 
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         original_answer = _m_callback_dispatch.answer_callback
@@ -150,7 +151,7 @@ class PanelLifecycleTests(SettingsTestCase):
             _m_help.send_text = original_send
 
     def test_settings_panel_displays_current_field_values(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_sync_core.update_generation_settings(
@@ -191,7 +192,7 @@ class PanelLifecycleTests(SettingsTestCase):
             self.assertIn(value, text)
 
     def test_settings_invalid_feedback_is_deleted_by_cancel(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_session_naming.set_meta(
@@ -260,7 +261,7 @@ class PanelLifecycleTests(SettingsTestCase):
         )
 
     def test_character_upload_uses_closable_guidance_panel(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_telegram.bind_panel_session(self.db, "chat", 105, session["session_id"])
@@ -293,7 +294,7 @@ class PanelLifecycleTests(SettingsTestCase):
         self.assertEqual(buttons[-1][1]["callback_data"], "character:cancel")
 
     def test_character_cancel_deletes_panel_message(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_telegram.bind_panel_session(self.db, "chat", 106, session["session_id"])
@@ -324,7 +325,7 @@ class PanelLifecycleTests(SettingsTestCase):
         self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 106))
 
     def test_owned_panel_rejects_different_user_without_closing_it(self):
-        session = _m_telegram.ensure_session(
+        session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_session_naming.update_session(self.db, "chat", session["session_id"], author_note="keep me")

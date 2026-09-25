@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
+
 ensure_application_extensions()
 
 import tempfile
@@ -11,7 +13,6 @@ import bridge.language as _m_language
 import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
 import bridge.session_naming as _m_session_naming
-import bridge.telegram as _m_telegram
 
 
 class PdfWorkerTests(SettingsTestCase):
@@ -54,7 +55,7 @@ class PdfWorkerTests(SettingsTestCase):
         with self.assertRaises(ValueError):
             _m_rag.extract_data_bank_text("fixture.pdf", b"not a pdf", app_settings=self.app_settings_builder.build())
 
-        first = _m_telegram.ensure_session(
+        first = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         _m_language.set_response_language(
@@ -62,7 +63,7 @@ class PdfWorkerTests(SettingsTestCase):
             "chat",
             first["session_id"],
             "id",
-            update_session=_m_telegram.update_session,
+            update_session=_owner_session_core.update_session,
         )
         second = _m_session_naming.create_session(
             self.db,

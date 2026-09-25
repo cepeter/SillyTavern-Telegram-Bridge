@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 
+from application_test_setup import make_test_session_service
 from settings_test_support import make_test_settings
 
 from bridge import media
@@ -14,7 +15,11 @@ def test_transcript_uses_injected_service_and_preserves_request_identity(monkeyp
         def process_message(self, *args, **kwargs):
             delivered.append((args, kwargs))
 
-    services = SimpleNamespace(config=make_test_settings(), conversation=ConversationRecorder())
+    services = SimpleNamespace(
+        config=make_test_settings(),
+        conversation=ConversationRecorder(),
+        session=make_test_session_service(app_settings=make_test_settings()),
+    )
     db = object()
     fields = {"name": "character"}
     monkeypatch.setattr(media, "get_meta", lambda _db, _key, default: default)

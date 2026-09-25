@@ -28,9 +28,9 @@ from bridge.repositories import delete_scene_state as _repo_delete_scene_state
 from bridge.repositories import load_scene_state_row as _repo_load_scene_state_row
 from bridge.repositories import upsert_scene_state_if_fresh as _repo_upsert_scene_state_if_fresh
 from bridge.scene_panel import scene_panel
+from bridge.session_core import load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import db_connect, write_transaction
-from bridge.telegram import load_session
 
 _SCENE_STATE_KEYS = ("location", "time", "weather", "participants", "objects", "facts", "goals")
 _SCENE_STATE_MAX_TEXT = 5000

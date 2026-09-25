@@ -33,9 +33,10 @@ from bridge.database import (
 )
 from bridge.expressions import deliver_expression
 from bridge.limits import STT_MAX_BYTES, TTS_MAX_CHARS
+from bridge.session_core import ensure_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import db_connect, run_write_txn
-from bridge.telegram import download_telegram_file, ensure_session, send_text, telegram_request
+from bridge.telegram import download_telegram_file, send_text, telegram_request
 from bridge.topic_scope import parse_topic_scope
 
 if TYPE_CHECKING:

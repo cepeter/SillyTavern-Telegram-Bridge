@@ -14,13 +14,13 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
 
 ensure_application_extensions()
 
 import bridge.commands as commands
 import bridge.database as database
-import bridge.telegram as telegram
 
 
 class NativeEditedMessageSessionTests(SettingsTestCase):
@@ -36,7 +36,7 @@ class NativeEditedMessageSessionTests(SettingsTestCase):
         self.tmp.cleanup()
 
     def test_edit_uses_message_owning_session_without_switching_active_session(self):
-        session_a = telegram.create_session(
+        session_a = _owner_session_core.create_session(
             self.db,
             "chat",
             self.model,
@@ -44,7 +44,7 @@ class NativeEditedMessageSessionTests(SettingsTestCase):
             title="A",
             app_settings=self.app_settings_builder.build(),
         )
-        telegram.update_session(
+        _owner_session_core.update_session(
             self.db,
             "chat",
             session_a["session_id"],
@@ -58,7 +58,7 @@ class NativeEditedMessageSessionTests(SettingsTestCase):
         self.db.commit()
         user_rowid = int(cursor.lastrowid)
 
-        session_b = telegram.create_session(
+        session_b = _owner_session_core.create_session(
             self.db,
             "chat",
             self.model,
@@ -66,7 +66,7 @@ class NativeEditedMessageSessionTests(SettingsTestCase):
             title="B",
             app_settings=self.app_settings_builder.build(),
         )
-        telegram.update_session(
+        _owner_session_core.update_session(
             self.db,
             "chat",
             session_b["session_id"],

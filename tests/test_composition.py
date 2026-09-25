@@ -9,11 +9,14 @@ from application_test_setup import (
     make_test_model_router,
     make_test_provider_port,
     make_test_request_context,
+    make_test_session_service,
 )
 from settings_test_support import SettingsTestCase, make_test_settings
 
 import bridge.command_panels as _command_panels
+import bridge.session_core as _owner_session_core
 from bridge.config_values import ConfigurationError
+from bridge.session_service import SessionService
 from bridge.settings import validate_app_settings
 
 ensure_application_extensions()
@@ -138,6 +141,7 @@ class CompositionConfigTests(SettingsTestCase):
             sync=sync,
             jobs=jobs,
             conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
+            session=make_test_session_service(app_settings=config),
         )
 
         self.assertIs(services.config, config)
@@ -352,6 +356,7 @@ class WorkerInjectionTests(SettingsTestCase):
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
+            session=make_test_session_service(app_settings=config),
         )
 
     def tearDown(self):
@@ -510,7 +515,7 @@ class WorkerInjectionTests(SettingsTestCase):
         captured = {}
         db = self._db_factory()
         try:
-            session = _m_telegram.ensure_session(
+            session = _owner_session_core.ensure_session(
                 db, "chat", "injected::model", app_settings=self.app_settings_builder.build()
             )
             with patch.object(
@@ -701,8 +706,8 @@ class WorkerInjectionTests(SettingsTestCase):
                 return_value=None,
             ),
             patch.object(
-                _m_workers,
-                "ensure_session",
+                SessionService,
+                "ensure",
                 return_value={"session_id": "session", "character_file": "mira.png"},
             ),
             patch.object(
@@ -843,6 +848,7 @@ class RecoveryCompositionTests(SettingsTestCase):
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
+            session=make_test_session_service(app_settings=config),
         )
 
     def tearDown(self):
@@ -1026,6 +1032,7 @@ class RecoveryCompositionTests(SettingsTestCase):
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
+            session=make_test_session_service(app_settings=self.services.config),
         )
 
         dispatcher = _m_workers.make_durable_backlog_dispatcher(
@@ -1144,6 +1151,7 @@ class StartupCompositionTests(SettingsTestCase):
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
+            session=make_test_session_service(app_settings=self.config),
         )
 
     def tearDown(self):
@@ -1253,10 +1261,8 @@ class StartupCompositionTests(SettingsTestCase):
         )
         self.assertIs(services.persona.upsert_persona.func, upsert_persona)
         self.assertIs(services.persona.delete_persona.func, delete_persona)
-        self.assertIs(
-            services.persona.update_session_persona,
-            update_session,
-        )
+        self.assertIs(services.persona.update_session_persona.__self__, services.session)
+        self.assertIs(services.session.update_backend, update_session)
 
     def test_startup_builds_sync_service_from_final_runtime_collaborators(self):
         with (
@@ -1382,6 +1388,7 @@ class StartupCompositionTests(SettingsTestCase):
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
+            session=make_test_session_service(app_settings=self.config),
         )
         with (
             patch.object(_m_runtime, "install_bridge_signal_handlers"),
@@ -1437,6 +1444,7 @@ class StartupCompositionTests(SettingsTestCase):
             provider=make_test_provider_port(),
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
+            session=make_test_session_service(app_settings=self.config),
         )
         try:
             with (

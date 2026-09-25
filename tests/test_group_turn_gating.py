@@ -30,10 +30,10 @@ import bridge.group_core as _m_group_core
 import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
+import bridge.session_core as _m_telegram
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
-import bridge.telegram as _m_telegram
 
 
 class GroupTurnGatingTests(SettingsTestCase):
