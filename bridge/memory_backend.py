@@ -151,7 +151,15 @@ async def _delete_hindsight_session_documents(client, bank_id: str, session_id: 
         if _hindsight_not_found(exc):
             return 0
         raise
-    document_ids = tagged | prefixed | set(mapped_ids) | {f"st-session-{session_id}"}
+    document_ids = (
+        tagged
+        | prefixed
+        | set(mapped_ids)
+        | {
+            f"st-session-{session_id}",
+            f"{prefix}-curated",
+        }
+    )
     deleted = 0
     for document_id in sorted(document_ids):
         try:

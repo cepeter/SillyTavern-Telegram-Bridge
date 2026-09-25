@@ -29,3 +29,14 @@ def store_meta_value(
         "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
         (str(key), str(value)),
     )
+
+
+def delete_meta_value(
+    db: sqlite3.Connection,
+    key: str,
+) -> None:
+    require_active_transaction(db)
+    db.execute(
+        "DELETE FROM meta WHERE key=?",
+        (str(key),),
+    )

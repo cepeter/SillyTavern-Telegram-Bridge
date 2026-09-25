@@ -19,6 +19,7 @@ from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
 from bridge.language import normalize_response_language
 from bridge.memory import clear_session_summary
+from bridge.memory_curator import clear_curated_memory_state
 from bridge.memory_service import MemoryService
 from bridge.metadata import get_meta, set_meta
 from bridge.operations import (
@@ -35,7 +36,7 @@ from bridge.rag_service import RagService
 from bridge.regeneration import regenerate_last
 from bridge.request_types import PreparedMessage, RequestContext
 from bridge.reset_panel import reset_confirmation_request
-from bridge.response_delivery import queue_user_quote_tts, send_reply
+from bridge.response_delivery import delete_outgoing_messages, queue_user_quote_tts, send_reply
 from bridge.response_variants import save_response_variant, swipe_state_key
 from bridge.session_core import ensure_session, list_sessions, load_session
 from bridge.settings import AppSettings
@@ -69,13 +70,18 @@ def reset_session(
         if operation_id is not None:
             set_operation_phase(db, operation_id, "reset", "memory_purged")
         db.commit()
+    delete_outgoing_messages(db, token, chat_id, session["session_id"])
     db.execute("DELETE FROM messages WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"]))
     db.execute("DELETE FROM response_variants WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"]))
     db.execute("DELETE FROM failed_turns WHERE chat_id=? AND session_id=?", (chat_id, session["session_id"]))
     clear_session_summary(db, chat_id, session["session_id"])
+    clear_curated_memory_state(db, chat_id, session["session_id"])
     db.execute(
         "DELETE FROM meta WHERE key IN (?, ?)",
-        (swipe_state_key(chat_id, session["session_id"]), f"swipe_message:{chat_id}:{session['session_id']}"),
+        (
+            swipe_state_key(chat_id, session["session_id"]),
+            f"swipe_message:{chat_id}:{session['session_id']}",
+        ),
     )
     if operation_id is not None:
         set_operation_phase(db, operation_id, "reset", "local_committed")

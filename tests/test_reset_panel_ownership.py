@@ -40,9 +40,12 @@ def test_reset_panel_module_is_pure_and_builds_exact_send_payload():
         "text": (
             "Reset active session and purge its memory?\n\n"
             "This will:\n"
-            "• Reset only the active session conversation.\n"
-            "• Delete Hindsight memories for this active session only.\n"
-            "• Delete session SQLite data, and session documents.\n\n"
+            "• Delete this session's stored conversation, response variants, summary, and curated memory.\n"
+            "• Purge Hindsight documents for this active session.\n"
+            "• Attempt to delete bridge-generated Telegram replies from this session.\n"
+            "• Keep your own Telegram messages, chat-scoped RAG, and this session identity.\n"
+            "• Use /new when you need a completely new session.\n\n"
+            "If Hindsight cleanup fails, no local session data will be deleted.\n\n"
             "This cannot be undone."
         ),
         "reply_markup": {
