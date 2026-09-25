@@ -8,6 +8,7 @@ from bridge.card_content import active_world_files, system_prompt_label
 from bridge.expressions import expression_mode_key
 from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
+from bridge.humanize import humanizer_label
 from bridge.language import response_language_label
 from bridge.memory import get_session_summary
 from bridge.memory_backend import memory_mode, memory_scope
@@ -54,7 +55,8 @@ def status_text(
         f"💬 Stored messages: {count}\n"
         f"🤖 Model: {current_model}\n"
         f"🛠️ Utility model: {utility_model}\n"
-        f"🌐 Response language: {response_language_label(session.get('response_language') or 'auto')}\n\n"
+        f"🌐 Response language: {response_language_label(session.get('response_language') or 'auto')}\n"
+        f"🖋️ Humanizer: {humanizer_label(session.get('humanizer'))}\n\n"
         "📚 Native context\n"
         f"• Persona: {persona}\n"
         f"• World Info: {world}\n"

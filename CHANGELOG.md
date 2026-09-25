@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add a session-scoped Humanizer response style, toggled from the generation settings panel and off by default. When enabled, a bounded post-processing pass rewrites the visible reply to remove AI-sounding patterns while preserving facts, names, numbers, code, commands, links, Markdown, and character dialogue. The pass fails open to the original response, disables the raw streaming preview, and is synced alongside the response language.
+
 ### Maintenance
 
 - Separate settings, voice, Data Bank, group, persona, provider, media and generation workflows into canonical owners; retain panel routing and delivery behavior without compatibility re-export modules. Response-variant writes now preserve caller-owned transactions.
