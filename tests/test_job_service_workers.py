@@ -16,7 +16,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import bridge.commands as _m_commands
 import bridge.database as _m_database
 import bridge.help as _m_help
 import bridge.media as _m_media
@@ -385,10 +384,10 @@ class JobWorkerServiceTests(SettingsTestCase):
     def test_locally_committed_edit_failure_completes_instead_of_failing(self):
         with (
             patch.object(
-                _m_commands,
+                _m_workers,
                 "edit_telegram_user_message",
                 side_effect=RuntimeError("provider delivery failed"),
-            ),
+            ) as edit,
             patch.object(
                 _m_workers,
                 "native_edit_committed_after_failure",
@@ -408,6 +407,7 @@ class JobWorkerServiceTests(SettingsTestCase):
             ["start", "complete"],
         )
         self.assertFalse(any(call[0] == "fail" for call in self.jobs.calls))
+        edit.assert_called_once()
 
     def test_voice_worker_success_and_failure_use_job_service(self):
         with (

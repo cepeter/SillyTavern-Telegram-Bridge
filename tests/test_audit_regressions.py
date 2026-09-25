@@ -1,3 +1,5 @@
+from unittest.mock import Mock, patch
+
 from application_test_setup import (
     ensure_application_extensions,
     make_test_application_services,
@@ -335,6 +337,10 @@ class AuditRegressionTests(SettingsTestCase):
         session = _m_telegram.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
+        deletions = Mock(return_value={})
+        cleanup_patch = patch.object(_m_telegram, "telegram_request", deletions)
+        cleanup_patch.start()
+        self.addCleanup(cleanup_patch.stop)
         original_send = _m_input_flows.send_text
         sent = []
         _m_input_flows.send_text = lambda _token, _chat, text: sent.append(text) or [101]
@@ -367,6 +373,7 @@ class AuditRegressionTests(SettingsTestCase):
             _m_input_flows.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "text_action_input:chat", ""), "")
         self.assertIn("Cancelled.", sent)
+        deletions.assert_called_once_with("token", "deleteMessage", {"chat_id": "chat", "message_id": 101})
 
     def test_memory_databank_and_stscript_panels_expose_new_actions(self):
         calls = []

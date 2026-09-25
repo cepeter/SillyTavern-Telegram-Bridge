@@ -37,6 +37,7 @@ TYPE_TARGETS: tuple[str, ...] = (
     "bridge/topic_scope.py",
     "bridge/runtime_logging.py",
     "bridge/limits.py",
+    "tools/check_dependency_lock.py",
 )
 
 

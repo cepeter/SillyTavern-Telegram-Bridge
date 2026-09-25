@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from application_test_setup import (
     ensure_application_extensions,
     make_test_application_services,
@@ -10,6 +12,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.callbacks as _callbacks
 import bridge.command_panels as _command_panels
 
 ensure_application_extensions()
@@ -54,6 +57,16 @@ class GroupTurnGatingTests(SettingsTestCase):
                 "turn_users": [],
             },
         )
+        self.closed_panels = []
+
+        def close_request(_token, method, payload):
+            self.assertIn(method, {"deleteMessage", "editMessageReplyMarkup"})
+            self.closed_panels.append((method, payload))
+            return {}
+
+        close_patch = patch.object(_callbacks, "telegram_request", side_effect=close_request)
+        close_patch.start()
+        self.addCleanup(close_patch.stop)
 
     def tearDown(self):
         self.db.close()
