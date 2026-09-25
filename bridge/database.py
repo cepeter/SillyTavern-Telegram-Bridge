@@ -573,3 +573,12 @@ def ensure_sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str) -
         "last_direction": str(row[2] or ""),
         "last_synced_at": float(row[3] or 0),
     }
+
+
+def native_edit_target(db: sqlite3.Connection, chat_id: str, message_id: int):
+    """Read the original message's session without changing the active session."""
+    return db.execute(
+        "SELECT rowid,session_id,role FROM messages WHERE chat_id=? AND "
+        "telegram_message_id=? ORDER BY rowid DESC LIMIT 1",
+        (chat_id, str(message_id)),
+    ).fetchone()
