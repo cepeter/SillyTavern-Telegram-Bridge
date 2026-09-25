@@ -8,6 +8,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.database as _owner_database
+import bridge.message_commands as _owner_message_commands
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -22,7 +24,6 @@ from unittest.mock import Mock, patch
 import bridge.commands as _m_commands
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
@@ -535,7 +536,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
         memory = Mock()
         memory.purge_session.side_effect = AssertionError("remote purge repeated")
 
-        _m_panel_callback_routes.reset_session(
+        _owner_message_commands.reset_session(
             self.db,
             "token",
             "chat",
@@ -557,7 +558,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
         self._operation(operation_id, "local_committed", "reset")
         memory = Mock()
 
-        _m_panel_callback_routes.reset_session(
+        _owner_message_commands.reset_session(
             self.db,
             "token",
             "chat",
@@ -660,8 +661,8 @@ class OperationRecoveryUnitTests(SettingsTestCase):
         self.log_info = Mock()
         self.adapter = OperationRecovery(
             operation_phase=_m_message_commands.operation_phase,
-            begin_operation=_m_panel_callback_routes.begin_operation,
-            record_operation=_m_panel_callback_routes.record_operation,
+            begin_operation=_owner_database.begin_operation,
+            record_operation=_owner_database.record_operation,
             run_write_txn=_m_sync_api.run_write_txn,
             get_meta=_m_session_naming.get_meta,
             telegram_request=self.telegram,

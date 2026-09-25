@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
+import bridge.database as _owner_database
+
 ensure_application_extensions()
 
 import json
@@ -12,7 +14,6 @@ from unittest.mock import patch
 
 import bridge.memory as _m_memory
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
@@ -30,7 +31,7 @@ class MemoryCuratorTests(SettingsTestCase):
             title="Curator",
             app_settings=self.app_settings_builder.build(),
         )
-        _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
+        _owner_database.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
 
     def tearDown(self):
         self.db.close()

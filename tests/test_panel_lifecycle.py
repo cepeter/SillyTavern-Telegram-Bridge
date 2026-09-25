@@ -6,6 +6,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.character_callbacks as _owner_character_callbacks
 import bridge.command_panels as _command_panels
 import bridge.session_core as _owner_session_core
 
@@ -25,7 +26,6 @@ import bridge.help as _m_help
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.sync_core as _m_sync_core
 import bridge.telegram as _m_telegram
@@ -267,9 +267,9 @@ class PanelLifecycleTests(SettingsTestCase):
         _m_telegram.bind_panel_session(self.db, "chat", 105, session["session_id"])
         calls = []
         original_answer = _m_callback_dispatch.answer_callback
-        original_request = _m_panel_callback_routes.send_panel_request
+        original_request = _owner_character_callbacks.send_panel_request
         _m_callback_dispatch.answer_callback = lambda *_args, **_kwargs: None
-        _m_panel_callback_routes.send_panel_request = lambda _token, method, payload, **_kwargs: (
+        _owner_character_callbacks.send_panel_request = lambda _token, method, payload, **_kwargs: (
             calls.append((method, payload)) or {}
         )
         callback = {
@@ -287,7 +287,7 @@ class PanelLifecycleTests(SettingsTestCase):
             )
         finally:
             _m_callback_dispatch.answer_callback = original_answer
-            _m_panel_callback_routes.send_panel_request = original_request
+            _owner_character_callbacks.send_panel_request = original_request
         self.assertEqual([method for method, _payload in calls], ["editMessageText"])
         self.assertEqual(calls[0][1]["message_id"], 105)
         buttons = calls[0][1]["reply_markup"]["inline_keyboard"]

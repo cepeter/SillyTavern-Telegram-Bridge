@@ -7,6 +7,7 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
+import bridge.groups as _owner_groups
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -23,7 +24,6 @@ import bridge.help as _m_help
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.native_imports as _m_telegram
-import bridge.panel_callback_routes as _m_panel_callback_routes
 
 
 class ItemPanelLayoutTests(SettingsTestCase):
@@ -148,7 +148,7 @@ class ItemPanelLayoutTests(SettingsTestCase):
             },
         )
         try:
-            _m_panel_callback_routes.send_group_menu(
+            _owner_groups.send_group_menu(
                 self.db,
                 "bot",
                 "chat",

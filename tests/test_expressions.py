@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions
 from settings_test_support import SettingsTestCase
 
+import bridge.expressions as _owner_expressions
+
 ensure_application_extensions()
 
 import sqlite3
@@ -10,7 +12,6 @@ from pathlib import Path
 
 import bridge.expressions as _m_expressions
 import bridge.media as _m_media
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
@@ -39,7 +40,7 @@ class ExpressionTests(SettingsTestCase):
         sprite_dir.mkdir()
         for name in ("joy.png", "joy-1.png", "sadness.expressive.webp"):
             (sprite_dir / name).write_bytes(b"image")
-        assets = _m_panel_callback_routes.discover_expression_assets(
+        assets = _owner_expressions.discover_expression_assets(
             "Alisha.png", app_settings=self.app_settings_builder.build()
         )
         self.assertEqual(set(assets), {"joy", "sadness"})
@@ -82,7 +83,7 @@ class ExpressionTests(SettingsTestCase):
         old_upload = _m_expressions._send_expression_photo
         _m_expressions._send_expression_photo = lambda token, chat, path: sent.append(path.name) or True
         try:
-            _m_session_naming.set_meta(db, _m_panel_callback_routes.expression_mode_key("1", "s1"), "auto")
+            _m_session_naming.set_meta(db, _owner_expressions.expression_mode_key("1", "s1"), "auto")
             _m_media.deliver_expression(
                 "token", "1", "I am happy", db, "s1", app_settings=self.app_settings_builder.build()
             )

@@ -5,6 +5,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.conversation_callbacks as _owner_conversation_callbacks
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -18,7 +19,6 @@ import bridge.callbacks as _m_callbacks
 import bridge.greetings as _m_greetings
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 
 
 class AlternateGreetingTests(SettingsTestCase):
@@ -149,12 +149,12 @@ class AlternateGreetingTests(SettingsTestCase):
         }
         sent = []
         answers = []
-        original_fields = _m_panel_callback_routes.card_fields_from_file
+        original_fields = _owner_conversation_callbacks.card_fields_from_file
         original_send = _m_greetings.send_text
-        original_close = _m_panel_callback_routes.close_panel_message
-        _m_panel_callback_routes.card_fields_from_file = lambda _filename, *, app_settings=None: fields
+        original_close = _owner_conversation_callbacks.close_panel_message
+        _owner_conversation_callbacks.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _m_greetings.send_text = lambda _token, _chat_id, text: sent.append(text) or [99]
-        _m_panel_callback_routes.close_panel_message = lambda *_args, **_kwargs: None
+        _owner_conversation_callbacks.close_panel_message = lambda *_args, **_kwargs: None
         callback = {
             "id": "cb",
             "from": {"id": "user"},
@@ -162,7 +162,7 @@ class AlternateGreetingTests(SettingsTestCase):
             "message": {"message_id": 77, "chat": {"id": "chat"}},
         }
         try:
-            handled = _m_panel_callback_routes.handle_greeting_callback(
+            handled = _owner_conversation_callbacks.handle_greeting_callback(
                 self.db,
                 "token",
                 callback,
@@ -179,9 +179,9 @@ class AlternateGreetingTests(SettingsTestCase):
                 ),
             )
         finally:
-            _m_panel_callback_routes.card_fields_from_file = original_fields
+            _owner_conversation_callbacks.card_fields_from_file = original_fields
             _m_greetings.send_text = original_send
-            _m_panel_callback_routes.close_panel_message = original_close
+            _owner_conversation_callbacks.close_panel_message = original_close
         self.assertTrue(handled)
         self.assertEqual(sent, ["Alt"])
         self.assertIn("Started with Alternate 2", answers)

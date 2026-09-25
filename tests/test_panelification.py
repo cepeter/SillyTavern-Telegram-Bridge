@@ -7,6 +7,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.catalog as _owner_catalog
 import bridge.command_panels as _command_panels
 
 ensure_application_extensions()
@@ -22,7 +23,6 @@ import bridge.groups as _m_groups
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.status_panels as _m_status_panels
 
@@ -232,7 +232,7 @@ class PanelificationTests(SettingsTestCase):
         _m_catalog.active_world_files = lambda _current, *, app_settings=None: []
         _m_catalog.dynamic_callback_token = lambda _kind, _name, _chat, **_kwargs: "callback-token"
         try:
-            _m_panel_callback_routes.send_world_menu(
+            _owner_catalog.send_world_menu(
                 "bot-token",
                 "chat",
                 "",

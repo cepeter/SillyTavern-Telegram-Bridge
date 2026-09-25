@@ -13,6 +13,8 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
+import bridge.database as _owner_database
+import bridge.message_commands as _owner_message_commands
 import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
 
@@ -38,7 +40,6 @@ import bridge.memory as _m_memory
 import bridge.memory_backend as memory_backend
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.provider_transport as _m_provider_transport
 import bridge.reset_panel as _m_reset_panel
 import bridge.session_naming as _m_session_naming
@@ -133,7 +134,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertEqual(captured[1]["reasoning"], {"max_tokens": 1024})
 
     def test_begin_operation_commits_prepared_marker(self):
-        self.assertTrue(_m_panel_callback_routes.begin_operation(self.db, 101, "test"))
+        self.assertTrue(_owner_database.begin_operation(self.db, 101, "test"))
 
         second = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         try:
@@ -606,7 +607,7 @@ class AuditRegressionTests(SettingsTestCase):
             self.assertEqual(panel[0][0], "sendMessage")
             self.assertEqual(panel[0][1]["reply_markup"]["inline_keyboard"][0][0]["callback_data"], "reset:confirm")
             self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
-            _m_panel_callback_routes.reset_session(
+            _owner_message_commands.reset_session(
                 self.db, "token", "chat", session, operation_id=902, memory_service=make_test_memory_service()
             )
         finally:
@@ -649,7 +650,7 @@ class AuditRegressionTests(SettingsTestCase):
         )
         _m_message_commands.send_text = lambda *_args, **_kwargs: None
         try:
-            _m_panel_callback_routes.reset_session(
+            _owner_message_commands.reset_session(
                 self.db,
                 "token",
                 "chat",

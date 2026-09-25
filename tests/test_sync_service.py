@@ -139,7 +139,7 @@ class SyncSourceBoundaryTests(SettingsTestCase):
         return source[start : next_def if next_def >= 0 else None]
 
     def test_sync_callback_does_not_call_raw_execution_backends(self):
-        source = (Path(__file__).parents[1] / "bridge" / "panel_callback_routes.py").read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "sync_callbacks.py").read_text(encoding="utf-8")
         chunk = self._function_chunk(
             source,
             "def handle_sync_callback",

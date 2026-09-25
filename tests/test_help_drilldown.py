@@ -8,6 +8,9 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.help_details as _owner_help_details
+import bridge.status_panels as _owner_status_panels
+
 ensure_application_extensions()
 
 import tempfile
@@ -21,7 +24,6 @@ import bridge.director_goals as _m_director_goals
 import bridge.help as _m_help
 import bridge.help_details as _m_help_details
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.scene_state as _m_scene_state
 import bridge.session_naming as _m_session_naming
 import bridge.status_panels as _m_status_panels
@@ -131,7 +133,7 @@ class HelpDrilldownTests(SettingsTestCase):
         original_answer = _m_catalog.answer_callback
         _m_catalog.answer_callback = lambda _token, _callback_id, text: answers.append(text)
         try:
-            handled = _m_panel_callback_routes.handle_help_callback(
+            handled = _owner_help_details.handle_help_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -255,7 +257,7 @@ class HelpDrilldownTests(SettingsTestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_sync_menu(
+            _owner_status_panels.send_sync_menu(
                 "token",
                 "chat",
                 self.db,

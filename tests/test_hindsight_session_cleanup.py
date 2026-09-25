@@ -18,7 +18,6 @@ import bridge.main as _m_main
 import bridge.memory as _m_memory
 import bridge.memory_backend as memory_backend
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
@@ -180,7 +179,7 @@ class HindsightSessionCleanupTests(SettingsTestCase):
         )
         self.db.commit()
 
-        deleted, reason = _m_panel_callback_routes.delete_session_data(
+        deleted, reason = _owner_session_core.delete_session_data(
             self.db,
             "chat",
             target["session_id"],
