@@ -11,7 +11,6 @@ from pathlib import Path
 from bridge.callback_tokens import dynamic_callback_token
 from bridge.card_content import active_world_files, safe_world_path, world_file_paths
 from bridge.cards import send_panel_message
-from bridge.config import MODEL_CHOICES
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
 from bridge.panel_utils import panel_label, panel_navigation, panel_page
 from bridge.provider_catalog import load_provider_catalog
@@ -199,16 +198,7 @@ def get_model_groups(*, app_settings: AppSettings) -> dict[str, tuple[str, list[
     except Exception:
         logging.warning("Could not read bridge model catalog", exc_info=True)
 
-    if groups:
-        return groups
-
-    fallback: dict[str, tuple[str, list[tuple[str, str]], bool]] = {}
-    for label, model_id in MODEL_CHOICES:
-        provider_id, _actual_model = model_id.split("::", 1)
-        fallback.setdefault(provider_id, (provider_id.replace("-", " ").title(), [], True))[1].append(
-            (label.split(" · ", 1)[-1], model_id)
-        )
-    return fallback
+    return groups
 
 
 def send_model_menu(
@@ -260,6 +250,11 @@ def send_model_menu(
             ]
         )
         text = f"Current model: {current_model}\nBridge provider catalog (page {current_page + 1}/{total_pages}):"
+        if not options:
+            text += (
+                "\n\nNo provider models available. Configure models in the private YAML file selected "
+                "by SILLYTAVERN_PROVIDER_CONFIG, or enable discover_models and use Refresh models."
+            )
     else:
         label, models, is_supported = groups.get(provider_id, (provider_id, [], False))
         page_options, current_page, total_pages = panel_page(models, page)
