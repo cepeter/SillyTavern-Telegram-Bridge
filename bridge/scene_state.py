@@ -16,18 +16,19 @@ import time
 from functools import partial as _partial
 
 from bridge.background import submit_background
-from bridge.database import get_generation_settings, task_model_for_session
 from bridge.delivery_port import DeliveryPort
 from bridge.extension_registry import extension_registry_snapshot as _extension_registry_snapshot
 from bridge.extension_registry import register_command_route as _register_command_route
 from bridge.extension_registry import register_post_retain_hook as _register_post_retain_hook
 from bridge.extension_registry import register_summary_clear_hook as _register_summary_clear_hook
 from bridge.extension_registry import register_summary_context_hook as _register_summary_context_hook
+from bridge.generation_settings import get_generation_settings
+from bridge.model_selection import task_model_for_session
 from bridge.provider_port import ProviderPort
-from bridge.repositories import delete_scene_state as _repo_delete_scene_state
-from bridge.repositories import load_scene_state_row as _repo_load_scene_state_row
-from bridge.repositories import upsert_scene_state_if_fresh as _repo_upsert_scene_state_if_fresh
 from bridge.scene_panel import scene_panel
+from bridge.scene_repository import delete_scene_state as _repo_delete_scene_state
+from bridge.scene_repository import load_scene_state_row as _repo_load_scene_state_row
+from bridge.scene_repository import upsert_scene_state_if_fresh as _repo_upsert_scene_state_if_fresh
 from bridge.session_core import load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import db_connect, write_transaction

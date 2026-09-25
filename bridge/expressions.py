@@ -13,9 +13,9 @@ import urllib.request
 from pathlib import Path
 
 from bridge.card_content import safe_character_path
-from bridge.database import get_meta, set_meta
 from bridge.delivery_port import DeliveryPort
 from bridge.limits import IMAGE_MAX_BYTES
+from bridge.metadata import get_meta, set_meta
 from bridge.panel_utils import panel_navigation, panel_page
 from bridge.settings import AppSettings
 from bridge.topic_scope import parse_topic_scope

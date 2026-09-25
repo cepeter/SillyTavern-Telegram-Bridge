@@ -1,8 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
-import bridge.database as _owner_database
 import bridge.memory as _m_memory
+import bridge.model_selection as _owner_model_selection
 
 ensure_application_extensions()
 
@@ -33,7 +33,7 @@ class SceneStateEngineTests(SettingsTestCase):
             title="Scene",
             app_settings=self.app_settings_builder.build(),
         )
-        _owner_database.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
+        _owner_model_selection.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
 
     def tearDown(self):
         self.db.close()

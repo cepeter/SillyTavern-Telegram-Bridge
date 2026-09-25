@@ -6,6 +6,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Architecture
 
+- Retire aggregate database/repository facades in favor of domain SQL owners and explicit transactional use cases. Metadata, jobs, operation phases, settings/presets, panel bindings and sync identities now preserve enclosing rollback; replace the lock-only write callback with real short transaction scopes.
 - Separate character, session, World Info, provider/model, settings, conversation and sync callback domains. Keep ordered routing and all callback identifiers, actor/session binding, photo/text fallbacks and Back/Close behavior unchanged.
 - Separate session lifecycle/repository, session deletion views and native imports from Telegram transport. Compose a required SessionService for ingress, workers and Persona selection; session creation and updates participate in caller-owned transactions.
 - Resolve models only through configured providers and known model IDs, including opted-in discovery results; reject ambiguous/unknown routes before startup rather than guessing `provider-one`. Check-only startup no longer updates Telegram’s command list.

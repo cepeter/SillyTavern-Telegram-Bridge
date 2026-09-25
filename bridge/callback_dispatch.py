@@ -8,10 +8,10 @@ from bridge.callback_tokens import resolve_dynamic_callback_token
 from bridge.callbacks import close_panel_message, discard_panel_binding, is_session_scoped_panel_callback
 from bridge.catalog import answer_callback
 from bridge.composition import BridgeServices
-from bridge.database import panel_owner_for_message, panel_session_for_message
 from bridge.groups import handle_group_panel_callback
 from bridge.help import handle_enum_callback
 from bridge.media import remove_inline_keyboard
+from bridge.panel_bindings import panel_owner_for_message, panel_session_for_message
 from bridge.panel_callback_routes import handle_entity_panel_callback, handle_primary_panel_callback
 from bridge.provider_callbacks import handle_provider_model_callback
 from bridge.request_types import RequestContext

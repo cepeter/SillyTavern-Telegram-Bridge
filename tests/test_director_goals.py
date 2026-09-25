@@ -3,7 +3,7 @@ from functools import partial as _partial
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
-import bridge.database as _owner_database
+import bridge.model_selection as _owner_model_selection
 
 ensure_application_extensions()
 
@@ -35,7 +35,7 @@ class DirectorGoalsTests(SettingsTestCase):
             title="Director goal",
             app_settings=self.app_settings_builder.build(),
         )
-        _owner_database.set_task_model(self.db, self.chat_id, self.session["session_id"], "utility::director")
+        _owner_model_selection.set_task_model(self.db, self.chat_id, self.session["session_id"], "utility::director")
         _m_group_core.save_group_state(
             self.db,
             self.chat_id,
@@ -136,14 +136,14 @@ class DirectorGoalsTests(SettingsTestCase):
         self.assertEqual(before, after)
 
     def test_director_policy_prefers_director_task_model(self):
-        _owner_database.set_task_model(
+        _owner_model_selection.set_task_model(
             self.db,
             self.chat_id,
             self.session["session_id"],
             "utility::fallback",
             task="utility",
         )
-        _owner_database.set_task_model(
+        _owner_model_selection.set_task_model(
             self.db,
             self.chat_id,
             self.session["session_id"],
@@ -179,14 +179,14 @@ class DirectorGoalsTests(SettingsTestCase):
         self.assertEqual(calls[0][0], "director::special")
 
     def test_director_policy_falls_back_to_utility_model(self):
-        _owner_database.set_task_model(
+        _owner_model_selection.set_task_model(
             self.db,
             self.chat_id,
             self.session["session_id"],
             "utility::fallback",
             task="utility",
         )
-        _owner_database.set_task_model(
+        _owner_model_selection.set_task_model(
             self.db,
             self.chat_id,
             self.session["session_id"],
@@ -222,14 +222,14 @@ class DirectorGoalsTests(SettingsTestCase):
         self.assertEqual(calls[0][0], "utility::fallback")
 
     def test_director_policy_falls_back_to_main_model(self):
-        _owner_database.set_task_model(
+        _owner_model_selection.set_task_model(
             self.db,
             self.chat_id,
             self.session["session_id"],
             "",
             task="director",
         )
-        _owner_database.set_task_model(
+        _owner_model_selection.set_task_model(
             self.db,
             self.chat_id,
             self.session["session_id"],

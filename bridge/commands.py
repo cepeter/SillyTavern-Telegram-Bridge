@@ -8,27 +8,23 @@ import time
 
 from bridge.card_content import card_fields_from_file, replace_macros
 from bridge.context_compaction import context_history_candidate_limit, context_input_budget_tokens
-from bridge.database import (
-    begin_operation,
+from bridge.generation import build_chat_messages, render_session_response, save_response_variant
+from bridge.generation_settings import (
     delete_generation_preset,
-    format_generation_settings,
     get_generation_settings,
-    get_meta,
     load_generation_preset,
-    native_edit_target,
-    operation_phase,
-    record_operation,
-    set_operation_phase,
     update_generation_settings,
 )
-from bridge.generation import build_chat_messages, render_session_response, save_response_variant
+from bridge.generation_settings_values import format_generation_settings
 from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
 from bridge.limits import MAX_HISTORY_MESSAGES
 from bridge.media import delete_outgoing_message_row, send_reply, send_typing
 from bridge.memory_backend import memory_mode, memory_scope
 from bridge.memory_service import MemoryService
+from bridge.metadata import get_meta
 from bridge.operation_recovery import OperationRecovery as _OperationRecovery
+from bridge.operations import begin_operation, operation_phase, record_operation, set_operation_phase
 from bridge.persona_service import PersonaService
 from bridge.persona_sync import persona_name
 from bridge.provider_port import ProviderPort
@@ -43,8 +39,9 @@ from bridge.reset_panel import reset_confirmation_request
 from bridge.session_core import ensure_session as ensure_session
 from bridge.session_core import load_session
 from bridge.settings import AppSettings
-from bridge.sqlite_store import run_write_txn, write_transaction
+from bridge.sqlite_store import write_transaction
 from bridge.telegram import send_panel_request, send_text, telegram_request
+from bridge.transcript_repository import native_edit_target
 
 _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
     operation_phase=lambda db, operation_id: operation_phase(
@@ -61,10 +58,7 @@ _COMMAND_OPERATION_RECOVERY = _OperationRecovery(
         operation_id,
         kind,
     ),
-    run_write_txn=lambda db, operation: run_write_txn(
-        db,
-        operation,
-    ),
+    write_transaction=write_transaction,
     get_meta=lambda db, key, default="": get_meta(
         db,
         key,
@@ -374,13 +368,11 @@ def regenerate_edited_turn(
                 "edit",
                 "local_committed",
             )
-        db.commit()
+
         return assistant_rowid
 
-    assistant_rowid = run_write_txn(
-        db,
-        persist_edit,
-    )
+    with write_transaction(db):
+        assistant_rowid = persist_edit()
     _COMMAND_OPERATION_RECOVERY.delete_stored_telegram_ids(
         token,
         chat_id,

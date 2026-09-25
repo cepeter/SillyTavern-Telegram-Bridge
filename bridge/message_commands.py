@@ -12,17 +12,7 @@ from bridge.cards import send_session_menu
 from bridge.character_identity import reconcile_session_character
 from bridge.commands import edit_last_user
 from bridge.context_compaction import context_history_candidate_limit
-from bridge.database import (
-    begin_operation,
-    clear_failed_turn,
-    get_generation_settings,
-    get_meta,
-    operation_phase,
-    operation_was_applied,
-    record_operation,
-    set_meta,
-    set_operation_phase,
-)
+from bridge.failed_turns import clear_failed_turn
 from bridge.generation import (
     build_chat_messages,
     continue_last,
@@ -31,11 +21,20 @@ from bridge.generation import (
     save_response_variant,
     swipe_state_key,
 )
+from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
 from bridge.language import normalize_response_language
 from bridge.media import queue_user_quote_tts, send_reply, send_typing
 from bridge.memory import clear_session_summary
 from bridge.memory_service import MemoryService
+from bridge.metadata import get_meta, set_meta
+from bridge.operations import (
+    begin_operation,
+    operation_phase,
+    operation_was_applied,
+    record_operation,
+    set_operation_phase,
+)
 from bridge.performance import timed_call
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
@@ -44,7 +43,7 @@ from bridge.request_types import PreparedMessage, RequestContext
 from bridge.reset_panel import reset_confirmation_request
 from bridge.session_core import ensure_session, list_sessions, load_session
 from bridge.settings import AppSettings
-from bridge.sqlite_store import optimize_database, run_write_txn, write_transaction
+from bridge.sqlite_store import optimize_database, write_transaction
 from bridge.telegram import send_panel_request, send_text, telegram_request
 
 if TYPE_CHECKING:
@@ -249,7 +248,8 @@ def generate_and_store_reply(
                 )
             return assistant_rowid
 
-    assistant_rowid = run_write_txn(db, persist_turn)
+    with write_transaction(db):
+        assistant_rowid = persist_turn()
     memory_service.retain(db, chat_id, session, fields)
     if telegram_message_id is not None:
         clear_failed_turn(db, chat_id, telegram_message_id)

@@ -12,8 +12,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from bridge.database import bind_panel_session
 from bridge.limits import MAX_TELEGRAM_LENGTH, SYNC_MAX_BYTES
+from bridge.panel_bindings import bind_panel_session
 from bridge.request_types import RequestContext
 from bridge.settings import AppSettings
 from bridge.topic_scope import parse_topic_scope

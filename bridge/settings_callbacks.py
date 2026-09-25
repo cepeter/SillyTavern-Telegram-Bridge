@@ -8,7 +8,6 @@ import time
 from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.card_content import get_system_prompt_choice
 from bridge.commands import send_note_menu
-from bridge.database import set_meta
 from bridge.delivery_port import DeliveryPort
 from bridge.expressions import (
     discover_expression_assets,
@@ -20,6 +19,7 @@ from bridge.help import send_system_prompt_menu
 from bridge.language import response_language_label, send_language_menu, set_response_language
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.media import remove_inline_keyboard
+from bridge.metadata import set_meta
 from bridge.session_core import update_session
 from bridge.telegram import send_text
 

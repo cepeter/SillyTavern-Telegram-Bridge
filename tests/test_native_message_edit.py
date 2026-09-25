@@ -14,13 +14,14 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.metadata as _owner_metadata
 import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
 
 ensure_application_extensions()
 
+
 import bridge.commands as commands
-import bridge.database as database
 
 
 class NativeEditedMessageSessionTests(SettingsTestCase):
@@ -73,7 +74,7 @@ class NativeEditedMessageSessionTests(SettingsTestCase):
             character_file="b.png",
         )
         self.assertEqual(
-            database.get_meta(self.db, "active_session:chat", ""),
+            _owner_metadata.get_meta(self.db, "active_session:chat", ""),
             "session-b",
         )
 
@@ -152,7 +153,7 @@ class NativeEditedMessageSessionTests(SettingsTestCase):
         self.assertIs(captured["persona_service"], persona)
         self.assertEqual(sent, [])
         self.assertEqual(
-            database.get_meta(self.db, "active_session:chat", ""),
+            _owner_metadata.get_meta(self.db, "active_session:chat", ""),
             "session-b",
         )
 

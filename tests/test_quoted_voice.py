@@ -72,6 +72,8 @@ class QuotedVoiceTests(SettingsTestCase):
 
     def test_assistant_tts_uses_content_scoped_idempotency_key(self):
         class FakeDB:
+            in_transaction = False
+
             def execute(self, *_args, **_kwargs):
                 return None
 

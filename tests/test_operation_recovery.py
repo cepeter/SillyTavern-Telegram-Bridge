@@ -8,8 +8,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
-import bridge.database as _owner_database
 import bridge.message_commands as _owner_message_commands
+import bridge.operations as _owner_operations
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -582,14 +582,14 @@ class DurableRecoveryOwnershipTests(SettingsTestCase):
         self.assertFalse(recovery.exists())
 
     def test_database_begin_operation_uses_serialized_short_write(self):
-        source = (Path(__file__).parents[1] / "bridge" / "database.py").read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "operations.py").read_text(encoding="utf-8")
         start = source.index("def begin_operation")
         end = source.index(
             "\ndef operation_was_applied",
             start,
         )
         chunk = source[start:end]
-        self.assertIn("run_write_txn(db, write)", chunk)
+        self.assertIn("with write_transaction(db):", chunk)
 
     def test_generation_owns_regen_and_continue_recovery_adapter(self):
         source = (Path(__file__).parents[1] / "bridge" / "generation.py").read_text(encoding="utf-8")
@@ -661,9 +661,9 @@ class OperationRecoveryUnitTests(SettingsTestCase):
         self.log_info = Mock()
         self.adapter = OperationRecovery(
             operation_phase=_m_message_commands.operation_phase,
-            begin_operation=_owner_database.begin_operation,
-            record_operation=_owner_database.record_operation,
-            run_write_txn=_m_sync_api.run_write_txn,
+            begin_operation=_owner_operations.begin_operation,
+            record_operation=_owner_operations.record_operation,
+            write_transaction=_m_sync_api.write_transaction,
             get_meta=_m_session_naming.get_meta,
             telegram_request=self.telegram,
             delete_outgoing_message_row=Mock(),

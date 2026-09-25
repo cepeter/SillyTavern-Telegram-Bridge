@@ -161,7 +161,7 @@ def make_native_test_persona_service(*, app_settings=None) -> PersonaService:
         load_personas,
         upsert_native_persona,
     )
-    from bridge.repositories import count_persona_references
+    from bridge.reference_repository import count_persona_references
     from bridge.session_core import update_session
 
     return PersonaService(
@@ -392,7 +392,7 @@ def make_native_test_sync_service(*, app_settings=None, retain_memory=None) -> S
     if retain_memory is None:
         retain_memory = make_test_memory_service().retain
     import bridge.sillytavern_api as _st_api
-    from bridge.repositories import count_session_messages
+    from bridge.reference_repository import count_session_messages
     from bridge.sync_api import _live_sync_disable, live_sync_now, live_sync_poll, live_sync_toggle_realtime
     from bridge.sync_core import sync_binding
 

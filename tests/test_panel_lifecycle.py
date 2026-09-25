@@ -8,6 +8,7 @@ from settings_test_support import SettingsTestCase
 
 import bridge.character_callbacks as _owner_character_callbacks
 import bridge.command_panels as _command_panels
+import bridge.panel_bindings as _owner_panel_bindings
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -21,7 +22,6 @@ from pathlib import Path
 import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.callbacks as _m_callbacks
 import bridge.cards as _m_cards
-import bridge.database as _m_database
 import bridge.help as _m_help
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
@@ -70,7 +70,7 @@ class PanelLifecycleTests(SettingsTestCase):
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
         self.assertEqual([method for method, _payload in calls], ["deleteMessage"])
-        self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 104))
+        self.assertIsNone(_owner_panel_bindings.panel_session_for_message(self.db, "chat", 104))
 
     def test_settings_text_route_opens_panel_without_mutating(self):
         session = _owner_session_core.ensure_session(
@@ -144,7 +144,7 @@ class PanelLifecycleTests(SettingsTestCase):
                 )
                 self.assertEqual(calls[0][0], "deleteMessage", data)
                 self.assertEqual(calls[1][0], "sendText", data)
-                self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", message_id), data)
+                self.assertIsNone(_owner_panel_bindings.panel_session_for_message(self.db, "chat", message_id), data)
         finally:
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
@@ -322,7 +322,7 @@ class PanelLifecycleTests(SettingsTestCase):
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
         self.assertEqual([method for method, _payload in calls], ["deleteMessage"])
-        self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 106))
+        self.assertIsNone(_owner_panel_bindings.panel_session_for_message(self.db, "chat", 106))
 
     def test_owned_panel_rejects_different_user_without_closing_it(self):
         session = _owner_session_core.ensure_session(
@@ -359,8 +359,8 @@ class PanelLifecycleTests(SettingsTestCase):
             )["author_note"],
             "keep me",
         )
-        self.assertEqual(_m_database.panel_owner_for_message(self.db, "chat", 107), "user-1")
-        self.assertEqual(_m_database.panel_session_for_message(self.db, "chat", 107), session["session_id"])
+        self.assertEqual(_owner_panel_bindings.panel_owner_for_message(self.db, "chat", 107), "user-1")
+        self.assertEqual(_owner_panel_bindings.panel_session_for_message(self.db, "chat", 107), session["session_id"])
 
 
 if __name__ == "__main__":

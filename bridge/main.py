@@ -18,18 +18,10 @@ from bridge.composition import BridgeServices as _BridgeServices
 from bridge.composition import TelegramRuntime as _TelegramRuntime
 from bridge.config_values import ConfigurationError
 from bridge.conversation_service import ConversationService as _ConversationService
-from bridge.database import (
-    enqueue_job,
-    finish_job,
-    get_generation_settings,
-    job_actor_id,
-    mark_job_running,
-    mark_job_scheduled,
-    recover_jobs,
-)
 from bridge.delivery_port import DeliveryPort as _DeliveryPort
 from bridge.director_goals import director_goal_policy
 from bridge.environment import bootstrap_environment
+from bridge.generation_settings import get_generation_settings
 from bridge.group_core import (
     advance_group_turn,
     claim_group_user_turn,
@@ -49,6 +41,7 @@ from bridge.help import set_bot_commands
 from bridge.input_flow_service import InputFlowService as _InputFlowService
 from bridge.input_flows import handle_pending_input, start_text_action_input
 from bridge.job_service import JobService as _JobService
+from bridge.job_store import enqueue_job, finish_job, job_actor_id, mark_job_running, mark_job_scheduled, recover_jobs
 from bridge.media import delete_outgoing_message_row, send_reply, send_typing
 from bridge.memory import (
     get_session_summary,
@@ -72,8 +65,8 @@ from bridge.persona_sync import (
 from bridge.provider_catalog import load_routing_catalog
 from bridge.provider_port import ProviderPort as _ProviderPort
 from bridge.provider_transport import generate_provider_text
-from bridge.repositories import count_persona_references as _count_persona_references
-from bridge.repositories import count_session_messages as _count_session_messages
+from bridge.reference_repository import count_persona_references as _count_persona_references
+from bridge.reference_repository import count_session_messages as _count_session_messages
 from bridge.runtime_lifecycle import run_bridge_runtime
 from bridge.runtime_logging import configure_logging, enforce_runtime_permissions
 from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard

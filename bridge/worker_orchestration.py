@@ -11,20 +11,14 @@ from bridge.callback_dispatch import process_callback
 from bridge.card_content import card_fields_from_file
 from bridge.commands import edit_telegram_user_message, process_image_message
 from bridge.composition import BridgeServices
-from bridge.database import (
-    clear_failed_turn,
-    committed_assistant_for_message,
-    native_edit_target,
-    operation_phase,
-    operation_was_applied,
-    record_failed_turn,
-    record_operation,
-)
+from bridge.failed_turns import clear_failed_turn, record_failed_turn
 from bridge.help import process_document_job
 from bridge.job_service import DurableJob, JobSubmission
 from bridge.limits import IMAGE_MAX_BYTES
 from bridge.media import process_voice_job, send_reply
-from bridge.sqlite_store import run_write_txn
+from bridge.operations import operation_phase, operation_was_applied, record_operation
+from bridge.sqlite_store import write_transaction
+from bridge.transcript_repository import committed_assistant_for_message, native_edit_target
 
 
 def process_message_job(
@@ -234,9 +228,9 @@ def process_callback_job(
 
                 def write_callback_operation():
                     record_operation(db, job_id, "callback")
-                    db.commit()
 
-                run_write_txn(db, write_callback_operation)
+                with write_transaction(db):
+                    write_callback_operation()
                 jobs.complete(db, job_id)
         except Exception as exc:
             logging.error("Background callback processing failed: %s", exc, exc_info=True)

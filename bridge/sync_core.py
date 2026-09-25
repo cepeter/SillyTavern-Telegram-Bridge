@@ -16,14 +16,9 @@ from bridge.card_content import (
     safe_world_path,
 )
 from bridge.config import GENERATION_DEFAULTS
-from bridge.database import (
-    ensure_sync_binding,
-    get_generation_settings,
-    parse_generation_setting,
-    sync_transcript_hash,
-    update_generation_settings,
-)
 from bridge.generation import save_response_variant
+from bridge.generation_settings import get_generation_settings, update_generation_settings
+from bridge.generation_settings_values import parse_generation_setting
 from bridge.language import normalize_response_language
 from bridge.limits import SYNC_MAX_BYTES
 from bridge.memory import get_session_summary
@@ -32,6 +27,7 @@ from bridge.port_contracts import RetainSessionMemory
 from bridge.session_core import load_session, update_session
 from bridge.settings import AppSettings
 from bridge.sync_integrity import SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter
+from bridge.sync_state import ensure_sync_binding, sync_transcript_hash
 
 SYNC_MAX_PAYLOAD_BYTES = SYNC_MAX_BYTES
 

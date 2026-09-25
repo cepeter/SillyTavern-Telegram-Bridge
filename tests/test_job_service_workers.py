@@ -10,6 +10,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase, make_test_settings
 
+import bridge.transcript_repository as _owner_transcript_repository
 from bridge.session_service import SessionService
 
 ensure_application_extensions()
@@ -19,7 +20,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import bridge.database as _m_database
 import bridge.help as _m_help
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
@@ -148,7 +148,7 @@ class JobWorkerServiceTests(SettingsTestCase):
     def test_message_worker_failure_uses_job_service(self):
         with (
             patch.object(
-                _m_database,
+                _owner_transcript_repository,
                 "committed_assistant_for_message",
                 return_value=None,
             ),
@@ -416,7 +416,7 @@ class JobWorkerServiceTests(SettingsTestCase):
     def test_voice_worker_success_and_failure_use_job_service(self):
         with (
             patch.object(
-                _m_database,
+                _owner_transcript_repository,
                 "committed_assistant_for_message",
                 return_value=None,
             ),
@@ -445,7 +445,7 @@ class JobWorkerServiceTests(SettingsTestCase):
         self.jobs.calls.clear()
         with (
             patch.object(
-                _m_database,
+                _owner_transcript_repository,
                 "committed_assistant_for_message",
                 return_value=None,
             ),

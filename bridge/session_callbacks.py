@@ -6,10 +6,10 @@ from pathlib import Path
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
 from bridge.cards import send_session_menu
-from bridge.database import set_meta
 from bridge.group_service import GroupService
 from bridge.input_flows import pending_character_for_session
 from bridge.media import remove_inline_keyboard
+from bridge.metadata import set_meta
 from bridge.session_core import delete_session_data, list_sessions, update_session
 from bridge.session_naming import start_session_name_input
 from bridge.session_panels import send_session_delete_confirm, send_session_delete_menu

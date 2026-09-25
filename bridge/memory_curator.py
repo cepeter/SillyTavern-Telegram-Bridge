@@ -18,15 +18,16 @@ from functools import partial as _partial
 
 from bridge.background import submit_background
 from bridge.curated_memory_panel import curated_memory_panel
-from bridge.database import get_generation_settings, task_model_for_session
 from bridge.delivery_port import DeliveryPort
 from bridge.extension_registry import extension_registry_snapshot as _extension_registry_snapshot
 from bridge.extension_registry import register_command_route as _register_command_route
 from bridge.extension_registry import register_post_retain_hook as _register_post_retain_hook
+from bridge.generation_settings import get_generation_settings
 from bridge.memory_backend import _retain_with_client, hindsight_session_prefix, memory_mode
+from bridge.meta_repository import load_meta_value as _repo_load_meta_value
+from bridge.meta_repository import store_meta_value as _repo_store_meta_value
+from bridge.model_selection import task_model_for_session
 from bridge.provider_port import ProviderPort
-from bridge.repositories import load_meta_value as _repo_load_meta_value
-from bridge.repositories import store_meta_value as _repo_store_meta_value
 from bridge.session_core import load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import db_connect, write_transaction

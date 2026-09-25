@@ -12,16 +12,16 @@ import sqlite3
 import threading
 import time
 
-from bridge.database import get_meta
 from bridge.limits import (
     HINDSIGHT_CONTEXT_MAX_CHARS,
     HINDSIGHT_DEFAULT_URL,
     HINDSIGHT_RECALL_MAX_TOKENS,
     HINDSIGHT_RETAIN_MAX_MESSAGES,
 )
+from bridge.metadata import get_meta
 from bridge.network_security import validate_provider_endpoint
 from bridge.settings import AppSettings
-from bridge.sqlite_store import db_connect, run_write_txn
+from bridge.sqlite_store import db_connect, write_transaction
 
 
 def hindsight_bank_id(chat_id: str) -> str:
@@ -112,9 +112,9 @@ def _record_hindsight_document(
                 ),
                 (str(chat_id), str(session_id), str(document_id), str(kind), time.time()),
             )
-            mapping_db.commit()
 
-        run_write_txn(mapping_db, write_mapping)
+        with write_transaction(mapping_db):
+            write_mapping()
     finally:
         mapping_db.close()
 
@@ -416,9 +416,9 @@ def _write_hindsight_successful_purge_state(
                 str(next_epoch),
             ),
         )
-        db.commit()
 
-    run_write_txn(db, write_purge_state)
+    with write_transaction(db):
+        write_purge_state()
 
 
 def _retain_session_memory_backend(

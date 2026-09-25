@@ -14,16 +14,10 @@ from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.card_content import card_fields_from_file, safe_character_path
 from bridge.cards import send_panel_message, send_persona_menu
 from bridge.commands import edit_last_user, handle_macro_command, send_note_menu
-from bridge.database import (
-    get_generation_settings,
-    get_meta,
-    parse_generation_setting,
-    save_generation_preset,
-    set_meta,
-    update_generation_settings,
-)
 from bridge.director_goal_panel import director_goal_panel
 from bridge.director_goals import set_director_goal
+from bridge.generation_settings import get_generation_settings, save_generation_preset, update_generation_settings
+from bridge.generation_settings_values import parse_generation_setting
 from bridge.group_service import GroupService
 from bridge.help import (
     send_databank_menu,
@@ -41,6 +35,7 @@ from bridge.memory import handle_memory_command
 from bridge.memory_backend import remember_fact
 from bridge.memory_service import MemoryService
 from bridge.message_commands import send_pending_input_message
+from bridge.metadata import get_meta, set_meta
 from bridge.persona_delete_panel import send_persona_delete_menu
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort

@@ -20,7 +20,6 @@ from pathlib import Path
 
 from defusedxml import ElementTree as ET
 
-from bridge.database import get_meta
 from bridge.limits import (
     RAG_CHUNK_CHARS,
     RAG_CHUNK_OVERLAP,
@@ -28,6 +27,7 @@ from bridge.limits import (
     RAG_MAX_FILE_BYTES,
     RAG_SUPPORTED_SUFFIXES,
 )
+from bridge.metadata import get_meta
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
 from bridge.rag_retrieval import cosine_similarity, embedding_signature, semantic_candidate_chunk_ids
 from bridge.settings import AppSettings
