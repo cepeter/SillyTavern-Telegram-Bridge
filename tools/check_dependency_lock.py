@@ -1,4 +1,4 @@
-"""Offline checks for the project's flat runtime lock and development inputs.
+"""Offline checks for the project's runtime and combined development locks.
 
 Validate exact pins, SHA-256 metadata, and direct requirements against the
 Python 3.11 target on the current platform. This is not a dependency resolver,
@@ -83,12 +83,17 @@ def read_records(text: str, label: str, errors: list[str], *, hashed: bool) -> l
 
 
 def validate(
-    manifest: str, locked: str, development: str, *, environment: Mapping[str, str] | None = None
+    manifest: str,
+    locked: str,
+    development: str,
+    *,
+    environment: Mapping[str, str] | None = None,
+    development_locked: str | None = None,
 ) -> tuple[str, ...]:
     errors: list[str] = []
     direct = read_records(manifest, "runtime manifest", errors, hashed=False)
     pins = read_records(locked, "runtime lock", errors, hashed=True)
-    read_records(development, "development", errors, hashed=False)
+    development_direct = read_records(development, "development", errors, hashed=False)
     active_environment: dict[str, str] = {key: str(value) for key, value in default_environment().items()}
     active_environment.update(python_version="3.11", python_full_version="3.11.0", extra="")
     if environment is not None:
@@ -111,6 +116,27 @@ def validate(
             errors.append(f"runtime lock: missing active direct requirement {name}")
         elif not requirement.specifier.contains(version, prereleases=True):
             errors.append(f"runtime lock: pinned {name} does not satisfy the runtime manifest")
+    if development_locked is not None:
+        development_pins = read_records(development_locked, "development lock", errors, hashed=True)
+        dev_active: dict[str, Version] = {}
+        for requirement in development_pins:
+            if requirement.marker and not requirement.marker.evaluate(active_environment):
+                continue
+            name = canonicalize_name(requirement.name)
+            if name in dev_active:
+                errors.append(f"development lock: duplicate active pin for {name}")
+            dev_active[name] = Version(next(iter(requirement.specifier)).version)
+        for requirement in development_direct:
+            if requirement.marker and not requirement.marker.evaluate(active_environment):
+                continue
+            name = canonicalize_name(requirement.name)
+            if name not in dev_active or not requirement.specifier.contains(dev_active[name], prereleases=True):
+                errors.append(f"development lock: missing or stale direct requirement {name}")
+        # The combined development environment includes every locked runtime
+        # package at the same version, not just its direct dependencies.
+        for runtime_name, runtime_version in active.items():
+            if dev_active.get(runtime_name) != runtime_version:
+                errors.append(f"development lock: runtime pin mismatch or omission for {runtime_name}")
     return tuple(errors)
 
 
@@ -120,12 +146,14 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, default=root / "requirements.txt")
     parser.add_argument("--lock", type=Path, default=root / "requirements.lock")
     parser.add_argument("--development", type=Path, default=root / "requirements-dev.txt")
+    parser.add_argument("--development-lock", type=Path, default=root / "requirements-dev.lock")
     args = parser.parse_args()
     try:
         errors = validate(
             args.manifest.read_text(encoding="utf-8"),
             args.lock.read_text(encoding="utf-8"),
             args.development.read_text(encoding="utf-8"),
+            development_locked=args.development_lock.read_text(encoding="utf-8"),
         )
     except (OSError, UnicodeError):
         print("dependency-lock: cannot read the configured UTF-8 dependency files", file=sys.stderr)

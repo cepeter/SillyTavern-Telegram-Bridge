@@ -29,12 +29,16 @@ fixtures, not maintainer trust material. Use a separate environment:
 python3.11 -m venv .venv
 . .venv/bin/activate
 python -m pip install --require-hashes -r requirements.lock
-python -m pip install -r requirements-dev.txt
+python -m pip install --require-hashes -r requirements-dev.lock
 python -m pip check
 ```
 
 `requirements.txt` is the runtime input manifest. `requirements.lock` is its
-hash-pinned resolved output. `requirements-dev.txt` lists exact tooling pins.
+hash-pinned resolved output. `requirements-dev.txt` lists exact tooling pins,
+including the compiler and vulnerability auditor. `requirements-dev.lock` is the
+complete runtime-plus-development environment, resolved against the exact runtime
+lock. Test, static-analysis and audit jobs install this hashed lock; they do not
+resolve an unpinned tool dependency tree during CI.
 Do not update a running bridge's Python environment as part of a test run.
 External API calls must be mocked; local HTTP fixtures must bind loopback. Tests
 must not require real bot tokens, provider accounts or user data.
@@ -82,7 +86,7 @@ minor/patch updates are grouped to reduce review noise. Open version-update
 requests are bounded, without disabling security updates.
 
 GitHub's documented pip support covers `.txt` manifests. **Do not assume** a
-Dependabot change regenerates the **custom requirements.lock** file used here.
+Dependabot change regenerates the **custom requirements.lock and requirements-dev.lock files** used here.
 For a runtime manifest change or a selected package upgrade, regenerate the lock
 with [uv's requirements compiler](https://docs.astral.sh/uv/pip/compile/) in an
 isolated checkout, review all resolved version and hash changes, and include the
@@ -91,6 +95,8 @@ necessary input and lock changes in the same pull request:
 ```bash
 uv pip compile requirements.txt --python-version 3.11 --generate-hashes \
   --output-file requirements.lock
+uv pip compile requirements.txt requirements-dev.txt --constraint requirements.lock \
+  --python-version 3.11 --generate-hashes --output-file requirements-dev.lock
 ```
 
 For an intentional targeted upgrade, add `--upgrade-package PACKAGE` using the
@@ -100,14 +106,23 @@ or silently replace public indexes with private credential-bearing URLs.
 
 `python tools/check_dependency_lock.py` performs offline checks for exact runtime
 pins, SHA-256 metadata, active direct-requirement compatibility, and exact
-development pins. It does **not** resolve transitive dependencies, authenticate
+development pins, hashed development records and exact runtime-version agreement
+inside the combined development lock. It does **not** resolve transitive dependencies, authenticate
 packages, verify downloaded artifact bytes, or query vulnerability advisories.
 Hash-enforced installation, `python -m pip check`, the full tests, and the existing
 `pip-audit` CI job remain separate required evidence. The runtime lock is the
 installation authority; a manifest-only update is not evidence of deployment.
+CI audits both lockfiles using `--require-hashes --disable-pip`: every listed
+package is checked against advisories without invoking a second resolver. Hash
+verification happens at installation, while `pip check` checks the resulting
+metadata. Audit tools do not prove a dependency is free of unknown vulnerabilities.
 
-Review GitHub Actions updates as executable dependency changes. Keep workflow
-permissions minimal. Do not grant Dependabot arbitrary external code execution
+Review GitHub Actions updates as executable dependency changes. Every declared
+external action is pinned to a full commit SHA resolved from its official upstream
+repository; the trailing version comment is for review, not the executed identity.
+`setup-uv` also receives the explicit compiler version from the development input.
+When changing the uv pin, update its workflow version and regenerate the combined
+lock in the same PR. Keep workflow permissions minimal. Do not grant Dependabot arbitrary external code execution
 or add a privileged workflow to auto-push unreviewed lockfile changes.
 
 References: [Dependabot options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)

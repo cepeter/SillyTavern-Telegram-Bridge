@@ -15,6 +15,8 @@ updates:
           - mypy
           - ruff
           - packaging
+          - pip-audit
+          - uv
         update-types:
           - minor
           - patch

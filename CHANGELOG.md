@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Pin declared CI actions to verified full commit SHAs and lock development/audit tooling with hashes; audit both complete locks without re-resolving dependencies.
+
 ### Changed
 
 - Make provider health and model refresh panel-only actions; remove misleading text aliases and their queue classification.

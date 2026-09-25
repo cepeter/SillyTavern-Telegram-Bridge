@@ -79,6 +79,12 @@ class _FakeHindsight:
 
 class MemoryNativeBackendTests(SettingsTestCase):
     def setUp(self):
+        # This suite tests the Hindsight guard, not asynchronous scene/curator
+        # workers. Those extension hooks have their own tests. Letting them run
+        # here races temporary SQLite-file cleanup after the guard returns.
+        hooks = patch.dict(registry._POST_RETAIN_HOOKS, {}, clear=True)
+        hooks.start()
+        self.addCleanup(hooks.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = self.app_settings_builder.db_file
         self.old_hindsight = memory_backend.hindsight_client
@@ -112,6 +118,26 @@ class MemoryNativeBackendTests(SettingsTestCase):
             ),
         )
         self.db.commit()
+
+    def test_fixture_does_not_schedule_unrelated_post_retain_workers(self):
+        import bridge.scene_state as scene_state
+
+        self._add_message()
+        with (
+            patch.object(_m_memory, "submit_background", return_value=False),
+            patch.object(scene_state, "submit_background", return_value=False) as scene_submit,
+            patch.object(_m_memory_curator, "submit_background", return_value=False) as curator_submit,
+        ):
+            _m_memory.retain_session_memory(
+                self.db,
+                "chat",
+                self.session,
+                self.fields,
+                provider_port=self.provider,
+                app_settings=self.app_settings_builder.build(),
+            )
+        scene_submit.assert_not_called()
+        curator_submit.assert_not_called()
 
     def test_memory_module_owns_guard_and_persistence_helpers(self):
         shell_source = (Path(__file__).parents[1] / "bridge" / "memory.py").read_text(encoding="utf-8")
