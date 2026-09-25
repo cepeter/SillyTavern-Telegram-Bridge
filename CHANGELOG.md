@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Re-uploading a character card whose name already exists no longer silently skips it or auto-creates a versioned copy. It now stages the upload and asks for confirmation to overwrite, keep the existing card, or save as a new version.
+
 ### Architecture
 
 - Add an explicitly composed RAG service and embedding port; separate bounded document extraction, embedding transport, indexing/query use cases and SQL-only Data Bank repositories. Retire the old RAG aggregation/re-export modules and extend dependency/type guards across the new boundaries.

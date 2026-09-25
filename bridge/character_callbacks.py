@@ -21,7 +21,7 @@ from bridge.group_service import GroupService
 from bridge.group_setup import apply_group_setup_character
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.metadata import get_meta, set_meta
-from bridge.native_imports import character_delete_references, verify_character_card_backup
+from bridge.native_imports import apply_pending_upload, character_delete_references, verify_character_card_backup
 from bridge.operations import begin_operation, record_operation
 from bridge.session_core import list_sessions
 from bridge.telegram import send_panel_photo, send_panel_request
@@ -101,6 +101,31 @@ def handle_character_callback(
                             {"text": "❌ Close", "callback_data": "character:cancel"},
                         ]
                     ]
+                },
+            },
+            request_context=request_context,
+        )
+        return True
+    if data.startswith("characterupload:"):
+        action = data.split(":", 1)[1]
+        if action not in {"overwrite", "newversion", "keep"}:
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Applying…")
+        message_text = apply_pending_upload(
+            db,
+            chat_id,
+            action,
+            app_settings=request_context.app_settings,
+        )
+        send_panel_request(
+            token,
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": message.get("message_id"),
+                "text": message_text,
+                "reply_markup": {
+                    "inline_keyboard": [[{"text": "👥 Character menu", "callback_data": "character:menu"}]]
                 },
             },
             request_context=request_context,

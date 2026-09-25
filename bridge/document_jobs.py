@@ -27,6 +27,7 @@ def process_document_job(
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
+            actor_id = jobs.actor_id(db, job_id) if job_id is not None else ""
             import_telegram_document(
                 db,
                 token,
@@ -46,6 +47,7 @@ def process_document_job(
                 group_director_service=services.group_director,
                 app_settings=services.config,
                 rag_service=services.rag,
+                actor_id=actor_id,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)
