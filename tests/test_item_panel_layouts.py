@@ -93,7 +93,7 @@ class ItemPanelLayoutTests(SettingsTestCase):
         self.assertTrue(any(value.startswith("enum:ragversions:") for value in callbacks))
         self.assertTrue(any(value.startswith("enum:ragremove:") for value in callbacks))
 
-    def test_character_upload_reports_duplicate_and_new_version(self):
+    def test_character_upload_asks_confirmation_on_existing_name(self):
         root = Path(self.tmp.name)
         old_character_dir = self.app_settings_builder.character_dir
         old_backup_dir = self.app_settings_builder.character_backup_dir
@@ -122,9 +122,9 @@ class ItemPanelLayoutTests(SettingsTestCase):
             _m_telegram.parse_png_chara_bytes = old_parse
             _m_telegram.card_fields = old_fields
             _m_telegram.send_text = old_send
-        self.assertIn("Duplicate character card:", sent[1])
-        self.assertIn("New character-card version installed:", sent[2])
-        self.assertIn("Previous version retained as Test_Character.png", sent[2])
+        self.assertIn("imported", sent[0])
+        self.assertIn("already exists", sent[1])
+        self.assertIn("already exists", sent[2])
 
     def test_group_rows_remove_members_without_card_delete_callback(self):
         session = _owner_session_core.ensure_session(

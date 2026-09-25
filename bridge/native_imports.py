@@ -13,16 +13,17 @@ from pathlib import Path
 from bridge.card_content import card_fields, card_fields_from_file, parse_png_chara_bytes
 from bridge.character_quality import merge_optimized_fields, rank_character, write_png_chara_bytes
 from bridge.group_director_service import GroupDirectorService
-from bridge.limits import CATALOG_MAX_ITEMS, RAG_MAX_FILE_BYTES, RAG_SUPPORTED_SUFFIXES
+from bridge.limits import CATALOG_MAX_ITEMS, PENDING_SETTINGS_TTL_SECONDS, RAG_MAX_FILE_BYTES, RAG_SUPPORTED_SUFFIXES
 from bridge.memory_service import MemoryService
 from bridge.metadata import get_meta, set_meta
 from bridge.persona_service import PersonaService
 from bridge.rag_query import rag_mode
 from bridge.rag_repository import data_bank_document_versions
 from bridge.rag_service import RagService
+from bridge.request_types import RequestContext
 from bridge.session_core import ensure_session
 from bridge.settings import AppSettings
-from bridge.telegram import download_telegram_file, send_text
+from bridge.telegram import download_telegram_file, send_panel_request, send_text
 from bridge.world_storage import install_world_info_document
 
 
@@ -86,6 +87,104 @@ def apply_optimized_character_card(path: Path, optimized: dict[str, str], *, app
     temporary.replace(path)
     prune_character_backups(path.name, app_settings=app_settings)
     return backup
+_PENDING_UPLOAD_META = "character_upload_pending:"
+
+
+def _pending_upload_path(chat_id: str, *, app_settings: AppSettings) -> Path:
+    return app_settings.character_dir / f".pending_{chat_id}.png"
+
+
+def _stage_pending_upload(
+    db: sqlite3.Connection, chat_id: str, stem: str, raw: bytes, *, app_settings: AppSettings
+) -> None:
+    app_settings.character_dir.mkdir(parents=True, exist_ok=True)
+    _pending_upload_path(chat_id, app_settings=app_settings).write_bytes(raw)
+    set_meta(
+        db,
+        _PENDING_UPLOAD_META + chat_id,
+        json.dumps({"stem": stem, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}),
+    )
+
+
+def _clear_pending_upload(db: sqlite3.Connection, chat_id: str, *, app_settings: AppSettings) -> None:
+    set_meta(db, _PENDING_UPLOAD_META + chat_id, "")
+    _pending_upload_path(chat_id, app_settings=app_settings).unlink(missing_ok=True)
+
+
+def _send_upload_confirmation(
+    token: str,
+    chat_id: str,
+    name: str,
+    target_name: str,
+    *,
+    request_context: RequestContext,
+) -> None:
+    send_panel_request(
+        token,
+        "sendMessage",
+        {
+            "chat_id": chat_id,
+            "text": (
+                f'Character card "{name}" already exists as {target_name}.\n\n'
+                "Overwrite it, keep the existing card, or save this upload as a new version?"
+            ),
+            "reply_markup": {
+                "inline_keyboard": [
+                    [
+                        {"text": "♻️ Overwrite", "callback_data": "characterupload:overwrite"},
+                        {"text": "📁 New version", "callback_data": "characterupload:newversion"},
+                    ],
+                    [
+                        {"text": "❌ Keep existing", "callback_data": "characterupload:keep"},
+                    ],
+                ]
+            },
+        },
+        request_context=request_context,
+    )
+
+
+def apply_pending_upload(
+    db: sqlite3.Connection,
+    chat_id: str,
+    action: str,
+    *,
+    app_settings: AppSettings,
+) -> str:
+    """Apply (overwrite / new version) or discard a staged upload. Returns a status message."""
+    raw_state = get_meta(db, _PENDING_UPLOAD_META + chat_id)
+    if not raw_state:
+        return "No pending character upload; it may have expired. Upload the card again."
+    try:
+        state = json.loads(raw_state)
+    except json.JSONDecodeError:
+        return "Pending character upload was invalid; upload the card again."
+    if float(state.get("expires_at", 0)) < time.time():
+        _clear_pending_upload(db, chat_id, app_settings=app_settings)
+        return "Pending character upload expired; upload the card again."
+    stem = str(state.get("stem") or "")
+    pending = _pending_upload_path(chat_id, app_settings=app_settings)
+    if not pending.exists():
+        _clear_pending_upload(db, chat_id, app_settings=app_settings)
+        return "Pending character upload file is missing; upload the card again."
+    raw = pending.read_bytes()
+    if action == "keep":
+        _clear_pending_upload(db, chat_id, app_settings=app_settings)
+        return f'Kept the existing "{stem}" card.'
+    target = app_settings.character_dir / f"{stem}.png"
+    if action == "newversion":
+        target = app_settings.character_dir / f"{stem}-{hashlib.sha256(raw).hexdigest()[:8]}.png"
+    try:
+        fields = card_fields(parse_png_chara_bytes(raw), app_settings=app_settings)
+        backup = verify_character_card_backup(target, raw, app_settings=app_settings)
+        target.write_bytes(raw)
+        prune_character_backups(target.name, app_settings=app_settings)
+    except (OSError, ValueError):
+        _clear_pending_upload(db, chat_id, app_settings=app_settings)
+        return "Character card write failed; no changes were made."
+    _clear_pending_upload(db, chat_id, app_settings=app_settings)
+    verb = "overwritten" if action == "overwrite" else "installed"
+    return f"Character card {verb}: {fields['name']} ({target.name}). Backup verified: {backup.name}."
 
 
 def import_character_card(
@@ -98,6 +197,7 @@ def import_character_card(
     app_settings: AppSettings,
     default_model: str = "",
     provider_port=None,
+    request_context=None,
 ) -> None:
     if len(raw) > RAG_MAX_FILE_BYTES:
         send_text(token, chat_id, "Character card is too large. The limit is 10 MB.")
@@ -117,10 +217,6 @@ def import_character_card(
             stem.encode("utf-8")[:64].decode("utf-8", "ignore").rstrip("_-") + "-" + hashlib.sha256(raw).hexdigest()[:8]
         )
     target = app_settings.character_dir / f"{stem}.png"
-    previous_target = target
-    is_new_version = target.exists() and target.read_bytes() != raw
-    if is_new_version:
-        target = app_settings.character_dir / f"{stem}-{hashlib.sha256(raw).hexdigest()[:8]}.png"
     installed_count = (
         sum(1 for path in app_settings.character_dir.glob("*.png") if path.is_file())
         if app_settings.character_dir.exists()
@@ -135,27 +231,22 @@ def import_character_card(
         return
     app_settings.character_dir.mkdir(parents=True, exist_ok=True)
     if target.exists():
-        if target.read_bytes() == raw:
-            try:
-                backup = verify_character_card_backup(target, raw, app_settings=app_settings)
-                prune_character_backups(target.name, app_settings=app_settings)
-            except OSError:
-                send_text(token, chat_id, "Character card exists, but backup verification failed; no changes made.")
-                return
+        _stage_pending_upload(db, chat_id, stem, raw, app_settings=app_settings)
+        if request_context is not None:
+            _send_upload_confirmation(
+                token,
+                chat_id,
+                fields["name"],
+                target.name,
+                request_context=request_context,
+            )
+        else:
             send_text(
                 token,
                 chat_id,
-                (
-                    "Duplicate character card: "
-                    f"""{fields["name"]}"""
-                    " is already installed as "
-                    f"""{target.name}"""
-                    ". Backup verified: "
-                    f"""{backup.name}"""
-                    "."
-                ),
+                f"Character card {fields['name']} already exists as {target.name}; no changes made.",
             )
-            return
+        return
     try:
         backup = verify_character_card_backup(target, raw, app_settings=app_settings)
         target.write_bytes(raw)
@@ -177,28 +268,11 @@ def import_character_card(
             )
         except Exception:
             logging.warning("Character rank skipped for %s", target.name, exc_info=True)
-    if is_new_version:
-        send_text(
-            token,
-            chat_id,
-            (
-                "New character-card version installed: "
-                f"""{fields["name"]}"""
-                " ("
-                f"""{target.name}"""
-                "). Previous version retained as "
-                f"""{previous_target.name}"""
-                ". Backup verified: "
-                f"""{backup.name}"""
-                "."
-            ),
-        )
-    else:
-        send_text(
-            token,
-            chat_id,
-            f"Character card imported: {fields['name']} ({target.name}). Backup verified: {backup.name}.",
-        )
+    send_text(
+        token,
+        chat_id,
+        f"Character card imported: {fields['name']} ({target.name}). Backup verified: {backup.name}.",
+    )
 
 
 def _consume_world_upload(db: sqlite3.Connection, chat_id: str) -> bool:
@@ -246,6 +320,7 @@ def import_telegram_document(
     app_settings: AppSettings,
     rag_service: RagService,
     provider_port=None,
+    actor_id: str = "",
 ) -> None:
     filename = str(document.get("file_name") or "document")
     suffix = Path(filename).suffix.casefold()
@@ -283,6 +358,12 @@ def import_telegram_document(
                 group_director_service=group_director_service,
             )
         else:
+            request_context = RequestContext(
+                db,
+                ensure_session(db, chat_id, default_model, app_settings=app_settings)["session_id"],
+                actor_id,
+                app_settings=app_settings,
+            )
             import_character_card(
                 db,
                 token,
@@ -292,6 +373,7 @@ def import_telegram_document(
                 app_settings=app_settings,
                 default_model=default_model,
                 provider_port=provider_port,
+                request_context=request_context,
             )
         return
     if suffix not in RAG_SUPPORTED_SUFFIXES:
