@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).parents[1]
 
 
 DATABASE_PUBLIC_FUNCTIONS = (
+    "native_edit_target",
     "get_meta",
     "set_meta",
     "record_failed_turn",

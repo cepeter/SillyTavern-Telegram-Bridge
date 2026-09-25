@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from bridge.composition import BridgeServices
+from bridge.database import native_edit_target
 from bridge.help import process_document_job
 from bridge.help_details import send_help_command
 from bridge.job_service import JobSubmission
@@ -51,7 +52,17 @@ def route_edited_message_update(
         return
 
     edited_message_id = int(edited_message.get("message_id") or 0)
-    edited_session_id = ensure_session(db, edited_chat_id, model, app_settings=services.config)["session_id"]
+    target = native_edit_target(db, edited_chat_id, edited_message_id)
+    # Native Telegram edits target their original message, which may belong to
+    # an inactive bridge session. Enforce the policy for that exact session.
+    edited_session_id = (
+        str(target[1])
+        if target is not None and target[2] == "user"
+        else ensure_session(db, edited_chat_id, model, app_settings=services.config)["session_id"]
+    )
+    if not services.group.user_turn_allowed(db, edited_chat_id, edited_session_id, edited_sender):
+        services.telegram.send_text(token, edited_chat_id, "It is not your turn in manual group mode.")
+        return
     truncated_text = str(edited_text)[:12000]
     job_id = services.jobs.enqueue(
         db,

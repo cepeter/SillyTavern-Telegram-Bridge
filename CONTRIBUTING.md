@@ -73,8 +73,9 @@ CI uploads JSON/XML coverage reports for 14 days.
 
 Before merging, require `test`, `dependency-audit`, `static-analysis`,
 `Analyze (actions)`, `Analyze (python)`, and the CodeQL result for the exact reviewed
-head commit. The repository uses GitHub's existing CodeQL setup; do not add a
-second local CodeQL workflow. A passing analysis job alone does not prove that
+head commit. The repository uses GitHub CodeQL Default Setup for Python and GitHub
+Actions; no checked-in CodeQL workflow is required. Do not add a second local
+CodeQL workflow. A passing analysis job alone does not prove that
 its security-result check passed. Do not force a merge if a head changes during
 review or checks.
 
@@ -150,3 +151,29 @@ regression guard, not an independent cryptographic trust anchor.
 Do not commit private `.env` files, databases, logs, native content or signing keys.
 Use [SECURITY.md](SECURITY.md) for vulnerability reporting. Deployment and release
 signing are separate operator actions; merging a PR does not deploy it.
+
+
+### SQLite write ownership
+
+Wrap application write operations in `with write_transaction(db):`. Repository
+writers reject a connection without an active transaction **before executing
+SQL**; they do not open or commit transactions themselves. This preserves atomic
+multi-operation changes, including rollback when the enclosing use case fails.
+Nested transaction scopes remain the original caller's responsibility.
+
+The serialized connection retains a single writer-lock acquisition until its
+transaction ends. It also tracks potentially-writing result cursors, including
+`INSERT/UPDATE/DELETE ... RETURNING` in autocommit mode. Consume their results or
+close the cursor explicitly; do not leave a cursor open while awaiting network
+I/O. Use the connection's standard cursor factory and its `execute`,
+`executemany`, `executescript`, commit/rollback, or connection context-manager APIs.
+Do not call the base `sqlite3.Connection` methods to bypass these wrappers.
+
+Leading SQL comments do not bypass classification. `WITH`, `PRAGMA`, transaction
+control, and unknown statement forms are conservatively serialized; plain
+`SELECT`, `VALUES`, and `EXPLAIN` are not classified as writes. Consequently a
+read-only CTE/PRAGMA cursor may also hold the gate until consumed or closed. This
+is an in-process serialization policy, not a SQL parser or sandbox for arbitrary
+native-extension/UDF side effects. SQLite's own file locking still governs other
+processes. Keep connections on their owning thread and make commit/rollback/close
+explicit at the owning boundary.

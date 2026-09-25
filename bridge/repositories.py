@@ -1,8 +1,18 @@
-"""SQL-only persistence primitives for current application domains."""
+"""SQL-only persistence primitives for current application domains.
+
+Writers require an active caller-owned transaction and never commit it. Use
+sqlite_store.write_transaction at the use-case boundary for atomic groups of
+changes; reads remain transaction-free. Standalone writes fail before SQL.
+"""
 
 from __future__ import annotations
 
 import sqlite3
+
+
+def _require_active_transaction(db: sqlite3.Connection) -> None:
+    if not db.in_transaction:
+        raise RuntimeError("repository write requires an active caller-owned transaction")
 
 
 def load_director_goal(
@@ -24,6 +34,7 @@ def store_director_goal(
     goal: str,
     updated_at: float,
 ) -> None:
+    _require_active_transaction(db)
     db.execute(
         "INSERT OR REPLACE INTO director_goals(chat_id,session_id,goal,updated_at) VALUES(?,?,?,?)",
         (str(chat_id), str(session_id), str(goal), float(updated_at)),
@@ -35,6 +46,7 @@ def delete_director_goal(
     chat_id: str,
     session_id: str,
 ) -> None:
+    _require_active_transaction(db)
     db.execute(
         "DELETE FROM director_goals WHERE chat_id=? AND session_id=?",
         (str(chat_id), str(session_id)),
@@ -58,6 +70,7 @@ def delete_scene_state(
     chat_id: str,
     session_id: str,
 ) -> None:
+    _require_active_transaction(db)
     db.execute(
         "DELETE FROM scene_states WHERE chat_id=? AND session_id=?",
         (str(chat_id), str(session_id)),
@@ -72,6 +85,7 @@ def upsert_scene_state_if_fresh(
     through_rowid: int,
     updated_at: float,
 ) -> bool:
+    _require_active_transaction(db)
     cursor = db.execute(
         """
         INSERT INTO scene_states(
@@ -111,6 +125,7 @@ def store_meta_value(
     key: str,
     value: str,
 ) -> None:
+    _require_active_transaction(db)
     db.execute(
         "INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
         (str(key), str(value)),
@@ -167,6 +182,7 @@ def store_group_state_row(
     turn_users_json: str,
     updated_at: float,
 ) -> None:
+    _require_active_transaction(db)
     db.execute(
         "INSERT OR REPLACE INTO group_sessions("
         "chat_id,session_id,title,enabled,turn_index,mode,forced_speaker,"
@@ -196,6 +212,7 @@ def try_claim_group_operation(
 ) -> bool:
     if operation_id is None:
         return True
+    _require_active_transaction(db)
     operation_id = str(operation_id)
     cursor = db.execute(
         "INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?,'in_progress',?,?)",
@@ -218,6 +235,7 @@ def mark_group_operation_applied(
 ) -> None:
     if operation_id is None:
         return
+    _require_active_transaction(db)
     db.execute(
         "UPDATE operations SET state='applied',kind=?,updated_at=? WHERE operation_id=?",
         (str(kind), float(now), str(operation_id)),

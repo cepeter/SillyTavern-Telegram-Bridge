@@ -499,6 +499,12 @@ PROVIDER_ONE_API_KEY=replace-me
 SILLYTAVERN_PROVIDER_ALLOWED_HOSTS=provider.example
 ```
 
+If the catalog contains no available model IDs, the panel shows setup guidance
+rather than inventing fallback providers or models. The Health and Refresh
+buttons remain available. For a Chat Completions provider, set `api_endpoint`
+(or its accepted `api` alias) explicitly; a missing endpoint produces a
+configuration error before any network request or credential attachment.
+
 ### Provider catalog field reference
 
 | Field | Default / values | Purpose |
@@ -916,6 +922,11 @@ not install extensions, poll chat files, import/export JSONL transcripts, or
 expose Live Sync credentials in Telegram.
 
 ### Forum Topic groups
+
+In manual mode, native Telegram message edits obey the same user-turn rule as
+new text. The rule is checked before enqueue and again before regeneration,
+including recovered jobs. An edit targets the session containing its original
+message, not whichever session is currently active.
 
 `/group` only works inside a Telegram Forum Topic. Each topic gets its own
 isolated session and group state. The setup wizard lets you create a group

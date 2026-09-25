@@ -57,3 +57,24 @@ until the deployment has been verified.
 Tests, coverage, static checks, package auditing and CodeQL are defense-in-depth
 controls, not a guarantee that the project is vulnerability-free. Report suspected
 boundary failures even when the current checks pass.
+
+
+## Code scanning setup
+
+This repository uses **GitHub CodeQL Default Setup** for **Python** and
+**GitHub Actions**. GitHub manages that configuration outside the checked-in
+workflow files, so a missing local CodeQL workflow file does not mean scanning
+is disabled. Repository maintainers can inspect Security → Code scanning and
+Settings → Code security, or query the repository's `code-scanning/default-setup`
+API. Verify the Python/Actions analyses and the aggregate CodeQL check for the
+exact PR head; do not add a second custom workflow solely to duplicate Default
+Setup. Forks must inspect or enable their own GitHub security configuration.
+
+## Diagnostics are private data
+
+Stored failure text and exception logs can include provider-supplied content.
+Length limits are not secret redaction, and the bridge does not promise that all
+third-party error messages are credential-free. Keep the database and logs
+private, inspect and redact diagnostics before sharing them, and rotate an
+exposed credential. No private environment value should be copied into a public
+issue, release asset, or test fixture.
