@@ -29,11 +29,7 @@ from bridge.config import (
 )
 from bridge.database import get_meta, optimize_database, write_transaction
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
-from bridge.rag_retrieval import (
-    cosine_similarity,
-    embedding_signature,
-    semantic_candidate_chunk_ids,
-)
+from bridge.rag_retrieval import cosine_similarity, embedding_signature, semantic_candidate_chunk_ids
 from bridge.settings import AppSettings
 
 

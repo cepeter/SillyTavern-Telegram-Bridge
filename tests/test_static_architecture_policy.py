@@ -128,3 +128,24 @@ def test_ci_requires_static_architecture_gates():
     assert "python -m ruff check ." in workflow
     assert "python -m ruff format --check ." in workflow
     assert ("python tools/static_analysis.py --print-type-targets | xargs python -m mypy") in workflow
+
+
+def test_isolated_services_may_depend_on_pure_contracts(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "service", "from bridge.port_contracts import Port\n")
+    write_module(bridge, "port_contracts", "class Port: pass\n")
+    report = policy.check_dependency_direction(bridge, static_targets=("bridge/service.py",))
+    assert report.errors == ()
+
+
+def test_contract_layer_cannot_smuggle_concrete_adapter_imports(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "service", "from bridge.port_contracts import Port\n")
+    write_module(bridge, "port_contracts", "import bridge.telegram\nclass Port: pass\n")
+    write_module(bridge, "telegram", "")
+    report = policy.check_dependency_direction(bridge, static_targets=("bridge/service.py",))
+    assert any("contract" in error.casefold() and "bridge.telegram" in error for error in report.errors)

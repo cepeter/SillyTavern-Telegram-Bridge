@@ -10,7 +10,7 @@ from pathlib import Path
 
 from settings_test_support import SettingsTestCase
 
-from bridge.composition import BridgeServices, build_bridge_services
+from bridge.composition import BridgeServices
 
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
@@ -89,7 +89,7 @@ class RuntimeArchitectureGuardTests(SettingsTestCase):
                     MISSING,
                 )
                 self.assertIs(
-                    inspect.signature(build_bridge_services).parameters[name].default,
+                    inspect.signature(BridgeServices).parameters[name].default,
                     inspect.Parameter.empty,
                 )
                 self.assertNotIn(
@@ -128,21 +128,25 @@ class RuntimeArchitectureGuardTests(SettingsTestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, source)
 
-    def test_application_routes_require_service_graph(self):
+    def test_orchestration_owns_root_graph_and_leaf_routes_require_narrow_roles(self):
         from bridge.callback_dispatch import process_callback
         from bridge.command_routes import handle_command_route
         from bridge.conversation_service import ConversationService
 
-        for function in (
-            ConversationService.process_message,
-            process_callback,
-            handle_command_route,
+        self.assertIs(inspect.signature(process_callback).parameters["services"].default, inspect.Parameter.empty)
+        self.assertNotIn("services", inspect.signature(ConversationService.process_message).parameters)
+        params = inspect.signature(handle_command_route).parameters
+        self.assertNotIn("services", params)
+        for name in (
+            "delivery_port",
+            "provider_port",
+            "memory_service",
+            "persona_service",
+            "group_service",
+            "sync_service",
+            "conversation_service",
         ):
-            with self.subTest(function=function.__name__):
-                self.assertIs(
-                    inspect.signature(function).parameters["services"].default,
-                    inspect.Parameter.empty,
-                )
+            self.assertIs(params[name].default, inspect.Parameter.empty)
 
     def test_required_service_routes_do_not_use_optional_service_lookup(self):
         for filename in (

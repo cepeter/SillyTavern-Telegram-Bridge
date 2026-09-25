@@ -170,7 +170,8 @@ def _director_goal_command_route(
     operation_id=None,
     *,
     request_context,
-    services,
+    delivery_port,
+    provider_port,
 ):
     if command == "/group goal" or command.startswith("/group goal "):
         handle_director_goal_command(
@@ -179,7 +180,7 @@ def _director_goal_command_route(
             chat_id,
             session,
             stripped,
-            delivery_port=services.delivery,
+            delivery_port=delivery_port,
             request_context=request_context,
         )
         return True

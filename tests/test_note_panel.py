@@ -2,7 +2,6 @@ from application_test_setup import (
     ensure_application_extensions,
     make_test_application_services,
     make_test_conversation_service,
-    make_test_provider_port,
     make_test_request_context,
 )
 from settings_test_support import SettingsTestCase
@@ -92,7 +91,6 @@ class NotePanelTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/note new text",
-                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -140,7 +138,6 @@ class NotePanelTests(SettingsTestCase):
                 "chat",
                 "remember this",
                 operation_id=701,
-                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -189,7 +186,6 @@ class NotePanelTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/cancel",
-                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -311,14 +307,6 @@ class NotePanelTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/authornote old text",
-                services=make_test_application_services(
-                    provider=make_test_provider_port(
-                        generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                            AssertionError("removed alias must not generate")
-                        )
-                    ),
-                    app_settings=self.app_settings_builder.build(),
-                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card

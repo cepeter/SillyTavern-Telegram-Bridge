@@ -6,9 +6,10 @@ import sqlite3
 
 from bridge.catalog import answer_callback
 from bridge.common import topic_scope_from_message
-from bridge.composition import BridgeServices, RequestContext
+from bridge.composition import BridgeServices
 from bridge.help_details import handle_help_callback, is_help_callback
 from bridge.job_service import JobSubmission
+from bridge.request_types import RequestContext
 from bridge.telegram import ensure_session
 from bridge.worker_orchestration import process_callback_job
 

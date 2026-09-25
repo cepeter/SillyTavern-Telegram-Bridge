@@ -38,7 +38,7 @@ import bridge.sillytavern_api as _m_sillytavern_api
 import bridge.telegram as _m_telegram
 import bridge.update_callback_routing as _m_update_callback_routing
 import bridge.worker_orchestration as _m_workers
-from bridge.composition import BackgroundRuntime, BridgeServices, TelegramRuntime, build_bridge_services
+from bridge.composition import BackgroundRuntime, BridgeServices, TelegramRuntime
 from bridge.group_director_service import GroupDirectorService
 from bridge.job_service import DurableJob, JobService, JobSubmission
 from bridge.memory_service import MemoryService
@@ -121,7 +121,7 @@ class CompositionConfigTests(SettingsTestCase):
         persona = object()
         sync = object()
         jobs = object()
-        services = build_bridge_services(
+        services = BridgeServices(
             config,
             db_factory=lambda: sqlite3.connect(":memory:"),
             telegram=telegram,
@@ -150,8 +150,8 @@ class CompositionConfigTests(SettingsTestCase):
         with self.assertRaises(FrozenInstanceError):
             services.telegram = telegram
 
-    def test_build_bridge_services_requires_complete_application_graph(self):
-        signature = inspect.signature(build_bridge_services)
+    def test_BridgeServices_requires_complete_application_graph(self):
+        signature = inspect.signature(BridgeServices)
         for name in ("jobs", "group_director", "memory", "persona", "sync"):
             self.assertEqual(
                 signature.parameters[name].default,
@@ -465,7 +465,7 @@ class WorkerInjectionTests(SettingsTestCase):
         self.assertEqual(captured["token"], "injected-token")
         self.assertEqual(captured["api_key"], "injected-key")
         self.assertEqual(captured["model"], "injected::model")
-        self.assertIs(captured["kwargs"]["services"], self.services)
+        self.assertNotIn("services", captured["kwargs"])
 
     def test_process_message_propagates_injected_persona_service(self):
         captured = {}
@@ -478,7 +478,12 @@ class WorkerInjectionTests(SettingsTestCase):
             ),
         )
         try:
-            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
+            make_test_conversation_service(
+                app_settings=services.config,
+                input_flow=services.input_flow,
+                persona=services.persona,
+                memory=services.memory,
+            ).process_message(
                 db,
                 "injected-token",
                 "injected-key",
@@ -487,7 +492,6 @@ class WorkerInjectionTests(SettingsTestCase):
                 "chat",
                 "hello",
                 70,
-                services=services,
             )
         finally:
             db.close()
@@ -530,7 +534,13 @@ class WorkerInjectionTests(SettingsTestCase):
                     request_context=make_test_request_context(
                         db, session["session_id"], app_settings=self.app_settings_builder.build()
                     ),
-                    services=self.services,
+                    conversation_service=self.services.conversation,
+                    delivery_port=self.services.delivery,
+                    group_service=self.services.group,
+                    memory_service=self.services.memory,
+                    persona_service=self.services.persona,
+                    provider_port=self.services.provider,
+                    sync_service=self.services.sync,
                 )
         finally:
             db.close()
@@ -641,16 +651,21 @@ class WorkerInjectionTests(SettingsTestCase):
                     "",
                     "Mira",
                     None,
-                    self.services,
                     request_context=make_test_request_context(
                         db, "active-session", app_settings=self.app_settings_builder.build()
                     ),
+                    conversation_service=self.services.conversation,
+                    delivery_port=self.services.delivery,
+                    group_service=self.services.group,
+                    memory_service=self.services.memory,
+                    provider_port=self.services.provider,
                 )
         finally:
             db.close()
 
         self.assertTrue(handled)
-        self.assertIs(captured["services"], self.services)
+        self.assertNotIn("services", captured)
+        self.assertEqual(captured["queued_session_id"], "failed-session")
 
     def test_recovered_model_override_wins_over_config_default(self):
         captured = {}

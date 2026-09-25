@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, cast
 
+from bridge.port_contracts import ProviderGenerate
+
 
 @dataclass(frozen=True)
 class DirectorCustomization:
@@ -34,7 +36,7 @@ class GroupDirectorService:
     member_labels: Callable[[list[str]], list[str]]
     card_fields: Callable[[str], dict[str, object]]
     generation_settings: Callable[[sqlite3.Connection, str, str], dict[str, object]]
-    generate_text: Callable[..., str]
+    generate_text: ProviderGenerate
     director_policy: DirectorPolicy
     default_model: str
 

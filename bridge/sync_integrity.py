@@ -6,13 +6,15 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from bridge.port_contracts import RetainSessionMemory
+
 
 @dataclass(frozen=True)
 class SyncSnapshotIntegrityAdapter:
     apply_backend: Callable[..., str]
     update_session: Callable[..., object]
     load_session: Callable[..., dict[str, str]]
-    retain_memory: Callable[..., None]
+    retain_memory: RetainSessionMemory
     card_fields: Callable[[str], dict[str, str]]
     default_model: str
     log_warning: Callable[..., None]

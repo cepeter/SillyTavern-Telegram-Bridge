@@ -216,7 +216,15 @@ class GroupTurnGatingTests(SettingsTestCase):
                 request_context=make_test_request_context(
                     self.db, "session", "user", app_settings=self.app_settings_builder.build()
                 ),
-                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
+                conversation_service=make_test_application_services(
+                    app_settings=self.app_settings_builder.build()
+                ).conversation,
+                delivery_port=make_test_application_services(app_settings=self.app_settings_builder.build()).delivery,
+                group_service=make_test_application_services(app_settings=self.app_settings_builder.build()).group,
+                memory_service=make_test_application_services(app_settings=self.app_settings_builder.build()).memory,
+                persona_service=make_test_application_services(app_settings=self.app_settings_builder.build()).persona,
+                provider_port=make_test_application_services(app_settings=self.app_settings_builder.build()).provider,
+                sync_service=make_test_application_services(app_settings=self.app_settings_builder.build()).sync,
             )
         finally:
             _m_command_routes.send_text = original_send

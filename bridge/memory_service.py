@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
 from dataclasses import dataclass
+
+from bridge.port_contracts import PurgeSessionMemory, ReadSummary, ReadSummaryState, RecallMemory, RetainSessionMemory
 
 
 @dataclass(frozen=True)
@@ -19,11 +20,11 @@ class MemoryPromptContext:
 class MemoryService:
     """Coordinate prompt memory, retention, and session-memory purge."""
 
-    recall_context: Callable[..., str]
-    summary_for_prompt: Callable[..., str]
-    summary_state: Callable[..., tuple[str, int]]
-    retain_session: Callable[..., None]
-    purge_session_memory: Callable[..., int]
+    recall_context: RecallMemory
+    summary_for_prompt: ReadSummary
+    summary_state: ReadSummaryState
+    retain_session: RetainSessionMemory
+    purge_session_memory: PurgeSessionMemory
 
     def prompt_context(
         self,

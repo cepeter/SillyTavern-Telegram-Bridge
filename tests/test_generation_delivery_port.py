@@ -25,7 +25,9 @@ def test_delivery_port_is_pure_and_declares_required_callables():
     path = BRIDGE / "delivery_port.py"
     assert path.is_file(), "DeliveryPort module is missing"
     module = importlib.import_module("bridge.delivery_port")
-    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("delivery_port.py"))
+    assert {
+        name for name in imported_modules("delivery_port.py") if name == "bridge" or name.startswith("bridge.")
+    } <= {"bridge.port_contracts"}
     assert set(module.DeliveryPort.__dataclass_fields__) == {
         "request",
         "send_text",
@@ -37,12 +39,12 @@ def test_delivery_port_is_pure_and_declares_required_callables():
 
 
 def test_delivery_port_is_required_by_composition():
-    from bridge.composition import BridgeServices, build_bridge_services
+    from bridge.composition import BridgeServices
 
     field = BridgeServices.__dataclass_fields__["delivery"]
     assert field.default is MISSING
     assert "None" not in str(field.type)
-    param = inspect.signature(build_bridge_services).parameters["delivery"]
+    param = inspect.signature(BridgeServices).parameters["delivery"]
     assert param.default is inspect.Parameter.empty
 
 

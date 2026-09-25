@@ -1,6 +1,5 @@
 from application_test_setup import (
     ensure_application_extensions,
-    make_test_application_services,
     make_test_conversation_service,
     make_test_group_service,
     make_test_input_flow_service,
@@ -117,9 +116,6 @@ class SessionNamingTests(SettingsTestCase):
                 {},
                 "chat",
                 "/status",
-                services=make_test_application_services(
-                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
-                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card

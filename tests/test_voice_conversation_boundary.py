@@ -36,6 +36,6 @@ def test_transcript_uses_injected_service_and_preserves_request_identity(monkeyp
     assert delivered == [
         (
             (db, "token", "key", "model", fields, "chat", "spoken message", 42),
-            {"queued_session_id": "queued-session", "actor_id": "actor", "services": services},
+            {"queued_session_id": "queued-session", "actor_id": "actor"},
         )
     ]

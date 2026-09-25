@@ -25,8 +25,9 @@ from bridge.database import (
 )
 from bridge.generation import save_response_variant
 from bridge.language import normalize_response_language
-from bridge.memory import get_session_summary, retain_session_memory
+from bridge.memory import get_session_summary
 from bridge.persona_sync import get_persona, persona_name
+from bridge.port_contracts import RetainSessionMemory
 from bridge.settings import AppSettings
 from bridge.sync_integrity import SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter
 from bridge.telegram import load_session, update_session
@@ -225,7 +226,7 @@ def _apply_sync_snapshot_backend(
     return sync_transcript_hash(messages)
 
 
-def _make_sync_snapshot_integrity(*, app_settings: AppSettings):
+def _make_sync_snapshot_integrity(*, app_settings: AppSettings, retain_memory: RetainSessionMemory):
     return _SyncSnapshotIntegrityAdapter(
         apply_backend=_partial(_apply_sync_snapshot_backend, app_settings=app_settings),
         update_session=(
@@ -241,11 +242,7 @@ def _make_sync_snapshot_integrity(*, app_settings: AppSettings):
                 db, chat_id, session_id, default_model, app_settings=app_settings
             )
         ),
-        retain_memory=(
-            lambda db, chat_id, session, fields: retain_session_memory(
-                db, chat_id, session, fields, app_settings=app_settings
-            )
-        ),
+        retain_memory=retain_memory,
         card_fields=(lambda character_file: card_fields_from_file(character_file, app_settings=app_settings)),
         default_model=app_settings.default_model,
         log_warning=(lambda message, **kwargs: logging.warning(message, **kwargs)),
@@ -261,8 +258,9 @@ def apply_sync_snapshot(
     variants: dict[int, tuple[list[str], int]],
     *,
     app_settings: AppSettings,
+    retain_memory: RetainSessionMemory,
 ) -> str:
-    return _make_sync_snapshot_integrity(app_settings=app_settings).apply(
+    return _make_sync_snapshot_integrity(app_settings=app_settings, retain_memory=retain_memory).apply(
         db,
         chat_id,
         session,

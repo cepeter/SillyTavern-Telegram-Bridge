@@ -14,7 +14,6 @@ import bridge.memory as _m_memory
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
-import bridge.sync_core as _m_sync_core
 
 
 class MemoryCuratorTests(SettingsTestCase):
@@ -121,7 +120,7 @@ class MemoryCuratorTests(SettingsTestCase):
         provider = make_test_provider_port()
         try:
             _m_session_naming.set_meta(self.db, "memory_mode:chat", "off")
-            _m_sync_core.retain_session_memory(
+            _m_memory.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,
@@ -132,7 +131,7 @@ class MemoryCuratorTests(SettingsTestCase):
             self.assertNotIn("memory_curator", queued)
 
             _m_session_naming.set_meta(self.db, "memory_mode:chat", "on")
-            _m_sync_core.retain_session_memory(
+            _m_memory.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,

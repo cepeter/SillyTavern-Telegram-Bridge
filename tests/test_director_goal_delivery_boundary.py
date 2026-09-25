@@ -122,7 +122,8 @@ def test_director_goal_extension_route_forwards_services_delivery(monkeypatch):
         "",
         "User",
         request_context="ctx",
-        services=SimpleNamespace(delivery=delivery),
+        delivery_port=SimpleNamespace(delivery=delivery).delivery,
+        provider_port=object(),
     )
 
     assert handled is True

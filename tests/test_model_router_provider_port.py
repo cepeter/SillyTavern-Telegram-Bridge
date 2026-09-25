@@ -64,7 +64,9 @@ def test_provider_port_is_pure_and_delegates_exact_call_shape():
     path = BRIDGE / "provider_port.py"
     assert path.is_file(), "ProviderPort module is missing"
     module = importlib.import_module("bridge.provider_port")
-    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("provider_port.py"))
+    assert {
+        name for name in imported_modules("provider_port.py") if name == "bridge" or name.startswith("bridge.")
+    } <= {"bridge.port_contracts"}
     calls = []
 
     def backend(*args, **kwargs):
@@ -107,13 +109,13 @@ def test_provider_catalog_returns_empty_mapping_on_read_failure(tmp_path, app_se
 
 
 def test_model_router_and_provider_are_required_by_composition():
-    from bridge.composition import BridgeServices, build_bridge_services
+    from bridge.composition import BridgeServices
 
     for name in ("model_router", "provider"):
         field = BridgeServices.__dataclass_fields__[name]
         assert field.default is MISSING
         assert "None" not in str(field.type)
-        param = inspect.signature(build_bridge_services).parameters[name]
+        param = inspect.signature(BridgeServices).parameters[name]
         assert param.default is inspect.Parameter.empty
 
 

@@ -438,8 +438,8 @@ class PersonaEditorTests(SettingsTestCase):
                 self.session["session_id"],
                 "provider/model",
                 self.session.get("persona_id") or "",
-                services=services,
                 request_context=self.request_context,
+                persona_service=services.persona,
             )
         self.assertTrue(handled)
         self.assertIs(captured["persona_service"], fake)

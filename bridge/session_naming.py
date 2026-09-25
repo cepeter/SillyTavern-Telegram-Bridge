@@ -9,13 +9,13 @@ from pathlib import Path
 from bridge import session_titles as _session_titles
 from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.cards import send_character_menu
-from bridge.composition import RequestContext
 from bridge.config import PENDING_SETTINGS_TTL_SECONDS
 from bridge.database import get_meta, set_meta
 from bridge.group_service import GroupService
 from bridge.groups import start_group_session
 from bridge.input_flows import _cancel_pending, pending_character_for_session
 from bridge.message_commands import send_pending_input_message
+from bridge.request_types import RequestContext
 from bridge.settings import AppSettings
 from bridge.telegram import create_session, delete_pending_input_prompts, send_text, update_session
 

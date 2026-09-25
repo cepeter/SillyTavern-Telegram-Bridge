@@ -451,7 +451,8 @@ def _memory_curator_command_route(
     operation_id=None,
     *,
     request_context,
-    services,
+    delivery_port,
+    provider_port,
 ):
     if command == "/memory curated" or command.startswith("/memory curated "):
         handle_curated_memory_command(
@@ -462,8 +463,8 @@ def _memory_curator_command_route(
             session,
             fields,
             command,
-            provider_port=services.provider,
-            delivery_port=services.delivery,
+            provider_port=provider_port,
+            delivery_port=delivery_port,
             request_context=request_context,
         )
         return True

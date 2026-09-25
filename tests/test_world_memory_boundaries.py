@@ -161,7 +161,8 @@ def test_memory_curator_extension_route_forwards_provider_and_delivery(monkeypat
         "",
         "User",
         request_context="ctx",
-        services=SimpleNamespace(provider=provider, delivery=delivery),
+        delivery_port=SimpleNamespace(provider=provider, delivery=delivery).delivery,
+        provider_port=SimpleNamespace(provider=provider, delivery=delivery).provider,
     )
 
     assert handled is True

@@ -22,7 +22,6 @@ from bridge.common import (
 from bridge.composition import BackgroundRuntime as _BackgroundRuntime
 from bridge.composition import BridgeServices as _BridgeServices
 from bridge.composition import TelegramRuntime as _TelegramRuntime
-from bridge.composition import build_bridge_services as _build_bridge_services_value
 from bridge.config_values import ConfigurationError
 from bridge.conversation_service import ConversationService as _ConversationService
 from bridge.database import (
@@ -185,9 +184,9 @@ def _build_startup_services(
     sync = _SyncService(
         load_binding=sync_binding,
         count_messages=_count_session_messages,
-        sync_now_backend=_partial(live_sync_now, app_settings=config),
-        toggle_realtime_backend=_partial(live_sync_toggle_realtime, app_settings=config),
-        poll_backend=_partial(live_sync_poll, app_settings=config),
+        sync_now_backend=_partial(live_sync_now, app_settings=config, retain_memory=memory.retain),
+        toggle_realtime_backend=_partial(live_sync_toggle_realtime, app_settings=config, retain_memory=memory.retain),
+        poll_backend=_partial(live_sync_poll, app_settings=config, retain_memory=memory.retain),
         disable_realtime=_live_sync_disable,
         api_configured=_partial(_st_api.live_sync_api_configured, app_settings=config),
         expected_errors=(_st_api.SillyTavernApiError, ValueError),
@@ -207,7 +206,73 @@ def _build_startup_services(
         submit_chat=background.submit_chat,
         prepare_worker=durable_worker_guard.prepare,
     )
-    return _build_bridge_services_value(
+
+    def dispatch(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        session_id,
+        current_model,
+        current_persona,
+        user_name,
+        operation_id=None,
+        *,
+        request_context,
+    ):
+        return handle_command_route(
+            db,
+            token,
+            api_key,
+            model,
+            fields,
+            chat_id,
+            stripped,
+            command,
+            session,
+            session_id,
+            current_model,
+            current_persona,
+            user_name,
+            operation_id,
+            request_context=request_context,
+            delivery_port=delivery,
+            provider_port=provider,
+            memory_service=memory,
+            persona_service=persona,
+            group_service=group,
+            sync_service=sync,
+            conversation_service=conversation,
+        )
+
+    conversation = _ConversationService(
+        prepare_message=_partial(
+            prepare_message,
+            app_settings=config,
+            delivery_port=delivery,
+            provider_port=provider,
+            memory_service=memory,
+            persona_service=persona,
+            group_service=group,
+            input_flow_service=input_flow,
+            group_director_service=group_director,
+        ),
+        dispatch_command=dispatch,
+        generate_reply=_partial(
+            generate_and_store_reply,
+            app_settings=config,
+            group_service=group,
+            provider_port=provider,
+            memory_service=memory,
+            persona_service=persona,
+        ),
+    )
+    return _BridgeServices(
         config,
         db_factory=_partial(db_connect, config.db_file, app_settings=config),
         telegram=_TelegramRuntime(
@@ -226,11 +291,7 @@ def _build_startup_services(
         sync=sync,
         jobs=jobs,
         delivery=delivery,
-        conversation=_ConversationService(
-            prepare_message=prepare_message,
-            dispatch_command=handle_command_route,
-            generate_reply=_partial(generate_and_store_reply, app_settings=config),
-        ),
+        conversation=conversation,
     )
 
 

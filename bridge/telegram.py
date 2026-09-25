@@ -23,7 +23,6 @@ from bridge.common import (
     time,
     urllib,
 )
-from bridge.composition import RequestContext
 from bridge.config import CATALOG_MAX_ITEMS, RAG_MAX_FILE_BYTES, RAG_SUPPORTED_SUFFIXES, SYNC_MAX_BYTES
 from bridge.database import (
     begin_operation,
@@ -45,6 +44,7 @@ from bridge.panel_utils import panel_label, panel_message_request, panel_navigat
 from bridge.persona_service import PersonaService
 from bridge.persona_sync import default_persona_id, get_persona
 from bridge.rag_core import add_data_bank_document, data_bank_document_versions, rag_mode
+from bridge.request_types import RequestContext
 from bridge.session_titles import normalize_session_title
 from bridge.settings import AppSettings
 from bridge.world_storage import install_world_info_document

@@ -75,10 +75,14 @@ class StartOnboardingTests(SettingsTestCase):
             current_persona,
             "User",
             None,
-            services,
             request_context=make_test_request_context(
                 self.db, active_session["session_id"], app_settings=self.app_settings_builder.build()
             ),
+            conversation_service=services.conversation,
+            delivery_port=services.delivery,
+            group_service=services.group,
+            memory_service=services.memory,
+            provider_port=services.provider,
         )
 
     def test_slash_start_rejects_installation_placeholder_before_probe(self):

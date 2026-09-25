@@ -15,8 +15,8 @@ ensure_application_extensions()
 
 import bridge.callback_dispatch as callback_dispatch
 import bridge.callbacks as callbacks
-import bridge.composition as composition
 import bridge.database as database
+import bridge.request_types as request_types
 import bridge.telegram as telegram
 import bridge.update as update
 
@@ -112,8 +112,8 @@ class PanelContextOwnershipTests(SettingsTestCase):
         self.assertIsNone(row)
 
     def test_request_context_is_immutable(self):
-        self.assertTrue(hasattr(composition, "RequestContext"))
-        context = composition.RequestContext(
+        self.assertTrue(hasattr(request_types, "RequestContext"))
+        context = request_types.RequestContext(
             self.db, "session-a", "user-a", app_settings=self.app_settings_builder.build()
         )
 
@@ -122,7 +122,7 @@ class PanelContextOwnershipTests(SettingsTestCase):
 
     def test_panel_request_binds_explicit_session_and_actor(self):
         self.assertTrue(hasattr(telegram, "send_panel_request"))
-        context = composition.RequestContext(
+        context = request_types.RequestContext(
             self.db, "session-explicit", "user-explicit", app_settings=self.app_settings_builder.build()
         )
         with patch.object(

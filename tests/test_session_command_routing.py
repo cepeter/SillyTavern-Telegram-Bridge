@@ -1,6 +1,5 @@
 from application_test_setup import (
     ensure_application_extensions,
-    make_test_application_services,
     make_test_conversation_service,
 )
 from settings_test_support import SettingsTestCase
@@ -52,7 +51,6 @@ class SessionCommandRoutingTests(SettingsTestCase):
                 "chat",
                 "/session",
                 telegram_message_id=1,
-                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.send_session_menu = old_menu

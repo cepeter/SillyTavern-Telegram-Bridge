@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
+import bridge.memory as _m_memory
+
 ensure_application_extensions()
 
 import tempfile
@@ -15,7 +17,6 @@ import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.scene_state as _m_scene_state
 import bridge.session_naming as _m_session_naming
-import bridge.sync_core as _m_sync_core
 
 
 class SceneStateEngineTests(SettingsTestCase):
@@ -95,7 +96,7 @@ class SceneStateEngineTests(SettingsTestCase):
         original_submit = _m_scene_state.submit_background
         _m_scene_state.submit_background = lambda name, fn, *args, **kwargs: queued.append((name, fn, args))
         try:
-            _m_sync_core.retain_session_memory(
+            _m_memory.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,

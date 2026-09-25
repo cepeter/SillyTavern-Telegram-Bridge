@@ -130,8 +130,12 @@ def test_command_route_help_detail_forwards_correct_arguments(monkeypatch):
         "",
         "User",
         None,
-        SimpleNamespace(delivery=delivery, provider=object()),
         request_context=context,
+        conversation_service=object(),
+        delivery_port=SimpleNamespace(delivery=delivery, provider=object()).delivery,
+        group_service=object(),
+        memory_service=object(),
+        provider_port=SimpleNamespace(delivery=delivery, provider=object()).provider,
     )
 
     assert handled is True
@@ -312,13 +316,55 @@ def test_command_routes_memory_search_forwards_delivery_send_text(monkeypatch):
         {"session_id": "session"},
         {"name": "Mira"},
         None,
-        SimpleNamespace(
+        request_context=make_test_request_context(),
+        delivery_port=SimpleNamespace(
+            group=object(),
+            sync=object(),
             memory=object(),
             persona=object(),
             provider=object(),
             delivery=SimpleNamespace(send_text=send_text_fn),
-        ),
-        request_context=make_test_request_context(),
+        ).delivery,
+        group_service=SimpleNamespace(
+            group=object(),
+            sync=object(),
+            memory=object(),
+            persona=object(),
+            provider=object(),
+            delivery=SimpleNamespace(send_text=send_text_fn),
+        ).group,
+        memory_service=SimpleNamespace(
+            group=object(),
+            sync=object(),
+            memory=object(),
+            persona=object(),
+            provider=object(),
+            delivery=SimpleNamespace(send_text=send_text_fn),
+        ).memory,
+        persona_service=SimpleNamespace(
+            group=object(),
+            sync=object(),
+            memory=object(),
+            persona=object(),
+            provider=object(),
+            delivery=SimpleNamespace(send_text=send_text_fn),
+        ).persona,
+        provider_port=SimpleNamespace(
+            group=object(),
+            sync=object(),
+            memory=object(),
+            persona=object(),
+            provider=object(),
+            delivery=SimpleNamespace(send_text=send_text_fn),
+        ).provider,
+        sync_service=SimpleNamespace(
+            group=object(),
+            sync=object(),
+            memory=object(),
+            persona=object(),
+            provider=object(),
+            delivery=SimpleNamespace(send_text=send_text_fn),
+        ).sync,
     )
 
     assert handled is True

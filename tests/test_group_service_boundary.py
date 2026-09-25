@@ -6,6 +6,8 @@ import inspect
 from dataclasses import MISSING
 from pathlib import Path
 
+from bridge.request_types import PreparedMessage
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -29,7 +31,9 @@ def group_service_module():
 
 def test_group_service_is_pure_and_has_expected_methods():
     module = group_service_module()
-    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("group_service.py"))
+    assert {
+        name for name in imported_modules("group_service.py") if name == "bridge" or name.startswith("bridge.")
+    } <= {"bridge.port_contracts"}
     for name in (
         "state",
         "save",
@@ -93,12 +97,12 @@ def test_group_service_delegates_without_rewriting_arguments(tmp_path):
 
 
 def test_group_service_is_required_by_composition():
-    from bridge.composition import BridgeServices, build_bridge_services
+    from bridge.composition import BridgeServices
 
     field = BridgeServices.__dataclass_fields__["group"]
     assert field.default is MISSING
     assert "None" not in str(field.type)
-    param = inspect.signature(build_bridge_services).parameters["group"]
+    param = inspect.signature(BridgeServices).parameters["group"]
     assert param.default is inspect.Parameter.empty
 
 
@@ -112,7 +116,7 @@ def test_startup_composes_group_before_director_and_director_uses_service():
 def test_conversation_forwards_group_service_to_generation():
     from types import SimpleNamespace
 
-    from bridge.conversation_service import ConversationService, PreparedMessage
+    from bridge.conversation_service import ConversationService
 
     group = object()
     memory = object()
@@ -133,12 +137,21 @@ def test_conversation_forwards_group_service_to_generation():
     )
     generated = {}
 
+    from functools import partial
+
+    provider = object()
     service = ConversationService(
         prepare_message=lambda *_args, **_kwargs: prepared,
         dispatch_command=lambda *_args, **_kwargs: False,
-        generate_reply=lambda *_args, **kwargs: generated.update(kwargs),
+        generate_reply=partial(
+            lambda *_args, **kwargs: generated.update(kwargs),
+            group_service=group,
+            provider_port=provider,
+            memory_service=memory,
+            persona_service=persona,
+        ),
     )
-    services = SimpleNamespace(group=group, provider=object(), memory=memory, persona=persona)
+    services = SimpleNamespace(group=group, provider=provider, memory=memory, persona=persona)
 
     service.process_message(
         object(),
@@ -149,7 +162,6 @@ def test_conversation_forwards_group_service_to_generation():
         "chat",
         "hello",
         11,
-        services=services,
     )
 
     assert generated["group_service"] is group

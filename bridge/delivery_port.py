@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
+
+from bridge.port_contracts import (
+    DeleteOutgoingMessage,
+    SendPanelRequest,
+    SendReply,
+    SendText,
+    SendTyping,
+    TelegramRequest,
+)
 
 
 @dataclass(frozen=True)
 class DeliveryPort:
-    request: Callable[..., object]
-    send_text: Callable[..., list[int]]
-    send_reply: Callable[..., None]
-    send_typing: Callable[..., None]
-    send_panel_request: Callable[..., dict]
-    delete_outgoing_message_row: Callable[..., None]
+    request: TelegramRequest
+    send_text: SendText
+    send_reply: SendReply
+    send_typing: SendTyping
+    send_panel_request: SendPanelRequest
+    delete_outgoing_message_row: DeleteOutgoingMessage

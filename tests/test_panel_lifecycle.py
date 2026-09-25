@@ -98,7 +98,6 @@ class PanelLifecycleTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/settings temperature 0.7",
-                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -234,7 +233,6 @@ class PanelLifecycleTests(SettingsTestCase):
                 fields,
                 "chat",
                 "99",
-                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
             pending = json.loads(_m_session_naming.get_meta(self.db, "settings_input:chat", "{}"))
             self.assertEqual(pending["prompt_message_ids"], [90, 91])
@@ -246,7 +244,6 @@ class PanelLifecycleTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/cancel",
-                services=make_test_application_services(app_settings=self.app_settings_builder.build()),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card

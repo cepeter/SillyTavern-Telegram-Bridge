@@ -1,6 +1,5 @@
 from application_test_setup import (
     ensure_application_extensions,
-    make_test_application_services,
     make_test_conversation_service,
     make_test_memory_service,
 )
@@ -71,9 +70,6 @@ class ResetBehaviorTests(SettingsTestCase):
                 {},
                 "chat",
                 "/reset",
-                services=make_test_application_services(
-                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
-                ),
             )
         finally:
             _m_message_commands.send_panel_request = original_request

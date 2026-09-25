@@ -122,6 +122,8 @@ def test_language_boundary_does_not_change_remember_inline_action(monkeypatch):
     calls = []
     provider = object()
     services = SimpleNamespace(
+        group=object(),
+        sync=object(),
         memory=object(),
         persona=object(),
         provider=provider,
@@ -144,8 +146,13 @@ def test_language_boundary_does_not_change_remember_inline_action(monkeypatch):
         {"session_id": "session"},
         {"name": "Mira"},
         17,
-        services,
         request_context="ctx",
+        delivery_port=services.delivery,
+        group_service=services.group,
+        memory_service=services.memory,
+        persona_service=services.persona,
+        provider_port=services.provider,
+        sync_service=services.sync,
     )
 
     assert handled is True

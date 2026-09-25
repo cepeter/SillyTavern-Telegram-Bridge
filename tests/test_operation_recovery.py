@@ -1,7 +1,6 @@
 from application_test_setup import (
     ensure_application_extensions,
     make_test_application_services,
-    make_test_conversation_service,
     make_test_delivery_port,
     make_test_memory_service,
     make_test_persona_service,
@@ -425,7 +424,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 side_effect=AssertionError("generic recovery ran first"),
             ),
         ):
-            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
+            services.conversation.process_message(
                 self.db,
                 "token",
                 "key",
@@ -435,7 +434,6 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 "/regen",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=services,
             )
 
         regen.assert_called_once()
@@ -469,7 +467,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 side_effect=AssertionError("generic recovery ran first"),
             ),
         ):
-            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
+            services.conversation.process_message(
                 self.db,
                 "token",
                 "key",
@@ -479,7 +477,6 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 "/continue",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=services,
             )
 
         continuation.assert_called_once()
@@ -513,7 +510,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 side_effect=AssertionError("generic recovery ran first"),
             ),
         ):
-            make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
+            services.conversation.process_message(
                 self.db,
                 "token",
                 "key",
@@ -523,7 +520,6 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 "/edit replacement",
                 queued_session_id=self.session["session_id"],
                 operation_id=operation_id,
-                services=services,
             )
 
         edit.assert_called_once()

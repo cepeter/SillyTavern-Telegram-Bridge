@@ -891,7 +891,7 @@ and never replaces the original conversation history.
 - **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
   reverse imports from the isolated service/port layer. Ruff linting, security
   rules, and formatting cover the complete Python tree. Mypy currently checks
-  17 explicitly listed modules, including the network and callback-token policy.
+  20 explicitly listed modules, including the network and callback-token policy.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---
@@ -972,6 +972,16 @@ dependency graph. Startup enters through `sillytavern_telegram_bridge.py`
 and composes required services/ports in `bridge.main`; there is no runtime
 loader, module override chain, or shared execution namespace.
 
+Core provider, delivery, Telegram, conversation, group and memory callbacks use
+named `Protocol` signatures; negative type-check fixtures verify rejected
+keywords, argument counts and return types. `RequestContext` and
+`PreparedMessage` have one low-level owner in `bridge/request_types.py`.
+Conversation processing is prebound to its preparation, command and generation
+callbacks. Leaf command handlers receive named collaborators rather than the
+root service container; `BridgeServices` remains the orchestration assembly.
+Live Sync imports retain memory through that application's configured memory
+port, preserving its provider binding.
+
 The current boundaries are deliberately small:
 
 - `sillytavern_telegram_bridge.py` bootstraps the environment and starts the app.
@@ -986,7 +996,10 @@ The current boundaries are deliberately small:
 `tools/static_analysis.py` enforces two repository invariants in CI:
 
 1. the complete `bridge` import graph must stay acyclic;
-2. the stabilized service/port modules may not import back into `bridge.*`.
+2. stabilized service/port modules may import only the named pure contract and
+   request-value modules, not concrete application adapters;
+3. the contract/value layer has its own explicit dependency allowlist, so it
+   cannot introduce a hidden dependency back into Telegram or composition.
 
 
 CI also measures all `bridge/` modules with statement and branch coverage,
