@@ -7,7 +7,7 @@ from dataclasses import MISSING
 from pathlib import Path
 from types import SimpleNamespace
 
-from application_test_setup import make_test_session_service
+from application_test_setup import make_test_rag_service, make_test_session_service
 from settings_test_support import make_test_settings
 
 ROOT = Path(__file__).parents[1]
@@ -133,6 +133,7 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
         memory_service=services.memory,
         persona_service=services.persona,
         provider_port=services.provider,
+        rag_service=make_test_rag_service(),
     )
 
     assert result is None

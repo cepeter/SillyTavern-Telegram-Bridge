@@ -8,7 +8,8 @@ from bridge.context_compaction import context_history_candidate_limit, context_i
 from bridge.group_service import GroupService
 from bridge.memory_backend import memory_mode, memory_scope
 from bridge.memory_service import MemoryService
-from bridge.rag_core import data_bank_documents, rag_mode
+from bridge.rag_query import rag_mode
+from bridge.rag_repository import data_bank_documents
 from bridge.settings import AppSettings
 
 

@@ -1,7 +1,11 @@
-from application_test_setup import ensure_application_extensions
+from application_test_setup import ensure_application_extensions, make_native_test_embedding_port
 from settings_test_support import SettingsTestCase
 
-import bridge.rag_core as _owner_rag_core
+import bridge.embedding_transport as _owner_embedding_transport
+import bridge.embedding_values as _owner_embedding_values
+import bridge.rag_indexing as _owner_rag_indexing
+import bridge.rag_query as _owner_rag_query
+import bridge.rag_retrieval as _owner_rag_retrieval
 
 ensure_application_extensions()
 
@@ -13,9 +17,6 @@ import unittest
 from pathlib import Path
 
 import bridge.memory_curator as _m_memory_curator
-import bridge.rag as _m_rag
-import bridge.rag_core as _m_telegram
-import bridge.rag_core as rag_core
 
 
 class RagScalingTests(SettingsTestCase):
@@ -24,7 +25,7 @@ class RagScalingTests(SettingsTestCase):
         self.original_db = self.app_settings_builder.db_file
         self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
-        self.namespace = _m_rag.rag_embedding_namespace(app_settings=self.app_settings_builder.build())
+        self.namespace = _owner_embedding_values.rag_embedding_namespace(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
@@ -67,8 +68,8 @@ class RagScalingTests(SettingsTestCase):
                     self.namespace,
                     2,
                     json.dumps(vector),
-                    _m_rag.embedding_signature(vector),
-                    _m_rag.embedding_norm(vector),
+                    _owner_rag_retrieval.embedding_signature(vector),
+                    _owner_embedding_values.embedding_norm(vector),
                 ),
             )
             self.db.execute(
@@ -100,9 +101,9 @@ class RagScalingTests(SettingsTestCase):
 
     def test_rag_sources_have_no_legacy_backfill_or_sampling_fallback(self):
         root = Path(__file__).parents[1] / "bridge"
-        core = (root / "rag_core.py").read_text(encoding="utf-8")
+        core = (root / "rag_query.py").read_text(encoding="utf-8")
         retrieval = (root / "rag_retrieval.py").read_text(encoding="utf-8")
-        shell = (root / "rag.py").read_text(encoding="utf-8")
+        shell = (root / "databank_commands.py").read_text(encoding="utf-8")
 
         self.assertNotIn("backfill_rag_embedding_signatures", core)
         self.assertNotIn("backfill_rag_embedding_signatures", shell)
@@ -112,39 +113,48 @@ class RagScalingTests(SettingsTestCase):
 
     def test_small_corpus_keeps_exact_semantic_candidate_set(self):
         ids = self._insert_chunks(20)
-        candidates = _m_rag.semantic_candidate_chunk_ids(self.db, "chat", self.namespace, [], candidate_limit=64)
+        candidates = _owner_rag_retrieval.semantic_candidate_chunk_ids(
+            self.db, "chat", self.namespace, [], candidate_limit=64
+        )
         self.assertEqual(candidates, tuple(ids))
 
     def test_large_corpus_is_bounded_and_keeps_lexical_neighborhood(self):
         ids = self._insert_chunks(500)
         hit = ids[250]
-        candidates = _m_rag.semantic_candidate_chunk_ids(self.db, "chat", self.namespace, [hit], candidate_limit=64)
+        candidates = _owner_rag_retrieval.semantic_candidate_chunk_ids(
+            self.db, "chat", self.namespace, [hit], candidate_limit=64
+        )
         self.assertLessEqual(len(candidates), 64)
         for expected in ids[248:253]:
             self.assertIn(expected, candidates)
 
     def test_retrieve_decodes_only_bounded_semantic_shortlist(self):
         self._insert_chunks(300, needle_index=150)
-        original_cached = rag_core.cached_rag_embedding
-        original_limit = rag_core.rag_semantic_candidate_limit
-        original_cosine = rag_core.cosine_similarity
+        original_cached = _owner_rag_query.cached_rag_embedding
+        original_limit = _owner_rag_query.rag_semantic_candidate_limit
+        original_cosine = _owner_rag_query.cosine_similarity
         cosine_calls = []
-        rag_core.cached_rag_embedding = lambda _db, _query, *, app_settings=None: [1.0, 0.0]
-        rag_core.rag_semantic_candidate_limit = lambda *, app_settings=None: 32
+        _owner_rag_query.cached_rag_embedding = lambda _db, _query, *, app_settings=None, embedding_port: [1.0, 0.0]
+        _owner_rag_query.rag_semantic_candidate_limit = lambda *, app_settings=None: 32
 
         def counted_cosine(left, right, *norms):
             cosine_calls.append((left, right))
             return original_cosine(left, right, *norms)
 
-        rag_core.cosine_similarity = counted_cosine
+        _owner_rag_query.cosine_similarity = counted_cosine
         try:
-            results = _m_rag.retrieve_data_bank(
-                self.db, "chat", "needle", limit=5, app_settings=self.app_settings_builder.build()
+            results = _owner_rag_query.retrieve_data_bank(
+                self.db,
+                "chat",
+                "needle",
+                limit=5,
+                app_settings=self.app_settings_builder.build(),
+                embedding_port=make_native_test_embedding_port(app_settings=self.app_settings_builder.build()),
             )
         finally:
-            rag_core.cached_rag_embedding = original_cached
-            rag_core.rag_semantic_candidate_limit = original_limit
-            rag_core.cosine_similarity = original_cosine
+            _owner_rag_query.cached_rag_embedding = original_cached
+            _owner_rag_query.rag_semantic_candidate_limit = original_limit
+            _owner_rag_query.cosine_similarity = original_cosine
 
         self.assertTrue(results)
         self.assertGreater(len(cosine_calls), 0)
@@ -152,43 +162,53 @@ class RagScalingTests(SettingsTestCase):
 
     def test_signature_shortlist_finds_nonlexical_semantic_target(self):
         self._insert_chunks(500, semantic_target_index=251)
-        original_cached = rag_core.cached_rag_embedding
-        original_limit = rag_core.rag_semantic_candidate_limit
-        rag_core.cached_rag_embedding = lambda _db, _query, *, app_settings=None: [1.0, 0.0]
-        rag_core.rag_semantic_candidate_limit = lambda *, app_settings=None: 16
+        original_cached = _owner_rag_query.cached_rag_embedding
+        original_limit = _owner_rag_query.rag_semantic_candidate_limit
+        _owner_rag_query.cached_rag_embedding = lambda _db, _query, *, app_settings=None, embedding_port: [1.0, 0.0]
+        _owner_rag_query.rag_semantic_candidate_limit = lambda *, app_settings=None: 16
         try:
-            results = _m_rag.retrieve_data_bank(
-                self.db, "chat", "meaningfulconcept", limit=3, app_settings=self.app_settings_builder.build()
+            results = _owner_rag_query.retrieve_data_bank(
+                self.db,
+                "chat",
+                "meaningfulconcept",
+                limit=3,
+                app_settings=self.app_settings_builder.build(),
+                embedding_port=make_native_test_embedding_port(app_settings=self.app_settings_builder.build()),
             )
         finally:
-            rag_core.cached_rag_embedding = original_cached
-            rag_core.rag_semantic_candidate_limit = original_limit
+            _owner_rag_query.cached_rag_embedding = original_cached
+            _owner_rag_query.rag_semantic_candidate_limit = original_limit
 
         self.assertTrue(results)
         self.assertEqual(results[0][1], "chunk 251")
 
     def test_add_document_embedding_batches_run_outside_write_transaction(self):
-        original_extract = rag_core.extract_data_bank_text
-        original_split = rag_core.split_data_bank_chunks
-        original_embed = rag_core.embed_rag_batch
+        original_extract = _owner_rag_indexing.extract_data_bank_text
+        original_split = _owner_rag_indexing.split_data_bank_chunks
+        original_embed = _owner_embedding_transport.embed_rag_batch
         transaction_states = []
 
-        rag_core.extract_data_bank_text = lambda _filename, _raw, *, app_settings=None: "content"
-        rag_core.split_data_bank_chunks = lambda _text: [f"chunk {index}" for index in range(65)]
+        _owner_rag_indexing.extract_data_bank_text = lambda _filename, _raw, *, app_settings=None: "content"
+        _owner_rag_indexing.split_data_bank_chunks = lambda _text: [f"chunk {index}" for index in range(65)]
 
         def fake_embed(texts, *, app_settings=None):
             transaction_states.append(self.db.in_transaction)
             return [[1.0, 0.0] for _ in texts]
 
-        rag_core.embed_rag_batch = fake_embed
+        _owner_embedding_transport.embed_rag_batch = fake_embed
         try:
-            status, count = _m_telegram.add_data_bank_document(
-                self.db, "chat", "batched.txt", b"batched-payload", app_settings=self.app_settings_builder.build()
+            status, count = _owner_rag_indexing.add_data_bank_document(
+                self.db,
+                "chat",
+                "batched.txt",
+                b"batched-payload",
+                app_settings=self.app_settings_builder.build(),
+                embedding_port=make_native_test_embedding_port(app_settings=self.app_settings_builder.build()),
             )
         finally:
-            rag_core.extract_data_bank_text = original_extract
-            rag_core.split_data_bank_chunks = original_split
-            rag_core.embed_rag_batch = original_embed
+            _owner_rag_indexing.extract_data_bank_text = original_extract
+            _owner_rag_indexing.split_data_bank_chunks = original_split
+            _owner_embedding_transport.embed_rag_batch = original_embed
 
         self.assertEqual((status, count), ("added", 65))
         self.assertEqual(transaction_states, [False, False, False])
@@ -224,20 +244,24 @@ class RagScalingTests(SettingsTestCase):
             )
         self.db.commit()
 
-        original_embed = rag_core.embed_rag_batch
+        original_embed = _owner_embedding_transport.embed_rag_batch
         transaction_states = []
 
         def fake_embed(texts, *, app_settings=None):
             transaction_states.append(self.db.in_transaction)
             return [[1.0, 0.0] for _ in texts]
 
-        rag_core.embed_rag_batch = fake_embed
+        _owner_embedding_transport.embed_rag_batch = fake_embed
         try:
-            total, indexed = _owner_rag_core.reindex_data_bank_documents(
-                self.db, "chat", "reindex.txt", app_settings=self.app_settings_builder.build()
+            total, indexed = _owner_rag_indexing.reindex_data_bank_documents(
+                self.db,
+                "chat",
+                "reindex.txt",
+                app_settings=self.app_settings_builder.build(),
+                embedding_port=make_native_test_embedding_port(app_settings=self.app_settings_builder.build()),
             )
         finally:
-            rag_core.embed_rag_batch = original_embed
+            _owner_embedding_transport.embed_rag_batch = original_embed
 
         self.assertEqual((total, indexed), (65, 65))
         self.assertEqual(transaction_states, [False, False, False])
@@ -266,7 +290,7 @@ class RagScalingTests(SettingsTestCase):
         cache_columns = {row[1]: row for row in self.db.execute("PRAGMA table_info(rag_embedding_cache)").fetchall()}
         self.assertEqual(cache_columns["vector_norm"][3], 1)
         self.assertIsNone(cache_columns["vector_norm"][4])
-        self.assertFalse(hasattr(rag_core, "backfill_rag_embedding_signatures"))
+        self.assertFalse(hasattr(_owner_rag_retrieval, "backfill_rag_embedding_signatures"))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bridge.databank_commands import handle_data_bank_command
 from bridge.databank_panels import send_databank_menu
 from bridge.expressions import send_expression_menu
 from bridge.feature_panels import send_summary_menu
@@ -14,7 +15,7 @@ from bridge.memory import handle_memory_command
 from bridge.memory_panels import send_memory_menu
 from bridge.note_panels import send_note_menu
 from bridge.preset_panels import send_preset_menu
-from bridge.rag import handle_data_bank_command
+from bridge.rag_service import RagService
 from bridge.session_core import update_session
 from bridge.settings_panels import send_settings_menu, send_stream_menu
 from bridge.sync_panels import send_sync_menu
@@ -41,6 +42,7 @@ def _handle_generation_panels(
     memory_service,
     persona_service,
     request_context,
+    rag_service: RagService,
 ):
     """Handle generation, preset, settings, and response-language panels."""
     if command == "/update":
@@ -81,6 +83,7 @@ def _handle_generation_panels(
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
+            rag_service=rag_service,
         )
     if command == "/stscript" or command.startswith("/stscript "):
         send_stscript_menu(token, chat_id, request_context=request_context)
@@ -138,6 +141,7 @@ def _handle_memory_media(
     persona_service,
     provider_port,
     sync_service,
+    rag_service: RagService,
 ):
     """Handle memory, RAG, group, and synchronization commands."""
     if command == "/memory" or command in {"/memory on", "/memory off", "/memory status", "/memory scope"}:
@@ -186,6 +190,7 @@ def _handle_memory_media(
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
+            rag_service=rag_service,
         )
     if command == "/summarize":
         send_summary_menu(token, chat_id, db, session, request_context=request_context)
@@ -209,7 +214,9 @@ def _handle_memory_media(
         or command.startswith("/databank reindex ")
         or command.startswith("/databank remove ")
     ):
-        handle_data_bank_command(db, token, chat_id, stripped, app_settings=request_context.app_settings)
+        handle_data_bank_command(
+            db, token, chat_id, stripped, app_settings=request_context.app_settings, rag_service=rag_service
+        )
         return True
     if command.startswith("/databank "):
         send_databank_menu(token, chat_id, db, request_context=request_context)
@@ -285,6 +292,7 @@ def _handle_panels(
     persona_service,
     provider_port,
     sync_service,
+    rag_service: RagService,
 ):
     """Dispatch generation, memory, voice, and panel-first commands."""
     if _handle_generation_panels(
@@ -302,6 +310,7 @@ def _handle_panels(
         memory_service=memory_service,
         request_context=request_context,
         persona_service=persona_service,
+        rag_service=rag_service,
     ):
         return True
     if _handle_memory_media(
@@ -321,6 +330,7 @@ def _handle_panels(
         persona_service=persona_service,
         provider_port=provider_port,
         sync_service=sync_service,
+        rag_service=rag_service,
     ):
         return True
     return _handle_voice_panels(db, token, chat_id, command, session, request_context=request_context)

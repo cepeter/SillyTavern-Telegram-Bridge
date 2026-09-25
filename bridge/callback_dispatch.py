@@ -124,6 +124,7 @@ def process_callback(
             message,
             input_flow_service=services.input_flow,
             request_context=request_context,
+            rag_service=services.rag,
         )
         return
     if data.startswith("group:") or data.startswith("groupchars:") or data.startswith("groupmode:"):

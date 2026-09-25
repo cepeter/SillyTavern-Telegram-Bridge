@@ -55,7 +55,7 @@ def make_test_input_flow_service(
     if handle_pending_backend is None:
         from bridge.input_flows import handle_pending_input
 
-        handle_pending_backend = handle_pending_input
+        handle_pending_backend = _partial(handle_pending_input, rag_service=make_test_rag_service())
     if start_text_action_backend is None:
         from bridge.text_action_input import start_text_action_input
 
@@ -233,6 +233,7 @@ class _TestGroupDirector:
 
 def make_test_conversation_service(
     *,
+    rag=None,
     app_settings=None,
     prepare=None,
     dispatch=None,
@@ -254,6 +255,7 @@ def make_test_conversation_service(
 
     if app_settings is None:
         app_settings = make_test_settings()
+    rag = rag or make_test_rag_service()
     delivery = delivery or make_test_delivery_port()
     provider = provider or make_test_provider_port()
     memory = memory or make_test_memory_service()
@@ -304,6 +306,7 @@ def make_test_conversation_service(
             group_service=group,
             sync_service=sync,
             conversation_service=conversation,
+            rag_service=rag,
         )
 
     conversation = ConversationService(
@@ -318,6 +321,7 @@ def make_test_conversation_service(
             group_service=group,
             input_flow_service=input_flow,
             group_director_service=group_director,
+            rag_service=rag,
         ),
         dispatch_command=dispatch or dispatch_default,
         generate_reply=generate
@@ -328,6 +332,7 @@ def make_test_conversation_service(
             provider_port=provider,
             memory_service=memory,
             persona_service=persona,
+            rag_service=rag,
         ),
     )
     return conversation
@@ -335,6 +340,7 @@ def make_test_conversation_service(
 
 def make_test_application_services(
     *,
+    rag=None,
     memory=None,
     persona=None,
     sync=None,
@@ -350,6 +356,7 @@ def make_test_application_services(
     """Return an explicit test-only application service graph for routers."""
     if app_settings is None:
         app_settings = make_test_settings()
+    rag = rag or make_test_rag_service()
     delivery = delivery or make_test_delivery_port()
     provider = provider or make_test_provider_port()
     memory = memory or make_test_memory_service()
@@ -359,6 +366,7 @@ def make_test_application_services(
     group_director = group_director or _TestGroupDirector()
     input_flow = input_flow or make_test_input_flow_service(app_settings=app_settings)
     conversation = conversation or make_test_conversation_service(
+        rag=rag,
         app_settings=app_settings,
         delivery=delivery,
         provider=provider,
@@ -370,6 +378,7 @@ def make_test_application_services(
         input_flow=input_flow,
     )
     return SimpleNamespace(
+        rag=rag,
         config=app_settings,
         memory=memory,
         persona=persona,
@@ -433,3 +442,43 @@ def make_test_session_service(*, app_settings=None, memory_service=None):
         list_backend=list_sessions,
         delete_backend=_partial(delete_session_data, memory_service=memory_service),
     )
+
+
+def make_test_rag_service():
+    """Explicit inert RAG collaborator for tests unrelated to retrieval/storage."""
+    from bridge.rag_service import RagService
+
+    return RagService(
+        retrieve_backend=lambda *args, **kwargs: [],
+        add_backend=lambda *args, **kwargs: ("added", 0),
+        reindex_backend=lambda *args, **kwargs: (0, 0),
+        documents_backend=lambda *args, **kwargs: [],
+        versions_backend=lambda *args, **kwargs: [],
+        activate_backend=lambda *args, **kwargs: False,
+        remove_backend=lambda *args, **kwargs: 0,
+        coverage_backend=lambda *args, **kwargs: (0, 0),
+        mode_backend=lambda *args, **kwargs: "on",
+        context_limit=4000,
+    )
+
+
+def make_native_test_embedding_port(*, app_settings=None):
+    from bridge import embedding_transport
+    from bridge.embedding_port import EmbeddingPort
+
+    if app_settings is None:
+        app_settings = make_test_settings()
+    return EmbeddingPort(
+        embed_backend=_partial(embedding_transport.embed_rag_text, app_settings=app_settings),
+        batch_backend=_partial(embedding_transport.embed_rag_batch, app_settings=app_settings),
+    )
+
+
+def make_native_test_rag_service(*, app_settings=None, embedding_port=None):
+    from bridge.rag_composition import build_rag_service
+
+    if app_settings is None:
+        app_settings = make_test_settings()
+    if embedding_port is None:
+        embedding_port = make_native_test_embedding_port(app_settings=app_settings)
+    return build_rag_service(app_settings=app_settings, embedding_port=embedding_port)

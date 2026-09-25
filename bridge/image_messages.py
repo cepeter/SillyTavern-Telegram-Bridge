@@ -15,7 +15,7 @@ from bridge.limits import MAX_HISTORY_MESSAGES
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
-from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
+from bridge.rag_service import RagService
 from bridge.response_delivery import send_reply
 from bridge.response_variants import save_response_variant
 from bridge.settings import AppSettings
@@ -41,6 +41,7 @@ def process_image_message(
     persona_service: PersonaService,
     group_director_service: GroupDirectorService,
     app_settings: AppSettings,
+    rag_service: RagService,
 ) -> None:
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_service.current_speaker(db, chat_id, session, caption)
@@ -59,7 +60,7 @@ def process_image_message(
         (chat_id, session["session_id"]),
     ).fetchall()
     history_rows = [(row[0], row[1]) for row in rows[-MAX_HISTORY_MESSAGES:]]
-    rag_bundle = rag_retrieval_bundle(db, chat_id, caption, app_settings=app_settings)
+    rag_bundle = rag_service.bundle(db, chat_id, caption)
     memory_prompt = memory_service.prompt_context(
         db,
         chat_id,
@@ -77,7 +78,7 @@ def process_image_message(
         image_data_uri=image_data_uri,
         memory_context=memory_context,
         session_summary=session_summary,
-        rag_context=rag_context_for_prompt(db, chat_id, caption, rag_bundle, app_settings=app_settings),
+        rag_context=rag_service.context_for_prompt(db, chat_id, caption, rag_bundle),
         group_context=group_context,
         persona_service=persona_service,
         app_settings=app_settings,
@@ -90,7 +91,7 @@ def process_image_message(
         session_id=f"telegram:{chat_id}:{session['session_id']}",
         settings=get_generation_settings(db, chat_id, session["session_id"]),
     )
-    reply += rag_citation_footer(db, chat_id, caption, rag_bundle, app_settings=app_settings)
+    reply += rag_service.citation_footer(db, chat_id, caption, rag_bundle)
     reply = render_session_response(
         api_key,
         session,

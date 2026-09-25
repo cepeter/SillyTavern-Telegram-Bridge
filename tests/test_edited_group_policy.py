@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from application_test_setup import make_test_session_service
+from application_test_setup import make_test_rag_service, make_test_session_service
 from settings_test_support import make_test_settings
 
 from bridge import group_core, update_message_routing, worker_orchestration
@@ -60,6 +60,7 @@ def case(tmp_path):
         persona=object(),
         delivery=object(),
         session=make_test_session_service(app_settings=config),
+        rag=make_test_rag_service(),
     )
     services.jobs.start.return_value = True
     services.jobs.enqueue.return_value = 91

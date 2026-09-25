@@ -15,7 +15,7 @@ from bridge.language import normalize_response_language, response_language_instr
 from bridge.limits import HINDSIGHT_CONTEXT_MAX_CHARS, RAG_MAX_CONTEXT_CHARS, SUMMARY_MAX_CHARS
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
-from bridge.rag_core import rag_citation_footer
+from bridge.rag_service import RagService
 from bridge.settings import AppSettings
 
 
@@ -235,6 +235,7 @@ def _generation_generate_rendered_reply(
     provider_port: ProviderPort,
     delivery_port: DeliveryPort,
     app_settings: AppSettings,
+    rag_service: RagService,
 ):
     session_id = session["session_id"]
     delivery_port.send_typing(token, chat_id)
@@ -250,7 +251,7 @@ def _generation_generate_rendered_reply(
         session_id=f"telegram:{chat_id}:{session_id}",
         settings=settings,
     )
-    reply += rag_citation_footer(db, chat_id, query, rag_bundle, app_settings=app_settings)
+    reply += rag_service.citation_footer(db, chat_id, query, rag_bundle)
     return render_session_response(
         api_key,
         session,

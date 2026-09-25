@@ -12,6 +12,7 @@ from bridge.pending_input import _pending_state
 from bridge.persona_input import _handle_persona_input
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
+from bridge.rag_service import RagService
 from bridge.settings_input import _handle_note_input, _handle_preset_input, _handle_settings_input, _handle_stt_input
 from bridge.telegram import send_text
 from bridge.text_action_input import _handle_text_action_input
@@ -33,6 +34,7 @@ def handle_pending_input(
     memory_service: MemoryService,
     persona_service: PersonaService,
     request_context,
+    rag_service: RagService,
 ) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
@@ -65,6 +67,7 @@ def handle_pending_input(
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
+            rag_service=rag_service,
         )
     session_name = _pending_state(db, f"session_name_input:{chat_id}", session_id, token, chat_id)
     if session_name:

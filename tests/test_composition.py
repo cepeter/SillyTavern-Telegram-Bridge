@@ -8,6 +8,7 @@ from application_test_setup import (
     make_test_input_flow_service,
     make_test_model_router,
     make_test_provider_port,
+    make_test_rag_service,
     make_test_request_context,
     make_test_session_service,
 )
@@ -142,6 +143,7 @@ class CompositionConfigTests(SettingsTestCase):
             jobs=jobs,
             conversation=make_test_conversation_service(app_settings=self.app_settings_builder.build()),
             session=make_test_session_service(app_settings=config),
+            rag=make_test_rag_service(),
         )
 
         self.assertIs(services.config, config)
@@ -357,6 +359,7 @@ class WorkerInjectionTests(SettingsTestCase):
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
             session=make_test_session_service(app_settings=config),
+            rag=make_test_rag_service(),
         )
 
     def tearDown(self):
@@ -547,6 +550,7 @@ class WorkerInjectionTests(SettingsTestCase):
                     persona_service=self.services.persona,
                     provider_port=self.services.provider,
                     sync_service=self.services.sync,
+                    rag_service=make_test_rag_service(),
                 )
         finally:
             db.close()
@@ -849,6 +853,7 @@ class RecoveryCompositionTests(SettingsTestCase):
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
             session=make_test_session_service(app_settings=config),
+            rag=make_test_rag_service(),
         )
 
     def tearDown(self):
@@ -1033,6 +1038,7 @@ class RecoveryCompositionTests(SettingsTestCase):
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
             session=make_test_session_service(app_settings=self.services.config),
+            rag=make_test_rag_service(),
         )
 
         dispatcher = _m_workers.make_durable_backlog_dispatcher(
@@ -1152,6 +1158,7 @@ class StartupCompositionTests(SettingsTestCase):
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
             session=make_test_session_service(app_settings=self.config),
+            rag=make_test_rag_service(),
         )
 
     def tearDown(self):
@@ -1389,6 +1396,7 @@ class StartupCompositionTests(SettingsTestCase):
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
             session=make_test_session_service(app_settings=self.config),
+            rag=make_test_rag_service(),
         )
         with (
             patch.object(_m_runtime, "install_bridge_signal_handlers"),
@@ -1445,6 +1453,7 @@ class StartupCompositionTests(SettingsTestCase):
             delivery=make_test_delivery_port(),
             input_flow=make_test_input_flow_service(app_settings=self.app_settings_builder.build()),
             session=make_test_session_service(app_settings=self.config),
+            rag=make_test_rag_service(),
         )
         try:
             with (

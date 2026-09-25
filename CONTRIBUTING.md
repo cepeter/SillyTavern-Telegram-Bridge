@@ -227,3 +227,63 @@ update deduplication remain atomic. Expected lock failures on standalone deliver
 or job status writes can report failure, but a failure inside a caller-owned
 transaction must propagate rather than silently roll back or commit the caller.
 Settings parsing/formatting lives separately in `generation_settings_values.py`.
+
+
+### UI and generation workflow ownership
+
+Keep panel rendering, callbacks, pending input and generation use cases in their
+canonical feature modules rather than adding another umbrella utility file.
+`settings_panels`, `voice_panels`, `preset_panels`, `databank_panels`,
+`persona_panels`, `group_panels`, `provider_panels` and related view modules own
+rendering. `input_flows` and `panel_callback_routes` are ordered dispatchers;
+feature handlers live in the corresponding input/callback owners. The old
+`help`, `groups`, `media`, `commands` and `catalog` aggregates are retired, not
+compatibility APIs.
+
+`generation` assembles prompts and renders provider output. `regeneration`,
+`continuation` and `edit_messages` own their durable workflows;
+`response_variants` owns variant lifecycle, `variant_repository` owns its SQL,
+and `swipe_panels` owns the view. `speech`, `voice_jobs`, `response_delivery`,
+`image_messages` and `document_jobs` separate media processing from message
+transport. Preserve queued actor/session identity and recovery phase semantics
+when extending any of these paths.
+
+### RAG service, embedding port and Data Bank persistence
+
+`BridgeServices.rag` is a required `RagService`. Startup constructs one
+`EmbeddingPort` from the configured transport and binds it with
+`rag_composition.build_rag_service`. Generation, edits, image analysis,
+document import, searches, reindexing and version mutation receive that service
+explicitly. A leaf workflow must not instantiate its own service or look up the
+root container. Read-only status renderers may use canonical query/repository
+reads without constructing an embedding client.
+
+| Owner | Responsibility |
+|---|---|
+| `rag_service` / `rag_contracts` | Application API, named call contracts, prompt context and citations |
+| `embedding_port` | Required single-text and batch embedding collaborator |
+| `embedding_transport` | Existing endpoint validation, credentials and bounded HTTP calls |
+| `document_extraction` / `pdf_parser` | Bounded document extraction and isolated PDF parsing |
+| `embedding_values` / `rag_retrieval` | Embedding namespace, vector values and bounded semantic shortlist |
+| `rag_indexing` / `rag_query` | Version/index/cache/query use cases and short write scopes |
+| `rag_repository` | Parameterized SQL and caller-owned transaction preconditions |
+| `databank_commands` / `databank_panels` | Telegram command and panel adapters |
+
+The old `rag.py` and `rag_core.py` re-export surfaces are removed. Tests must
+patch the transport actually called or inject an `EmbeddingPort`; do not
+restore old aliases or patch-propagation machinery. Preserve content identity,
+active-version filtering, chat isolation, embedding revision/dimensions,
+full-text operation without embeddings, shortlist bounds and ranking weights.
+
+Embedding calls happen before the indexing/query use case opens its own write
+scope. Callers must not hold a write transaction across external network I/O.
+When a caller already owns a transaction, cache/activation/removal writes join
+it without committing it. A repository write without an active transaction
+fails before executing SQL.
+
+The architecture gate enforces the pure RAG service/contract layer, allowed
+query/indexing dependencies, SQL-only repositories, callback sibling isolation
+and composition-root-only service construction. The selected mypy surface
+includes every RAG core owner plus its SQLite/scheduler dependency path. Dynamic
+DB-API parameter containers and user row factories remain explicitly dynamic;
+there is no blanket type-check suppression for the old low-level implementation.

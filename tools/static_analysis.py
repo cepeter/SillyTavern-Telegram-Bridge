@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import NamedTuple, Sequence
 
 STATIC_TARGETS: tuple[str, ...] = (
+    "bridge/rag_service.py",
+    "bridge/embedding_port.py",
     "bridge/conversation_service.py",
     "bridge/delivery_port.py",
     "bridge/group_director_service.py",
@@ -24,6 +26,7 @@ STATIC_TARGETS: tuple[str, ...] = (
 
 
 REPOSITORY_TARGETS: tuple[str, ...] = (
+    "bridge/rag_repository.py",
     "bridge/variant_repository.py",
     "bridge/director_goal_repository.py",
     "bridge/failure_repository.py",
@@ -44,6 +47,16 @@ REPOSITORY_TARGETS: tuple[str, ...] = (
 TYPE_TARGETS: tuple[str, ...] = (
     *STATIC_TARGETS,
     *REPOSITORY_TARGETS,
+    "bridge/rag_contracts.py",
+    "bridge/rag_indexing.py",
+    "bridge/rag_query.py",
+    "bridge/embedding_values.py",
+    "bridge/embedding_transport.py",
+    "bridge/document_extraction.py",
+    "bridge/rag_composition.py",
+    "bridge/rag_retrieval.py",
+    "bridge/sqlite_store.py",
+    "bridge/scheduler_safety.py",
     "bridge/repository_contracts.py",
     "bridge/network_security.py",
     "bridge/callback_tokens.py",
@@ -62,15 +75,42 @@ TYPE_TARGETS: tuple[str, ...] = (
 
 
 PURE_CONTRACT_IMPORTS = {
+    "bridge.rag_contracts": frozenset(),
     "bridge.port_contracts": frozenset({"bridge.request_types"}),
     "bridge.request_types": frozenset({"bridge.settings"}),
     "bridge.settings": frozenset({"bridge.config_values"}),
     "bridge.config_values": frozenset(),
 }
-SERVICE_CONTRACT_IMPORTS = frozenset({"bridge.port_contracts", "bridge.request_types"})
+SERVICE_CONTRACT_IMPORTS = frozenset({"bridge.port_contracts", "bridge.request_types", "bridge.rag_contracts"})
 
 
 LOW_LEVEL_IMPORTS = {
+    "bridge.rag_indexing": frozenset(
+        (
+            "bridge.rag_repository",
+            "bridge.document_extraction",
+            "bridge.embedding_port",
+            "bridge.embedding_values",
+            "bridge.limits",
+            "bridge.settings",
+            "bridge.sqlite_store",
+        )
+    ),
+    "bridge.rag_query": frozenset(
+        (
+            "bridge.rag_repository",
+            "bridge.embedding_port",
+            "bridge.embedding_values",
+            "bridge.metadata",
+            "bridge.rag_retrieval",
+            "bridge.settings",
+            "bridge.sqlite_store",
+        )
+    ),
+    "bridge.document_extraction": frozenset(("bridge.limits", "bridge.settings")),
+    "bridge.embedding_transport": frozenset(("bridge.network_security", "bridge.settings")),
+    "bridge.embedding_values": frozenset(("bridge.rag_retrieval", "bridge.settings")),
+    "bridge.rag_retrieval": frozenset(("bridge.rag_repository",)),
     "bridge.repository_contracts": frozenset(),
     "bridge.session_repository": frozenset({"bridge.repository_contracts"}),
     "bridge.topic_scope": frozenset(),
@@ -82,6 +122,10 @@ LOW_LEVEL_IMPORTS = {
 }
 CALLBACK_DOMAIN_MODULES = frozenset(
     {
+        "bridge.enum_callbacks",
+        "bridge.feature_callbacks",
+        "bridge.group_callbacks",
+        "bridge.persona_callbacks",
         "bridge.settings_callbacks",
         "bridge.conversation_callbacks",
         "bridge.sync_callbacks",
@@ -305,6 +349,9 @@ def check_dependency_direction(
                 and node.func.attr in {"commit", "rollback"}
             ):
                 errors.append(f"SQL repository {module} owns forbidden transaction call {node.func.attr}")
+    for module, imported in graph.items():
+        if "bridge.rag_composition" in imported and module != "bridge.main":
+            errors.append(f"Leaf construction violation: {module} imports bridge.rag_composition")
     for module in CALLBACK_DOMAIN_MODULES:
         forbidden = CALLBACK_DOMAIN_MODULES - {module}
         for imported in sorted(graph.get(module, set()) & forbidden):

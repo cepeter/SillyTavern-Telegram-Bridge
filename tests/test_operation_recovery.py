@@ -5,12 +5,15 @@ from application_test_setup import (
     make_test_memory_service,
     make_test_persona_service,
     make_test_provider_port,
+    make_test_rag_service,
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.continuation as _owner_continuation
 import bridge.edit_messages as _owner_edit_messages
 import bridge.message_commands as _owner_message_commands
 import bridge.operations as _owner_operations
+import bridge.regeneration as _owner_regeneration
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -113,7 +116,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
             send_reply=send_reply,
             delete_outgoing_message_row=delete_current,
         )
-        _m_message_commands.regenerate_last(
+        _owner_regeneration.regenerate_last(
             self.db,
             "token",
             "key",
@@ -130,6 +133,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
             memory_service=make_test_memory_service(),
             persona_service=make_test_persona_service(),
             app_settings=self.app_settings_builder.build(),
+            rag_service=make_test_rag_service(),
         )
 
         delete_current.assert_called_once_with(
@@ -177,7 +181,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
             RuntimeError,
             "Telegram sendMessage failed",
         ):
-            _m_message_commands.regenerate_last(
+            _owner_regeneration.regenerate_last(
                 self.db,
                 "token",
                 "key",
@@ -194,6 +198,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertEqual(
@@ -213,7 +218,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
             RuntimeError,
             "regen recovery state is incomplete",
         ):
-            _m_message_commands.regenerate_last(
+            _owner_regeneration.regenerate_last(
                 self.db,
                 "token",
                 "key",
@@ -226,6 +231,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertEqual(
@@ -250,7 +256,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
             request=Mock(return_value={}),
             send_reply=send_reply,
         )
-        _m_message_commands.continue_last(
+        _owner_continuation.continue_last(
             self.db,
             "token",
             "key",
@@ -267,6 +273,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
             memory_service=make_test_memory_service(),
             persona_service=make_test_persona_service(),
             app_settings=self.app_settings_builder.build(),
+            rag_service=make_test_rag_service(),
         )
 
         self.assertIn(
@@ -327,6 +334,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertIn(
@@ -350,7 +358,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
             RuntimeError,
             "continue recovery state is incomplete",
         ):
-            _m_message_commands.continue_last(
+            _owner_continuation.continue_last(
                 self.db,
                 "token",
                 "key",
@@ -363,6 +371,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertEqual(
@@ -392,6 +401,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
                 memory_service=make_test_memory_service(),
                 persona_service=make_test_persona_service(),
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertEqual(

@@ -36,12 +36,16 @@ def process_document_job(
                 telegram_message_id=message_id,
                 api_key=services.config.api_key,
                 process_image=partial(
-                    process_image_message, provider_port=services.provider, app_settings=services.config
+                    process_image_message,
+                    provider_port=services.provider,
+                    app_settings=services.config,
+                    rag_service=services.rag,
                 ),
                 memory_service=services.memory,
                 persona_service=services.persona,
                 group_director_service=services.group_director,
                 app_settings=services.config,
+                rag_service=services.rag,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)

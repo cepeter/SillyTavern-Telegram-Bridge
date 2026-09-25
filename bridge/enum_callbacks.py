@@ -10,6 +10,7 @@ from bridge.callback_tokens import resolve_dynamic_callback_token
 from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.cards import send_panel_message
 from bridge.config import GENERATION_DEFAULTS, REASONING_LEVELS
+from bridge.databank_commands import handle_data_bank_command
 from bridge.databank_panels import (
     send_databank_menu,
     send_databank_remove_confirm,
@@ -24,8 +25,7 @@ from bridge.memory_panels import send_memory_menu
 from bridge.metadata import set_meta
 from bridge.preset_actions import apply_preset_action
 from bridge.preset_panels import send_preset_delete_confirm, send_preset_delete_menu, send_preset_menu
-from bridge.rag import handle_data_bank_command
-from bridge.rag_core import activate_data_bank_version, reindex_data_bank_documents
+from bridge.rag_service import RagService
 from bridge.reset_panel import reset_confirmation_request
 from bridge.settings_panels import send_settings_menu, send_stream_menu
 from bridge.telegram import send_text
@@ -42,6 +42,7 @@ def handle_enum_callback(
     *,
     input_flow_service: InputFlowService,
     request_context,
+    rag_service: RagService,
 ) -> None:
     message_id = message.get("message_id")
     if data == "enum:close":
@@ -235,7 +236,7 @@ def handle_enum_callback(
         except ValueError:
             version = 0
         if filename and version > 0:
-            activate_data_bank_version(db, chat_id, filename, version)
+            rag_service.activate(db, chat_id, filename, version)
         send_databank_versions_menu(token, chat_id, db, message_id, filename=filename, request_context=request_context)
     elif data == "enum:rag:remove":
         send_databank_remove_menu(token, chat_id, db, message_id, request_context=request_context)
@@ -254,6 +255,7 @@ def handle_enum_callback(
                 chat_id,
                 "/databank remove " + filename + " confirm",
                 app_settings=request_context.app_settings,
+                rag_service=rag_service,
             )
         send_databank_menu(token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:ragremove:"):
@@ -263,7 +265,7 @@ def handle_enum_callback(
         else:
             send_databank_menu(token, chat_id, db, message_id, request_context=request_context)
     elif data == "enum:rag:reindex":
-        total, indexed = reindex_data_bank_documents(db, chat_id, app_settings=request_context.app_settings)
+        total, indexed = rag_service.reindex(db, chat_id)
         send_text(token, chat_id, f"Data Bank reindex complete: {indexed}/{total} chunks indexed.")
         send_databank_menu(token, chat_id, db, message_id, request_context=request_context)
     elif data.startswith("enum:rag:"):
@@ -271,5 +273,7 @@ def handle_enum_callback(
         if value in {"on", "off"}:
             set_meta(db, f"rag_mode:{chat_id}", value)
         elif value == "list":
-            handle_data_bank_command(db, token, chat_id, "/databank list", app_settings=request_context.app_settings)
+            handle_data_bank_command(
+                db, token, chat_id, "/databank list", app_settings=request_context.app_settings, rag_service=rag_service
+            )
         send_databank_menu(token, chat_id, db, message_id, request_context=request_context)

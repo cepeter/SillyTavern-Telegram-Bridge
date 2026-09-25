@@ -14,7 +14,8 @@ from bridge.memory_backend import memory_mode, memory_scope
 from bridge.metadata import get_meta
 from bridge.model_selection import task_model_for_session
 from bridge.persona_sync import persona_name
-from bridge.rag_core import data_bank_documents, rag_mode
+from bridge.rag_query import rag_mode
+from bridge.rag_repository import data_bank_documents
 from bridge.settings import AppSettings
 
 

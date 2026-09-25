@@ -17,6 +17,7 @@ from bridge.model_selection import task_model_for_session
 from bridge.prompt_diagnostics import prompt_diagnostics
 from bridge.prompt_panels import send_prompt_menu
 from bridge.provider_panels import send_model_target_menu
+from bridge.rag_service import RagService
 from bridge.regeneration import regenerate_last
 from bridge.response_delivery import send_reply
 from bridge.session_core import list_sessions
@@ -309,6 +310,7 @@ def _handle_chat(
     memory_service,
     persona_service,
     provider_port,
+    rag_service: RagService,
 ):
     """Handle edit, continuation, swipe, branch, and regeneration commands."""
     if command == "/edit":
@@ -331,6 +333,7 @@ def _handle_chat(
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
+            rag_service=rag_service,
         )
     if command == "/continue":
         continue_last(
@@ -346,6 +349,7 @@ def _handle_chat(
             memory_service=memory_service,
             persona_service=persona_service,
             app_settings=request_context.app_settings,
+            rag_service=rag_service,
         )
         return True
     if command == "/swipe" or command == "/branch" or command.startswith("/branch "):
@@ -367,6 +371,7 @@ def _handle_chat(
             memory_service=memory_service,
             persona_service=persona_service,
             app_settings=request_context.app_settings,
+            rag_service=rag_service,
         )
         return True
     return False
@@ -396,6 +401,7 @@ def handle_command_route(
     persona_service,
     provider_port,
     sync_service,
+    rag_service: RagService,
 ):
     """Dispatch a normalized slash command without entering normal generation."""
     if _dispatch_extension_command_routes(
@@ -462,6 +468,7 @@ def handle_command_route(
         persona_service=persona_service,
         provider_port=provider_port,
         sync_service=sync_service,
+        rag_service=rag_service,
     ):
         return True
     if _handle_entities(
@@ -495,6 +502,7 @@ def handle_command_route(
         memory_service=memory_service,
         persona_service=persona_service,
         provider_port=provider_port,
+        rag_service=rag_service,
     ):
         return True
     if command.startswith("/"):

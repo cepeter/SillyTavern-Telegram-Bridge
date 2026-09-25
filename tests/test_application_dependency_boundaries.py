@@ -3,7 +3,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from application_test_setup import make_native_test_persona_service, make_test_provider_port, make_test_session_service
+from application_test_setup import (
+    make_native_test_persona_service,
+    make_test_provider_port,
+    make_test_rag_service,
+    make_test_session_service,
+)
 from settings_test_support import SettingsBuilder, make_test_settings
 
 import bridge.document_jobs as _owner_document_jobs
@@ -91,21 +96,10 @@ def _image_services(download_file, sent):
     from types import SimpleNamespace
 
     return SimpleNamespace(
-        config=SimpleNamespace(
-            bot_token="token",
-            api_key="configured-key",
-            default_model="queue-model",
-        ),
+        config=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="queue-model"),
         db_factory=lambda: __import__("sqlite3").connect(":memory:"),
-        jobs=SimpleNamespace(
-            start=lambda *_args: True,
-            complete=lambda *_args: True,
-            fail=lambda *_args: True,
-        ),
-        telegram=SimpleNamespace(
-            download_file=download_file,
-            send_text=lambda *args, **_kwargs: sent.append(args),
-        ),
+        jobs=SimpleNamespace(start=lambda *_args: True, complete=lambda *_args: True, fail=lambda *_args: True),
+        telegram=SimpleNamespace(download_file=download_file, send_text=lambda *args, **_kwargs: sent.append(args)),
         group=object(),
         provider=make_test_provider_port(),
         memory=object(),
@@ -114,6 +108,7 @@ def _image_services(download_file, sent):
         session=make_test_session_service(
             app_settings=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="queue-model")
         ),
+        rag=make_test_rag_service(),
     )
 
 
@@ -218,6 +213,7 @@ def test_image_worker_uses_injected_download_and_forwards_identity(monkeypatch):
     assert kwargs["memory_service"] is memory
     assert kwargs["persona_service"] is persona
     assert kwargs["group_director_service"] is director
+    assert kwargs["rag_service"] is services.rag
 
 
 def test_committed_image_recovery_returns_before_download(monkeypatch):
@@ -310,8 +306,12 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
         _owner_native_imports, "import_character_card", lambda *_args, app_settings=None, **_kwargs: None
     )
     monkeypatch.setattr(native_imports, "send_text", lambda *args, **_kwargs: sent.append(args))
+    from dataclasses import replace
+    from functools import partial
+
+    rag = make_test_rag_service()
     if add_document is not None:
-        monkeypatch.setattr(native_imports, "add_data_bank_document", add_document)
+        rag = replace(rag, add_backend=partial(add_document, app_settings=app_settings_builder.build()))
         monkeypatch.setattr(native_imports, "rag_mode", lambda *_args: "on")
 
     _owner_native_imports.import_telegram_document(
@@ -327,6 +327,7 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
         persona_service="persona",
         group_director_service="director",
         app_settings=app_settings_builder.build(),
+        rag_service=rag,
     )
     return image_calls, sent
 
@@ -379,17 +380,9 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
 
     captured = {}
     services = SimpleNamespace(
-        config=SimpleNamespace(
-            bot_token="token",
-            api_key="configured-key",
-            default_model="model",
-        ),
+        config=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="model"),
         db_factory=lambda: sqlite3.connect(":memory:"),
-        jobs=SimpleNamespace(
-            start=lambda *_args: True,
-            complete=lambda *_args: True,
-            fail=lambda *_args: True,
-        ),
+        jobs=SimpleNamespace(start=lambda *_args: True, complete=lambda *_args: True, fail=lambda *_args: True),
         telegram=SimpleNamespace(send_text=lambda *_args, **_kwargs: None),
         provider=make_test_provider_port(),
         memory="memory",
@@ -398,6 +391,7 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
         session=make_test_session_service(
             app_settings=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="model")
         ),
+        rag=make_test_rag_service(),
     )
     monkeypatch.setattr(
         _owner_document_jobs,

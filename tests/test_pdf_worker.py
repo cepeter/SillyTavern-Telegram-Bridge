@@ -1,6 +1,7 @@
 from application_test_setup import ensure_application_extensions
 from settings_test_support import SettingsTestCase
 
+import bridge.document_extraction as _owner_document_extraction
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -11,7 +12,6 @@ from pathlib import Path
 
 import bridge.language as _m_language
 import bridge.memory_curator as _m_memory_curator
-import bridge.rag as _m_rag
 import bridge.session_naming as _m_session_naming
 
 
@@ -50,10 +50,14 @@ class PdfWorkerTests(SettingsTestCase):
 
         self.assertIn(
             text,
-            _m_rag.extract_data_bank_text("fixture.pdf", bytes(pdf), app_settings=self.app_settings_builder.build()),
+            _owner_document_extraction.extract_data_bank_text(
+                "fixture.pdf", bytes(pdf), app_settings=self.app_settings_builder.build()
+            ),
         )
         with self.assertRaises(ValueError):
-            _m_rag.extract_data_bank_text("fixture.pdf", b"not a pdf", app_settings=self.app_settings_builder.build())
+            _owner_document_extraction.extract_data_bank_text(
+                "fixture.pdf", b"not a pdf", app_settings=self.app_settings_builder.build()
+            )
 
         first = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()

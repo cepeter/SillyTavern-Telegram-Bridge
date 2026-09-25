@@ -6,6 +6,7 @@ from application_test_setup import (
     make_test_input_flow_service,
     make_test_persona_service,
     make_test_provider_port,
+    make_test_rag_service,
     make_test_request_context,
 )
 from settings_test_support import SettingsTestCase
@@ -15,6 +16,7 @@ import bridge.image_messages as _owner_image_messages
 import bridge.message_commands as _owner_message_commands
 import bridge.native_imports as _owner_native_imports
 import bridge.sqlite_store as _sqlite_store
+from bridge.rag_service import RagService
 
 ensure_application_extensions()
 
@@ -273,18 +275,18 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 side_effect=legacy_called,
             ),
             patch.object(
-                _m_message_commands,
-                "rag_retrieval_bundle",
+                RagService,
+                "bundle",
                 return_value={},
             ),
             patch.object(
-                _m_message_commands,
-                "rag_context_for_prompt",
+                RagService,
+                "context_for_prompt",
                 return_value="",
             ),
             patch.object(
-                _m_message_commands,
-                "rag_citation_footer",
+                RagService,
+                "citation_footer",
                 return_value="",
             ),
             patch.object(
@@ -344,6 +346,7 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertEqual(captured["memory_context"], "service recall")
@@ -425,13 +428,13 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 side_effect=legacy_called,
             ),
             patch.object(
-                _owner_edit_messages,
-                "rag_retrieval_bundle",
+                RagService,
+                "bundle",
                 return_value={},
             ),
             patch.object(
-                _owner_edit_messages,
-                "rag_context_for_prompt",
+                RagService,
+                "context_for_prompt",
                 return_value="",
             ),
             patch.object(
@@ -444,8 +447,8 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 "send_typing",
             ),
             patch.object(
-                _owner_edit_messages,
-                "rag_citation_footer",
+                RagService,
+                "citation_footer",
                 return_value="",
             ),
             patch.object(
@@ -475,6 +478,7 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertEqual(
@@ -545,6 +549,7 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 sync_service=make_test_application_services(
                     memory=memory, app_settings=self.app_settings_builder.build()
                 ).sync,
+                rag_service=make_test_rag_service(),
             )
 
         self.assertTrue(handled)
@@ -636,13 +641,13 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 side_effect=legacy_called,
             ),
             patch.object(
-                _owner_image_messages,
-                "rag_retrieval_bundle",
+                RagService,
+                "bundle",
                 return_value={},
             ),
             patch.object(
-                _owner_image_messages,
-                "rag_context_for_prompt",
+                RagService,
+                "context_for_prompt",
                 return_value="",
             ),
             patch.object(
@@ -660,8 +665,8 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 return_value={},
             ),
             patch.object(
-                _owner_image_messages,
-                "rag_citation_footer",
+                RagService,
+                "citation_footer",
                 return_value="",
             ),
             patch.object(
@@ -696,6 +701,7 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                     app_settings=self.app_settings_builder.build()
                 ).group_director,
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertEqual(captured["memory_context"], "image recall")
@@ -759,6 +765,7 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                     app_settings=self.app_settings_builder.build()
                 ).group_director,
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertIs(captured["memory_service"], memory)

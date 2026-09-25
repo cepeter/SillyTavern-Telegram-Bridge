@@ -11,6 +11,7 @@ from application_test_setup import (
     make_test_memory_service,
     make_test_persona_service,
     make_test_provider_port,
+    make_test_rag_service,
 )
 from settings_test_support import SettingsTestCase
 
@@ -140,6 +141,7 @@ class NativeEditedMessageSessionTests(SettingsTestCase):
                 memory_service=memory,
                 persona_service=persona,
                 app_settings=self.app_settings_builder.build(),
+                rag_service=make_test_rag_service(),
             )
 
         self.assertEqual(captured["session_id"], "session-a")

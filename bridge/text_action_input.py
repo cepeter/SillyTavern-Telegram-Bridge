@@ -6,6 +6,7 @@ import json
 import time
 
 from bridge.callbacks import close_panel_message, discard_panel_binding
+from bridge.databank_commands import handle_data_bank_command
 from bridge.databank_panels import send_databank_menu
 from bridge.director_goal_panel import director_goal_panel
 from bridge.director_goals import set_director_goal
@@ -22,7 +23,7 @@ from bridge.metadata import set_meta
 from bridge.pending_input import _cancel_pending
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
-from bridge.rag import handle_data_bank_command
+from bridge.rag_service import RagService
 from bridge.telegram import send_panel_request, send_text
 
 
@@ -54,6 +55,7 @@ def handle_inline_text_action(
     memory_service: MemoryService,
     persona_service: PersonaService,
     request_context,
+    rag_service: RagService,
 ) -> bool:
     """Run a bounded text action immediately when a command includes its value."""
     state = {
@@ -75,6 +77,7 @@ def handle_inline_text_action(
         memory_service=memory_service,
         persona_service=persona_service,
         request_context=request_context,
+        rag_service=rag_service,
     )
 
 
@@ -93,6 +96,7 @@ def _handle_text_action_input(
     memory_service: MemoryService,
     persona_service: PersonaService,
     request_context,
+    rag_service: RagService,
 ) -> bool:
     meta_key = f"text_action_input:{chat_id}"
     if stripped.casefold() in {"/cancel", "cancel"}:
@@ -121,6 +125,7 @@ def _handle_text_action_input(
                 memory_service=memory_service,
                 persona_service=persona_service,
                 app_settings=request_context.app_settings,
+                rag_service=rag_service,
             )
         elif action == "remember":
             if len(value) > 4000 or not remember_fact(
@@ -148,7 +153,12 @@ def _handle_text_action_input(
             send_memory_menu(token, chat_id, db, request_context=request_context)
         elif action == "databank_search":
             handle_data_bank_command(
-                db, token, chat_id, "/databank search " + value, app_settings=request_context.app_settings
+                db,
+                token,
+                chat_id,
+                "/databank search " + value,
+                app_settings=request_context.app_settings,
+                rag_service=rag_service,
             )
             send_databank_menu(token, chat_id, db, request_context=request_context)
         elif action == "director_goal":
