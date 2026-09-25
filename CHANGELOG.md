@@ -10,6 +10,8 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Security
 
+- Require independently trusted SSH-signed release tags, bounded isolated preparation, version-bound confirmation and safe managed update targets. Use structured outcomes, retain the previous mirror for recovery, and report partial activation or restart failure explicitly.
+
 - Verify opened environment-file ownership, private permissions, file type and size; apply assignments atomically and validate bounded numeric settings with redacted, actionable startup errors.
 
 - Replace deterministic callback IDs with random chat-scoped handles, remove the process cache, and preserve caller transaction ownership during token creation and lookup.
