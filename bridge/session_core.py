@@ -98,6 +98,7 @@ def _new_session_values(
                 "",
                 "",
                 "auto",
+                "off",
             ),
             strict=True,
         )
