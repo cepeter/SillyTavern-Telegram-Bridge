@@ -69,3 +69,12 @@ def test_public_examples_match_original_reviewed_hashes():
     assert paths == set(baseline["sha256"])
     for name, expected in baseline["sha256"].items():
         assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == expected, name
+
+
+def test_repository_explicitly_ignores_python_tool_caches():
+    ignored = {
+        line.strip()
+        for line in (ROOT / ".gitignore").read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    assert {".pytest_cache/", ".mypy_cache/", ".ruff_cache/"} <= ignored

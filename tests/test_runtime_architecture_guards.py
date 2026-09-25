@@ -263,5 +263,80 @@ class RuntimeArchitectureGuardTests(SettingsTestCase):
         self.assertEqual(offenders, [])
 
 
+def _top_level_functions(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+
+
+class MainDecompositionTests(SettingsTestCase):
+    def test_worker_recovery_orchestration_has_focused_owner(self):
+        worker_path = BRIDGE_DIR / "worker_orchestration.py"
+        self.assertTrue(worker_path.is_file(), "worker orchestration module must exist")
+        expected = {
+            "process_message_job",
+            "process_image_job",
+            "process_callback_job",
+            "native_edit_committed_after_failure",
+            "process_edit_job",
+            "resolve_recovered_job_submission",
+            "make_durable_backlog_dispatcher",
+        }
+        self.assertTrue(expected <= _top_level_functions(worker_path))
+        self.assertTrue(expected.isdisjoint(_top_level_functions(BRIDGE_DIR / "main.py")))
+
+    def test_update_routing_has_focused_owner(self):
+        routing = _top_level_functions(BRIDGE_DIR / "update_routing.py")
+        callbacks = _top_level_functions(BRIDGE_DIR / "update_callback_routing.py")
+        messages = _top_level_functions(BRIDGE_DIR / "update_message_routing.py")
+        main_functions = _top_level_functions(BRIDGE_DIR / "main.py")
+        expected = {
+            "route_update",
+            "complete_update",
+            "route_callback_update",
+            "route_edited_message_update",
+            "route_message_update",
+            "is_long_running_command",
+        }
+        self.assertTrue({"route_update", "complete_update"} <= routing)
+        self.assertNotIn("is_long_running_command", routing)
+        self.assertIn("route_callback_update", callbacks)
+        self.assertTrue({"route_edited_message_update", "route_message_update", "is_long_running_command"} <= messages)
+        self.assertTrue(expected.isdisjoint(main_functions))
+
+    def test_runtime_lifecycle_has_focused_owner(self):
+        expected = {
+            "run_bridge_runtime",
+            "request_bridge_shutdown",
+            "install_bridge_signal_handlers",
+            "restore_poll_offset",
+        }
+        lifecycle = _top_level_functions(BRIDGE_DIR / "runtime_lifecycle.py")
+        main_functions = _top_level_functions(BRIDGE_DIR / "main.py")
+        self.assertTrue(expected <= lifecycle)
+        self.assertTrue(expected.isdisjoint(main_functions))
+        main_source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
+        main_chunk = main_source[main_source.index("def _main()") :]
+        self.assertIn("run_bridge_runtime(", main_chunk)
+        for forbidden in (
+            "getUpdates",
+            "services.jobs.recover(",
+            "start_live_sync_worker(",
+            "shutdown_background_executors(",
+        ):
+            self.assertNotIn(forbidden, main_chunk)
+
+    def test_main_passes_loaded_card_fields_to_runtime(self):
+        tree = ast.parse((BRIDGE_DIR / "main.py").read_text(encoding="utf-8"))
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "run_bridge_runtime"
+        ]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls[0].args), 2)
+        self.assertIsInstance(calls[0].args[1], ast.Name)
+        self.assertEqual(calls[0].args[1].id, "fields")
+
+
 if __name__ == "__main__":
     unittest.main()
