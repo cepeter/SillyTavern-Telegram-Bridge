@@ -2,7 +2,9 @@
 
 Preparation never changes the checkout or live files. Activation fast-forwards
 only an unchanged clean main checkout, then replaces the dedicated managed live
-mirror. A supervisor failure is reported as restart-required, never as success.
+mirror. Restart is scheduled in a separate transient user-systemd unit so the
+updater is not killed by its own service restart. A supervisor scheduling
+failure is reported as restart-required, never as success.
 """
 
 from __future__ import annotations
@@ -83,6 +85,24 @@ def _executable(name: str) -> str:
     if not result:
         raise UpdateRefused("tools")
     return result
+
+
+def _schedule_user_service_restart(tools: Mapping[str, str], unit: str) -> None:
+    """Schedule restart outside the bridge cgroup so the requester survives long enough to return."""
+    _run(
+        [
+            tools["systemd-run"],
+            "--user",
+            "--quiet",
+            "--collect",
+            "--no-block",
+            "--on-active=5s",
+            tools["systemctl"],
+            "--user",
+            "restart",
+            unit,
+        ]
+    )
 
 
 def _git(argv: Sequence[str], cwd: Path, *, executable: str, extra: Sequence[str] = ()) -> str:
@@ -405,7 +425,7 @@ def apply_update(plan: UpdatePlan) -> UpdateOutcome:
     phase = "preflight"
     try:
         validate_plan(plan)
-        tools = {name: _executable(name) for name in ("git", "ssh-keygen", "systemctl")}
+        tools = {name: _executable(name) for name in ("git", "ssh-keygen", "systemctl", "systemd-run")}
         assert plan.trusted_signers is not None  # noqa: S101 -- validated above, type narrowing only
         public_policy = _read_public_signer_policy(plan.trusted_signers)
         old = _clean_source(plan.source, tools["git"])
@@ -460,7 +480,7 @@ def apply_update(plan: UpdatePlan) -> UpdateOutcome:
             _activate_live(payload, plan.live, backup)
             live_changed = True
             try:
-                _run([tools["systemctl"], "--user", "--no-block", "restart", plan.unit])
+                _schedule_user_service_restart(tools, plan.unit)
             except (OSError, subprocess.SubprocessError):
                 return UpdateOutcome(
                     UpdateStatus.RESTART_REQUIRED, plan.release_version, commit, "restart", source_changed, live_changed

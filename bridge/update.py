@@ -180,7 +180,7 @@ def format_update_outcome(outcome: UpdateOutcome) -> str:
         "source": "a complete source checkout was not found",
         "trust": "an external, owner-controlled SSH allowed-signers file is required",
         "signature": "the release tag was not signed by an independently trusted maintainer key",
-        "tools": "Git, ssh-keygen and user systemd are required",
+        "tools": "Git, ssh-keygen, systemctl, systemd-run and user systemd are required",
         "supervisor": "the configured user service is unavailable",
         "dirty": "the source checkout has uncommitted changes",
         "branch": "the source checkout must be on main",

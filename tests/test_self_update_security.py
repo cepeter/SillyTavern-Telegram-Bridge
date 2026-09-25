@@ -85,9 +85,13 @@ def fake_supervisor(monkeypatch, engine):
     original = engine._run
 
     def command(argv, **kwargs):
-        if Path(argv[0]).name == "systemctl":
+        executable_name = Path(argv[0]).name
+        if executable_name == "systemctl":
             calls.append(argv)
             return subprocess.CompletedProcess(argv, 0, "loaded\n", "")
+        if executable_name == "systemd-run":
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0, "", "")
         return original(argv, **kwargs)
 
     monkeypatch.setattr(engine, "_run", command)
@@ -185,14 +189,39 @@ def test_wrong_signer_refused(engine, release_tree, monkeypatch):
 
 def test_verified_release_updates_exact_commit_and_schedules_restart(engine, release_tree, monkeypatch):
     data = release_tree
-    calls = fake_supervisor(monkeypatch, engine)
+    calls = []
+    original = engine._run
+
+    def command(argv, **kwargs):
+        executable_name = Path(argv[0]).name
+        if executable_name == "systemctl":
+            calls.append(list(argv))
+            if "show" in argv:
+                return subprocess.CompletedProcess(argv, 0, "loaded\n", "")
+            pytest.fail("bridge updater must not restart its own unit from inside the service cgroup")
+        if executable_name == "systemd-run":
+            calls.append(list(argv))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        return original(argv, **kwargs)
+
+    monkeypatch.setattr(engine, "_run", command)
     result = engine.apply_update(make_plan(engine, data))
     assert result.status is engine.UpdateStatus.RESTART_SCHEDULED
     assert result.commit == data.new
     assert git(data.source, "rev-parse", "HEAD") == data.new
     assert (data.live / "bridge" / "feature.py").read_text() == "VALUE = 2\n"
     assert (data.live / ".bridge-deployment.json").is_file()
-    assert any("--no-block" in call and "restart" in call for call in calls)
+    scheduled = [call for call in calls if Path(call[0]).name == "systemd-run"]
+    assert len(scheduled) == 1
+    command = scheduled[0]
+    assert "--user" in command
+    assert "--collect" in command
+    assert "--no-block" in command
+    assert "--on-active=5s" in command
+    restart_index = command.index("restart")
+    assert Path(command[restart_index - 2]).name == "systemctl"
+    assert command[restart_index - 1] == "--user"
+    assert command[restart_index + 1] == make_plan(engine, data).unit
 
 
 def test_prepare_failure_preserves_source_and_live(engine, release_tree, monkeypatch):
@@ -231,10 +260,13 @@ def test_restart_failure_is_explicit_not_false_success(engine, release_tree, mon
     original = engine._run
 
     def command(argv, **kwargs):
-        if Path(argv[0]).name == "systemctl":
+        executable_name = Path(argv[0]).name
+        if executable_name == "systemctl":
             if "restart" in argv:
-                raise subprocess.CalledProcessError(1, argv, stderr="private service internals")
+                pytest.fail("restart must not run directly inside the bridge service cgroup")
             return subprocess.CompletedProcess(argv, 0, "loaded\n", "")
+        if executable_name == "systemd-run":
+            raise subprocess.CalledProcessError(1, argv, stderr="private service internals")
         return original(argv, **kwargs)
 
     monkeypatch.setattr(engine, "_run", command)

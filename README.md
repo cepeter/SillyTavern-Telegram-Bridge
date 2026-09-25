@@ -1037,7 +1037,7 @@ Automatic installation is fail-closed. `/update` requires:
 4. user-owned source/live parent directories that are not group/other-writable;
 5. an empty managed live directory or one containing the bridge's
    `.bridge-deployment.json` marker;
-6. Git, `ssh-keygen`, and the configured user systemd service.
+6. Git, `ssh-keygen`, `systemctl`, `systemd-run`, and the configured user systemd service.
 
 Create the trust directory/file on Linux:
 
