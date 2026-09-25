@@ -664,6 +664,26 @@ class GenerationContinuationTests(SettingsTestCase):
         self.assertEqual(captured["settings"]["temperature"], 0.2)
         self.assertEqual(captured["settings"]["reasoning_budget"], 0)
 
+    def test_streaming_nested_data_choices_returns_text_content(self):
+        self.spec["streaming"] = True
+        _m_provider_transport.strict_urlopen = lambda _request, **_kwargs: _FakeStreamResponse(
+            [
+                'data: {"data":{"choices":[{"delta":{"content":"Hive text"},"finish_reason":null}]},"success":true}\n',
+                'data: {"data":{"choices":[{"delta":{},"finish_reason":"stop"}]}}\n',
+                "data: [DONE]\n",
+            ]
+        )
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
+            "",
+            "hive::zai-org/glm-5.3-flash",
+            [{"role": "user", "content": "Summarize this."}],
+            settings=dict(_m_sync_core.GENERATION_DEFAULTS),
+            app_settings=self.app_settings_builder.build(),
+        )
+
+        self.assertEqual(result, "Hive text")
+
 
 if __name__ == "__main__":
     unittest.main()

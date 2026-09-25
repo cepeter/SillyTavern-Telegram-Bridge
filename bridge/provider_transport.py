@@ -108,7 +108,7 @@ def _read_openai_stream_segment(
             event = json.loads(payload)
         except json.JSONDecodeError:
             continue
-        for choice in event.get("choices", []):
+        for choice in _openai_response_choices(event):
             delta = choice.get("delta") or {}
             text_delta = _stream_text(delta.get("content"))
             if text_delta:
