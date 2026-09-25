@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Architecture
+
+- Resolve models only through configured providers and known model IDs, including opted-in discovery results; reject ambiguous/unknown routes before startup rather than guessing `provider-one`. Check-only startup no longer updates Telegram’s command list.
+
 ## [0.2.029] - 2026-09-25
 
 ### Fixed

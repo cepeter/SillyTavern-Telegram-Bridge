@@ -60,6 +60,7 @@ from bridge.memory_backend import recall_memory_context
 from bridge.memory_service import MemoryService as _MemoryService
 from bridge.message_commands import generate_and_store_reply, prepare_message
 from bridge.model_router import ModelRouter as _ModelRouter
+from bridge.network_security import validate_provider_endpoint
 from bridge.persona_service import PersonaService as _PersonaService
 from bridge.persona_sync import (
     PERSONA_EDIT_LOCK,
@@ -68,7 +69,7 @@ from bridge.persona_sync import (
     load_personas,
     upsert_native_persona,
 )
-from bridge.provider_catalog import load_provider_catalog
+from bridge.provider_catalog import load_routing_catalog
 from bridge.provider_port import ProviderPort as _ProviderPort
 from bridge.provider_transport import generate_provider_text
 from bridge.repositories import count_persona_references as _count_persona_references
@@ -88,7 +89,15 @@ from bridge.telegram import download_telegram_file, send_panel_request, send_tex
 def validate_startup_credential(model: str, model_router: _ModelRouter, *, app_settings: AppSettings) -> None:
     route = model_router.route(model)
     spec = dict(route.spec)
-    transport = str(spec.get("transport") or "")
+    transport = str(spec.get("transport") or "chat_completions")
+    if transport not in {"chat_completions", "openai", "openai_compatible", "anthropic_messages", "opencode_muse"}:
+        raise RuntimeError("provider transport is not supported")
+    endpoint = str(spec.get("api_endpoint") or spec.get("api") or "").strip().rstrip("/")
+    if not endpoint and transport == "opencode_muse":
+        endpoint = "https://opencode.ai/zen/v1"
+    if not endpoint:
+        raise RuntimeError("provider api_endpoint is missing from the private provider catalog")
+    validate_provider_endpoint(endpoint, environ=app_settings.environ)
     if transport == "opencode_muse":
         return
     configured_key_env = spec.get("api_key_env")
@@ -315,7 +324,7 @@ def _main() -> int:
     environment = dict(os.environ)
     bootstrap_environment(environment)
     config = _load_startup_config(environment)
-    model_router = _ModelRouter(load_catalog=_partial(load_provider_catalog, app_settings=config))
+    model_router = _ModelRouter(load_catalog=_partial(load_routing_catalog, app_settings=config))
     try:
         validate_startup_credential(config.default_model, model_router, app_settings=config)
     except RuntimeError as exc:
@@ -330,11 +339,10 @@ def _main() -> int:
     )
     _initialize_extensions()
     token = config.bot_token
-    set_bot_commands(token)
-
     if args.check:
         return run_check(services)
 
+    set_bot_commands(token)
     fields = card_fields(read_png_chara(config.card_file), app_settings=config)
     return run_bridge_runtime(services, fields)
 

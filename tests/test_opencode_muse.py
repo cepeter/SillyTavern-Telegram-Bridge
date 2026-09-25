@@ -32,6 +32,7 @@ class OpenCodeMuseTests(SettingsTestCase):
         self.old_hosts = os.environ.get("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS")
         self.spec = {
             "transport": "opencode_muse",
+            "models": ["muse-spark-1.3-contributor-free"],
             "api_endpoint": "https://opencode.ai/zen/v1",
         }
         self.router = ModelRouter(load_catalog=lambda: {"opencode-free": self.spec})
@@ -58,7 +59,15 @@ class OpenCodeMuseTests(SettingsTestCase):
 
     def test_startup_still_requires_credentials_for_keyed_transport(self):
         old_key = os.environ.pop("LLM_API_KEY", None)
-        router = ModelRouter(load_catalog=lambda: {"provider": {"transport": "openai_compatible"}})
+        router = ModelRouter(
+            load_catalog=lambda: {
+                "provider": {
+                    "transport": "openai_compatible",
+                    "models": ["model"],
+                    "api_endpoint": "http://127.0.0.1:8899/v1",
+                }
+            }
+        )
         try:
             with self.assertRaisesRegex(RuntimeError, "required provider credential"):
                 _m_main.validate_startup_credential(

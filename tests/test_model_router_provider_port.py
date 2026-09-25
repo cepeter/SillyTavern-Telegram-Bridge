@@ -6,6 +6,8 @@ import inspect
 from dataclasses import MISSING
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -21,7 +23,7 @@ def imported_modules(filename: str) -> set[str]:
     return result
 
 
-def test_model_router_is_pure_and_routes_qualified_unqualified_and_slash_models():
+def test_model_router_is_pure_and_routes_qualified_and_unique_exact_models():
     path = BRIDGE / "model_router.py"
     assert path.is_file(), "ModelRouter module is missing"
     module = importlib.import_module("bridge.model_router")
@@ -39,25 +41,20 @@ def test_model_router_is_pure_and_routes_qualified_unqualified_and_slash_models(
     direct = router.route("alpha-one")
     assert (direct.provider_id, direct.model_id) == ("alpha", "alpha-one")
 
-    slash = router.route("vendor/model-x")
-    assert (slash.provider_id, slash.model_id) == ("beta", "vendor/model-x")
+    with pytest.raises(module.ModelRoutingError, match="unknown model"):
+        router.route("vendor/model-x")
 
 
-def test_model_router_falls_back_when_catalog_loader_fails_or_model_is_unknown():
+def test_model_router_refuses_catalog_failure_or_unknown_model():
     module = importlib.import_module("bridge.model_router")
 
     def broken():
         raise OSError("catalog unavailable")
 
-    failed = module.ModelRouter(load_catalog=broken).route("mystery")
-    assert failed.provider_id == "provider-one"
-    assert failed.model_id == "mystery"
-    assert dict(failed.spec) == {}
-
-    unknown = module.ModelRouter(load_catalog=lambda: {"other": {"models": ["known"]}}).route("mystery")
-    assert unknown.provider_id == "provider-one"
-    assert unknown.model_id == "mystery"
-    assert dict(unknown.spec) == {}
+    with pytest.raises(module.ModelRoutingError, match="catalog"):
+        module.ModelRouter(load_catalog=broken).route("mystery")
+    with pytest.raises(module.ModelRoutingError, match="unknown model"):
+        module.ModelRouter(load_catalog=lambda: {"other": {"models": ["known"]}}).route("mystery")
 
 
 def test_provider_port_is_pure_and_delegates_exact_call_shape():
@@ -123,7 +120,7 @@ def test_startup_composes_model_router_and_provider_port():
     source = (BRIDGE / "main.py").read_text(encoding="utf-8")
     assert "_ModelRouter(" in source
     assert "_ProviderPort(" in source
-    assert "load_catalog=_partial(load_provider_catalog, app_settings=config)" in source
+    assert "load_catalog=_partial(load_routing_catalog, app_settings=config)" in source
 
 
 def test_provider_transport_is_infrastructure_only():
