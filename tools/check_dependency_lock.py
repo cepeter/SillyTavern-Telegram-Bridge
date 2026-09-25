@@ -89,7 +89,7 @@ def validate(
     direct = read_records(manifest, "runtime manifest", errors, hashed=False)
     pins = read_records(locked, "runtime lock", errors, hashed=True)
     read_records(development, "development", errors, hashed=False)
-    active_environment = dict(default_environment())
+    active_environment: dict[str, str] = {key: str(value) for key, value in default_environment().items()}
     active_environment.update(python_version="3.11", python_full_version="3.11.0", extra="")
     if environment is not None:
         active_environment.update(environment)

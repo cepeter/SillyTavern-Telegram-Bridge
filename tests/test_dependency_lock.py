@@ -71,3 +71,13 @@ def test_error_does_not_echo_url_credentials():
     errors = guard().validate("demo @ https://user:private-secret@example.invalid/demo.whl", "", "pytest==9.1.1")
     assert errors
     assert "private-secret" not in repr(errors)
+
+
+def test_guard_typechecks_with_the_installed_development_dependencies():
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "--no-incremental", "tools/check_dependency_lock.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
