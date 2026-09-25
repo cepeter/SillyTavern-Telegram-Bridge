@@ -149,3 +149,34 @@ def test_contract_layer_cannot_smuggle_concrete_adapter_imports(tmp_path):
     write_module(bridge, "telegram", "")
     report = policy.check_dependency_direction(bridge, static_targets=("bridge/service.py",))
     assert any("contract" in error.casefold() and "bridge.telegram" in error for error in report.errors)
+
+
+def test_low_level_owner_cannot_import_application_adapter(tmp_path):
+    policy = load_policy()
+    for name in ("topic_scope", "limits", "runtime_logging", "background", "sqlite_store"):
+        bridge = tmp_path / name / "bridge"
+        bridge.mkdir(parents=True)
+        write_module(bridge, name, "def lazy():\n    import bridge.telegram\n")
+        write_module(bridge, "telegram", "")
+        report = policy.check_dependency_direction(bridge, static_targets=())
+        assert any(name in error and "bridge.telegram" in error for error in report.errors), name
+
+
+def test_sqlite_mechanics_cannot_depend_on_database_operations(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "sqlite_store", "import bridge.database\n")
+    write_module(bridge, "database", "")
+    report = policy.check_dependency_direction(bridge, static_targets=())
+    assert any("sqlite_store" in error and "bridge.database" in error for error in report.errors)
+
+
+def test_panel_owner_cannot_import_root_command_dispatch(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "command_panels", "import bridge.command_routes\n")
+    write_module(bridge, "command_routes", "")
+    report = policy.check_dependency_direction(bridge, static_targets=())
+    assert any("command_panels" in error and "command_routes" in error for error in report.errors)

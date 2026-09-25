@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import json
+import logging
+import sqlite3
+import time
+from pathlib import Path
+
 from bridge.callback_tokens import dynamic_callback_token, resolve_dynamic_callback_token
 from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.card_content import card_fields_from_file as card_fields_from_file
@@ -7,18 +13,18 @@ from bridge.card_content import character_card_paths
 from bridge.card_content import safe_character_path as safe_character_path
 from bridge.cards import send_panel_message
 from bridge.catalog import send_world_menu
-from bridge.common import Path, json, logging, parse_topic_scope, sqlite3, time
-from bridge.config import PENDING_SETTINGS_TTL_SECONDS
 from bridge.database import get_generation_settings as get_generation_settings
 from bridge.database import set_meta
 from bridge.group_service import GroupService
 from bridge.input_flow_service import InputFlowService
+from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.media import remove_inline_keyboard, send_typing
 from bridge.memory import generate_session_summary
 from bridge.panel_utils import panel_label, panel_page
 from bridge.provider_port import ProviderPort
 from bridge.settings import AppSettings
 from bridge.telegram import create_session, load_session, send_text, update_session
+from bridge.topic_scope import parse_topic_scope
 
 
 def send_group_menu(

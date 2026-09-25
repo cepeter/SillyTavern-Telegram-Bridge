@@ -7,6 +7,8 @@ from pathlib import Path
 
 from settings_test_support import SettingsTestCase
 
+import bridge.limits as _limits
+
 REPO_ROOT = Path(__file__).parents[1]
 
 NETWORK_EXPORTS = (
@@ -82,25 +84,24 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
         )
 
     def test_config_owns_memory_and_rag_defaults(self):
-        import bridge.config as config
 
-        self.assertEqual(config.HINDSIGHT_DEFAULT_URL, "http://127.0.0.1:8890")
-        self.assertEqual(config.HINDSIGHT_RECALL_MAX_TOKENS, 1200)
-        self.assertEqual(config.HINDSIGHT_CONTEXT_MAX_CHARS, 6000)
-        self.assertEqual(config.HINDSIGHT_RETAIN_MAX_MESSAGES, 100)
-        self.assertEqual(config.SUMMARY_TRIGGER_MESSAGES, 32)
-        self.assertEqual(config.SUMMARY_RECENT_MESSAGES, 24)
-        self.assertEqual(config.SUMMARY_MAX_CHARS, 12000)
-        self.assertEqual(config.SUMMARY_MAX_OUTPUT_TOKENS, 1200)
-        self.assertEqual(config.SUMMARY_UPDATE_INTERVAL, 8)
-        self.assertEqual(config.RAG_MAX_FILE_BYTES, 10 * 1024 * 1024)
-        self.assertEqual(config.RAG_CHUNK_CHARS, 1800)
-        self.assertEqual(config.RAG_CHUNK_OVERLAP, 220)
-        self.assertEqual(config.RAG_MAX_CONTEXT_CHARS, 6000)
+        self.assertEqual(_limits.HINDSIGHT_DEFAULT_URL, "http://127.0.0.1:8890")
+        self.assertEqual(_limits.HINDSIGHT_RECALL_MAX_TOKENS, 1200)
+        self.assertEqual(_limits.HINDSIGHT_CONTEXT_MAX_CHARS, 6000)
+        self.assertEqual(_limits.HINDSIGHT_RETAIN_MAX_MESSAGES, 100)
+        self.assertEqual(_limits.SUMMARY_TRIGGER_MESSAGES, 32)
+        self.assertEqual(_limits.SUMMARY_RECENT_MESSAGES, 24)
+        self.assertEqual(_limits.SUMMARY_MAX_CHARS, 12000)
+        self.assertEqual(_limits.SUMMARY_MAX_OUTPUT_TOKENS, 1200)
+        self.assertEqual(_limits.SUMMARY_UPDATE_INTERVAL, 8)
+        self.assertEqual(_limits.RAG_MAX_FILE_BYTES, 10 * 1024 * 1024)
+        self.assertEqual(_limits.RAG_CHUNK_CHARS, 1800)
+        self.assertEqual(_limits.RAG_CHUNK_OVERLAP, 220)
+        self.assertEqual(_limits.RAG_MAX_CONTEXT_CHARS, 6000)
         self.assertEqual(self.app_settings_builder.rag_embedding_model, "text-embedding-3-small")
 
     def test_common_no_longer_defines_memory_or_rag_defaults(self):
-        source = (REPO_ROOT / "bridge" / "common.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "background.py").read_text(encoding="utf-8")
         prefixes = (
             "HINDSIGHT_DEFAULT_URL = ",
             "HINDSIGHT_RECALL_MAX_TOKENS = ",

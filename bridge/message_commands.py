@@ -19,12 +19,9 @@ from bridge.database import (
     get_meta,
     operation_phase,
     operation_was_applied,
-    optimize_database,
     record_operation,
-    run_write_txn,
     set_meta,
     set_operation_phase,
-    write_transaction,
 )
 from bridge.generation import (
     build_chat_messages,
@@ -46,6 +43,7 @@ from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_ret
 from bridge.request_types import PreparedMessage, RequestContext
 from bridge.reset_panel import reset_confirmation_request
 from bridge.settings import AppSettings
+from bridge.sqlite_store import optimize_database, run_write_txn, write_transaction
 from bridge.telegram import ensure_session, list_sessions, load_session, send_panel_request, send_text, telegram_request
 
 if TYPE_CHECKING:

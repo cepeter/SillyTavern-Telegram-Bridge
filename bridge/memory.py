@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+import logging
+import sqlite3
+import time
 from collections.abc import Callable
 from functools import partial as _partial
 
-from bridge.common import logging, sqlite3, submit_background, time
-from bridge.config import (
+from bridge.background import submit_background
+from bridge.database import get_generation_settings, set_meta, task_model_for_session
+from bridge.extension_registry import apply_summary_context_hooks as _apply_summary_context_hooks
+from bridge.extension_registry import run_post_retain_hooks as _run_post_retain_hooks
+from bridge.extension_registry import run_summary_clear_hooks as _run_summary_clear_hooks
+from bridge.hindsight_integrity import HindsightStaleGuard as _HindsightStaleGuard
+from bridge.limits import (
     SUMMARY_MAX_CHARS,
     SUMMARY_MAX_OUTPUT_TOKENS,
     SUMMARY_RECENT_MESSAGES,
     SUMMARY_TRIGGER_MESSAGES,
     SUMMARY_UPDATE_INTERVAL,
 )
-from bridge.database import db_connect, get_generation_settings, set_meta, task_model_for_session
-from bridge.extension_registry import apply_summary_context_hooks as _apply_summary_context_hooks
-from bridge.extension_registry import run_post_retain_hooks as _run_post_retain_hooks
-from bridge.extension_registry import run_summary_clear_hooks as _run_summary_clear_hooks
-from bridge.hindsight_integrity import HindsightStaleGuard as _HindsightStaleGuard
 from bridge.memory_backend import (
     _memory_hindsight_conversation_snapshot,
     _memory_hindsight_epoch,
@@ -41,6 +44,7 @@ from bridge.memory_backend import recall_memory_context as recall_memory_context
 from bridge.memory_backend import remember_fact as remember_fact
 from bridge.provider_port import ProviderPort
 from bridge.settings import AppSettings
+from bridge.sqlite_store import db_connect
 
 
 def _make_hindsight_stale_guard(*, app_settings: AppSettings):

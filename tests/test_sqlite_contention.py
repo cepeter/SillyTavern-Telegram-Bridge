@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_request_context
 from settings_test_support import SettingsTestCase
 
+import bridge.sqlite_store as _sqlite_store
+
 ensure_application_extensions()
 
 import json
@@ -12,7 +14,6 @@ import unittest
 import urllib
 from pathlib import Path
 
-import bridge.database as database
 import bridge.main as _m_main
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
@@ -300,9 +301,9 @@ class SqliteContentionTests(SettingsTestCase):
 
     def test_explicit_path_workers_still_use_serialized_connection(self):
         path = Path(self.tmp.name) / "explicit-worker.sqlite3"
-        db = database.db_connect(path, app_settings=self.app_settings_builder.build())
+        db = _sqlite_store.db_connect(path, app_settings=self.app_settings_builder.build())
         try:
-            self.assertIsInstance(db, database._SerializedSQLiteConnection)
+            self.assertIsInstance(db, _sqlite_store._SerializedSQLiteConnection)
             self.assertEqual(
                 db.execute("PRAGMA journal_mode").fetchone()[0].lower(),
                 "wal",

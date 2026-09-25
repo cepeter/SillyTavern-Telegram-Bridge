@@ -11,6 +11,9 @@ from pathlib import Path
 
 import pytest
 
+import bridge.limits as _limits
+from bridge.sqlite_store import db_connect
+
 
 def loader():
     return importlib.import_module("bridge.settings").load_app_settings
@@ -75,7 +78,6 @@ def test_two_explicit_settings_choose_distinct_default_character_names(tmp_path,
 
 
 def test_two_database_factories_do_not_share_configured_paths(tmp_path, *, app_settings_builder):
-    from bridge.database import db_connect
 
     load = loader()
     first = load({}, home=tmp_path / "one")
@@ -212,7 +214,7 @@ def test_current_config_module_contains_fixed_limits_only():
     for name in ("DB_FILE", "LOG_FILE", "DEFAULT_MODEL", "CHARACTER_DIR", "BRIDGE_HOME", "PROVIDER_CONFIG_FILE"):
         assert not hasattr(config, name)
         assert name.lower() in AppSettings.__dataclass_fields__
-    assert config.CATALOG_MAX_ITEMS == 40
+    assert _limits.CATALOG_MAX_ITEMS == 40
 
 
 def test_no_hidden_configuration_context_or_module_setter_is_introduced():

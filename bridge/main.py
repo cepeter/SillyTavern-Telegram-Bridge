@@ -8,24 +8,17 @@ from functools import partial as _partial
 from pathlib import Path
 
 import bridge.sillytavern_api as _st_api
-from bridge import database as _database
+import bridge.sqlite_store as _sqlite_store
 from bridge.application_composition import initialize_extensions as _initialize_extensions
+from bridge.background import begin_background_shutdown, register_durable_backlog_dispatcher, submit_chat_background
 from bridge.card_content import card_fields, card_fields_from_file, read_png_chara, safe_character_path
 from bridge.command_routes import handle_command_route
-from bridge.common import (
-    begin_background_shutdown,
-    configure_logging,
-    enforce_runtime_permissions,
-    register_durable_backlog_dispatcher,
-    submit_chat_background,
-)
 from bridge.composition import BackgroundRuntime as _BackgroundRuntime
 from bridge.composition import BridgeServices as _BridgeServices
 from bridge.composition import TelegramRuntime as _TelegramRuntime
 from bridge.config_values import ConfigurationError
 from bridge.conversation_service import ConversationService as _ConversationService
 from bridge.database import (
-    db_connect,
     enqueue_job,
     finish_job,
     get_generation_settings,
@@ -81,9 +74,11 @@ from bridge.provider_transport import generate_provider_text
 from bridge.repositories import count_persona_references as _count_persona_references
 from bridge.repositories import count_session_messages as _count_session_messages
 from bridge.runtime_lifecycle import run_bridge_runtime
+from bridge.runtime_logging import configure_logging, enforce_runtime_permissions
 from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
 from bridge.session_naming import handle_session_name_input, start_session_name_input
 from bridge.settings import AppSettings, load_app_settings, validate_app_settings
+from bridge.sqlite_store import db_connect
 from bridge.sync_api import _live_sync_disable, live_sync_now, live_sync_poll, live_sync_toggle_realtime
 from bridge.sync_core import sync_binding
 from bridge.sync_service import SyncService as _SyncService
@@ -118,7 +113,7 @@ def _build_startup_services(
     *,
     model_router: _ModelRouter,
 ) -> _BridgeServices:
-    durable_worker_guard = _DurableWorkerGuard(_database._lightweight_db_connect)
+    durable_worker_guard = _DurableWorkerGuard(_sqlite_store._lightweight_db_connect)
     provider = _ProviderPort(generate_backend=_partial(generate_provider_text, model_router, app_settings=config))
     delivery = _DeliveryPort(
         request=telegram_request,

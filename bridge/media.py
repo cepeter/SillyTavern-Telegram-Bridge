@@ -20,28 +20,23 @@ from functools import partial as _partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from bridge.background import chat_job_lock, submit_background
 from bridge.callbacks import close_panel_message
-from bridge.common import (
-    STT_DEFAULT_MODEL,
-    STT_MAX_BYTES,
-    TTS_MAX_CHARS,
-    chat_job_lock,
-    parse_topic_scope,
-    submit_background,
-)
+from bridge.config import STT_DEFAULT_MODEL
 from bridge.database import (
     begin_operation,
     clear_failed_turn,
     committed_assistant_for_message,
-    db_connect,
     get_meta,
     operation_was_applied,
     record_operation,
-    run_write_txn,
 )
 from bridge.expressions import deliver_expression
+from bridge.limits import STT_MAX_BYTES, TTS_MAX_CHARS
 from bridge.settings import AppSettings
+from bridge.sqlite_store import db_connect, run_write_txn
 from bridge.telegram import download_telegram_file, ensure_session, send_text, telegram_request
+from bridge.topic_scope import parse_topic_scope
 
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices as _BridgeServices

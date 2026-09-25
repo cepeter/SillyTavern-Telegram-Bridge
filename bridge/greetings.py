@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import random
+import sqlite3
+import time
 
 from bridge.card_content import replace_macros
-from bridge.common import json, sqlite3, time
-from bridge.config import CARD_FIELD_MAX_CHARS
 from bridge.database import begin_operation, operation_was_applied, record_operation
+from bridge.limits import CARD_FIELD_MAX_CHARS
 from bridge.panel_utils import PANEL_PAGE_SIZE, panel_page
 from bridge.settings import AppSettings
 from bridge.telegram import send_panel_request, send_text

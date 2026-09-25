@@ -7,7 +7,6 @@ import sqlite3
 import time
 
 from bridge.card_content import card_fields_from_file, replace_macros
-from bridge.common import MAX_HISTORY_MESSAGES
 from bridge.context_compaction import context_history_candidate_limit, context_input_budget_tokens
 from bridge.database import (
     begin_operation,
@@ -18,14 +17,13 @@ from bridge.database import (
     load_generation_preset,
     operation_phase,
     record_operation,
-    run_write_txn,
     set_operation_phase,
     update_generation_settings,
-    write_transaction,
 )
 from bridge.generation import build_chat_messages, render_session_response, save_response_variant
 from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
+from bridge.limits import MAX_HISTORY_MESSAGES
 from bridge.media import delete_outgoing_message_row, send_reply, send_typing
 from bridge.memory_backend import memory_mode, memory_scope
 from bridge.memory_service import MemoryService
@@ -42,6 +40,7 @@ from bridge.rag_core import (
 )
 from bridge.reset_panel import reset_confirmation_request
 from bridge.settings import AppSettings
+from bridge.sqlite_store import run_write_txn, write_transaction
 from bridge.telegram import ensure_session as ensure_session
 from bridge.telegram import load_session, send_panel_request, send_text, telegram_request
 

@@ -16,7 +16,12 @@ REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
 
 APPLICATION_BOUNDARY_FILES = (
-    "common.py",
+    "background.py",
+    "runtime_logging.py",
+    "topic_scope.py",
+    "limits.py",
+    "sqlite_store.py",
+    "command_panels.py",
     "cards.py",
     "memory.py",
     "rag.py",

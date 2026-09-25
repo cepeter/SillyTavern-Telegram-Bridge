@@ -1,6 +1,9 @@
 from application_test_setup import ensure_application_extensions
 from settings_test_support import SettingsTestCase
 
+import bridge.limits as _limits
+import bridge.sqlite_store as _sqlite_store
+
 ensure_application_extensions()
 
 import sqlite3
@@ -10,7 +13,6 @@ import types
 import unittest
 from pathlib import Path
 
-import bridge.database as database
 import bridge.message_commands as _m_message_commands
 import bridge.sync_api as _m_sync_api
 
@@ -20,7 +22,7 @@ class DatabaseOptimizationTests(SettingsTestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.original_db = self.app_settings_builder.db_file
         self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
-        self.db = database.db_connect(app_settings=self.app_settings_builder.build())
+        self.db = _sqlite_store.db_connect(app_settings=self.app_settings_builder.build())
 
     def tearDown(self):
         self.db.close()
@@ -28,10 +30,10 @@ class DatabaseOptimizationTests(SettingsTestCase):
         self.tmp.cleanup()
 
     def test_connection_pragmas_on_primary_and_lightweight_connect(self):
-        worker = database._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=15.0)
+        worker = _sqlite_store._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=15.0)
         for conn, expected_cache_kib in (
-            (self.db, database._DB_PRIMARY_CACHE_KIB),
-            (worker, database._DB_WORKER_CACHE_KIB),
+            (self.db, _limits._DB_PRIMARY_CACHE_KIB),
+            (worker, _limits._DB_WORKER_CACHE_KIB),
         ):
             try:
                 synchronous = conn.execute("PRAGMA synchronous").fetchone()[0]
@@ -49,7 +51,7 @@ class DatabaseOptimizationTests(SettingsTestCase):
                 if conn is worker:
                     conn.close()
         self.assertEqual(self.db.execute("PRAGMA journal_mode").fetchone()[0].casefold(), "wal")
-        self.assertLess(database._DB_WORKER_CACHE_KIB, database._DB_PRIMARY_CACHE_KIB)
+        self.assertLess(_limits._DB_WORKER_CACHE_KIB, _limits._DB_PRIMARY_CACHE_KIB)
 
     def test_lightweight_connect_does_not_negotiate_journal_mode(self):
         # Worker startup must stay connection-local: a brand-new database file
@@ -57,7 +59,7 @@ class DatabaseOptimizationTests(SettingsTestCase):
         fresh = Path(self.tmp.name) / "fresh.sqlite3"
         self.app_settings_builder.db_file = fresh
         try:
-            conn = database._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
+            conn = _sqlite_store._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
             try:
                 journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
                 self.assertEqual(journal_mode.casefold(), "delete")
@@ -103,12 +105,12 @@ class DatabaseOptimizationTests(SettingsTestCase):
         self.db.execute("DELETE FROM test_churn")
         self.db.commit()
 
-        reclaimed = database.run_database_maintenance(
+        reclaimed = _sqlite_store.run_database_maintenance(
             vacuum_freelist_threshold=1, app_settings=self.app_settings_builder.build()
         )
         self.assertTrue(reclaimed)
 
-        conn = database._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
+        conn = _sqlite_store._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
         try:
             freelist = conn.execute("PRAGMA freelist_count").fetchone()[0]
             self.assertEqual(freelist, 0)
@@ -124,7 +126,7 @@ class DatabaseOptimizationTests(SettingsTestCase):
         self.db.commit()
         self.assertGreater(self.db.execute("PRAGMA freelist_count").fetchone()[0], 0)
 
-        reclaimed = database.run_database_maintenance(
+        reclaimed = _sqlite_store.run_database_maintenance(
             vacuum_freelist_threshold=500, app_settings=self.app_settings_builder.build()
         )
 
@@ -177,7 +179,7 @@ class DatabaseOptimizationTests(SettingsTestCase):
         self.assertTrue(connections[0].closed)
 
     def test_load_optional_vector_extension_safe(self):
-        loaded = database._load_optional_vector_extension(self.db)
+        loaded = _sqlite_store._load_optional_vector_extension(self.db)
         self.assertIsInstance(loaded, bool)
 
     def test_vector_extension_failure_disables_extension_loading(self):
@@ -192,7 +194,7 @@ class DatabaseOptimizationTests(SettingsTestCase):
         original = sys.modules.get("sqlite_vec")
         sys.modules["sqlite_vec"] = fake
         try:
-            loaded = database._load_optional_vector_extension(self.db)
+            loaded = _sqlite_store._load_optional_vector_extension(self.db)
             self.assertFalse(loaded)
             with self.assertRaises(sqlite3.OperationalError) as ctx:
                 self.db.execute("SELECT load_extension('no_such_extension')")
@@ -206,11 +208,11 @@ class DatabaseOptimizationTests(SettingsTestCase):
     def test_db_connect_runs_database_wide_schema_setup_once_per_process(self):
         self.assertIn(
             Path(self.app_settings_builder.db_file).expanduser().resolve(),
-            database._DB_CONNECTION_GATE._ready_paths,
+            _sqlite_store._DB_CONNECTION_GATE._ready_paths,
         )
 
         traced = []
-        second = database._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
+        second = _sqlite_store._lightweight_db_connect(self.app_settings_builder.build().db_file, timeout=5.0)
         second.set_trace_callback(traced.append)
         try:
             self.assertEqual(

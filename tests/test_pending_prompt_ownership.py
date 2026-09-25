@@ -11,9 +11,10 @@ from unittest.mock import patch
 from application_test_setup import make_test_group_service
 from settings_test_support import SettingsTestCase
 
-import bridge.database as database
+import bridge.background as _background
 import bridge.input_flows as input_flows
 import bridge.session_naming as session_naming
+import bridge.sqlite_store as _sqlite_store
 import bridge.telegram as telegram
 
 BRIDGE_DIR = Path(__file__).parents[1] / "bridge"
@@ -44,14 +45,13 @@ class PendingPromptOwnershipTests(SettingsTestCase):
     def test_common_does_not_import_telegram(self):
         self.assertNotIn(
             "bridge.telegram",
-            imported_modules(BRIDGE_DIR / "common.py"),
+            imported_modules(BRIDGE_DIR / "background.py"),
         )
 
     def test_telegram_is_canonical_owner(self):
-        import bridge.common as common
 
         self.assertTrue(callable(telegram.delete_pending_input_prompts))
-        self.assertFalse(hasattr(common, "delete_pending_input_prompts"))
+        self.assertFalse(hasattr(_background, "delete_pending_input_prompts"))
 
     def test_consumers_import_canonical_owner(self):
         for filename in ("input_flows.py", "session_naming.py"):
@@ -128,7 +128,7 @@ class PendingPromptOwnershipTests(SettingsTestCase):
 
     def test_start_session_name_input_clears_conflicting_prompt_messages(self):
         with tempfile.TemporaryDirectory() as tmp:
-            db = database.db_connect(Path(tmp) / "prompt.sqlite3", app_settings=self.app_settings_builder.build())
+            db = _sqlite_store.db_connect(Path(tmp) / "prompt.sqlite3", app_settings=self.app_settings_builder.build())
             state = {
                 "session_id": "default",
                 "expires_at": time.time() + 600,

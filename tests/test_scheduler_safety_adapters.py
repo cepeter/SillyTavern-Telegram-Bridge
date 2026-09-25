@@ -1,6 +1,9 @@
 from application_test_setup import ensure_application_extensions
 from settings_test_support import SettingsTestCase
 
+import bridge.limits as _limits
+import bridge.sqlite_store as _sqlite_store
+
 ensure_application_extensions()
 
 import sqlite3
@@ -10,7 +13,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import bridge.database as database
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 from bridge.scheduler_safety import DatabaseConnectionGate, DurableWorkerGuard
@@ -240,7 +242,7 @@ class CanonicalDatabaseConnectionTests(SettingsTestCase):
         self.tmp.cleanup()
 
     def test_canonical_gate_runs_schema_initialization_once(self):
-        original = database.initialize_database_schema
+        original = _sqlite_store.initialize_database_schema
         calls = []
 
         def traced(db):
@@ -248,12 +250,12 @@ class CanonicalDatabaseConnectionTests(SettingsTestCase):
             return original(db)
 
         with patch.object(
-            database,
+            _sqlite_store,
             "initialize_database_schema",
             side_effect=traced,
         ):
-            first = database._DB_CONNECTION_GATE.connect(self.path)
-            second = database._DB_CONNECTION_GATE.connect(self.path)
+            first = _sqlite_store._DB_CONNECTION_GATE.connect(self.path)
+            second = _sqlite_store._DB_CONNECTION_GATE.connect(self.path)
 
         try:
             self.assertEqual(len(calls), 1)
@@ -262,13 +264,13 @@ class CanonicalDatabaseConnectionTests(SettingsTestCase):
             second.close()
 
     def test_canonical_gate_keeps_role_specific_cache(self):
-        first = database._DB_CONNECTION_GATE.connect(self.path)
-        second = database._DB_CONNECTION_GATE.connect(self.path)
+        first = _sqlite_store._DB_CONNECTION_GATE.connect(self.path)
+        second = _sqlite_store._DB_CONNECTION_GATE.connect(self.path)
         try:
             first_cache = first.execute("PRAGMA cache_size").fetchone()[0]
             second_cache = second.execute("PRAGMA cache_size").fetchone()[0]
-            self.assertEqual(first_cache, -database._DB_PRIMARY_CACHE_KIB)
-            self.assertEqual(second_cache, -database._DB_WORKER_CACHE_KIB)
+            self.assertEqual(first_cache, -_limits._DB_PRIMARY_CACHE_KIB)
+            self.assertEqual(second_cache, -_limits._DB_WORKER_CACHE_KIB)
             self.assertEqual(
                 second.execute("PRAGMA foreign_keys").fetchone()[0],
                 1,
@@ -363,7 +365,7 @@ class CanonicalRecoveryTests(SettingsTestCase):
 
 class DatabaseSourceBoundaryTests(SettingsTestCase):
     def test_canonical_db_connect_does_not_depend_on_legacy_readiness_globals(self):
-        source = (Path(__file__).parents[1] / "bridge" / "database.py").read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "sqlite_store.py").read_text(encoding="utf-8")
         start = source.index("def db_connect(")
         end = source.find("\ndef ", start + 4)
         chunk = source[start : end if end >= 0 else None]

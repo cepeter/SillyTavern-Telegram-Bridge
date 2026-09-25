@@ -14,8 +14,7 @@ from functools import partial as _partial
 from pathlib import Path
 
 import bridge.sillytavern_api as _st_api
-from bridge.common import IMAGE_MAX_BYTES
-from bridge.config import CATALOG_MAX_ITEMS, SYNC_MAX_BYTES
+from bridge.limits import CATALOG_MAX_ITEMS, IMAGE_MAX_BYTES, SYNC_MAX_BYTES
 from bridge.persona_integrity import IntegrityCheckedPersonaStore as _IntegrityCheckedPersonaStore
 from bridge.settings import AppSettings
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from bridge.common import MAX_TELEGRAM_LENGTH, sqlite3
+import sqlite3
+
 from bridge.database import set_meta
+from bridge.limits import MAX_TELEGRAM_LENGTH
 from bridge.rag_core import (
     activate_data_bank_version,
     data_bank_document_versions,

@@ -14,6 +14,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.sqlite_store as _sqlite_store
+
 ensure_application_extensions()
 
 import bridge.commands as commands
@@ -24,7 +26,7 @@ import bridge.telegram as telegram
 class NativeEditedMessageSessionTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = database.db_connect(
+        self.db = _sqlite_store.db_connect(
             Path(self.tmp.name) / "edit.sqlite3", app_settings=self.app_settings_builder.build()
         )
         self.model = "provider::model"

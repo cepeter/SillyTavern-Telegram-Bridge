@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from bridge.card_content import active_world_files, build_system_prompt, build_world_info, replace_macros
-from bridge.config import GENERATION_DEFAULTS, HINDSIGHT_CONTEXT_MAX_CHARS, RAG_MAX_CONTEXT_CHARS, SUMMARY_MAX_CHARS
+from bridge.config import GENERATION_DEFAULTS
 from bridge.context_compaction import compact_chat_messages
 from bridge.database import (
     begin_operation,
@@ -15,18 +15,19 @@ from bridge.database import (
     get_meta,
     operation_phase,
     record_operation,
-    run_write_txn,
     set_meta,
     set_operation_phase,
 )
 from bridge.delivery_port import DeliveryPort
 from bridge.language import normalize_response_language, response_language_instruction, response_language_label
+from bridge.limits import HINDSIGHT_CONTEXT_MAX_CHARS, RAG_MAX_CONTEXT_CHARS, SUMMARY_MAX_CHARS
 from bridge.memory_service import MemoryService
 from bridge.operation_recovery import OperationRecovery as _OperationRecovery
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
 from bridge.settings import AppSettings
+from bridge.sqlite_store import run_write_txn
 
 
 def _generation_operation_recovery(

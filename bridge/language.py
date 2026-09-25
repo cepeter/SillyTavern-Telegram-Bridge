@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from collections.abc import Callable
 
-from bridge.common import sqlite3
 from bridge.delivery_port import DeliveryPort
 from bridge.panel_utils import panel_navigation, panel_page
 

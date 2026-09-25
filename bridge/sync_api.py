@@ -9,12 +9,13 @@ import time
 from functools import partial as _partial
 
 import bridge.sillytavern_api as _st_api
+from bridge.background import chat_job_lock
 from bridge.card_content import card_fields_from_file
-from bridge.common import chat_job_lock
-from bridge.database import db_connect, run_write_txn, sync_transcript_hash
+from bridge.database import sync_transcript_hash
 from bridge.group_core import group_state
 from bridge.port_contracts import RetainSessionMemory
 from bridge.settings import AppSettings
+from bridge.sqlite_store import db_connect, run_write_txn
 from bridge.sync_core import (
     apply_sync_snapshot,
     build_sync_records,

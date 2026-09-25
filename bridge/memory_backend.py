@@ -12,15 +12,16 @@ import sqlite3
 import threading
 import time
 
-from bridge.config import (
+from bridge.database import get_meta
+from bridge.limits import (
     HINDSIGHT_CONTEXT_MAX_CHARS,
     HINDSIGHT_DEFAULT_URL,
     HINDSIGHT_RECALL_MAX_TOKENS,
     HINDSIGHT_RETAIN_MAX_MESSAGES,
 )
-from bridge.database import db_connect, get_meta, run_write_txn
 from bridge.network_security import validate_provider_endpoint
 from bridge.settings import AppSettings
+from bridge.sqlite_store import db_connect, run_write_txn
 
 
 def hindsight_bank_id(chat_id: str) -> str:

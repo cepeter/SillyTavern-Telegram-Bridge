@@ -10,10 +10,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from bridge.common import IMAGE_MAX_BYTES, parse_topic_scope
+from bridge.limits import IMAGE_MAX_BYTES
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
 from bridge.settings import AppSettings
 from bridge.telegram import send_text
+from bridge.topic_scope import parse_topic_scope
 
 IMAGE_PROMPT_MAX_CHARS = 4000
 IMAGE_DEFAULT_SIZE = "1024x1024"

@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 from settings_test_support import SettingsTestCase
 
+import bridge.limits as _limits
+
 REPO_ROOT = Path(__file__).parents[1]
 
 
@@ -69,9 +71,9 @@ class CardFoundationBoundaryTests(SettingsTestCase):
         self.assertIsInstance(self.app_settings_builder.default_character_file, str)
         self.assertFalse(hasattr(config, "SYSTEM_PROMPTS_FILE"))
         self.assertIsInstance(self.app_settings_builder.default_user_name, str)
-        self.assertEqual(config.CATALOG_MAX_ITEMS, 40)
-        self.assertEqual(config.CARD_FIELD_MAX_CHARS, 20000)
-        self.assertEqual(config.CARD_TOTAL_MAX_CHARS, 60000)
+        self.assertEqual(_limits.CATALOG_MAX_ITEMS, 40)
+        self.assertEqual(_limits.CARD_FIELD_MAX_CHARS, 20000)
+        self.assertEqual(_limits.CARD_TOTAL_MAX_CHARS, 60000)
 
     def test_card_file_is_fixed_in_each_explicit_settings_snapshot(self):
         first = self.app_settings_builder.build()
@@ -83,7 +85,7 @@ class CardFoundationBoundaryTests(SettingsTestCase):
         self.assertIsNot(first, second)
 
     def test_common_no_longer_owns_extracted_context_state(self):
-        source = (REPO_ROOT / "bridge" / "common.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "background.py").read_text(encoding="utf-8")
 
         self.assertNotIn(
             "_PANEL_SESSION_CONTEXT = threading.local()",
@@ -104,7 +106,7 @@ class CardFoundationBoundaryTests(SettingsTestCase):
             self.assertNotIn(f"def {name}(", source)
 
     def test_common_no_longer_defines_extracted_card_config(self):
-        source = (REPO_ROOT / "bridge" / "common.py").read_text(encoding="utf-8")
+        source = (REPO_ROOT / "bridge" / "background.py").read_text(encoding="utf-8")
 
         for prefix in (
             "SILLYTAVERN_DIR = ",

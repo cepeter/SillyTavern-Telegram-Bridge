@@ -6,6 +6,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.command_panels as _command_panels
+
 ensure_application_extensions()
 
 import tempfile
@@ -60,7 +62,7 @@ class ItemPanelLayoutTests(SettingsTestCase):
 
     def test_preset_rows_have_delete_callbacks(self):
         _m_input_flows.save_generation_preset(self.db, "chat", "fast", {"temperature": 0.7})
-        _m_command_routes.send_preset_menu(
+        _command_panels.send_preset_menu(
             "bot",
             "chat",
             self.db,
@@ -77,7 +79,7 @@ class ItemPanelLayoutTests(SettingsTestCase):
         _m_help.data_bank_documents = lambda _db, _chat: [("doc-1", "lore.json", 1, 2)]
         _m_help.rag_embedding_coverage = lambda _db, _chat, *, app_settings=None: (2, 2)
         try:
-            _m_command_routes.send_databank_menu(
+            _command_panels.send_databank_menu(
                 "bot",
                 "chat",
                 self.db,
