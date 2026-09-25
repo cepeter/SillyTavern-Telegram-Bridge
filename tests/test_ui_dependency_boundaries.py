@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from application_test_setup import make_test_delivery_port, make_test_group_service, make_test_request_context
 
+import bridge.group_callbacks as _owner_group_callbacks
 import bridge.settings_callbacks as _owner_settings_callbacks
 
 ROOT = Path(__file__).parents[1]
@@ -95,11 +96,15 @@ def test_input_flow_service_requires_session_name_backend_and_delegates():
 
 
 def test_groups_no_longer_imports_session_naming():
-    assert "bridge.session_naming" not in imported_modules("groups.py")
+    assert "bridge.session_naming" not in set().union(
+        imported_modules("group_callbacks.py"),
+        imported_modules("group_commands.py"),
+        imported_modules("group_panels.py"),
+        imported_modules("group_setup.py"),
+    )
 
 
 def test_group_new_session_uses_injected_input_flow_service(*, app_settings_builder):
-    import bridge.groups as groups
 
     calls = []
     group_service = make_test_group_service(app_settings=app_settings_builder.build())
@@ -108,7 +113,7 @@ def test_group_new_session_uses_injected_input_flow_service(*, app_settings_buil
     session = {"session_id": "session", "character_file": "mira.png"}
     message = {"message_id": 41}
 
-    groups.handle_group_panel_callback(
+    _owner_group_callbacks.handle_group_panel_callback(
         db,
         "token",
         "chat|topic:1",

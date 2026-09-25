@@ -236,3 +236,21 @@ def send_text(token: str, chat_id: str, text: str) -> list[int]:
         if result.get("message_id") is not None:
             message_ids.append(int(result["message_id"]))
     return message_ids
+
+
+def send_typing(token: str, chat_id: str) -> None:
+    try:
+        telegram_request(token, "sendChatAction", {"chat_id": chat_id, "action": "typing"})
+    except Exception:
+        logging.debug("typing indicator failed", exc_info=True)
+
+
+def answer_callback(token: str, callback_id: str, text: str) -> None:
+    telegram_request(
+        token,
+        "answerCallbackQuery",
+        {
+            "callback_query_id": callback_id,
+            "text": text[:200],
+        },
+    )

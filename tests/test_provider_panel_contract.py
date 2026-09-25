@@ -9,7 +9,8 @@ from application_test_setup import make_test_request_context
 from settings_test_support import make_test_settings
 
 import bridge.provider_callbacks as _owner_provider_callbacks
-from bridge import catalog, command_routes, help_details
+import bridge.provider_discovery as _owner_provider_discovery
+from bridge import command_routes, help_details, provider_panels
 from bridge.update_message_routing import is_long_running_command
 
 
@@ -19,8 +20,12 @@ def test_provider_subcommands_explain_panel_without_running_or_opening_it(monkey
     monkeypatch.setattr(command_routes, "task_model_for_session", lambda *a, **kw: "")
     monkeypatch.setattr(command_routes, "send_text", lambda token, chat, text: sent.append(text))
     monkeypatch.setattr(command_routes, "send_model_target_menu", lambda *a, **k: pytest.fail("not a text action"))
-    monkeypatch.setattr(catalog, "provider_health_checks", lambda *a, **k: pytest.fail("no network action"))
-    monkeypatch.setattr(catalog, "refresh_model_catalog", lambda *a, **k: pytest.fail("no refresh action"))
+    monkeypatch.setattr(
+        _owner_provider_discovery, "provider_health_checks", lambda *a, **k: pytest.fail("no network action")
+    )
+    monkeypatch.setattr(
+        _owner_provider_discovery, "refresh_model_catalog", lambda *a, **k: pytest.fail("no refresh action")
+    )
     assert command_routes._handle_entities(
         None,
         "token",
@@ -76,11 +81,11 @@ def test_panel_buttons_still_run_their_real_action(monkeypatch, action):
     calls = []
     context = make_test_request_context(app_settings=make_test_settings())
     monkeypatch.setattr(
-        catalog,
+        provider_panels,
         "provider_health_checks",
         lambda **kw: calls.append(("health", kw)) or [("provider", "Provider", "healthy")],
     )
-    monkeypatch.setattr(catalog, "send_panel_message", lambda *a, **kw: None)
+    monkeypatch.setattr(provider_panels, "send_panel_message", lambda *a, **kw: None)
     monkeypatch.setattr(
         _owner_provider_callbacks, "refresh_model_catalog", lambda **kw: calls.append(("refresh", kw)) or ({}, 2, 0)
     )

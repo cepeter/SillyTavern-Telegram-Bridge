@@ -9,12 +9,11 @@ import unicodedata
 import urllib.request
 from pathlib import Path
 
-from bridge.catalog import answer_callback
-from bridge.media import remove_inline_keyboard
+from bridge.callbacks import remove_inline_keyboard
 from bridge.network_security import EndpointPolicy, strict_urlopen
 from bridge.self_update import UpdateOutcome, UpdatePlan, UpdateStatus, apply_update, version_tuple
 from bridge.settings import AppSettings
-from bridge.telegram import send_panel_request, send_text
+from bridge.telegram import answer_callback, send_panel_request, send_text
 
 UPDATE_REPO = "cepeter/SillyTavern-Telegram-Bridge"
 UPDATE_CANONICAL_GIT_URL = f"https://github.com/{UPDATE_REPO}.git"

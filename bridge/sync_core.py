@@ -16,7 +16,6 @@ from bridge.card_content import (
     safe_world_path,
 )
 from bridge.config import GENERATION_DEFAULTS
-from bridge.generation import save_response_variant
 from bridge.generation_settings import get_generation_settings, update_generation_settings
 from bridge.generation_settings_values import parse_generation_setting
 from bridge.language import normalize_response_language
@@ -24,6 +23,7 @@ from bridge.limits import SYNC_MAX_BYTES
 from bridge.memory import get_session_summary
 from bridge.persona_sync import get_persona, persona_name
 from bridge.port_contracts import RetainSessionMemory
+from bridge.response_variants import save_response_variant
 from bridge.session_core import load_session, update_session
 from bridge.settings import AppSettings
 from bridge.sync_integrity import SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter
@@ -210,15 +210,7 @@ def _apply_sync_snapshot_backend(
         user_rowid, user_content = user_rowids[user_index]
         ordered = [value for pos, value in enumerate(swipes) if pos != selected] + [swipes[selected]]
         for response in ordered:
-            save_response_variant(
-                db,
-                chat_id,
-                session["session_id"],
-                user_content,
-                response,
-                user_rowid=user_rowid,
-                commit=False,
-            )
+            save_response_variant(db, chat_id, session["session_id"], user_content, response, user_rowid=user_rowid)
     db.commit()
     return sync_transcript_hash(messages)
 

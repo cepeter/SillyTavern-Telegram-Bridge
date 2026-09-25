@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from application_test_setup import (
     ensure_application_extensions,
     make_test_application_services,
@@ -7,8 +9,10 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
-import bridge.catalog as _owner_catalog
 import bridge.command_panels as _command_panels
+import bridge.provider_discovery as _owner_provider_discovery
+import bridge.world_panels as _owner_world_panels
+from bridge import feature_panels, group_panels, prompt_panels, provider_panels, text_action_input, world_panels
 
 ensure_application_extensions()
 
@@ -17,14 +21,10 @@ import unittest
 from pathlib import Path
 
 import bridge.cards as _m_cards
-import bridge.catalog as _m_catalog
 import bridge.command_routes as _m_command_routes
-import bridge.groups as _m_groups
-import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
-import bridge.status_panels as _m_status_panels
 
 
 class PanelificationTests(SettingsTestCase):
@@ -41,32 +41,22 @@ class PanelificationTests(SettingsTestCase):
             app_settings=self.app_settings_builder.build(),
         )
         self.calls = []
-        self.old_panels = {
-            "cards": _m_cards.send_panel_message,
-            "status": _m_status_panels.send_panel_message,
-            "catalog": _m_catalog.send_panel_message,
-            "groups": _m_groups.send_panel_message,
-        }
         self.old_card = _m_message_commands.card_fields_from_file
-        self.old_groups = _m_catalog.get_model_groups
+        self.old_groups = _owner_provider_discovery.get_model_groups
 
         def panel_stub(*args, **kwargs):
             return self.calls.append((args, kwargs))
 
-        _m_cards.send_panel_message = panel_stub
-        _m_status_panels.send_panel_message = panel_stub
-        _m_catalog.send_panel_message = panel_stub
-        _m_groups.send_panel_message = panel_stub
+        for owner in (_m_cards, prompt_panels, feature_panels, provider_panels, world_panels, group_panels):
+            patcher = patch.object(owner, "send_panel_message", side_effect=panel_stub)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: {"name": "Test"}
-        _m_catalog.get_model_groups = lambda *, app_settings=None: {}
+        _owner_provider_discovery.get_model_groups = lambda *, app_settings=None: {}
 
     def tearDown(self):
-        _m_cards.send_panel_message = self.old_panels["cards"]
-        _m_status_panels.send_panel_message = self.old_panels["status"]
-        _m_catalog.send_panel_message = self.old_panels["catalog"]
-        _m_groups.send_panel_message = self.old_panels["groups"]
         _m_message_commands.card_fields_from_file = self.old_card
-        _m_catalog.get_model_groups = self.old_groups
+        _owner_provider_discovery.get_model_groups = self.old_groups
         self.db.close()
         self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
@@ -194,12 +184,12 @@ class PanelificationTests(SettingsTestCase):
         macro_calls = []
         old_memory = _command_panels.handle_memory_command
         old_group = _command_panels.handle_group_command
-        old_macro = _m_input_flows.handle_macro_command
+        old_macro = text_action_input.handle_macro_command
         _command_panels.handle_memory_command = lambda *args, app_settings=None, **_kwargs: memory_calls.append(
             args[-1]
         )
         _command_panels.handle_group_command = lambda *args, **_kwargs: group_calls.append(args[4])
-        _m_input_flows.handle_macro_command = lambda *args, **_kwargs: macro_calls.append(args[-1])
+        text_action_input.handle_macro_command = lambda *args, **_kwargs: macro_calls.append(args[-1])
         try:
             self.assertTrue(self._route("/memory search hidden fact"))
             self.assertEqual(memory_calls, ["/memory search hidden fact"])
@@ -222,26 +212,26 @@ class PanelificationTests(SettingsTestCase):
         finally:
             _command_panels.handle_memory_command = old_memory
             _command_panels.handle_group_command = old_group
-            _m_input_flows.handle_macro_command = old_macro
+            text_action_input.handle_macro_command = old_macro
 
     def test_world_menu_keeps_bot_token_for_telegram_request(self):
-        old_world_paths = _m_catalog.world_file_paths
-        old_active_worlds = _m_catalog.active_world_files
-        old_callback_token = _m_catalog.dynamic_callback_token
-        _m_catalog.world_file_paths = lambda *, app_settings=None: [Path("lore.json")]
-        _m_catalog.active_world_files = lambda _current, *, app_settings=None: []
-        _m_catalog.dynamic_callback_token = lambda _kind, _name, _chat, **_kwargs: "callback-token"
+        old_world_paths = _owner_world_panels.world_file_paths
+        old_active_worlds = _owner_world_panels.active_world_files
+        old_callback_token = _owner_world_panels.dynamic_callback_token
+        _owner_world_panels.world_file_paths = lambda *, app_settings=None: [Path("lore.json")]
+        _owner_world_panels.active_world_files = lambda _current, *, app_settings=None: []
+        _owner_world_panels.dynamic_callback_token = lambda _kind, _name, _chat, **_kwargs: "callback-token"
         try:
-            _owner_catalog.send_world_menu(
+            _owner_world_panels.send_world_menu(
                 "bot-token",
                 "chat",
                 "",
                 request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
         finally:
-            _m_catalog.world_file_paths = old_world_paths
-            _m_catalog.active_world_files = old_active_worlds
-            _m_catalog.dynamic_callback_token = old_callback_token
+            _owner_world_panels.world_file_paths = old_world_paths
+            _owner_world_panels.active_world_files = old_active_worlds
+            _owner_world_panels.dynamic_callback_token = old_callback_token
         self.assertEqual(self.calls[0][0][0], "bot-token")
         payload = self.calls[0][0][3]
         self.assertEqual(payload["inline_keyboard"][0][0]["callback_data"], "world:callback-token")

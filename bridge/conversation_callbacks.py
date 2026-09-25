@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import logging
 
-from bridge.callbacks import close_panel_message, discard_panel_binding
+from bridge.callbacks import close_panel_message, discard_panel_binding, remove_inline_keyboard
 from bridge.card_content import card_fields_from_file
 from bridge.delivery_port import DeliveryPort
-from bridge.generation import edit_swipe_menu, keep_swipe_variant, last_user_variants, swipe_state_key
 from bridge.greetings import greeting_choice_label, greeting_options, send_character_greeting, send_greeting_menu
-from bridge.media import delete_outgoing_messages, remove_inline_keyboard
 from bridge.message_commands import reset_session
 from bridge.metadata import get_meta
+from bridge.response_delivery import delete_outgoing_messages
+from bridge.response_variants import keep_swipe_variant, last_user_variants, swipe_state_key
+from bridge.swipe_panels import edit_swipe_menu
 from bridge.telegram import send_text, telegram_request
 
 

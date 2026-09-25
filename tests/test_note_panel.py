@@ -7,10 +7,11 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
-import bridge.commands as _owner_commands
+import bridge.note_panels as _owner_note_panels
 import bridge.panel_bindings as _owner_panel_bindings
 import bridge.session_core as _owner_session_core
 import bridge.settings_callbacks as _owner_settings_callbacks
+from bridge import settings_input
 
 ensure_application_extensions()
 
@@ -23,8 +24,6 @@ from pathlib import Path
 import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
-import bridge.commands as _m_commands
-import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
@@ -55,19 +54,19 @@ class NotePanelTests(SettingsTestCase):
 
     def test_note_panel_has_off_and_user_input(self):
         calls = []
-        original_request = _m_commands.send_panel_request
-        _m_commands.send_panel_request = lambda _token, method, payload, **_kwargs: (
+        original_request = _owner_note_panels.send_panel_request
+        _owner_note_panels.send_panel_request = lambda _token, method, payload, **_kwargs: (
             calls.append((method, payload)) or {}
         )
         try:
-            _owner_commands.send_note_menu(
+            _owner_note_panels.send_note_menu(
                 "token",
                 "chat",
                 "existing note",
                 request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
         finally:
-            _m_commands.send_panel_request = original_request
+            _owner_note_panels.send_panel_request = original_request
         self.assertIn(
             "note:off", {b["callback_data"] for row in calls[0][1]["reply_markup"]["inline_keyboard"] for b in row}
         )
@@ -124,11 +123,11 @@ class NotePanelTests(SettingsTestCase):
             ),
         )
         original_card = _m_message_commands.card_fields_from_file
-        original_menu = _m_input_flows.send_note_menu
-        original_send = _m_input_flows.send_text
+        original_menu = settings_input.send_note_menu
+        original_send = settings_input.send_text
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
-        _m_input_flows.send_note_menu = lambda *_args, **_kwargs: None
-        _m_input_flows.send_text = lambda *_args, **_kwargs: []
+        settings_input.send_note_menu = lambda *_args, **_kwargs: None
+        settings_input.send_text = lambda *_args, **_kwargs: []
         original_request = _m_telegram.telegram_request
         deleted = []
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
@@ -145,8 +144,8 @@ class NotePanelTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_input_flows.send_note_menu = original_menu
-            _m_input_flows.send_text = original_send
+            settings_input.send_note_menu = original_menu
+            settings_input.send_text = original_send
             _m_telegram.telegram_request = original_request
         loaded = _m_memory_curator.load_session(
             self.db,
@@ -173,13 +172,13 @@ class NotePanelTests(SettingsTestCase):
             ),
         )
         original_card = _m_message_commands.card_fields_from_file
-        original_menu = _m_input_flows.send_note_menu
-        original_send = _m_input_flows.send_text
+        original_menu = settings_input.send_note_menu
+        original_send = settings_input.send_text
         original_request = _m_telegram.telegram_request
         deleted = []
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
-        _m_input_flows.send_note_menu = lambda *_args, **_kwargs: None
-        _m_input_flows.send_text = lambda *_args, **_kwargs: []
+        settings_input.send_note_menu = lambda *_args, **_kwargs: None
+        settings_input.send_text = lambda *_args, **_kwargs: []
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
             make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
@@ -193,8 +192,8 @@ class NotePanelTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_input_flows.send_note_menu = original_menu
-            _m_input_flows.send_text = original_send
+            settings_input.send_note_menu = original_menu
+            settings_input.send_text = original_send
             _m_telegram.telegram_request = original_request
         self.assertEqual(deleted, [("deleteMessage", {"chat_id": "chat", "message_id": 90})])
         self.assertEqual(_m_session_naming.get_meta(self.db, "note_input:chat", ""), "")

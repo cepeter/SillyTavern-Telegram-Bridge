@@ -7,17 +7,17 @@ import time
 from pathlib import Path
 
 from bridge.callback_tokens import dynamic_callback_token, resolve_dynamic_callback_token
-from bridge.callbacks import discard_panel_binding
+from bridge.callbacks import discard_panel_binding, remove_inline_keyboard
 from bridge.card_content import active_world_files, encode_world_files, safe_world_path
 from bridge.cards import send_panel_message
-from bridge.catalog import delete_world_info_file, send_world_menu
+from bridge.group_panels import send_group_menu
 from bridge.group_service import GroupService
-from bridge.groups import send_group_menu
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
-from bridge.media import remove_inline_keyboard
 from bridge.metadata import set_meta
 from bridge.session_core import update_session
 from bridge.telegram import send_text
+from bridge.world_management import delete_world_info_file
+from bridge.world_panels import send_world_menu
 
 
 def handle_world_callback(

@@ -9,16 +9,18 @@ import sqlite3
 from bridge.background import chat_job_lock
 from bridge.callback_dispatch import process_callback
 from bridge.card_content import card_fields_from_file
-from bridge.commands import edit_telegram_user_message, process_image_message
 from bridge.composition import BridgeServices
+from bridge.document_jobs import process_document_job
+from bridge.edit_messages import edit_telegram_user_message
 from bridge.failed_turns import clear_failed_turn, record_failed_turn
-from bridge.help import process_document_job
+from bridge.image_messages import process_image_message
 from bridge.job_service import DurableJob, JobSubmission
 from bridge.limits import IMAGE_MAX_BYTES
-from bridge.media import process_voice_job, send_reply
 from bridge.operations import operation_phase, operation_was_applied, record_operation
+from bridge.response_delivery import send_reply
 from bridge.sqlite_store import write_transaction
 from bridge.transcript_repository import committed_assistant_for_message, native_edit_target
+from bridge.voice_jobs import process_voice_job
 
 
 def process_message_job(

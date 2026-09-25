@@ -454,7 +454,7 @@ def _scene_state_command_route(
 
 
 def register_scene_state_extensions() -> None:
-    """Register Scene State hooks once in the compatibility extension registry."""
+    """Register Scene State hooks once in the extension registry."""
     snapshot = _extension_registry_snapshot()
     if "scene_state" not in snapshot["post_retain"]:
         _register_post_retain_hook("scene_state", _scene_state_post_retain)

@@ -128,16 +128,18 @@ def test_cards_and_session_panels_use_shared_panel_request_builder():
 
 
 def test_persona_identity_consumers_use_persona_sync_owner():
-    for filename in (
-        "commands.py",
-        "main.py",
-        "sync_core.py",
-        "session_core.py",
-    ):
+    for filename in ("session_core.py", "macro_commands.py", "main.py", "sync_core.py"):
         imports = imported_modules(filename)
         assert "bridge.persona_sync" in imports
 
-    assert "bridge.cards" not in imported_modules("commands.py")
+    assert "bridge.cards" not in set().union(
+        imported_modules("edit_messages.py"),
+        imported_modules("image_messages.py"),
+        imported_modules("macro_commands.py"),
+        imported_modules("note_panels.py"),
+        imported_modules("preset_actions.py"),
+        imported_modules("prompt_diagnostics.py"),
+    )
     assert "bridge.cards" not in imported_modules("main.py")
     assert "bridge.cards" not in imported_modules("sync_core.py")
     assert "bridge.cards" not in imported_modules("session_core.py")

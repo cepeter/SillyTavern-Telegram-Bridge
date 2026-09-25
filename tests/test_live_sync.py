@@ -6,6 +6,7 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.sync_callbacks as _owner_sync_callbacks
+import bridge.sync_panels as _owner_sync_panels
 
 ensure_application_extensions()
 
@@ -26,7 +27,6 @@ import bridge.memory_curator as _m_memory_curator
 import bridge.session_core as _m_telegram
 import bridge.session_naming as _m_session_naming
 import bridge.sillytavern_api as _m_sillytavern_api
-import bridge.status_panels as _m_status_panels
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
 from bridge.sync_service import SyncStatus
@@ -324,7 +324,7 @@ class Phase3SyncTests(SettingsTestCase):
     def test_sync_status_text_renders_injected_service_status(self):
         fake = _FakeSyncService()
 
-        text = _m_status_panels.sync_status_text(
+        text = _owner_sync_panels.sync_status_text(
             self.db,
             "chat",
             self.session,

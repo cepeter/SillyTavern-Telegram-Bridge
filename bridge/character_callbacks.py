@@ -18,7 +18,7 @@ from bridge.cards import (
     send_session_menu,
 )
 from bridge.group_service import GroupService
-from bridge.groups import apply_group_setup_character
+from bridge.group_setup import apply_group_setup_character
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.metadata import get_meta, set_meta
 from bridge.native_imports import character_delete_references, verify_character_card_backup

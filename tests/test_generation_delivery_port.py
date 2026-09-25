@@ -6,6 +6,10 @@ import inspect
 from dataclasses import MISSING
 from pathlib import Path
 
+import bridge.continuation as _owner_continuation
+import bridge.generation_recovery as _owner_generation_recovery
+import bridge.regeneration as _owner_regeneration
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -63,13 +67,31 @@ def test_startup_binds_delivery_port_to_canonical_concrete_owners():
 
 
 def test_generation_imports_no_concrete_delivery_modules():
-    imports = imported_modules("generation.py")
+    imports = set().union(
+        imported_modules("continuation.py"),
+        imported_modules("generation.py"),
+        imported_modules("generation_recovery.py"),
+        imported_modules("regeneration.py"),
+        imported_modules("response_variants.py"),
+        imported_modules("swipe_panels.py"),
+    )
     assert "bridge.media" not in imports
     assert "bridge.telegram" not in imports
 
 
 def test_generation_has_no_module_global_recovery_binding():
-    tree = ast.parse((BRIDGE / "generation.py").read_text(encoding="utf-8"))
+    tree = ast.parse(
+        "\n".join(
+            (
+                (BRIDGE / "continuation.py").read_text(encoding="utf-8"),
+                (BRIDGE / "generation.py").read_text(encoding="utf-8"),
+                (BRIDGE / "generation_recovery.py").read_text(encoding="utf-8"),
+                (BRIDGE / "regeneration.py").read_text(encoding="utf-8"),
+                (BRIDGE / "response_variants.py").read_text(encoding="utf-8"),
+                (BRIDGE / "swipe_panels.py").read_text(encoding="utf-8"),
+            )
+        )
+    )
     assigned = {
         target.id
         for node in tree.body
@@ -81,9 +103,8 @@ def test_generation_has_no_module_global_recovery_binding():
 
 
 def test_regen_and_continue_require_delivery_port(*, app_settings_builder):
-    import bridge.generation as generation
 
-    for fn in (generation.regenerate_last, generation.continue_last):
+    for fn in (_owner_regeneration.regenerate_last, _owner_continuation.continue_last):
         param = inspect.signature(fn).parameters.get("delivery_port")
         assert param is not None
         assert param.default is inspect.Parameter.empty
@@ -91,8 +112,6 @@ def test_regen_and_continue_require_delivery_port(*, app_settings_builder):
 
 def test_recovery_factory_binds_exact_delivery_collaborators():
     from application_test_setup import make_test_delivery_port
-
-    import bridge.generation as generation
 
     def request(*_args, **_kwargs):
         return {}
@@ -104,6 +123,6 @@ def test_recovery_factory_binds_exact_delivery_collaborators():
         request=request,
         delete_outgoing_message_row=delete,
     )
-    recovery = generation._generation_operation_recovery(port)
+    recovery = _owner_generation_recovery._generation_operation_recovery(port)
     assert recovery.telegram_request is request
     assert recovery.delete_outgoing_message_row is delete

@@ -9,7 +9,6 @@ import time
 
 from bridge.card_content import active_world_files, encode_world_files, safe_world_path
 from bridge.expressions import expression_last_key, expression_mode_key
-from bridge.generation import swipe_state_key
 from bridge.generation_settings import get_generation_settings
 from bridge.memory_backend import hindsight_session_lock
 from bridge.memory_service import MemoryService
@@ -17,6 +16,7 @@ from bridge.meta_repository import store_meta_value
 from bridge.metadata import get_meta
 from bridge.operation_repository import claim_operation, mark_operation_applied
 from bridge.persona_sync import default_persona_id, get_persona
+from bridge.response_variants import swipe_state_key
 from bridge.session_repository import (
     SESSION_COLUMNS,
     delete_session_rows,

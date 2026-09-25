@@ -8,6 +8,10 @@ from pathlib import Path
 
 from application_test_setup import make_test_session_service
 
+import bridge.group_commands as _owner_group_commands
+import bridge.group_panels as _owner_group_panels
+import bridge.group_setup as _owner_group_setup
+import bridge.prompt_panels as _owner_prompt_panels
 from bridge.request_types import PreparedMessage
 from bridge.session_service import SessionService
 
@@ -174,7 +178,7 @@ def test_conversation_forwards_group_service_to_generation():
 
 
 def test_image_processing_requires_group_service_parameter(*, app_settings_builder):
-    from bridge.commands import process_image_message
+    from bridge.image_messages import process_image_message
 
     param = inspect.signature(process_image_message).parameters.get("group_service")
     assert param is not None
@@ -184,7 +188,12 @@ def test_image_processing_requires_group_service_parameter(*, app_settings_build
 def test_application_paths_do_not_import_group_core_after_service_migration():
     for filename in (
         "message_commands.py",
-        "commands.py",
+        "edit_messages.py",
+        "image_messages.py",
+        "macro_commands.py",
+        "note_panels.py",
+        "preset_actions.py",
+        "prompt_diagnostics.py",
         "worker_orchestration.py",
         "update_routing.py",
     ):
@@ -261,17 +270,16 @@ def test_only_composition_and_sync_backend_import_group_core():
 
 
 def test_group_ui_session_and_status_contracts_require_group_service(*, app_settings_builder):
-    import bridge.groups as groups
     import bridge.session_naming as session_naming
     import bridge.status_panels as status_panels
 
     for function in (
-        groups.send_group_menu,
-        groups.handle_group_command,
-        groups.start_group_session,
+        _owner_group_panels.send_group_menu,
+        _owner_group_commands.handle_group_command,
+        _owner_group_setup.start_group_session,
         session_naming.handle_session_name_input,
         status_panels.status_text,
-        status_panels.prompt_panel_text,
+        _owner_prompt_panels.prompt_panel_text,
     ):
         param = inspect.signature(function).parameters.get("group_service")
         assert param is not None, function.__name__
@@ -279,7 +287,6 @@ def test_group_ui_session_and_status_contracts_require_group_service(*, app_sett
 
 
 def test_group_command_uses_injected_group_service(monkeypatch):
-    import bridge.groups as groups
 
     state = {
         "title": "Group chat",
@@ -306,8 +313,8 @@ def test_group_command_uses_injected_group_service(monkeypatch):
             return [Path(item).stem.title() for item in members]
 
     sent = []
-    monkeypatch.setattr(groups, "send_text", lambda *args: sent.append(args))
-    groups.handle_group_command(
+    monkeypatch.setattr(_owner_group_commands, "send_text", lambda *args: sent.append(args))
+    _owner_group_commands.handle_group_command(
         object(),
         "token",
         "chat",

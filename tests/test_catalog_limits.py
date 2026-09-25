@@ -5,6 +5,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.card_content as _owner_card_content
+import bridge.persona_input as _owner_persona_input
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -16,15 +18,12 @@ import unittest
 from pathlib import Path
 
 import bridge.cards as _m_cards
-import bridge.catalog as _m_catalog
 import bridge.character_identity as _m_character_identity
 import bridge.command_routes as _m_command_routes
-import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.native_imports as _m_telegram
 import bridge.sillytavern_api as _m_sillytavern_api
-import bridge.status_panels as _m_status_panels
 
 
 class CatalogLimitTests(SettingsTestCase):
@@ -107,7 +106,7 @@ class CatalogLimitTests(SettingsTestCase):
         self.assertEqual(
             len(_m_character_identity.character_card_paths(app_settings=self.app_settings_builder.build())), 40
         )
-        self.assertEqual(len(_m_catalog.world_file_paths(app_settings=self.app_settings_builder.build())), 40)
+        self.assertEqual(len(_owner_card_content.world_file_paths(app_settings=self.app_settings_builder.build())), 40)
         self.assertEqual(len(_m_cards.load_system_prompts(app_settings=self.app_settings_builder.build())), 40)
         self.assertEqual(
             _m_character_identity.character_card_paths(app_settings=self.app_settings_builder.build())[-1].name,
@@ -124,14 +123,16 @@ class CatalogLimitTests(SettingsTestCase):
         self.assertEqual(prompts["Native Prompt"]["name"], "Native Prompt")
         self.assertEqual(prompts["Native Prompt"]["prompt"], "native content")
         self.assertEqual(
-            _m_status_panels.system_prompt_label("native content", app_settings=self.app_settings_builder.build()),
+            _owner_card_content.system_prompt_label("native content", app_settings=self.app_settings_builder.build()),
             "Native Prompt",
         )
         self.assertEqual(
-            _m_status_panels.system_prompt_label("", app_settings=self.app_settings_builder.build()), "off"
+            _owner_card_content.system_prompt_label("", app_settings=self.app_settings_builder.build()), "off"
         )
         self.assertEqual(
-            _m_status_panels.system_prompt_label("unrecognized prompt", app_settings=self.app_settings_builder.build()),
+            _owner_card_content.system_prompt_label(
+                "unrecognized prompt", app_settings=self.app_settings_builder.build()
+            ),
             "custom",
         )
         self.assertNotIn("name", prompts)
@@ -190,7 +191,7 @@ class CatalogLimitTests(SettingsTestCase):
                 "expires_at": time.time() + 60,
             }
             self.assertTrue(
-                _m_input_flows._handle_persona_input(
+                _owner_persona_input._handle_persona_input(
                     self.db,
                     "token",
                     "chat",

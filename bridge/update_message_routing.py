@@ -7,13 +7,13 @@ import sqlite3
 from pathlib import Path
 
 from bridge.composition import BridgeServices
-from bridge.help import process_document_job
+from bridge.document_jobs import process_document_job
 from bridge.help_details import send_help_command
 from bridge.job_service import JobSubmission
-from bridge.media import process_voice_job
 from bridge.request_types import RequestContext
 from bridge.topic_scope import topic_scope_from_message
 from bridge.transcript_repository import native_edit_target
+from bridge.voice_jobs import process_voice_job
 from bridge.worker_orchestration import process_edit_job, process_image_job, process_message_job
 
 LONG_RUNNING_COMMANDS = (

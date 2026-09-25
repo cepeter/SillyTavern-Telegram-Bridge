@@ -14,7 +14,9 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase, make_test_settings
 
 import bridge.command_panels as _command_panels
+import bridge.document_jobs as _owner_document_jobs
 import bridge.session_core as _owner_session_core
+import bridge.voice_jobs as _owner_voice_jobs
 from bridge.config_values import ConfigurationError
 from bridge.session_service import SessionService
 from bridge.settings import validate_app_settings
@@ -33,9 +35,7 @@ from unittest.mock import Mock, patch
 
 import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.command_routes as _m_command_routes
-import bridge.help as _m_help
 import bridge.main as _m_main
-import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.runtime_lifecycle as _m_runtime
 import bridge.sillytavern_api as _m_sillytavern_api
@@ -403,7 +403,7 @@ class WorkerInjectionTests(SettingsTestCase):
                 "model_override",
                 "job_id",
             ),
-            _m_media.process_voice_job: (
+            _owner_voice_jobs.process_voice_job: (
                 "services",
                 "fields",
                 "chat_id",
@@ -413,7 +413,7 @@ class WorkerInjectionTests(SettingsTestCase):
                 "model_override",
                 "job_id",
             ),
-            _m_help.process_document_job: (
+            _owner_document_jobs.process_document_job: (
                 "services",
                 "chat_id",
                 "document",
@@ -739,11 +739,11 @@ class WorkerInjectionTests(SettingsTestCase):
         captured = {}
 
         with patch.object(
-            _m_help,
+            _owner_document_jobs,
             "import_telegram_document",
             side_effect=lambda *_args, app_settings=None, **kwargs: captured.update(kwargs),
         ):
-            _m_help.process_document_job(
+            _owner_document_jobs.process_document_job(
                 self.services,
                 "chat",
                 {"file_name": "photo.png"},
@@ -945,7 +945,7 @@ class RecoveryCompositionTests(SettingsTestCase):
                         "model": "stored::voice",
                     },
                 ),
-                _m_media.process_voice_job,
+                _owner_voice_jobs.process_voice_job,
                 "stored::voice",
             ),
             (
@@ -977,7 +977,7 @@ class RecoveryCompositionTests(SettingsTestCase):
                         "model": "stored::document",
                     },
                 ),
-                _m_help.process_document_job,
+                _owner_document_jobs.process_document_job,
                 "stored::document",
             ),
         ]
@@ -1815,8 +1815,28 @@ class CompositionSourceBoundaryTests(SettingsTestCase):
         files = {
             "main.py": (root / "main.py").read_text(encoding="utf-8"),
             "worker_orchestration.py": (root / "worker_orchestration.py").read_text(encoding="utf-8"),
-            "media.py": (root / "media.py").read_text(encoding="utf-8"),
-            "help.py": (root / "help.py").read_text(encoding="utf-8"),
+            "media.py": "\n".join(
+                (
+                    (root / "callbacks.py").read_text(encoding="utf-8"),
+                    (root / "response_delivery.py").read_text(encoding="utf-8"),
+                    (root / "speech.py").read_text(encoding="utf-8"),
+                    (root / "telegram.py").read_text(encoding="utf-8"),
+                    (root / "voice_jobs.py").read_text(encoding="utf-8"),
+                )
+            ),
+            "help.py": "\n".join(
+                (
+                    (root / "bot_commands.py").read_text(encoding="utf-8"),
+                    (root / "databank_panels.py").read_text(encoding="utf-8"),
+                    (root / "document_jobs.py").read_text(encoding="utf-8"),
+                    (root / "enum_callbacks.py").read_text(encoding="utf-8"),
+                    (root / "memory_panels.py").read_text(encoding="utf-8"),
+                    (root / "preset_panels.py").read_text(encoding="utf-8"),
+                    (root / "settings_panels.py").read_text(encoding="utf-8"),
+                    (root / "system_prompt_panels.py").read_text(encoding="utf-8"),
+                    (root / "voice_panels.py").read_text(encoding="utf-8"),
+                )
+            ),
         }
 
         worker_markers = (

@@ -57,7 +57,7 @@ def make_test_input_flow_service(
 
         handle_pending_backend = handle_pending_input
     if start_text_action_backend is None:
-        from bridge.input_flows import start_text_action_input
+        from bridge.text_action_input import start_text_action_input
 
         start_text_action_backend = start_text_action_input
     if start_session_name_backend is None or handle_session_name_backend is None:

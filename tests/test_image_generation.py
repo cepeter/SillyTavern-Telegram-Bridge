@@ -93,7 +93,7 @@ class ImageGenerationTests(SettingsTestCase):
             _m_image_generation.generate_image("", "a prompt", app_settings=self.app_settings_builder.build())
 
     def test_command_is_registered(self):
-        source = Path(_m_image_generation.__file__).parent / "help.py"
+        source = Path(_m_image_generation.__file__).parent / "bot_commands.py"
         self.assertIn('"command": "imagine"', source.read_text(encoding="utf-8"))
 
 

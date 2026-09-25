@@ -14,6 +14,8 @@ from application_test_setup import (
     make_test_request_context,
 )
 
+import bridge.enum_callbacks as _owner_enum_callbacks
+import bridge.text_action_input as _owner_text_action_input
 from bridge.session_service import SessionService
 
 ROOT = Path(__file__).parents[1]
@@ -68,9 +70,18 @@ def test_input_flow_service_requires_final_backends_and_injects_handler():
 
 
 def test_help_no_longer_imports_input_flows_and_enum_uses_service():
-    import bridge.help as help_module
 
-    assert "bridge.input_flows" not in imported_modules("help.py")
+    assert "bridge.input_flows" not in set().union(
+        imported_modules("bot_commands.py"),
+        imported_modules("databank_panels.py"),
+        imported_modules("document_jobs.py"),
+        imported_modules("enum_callbacks.py"),
+        imported_modules("memory_panels.py"),
+        imported_modules("preset_panels.py"),
+        imported_modules("settings_panels.py"),
+        imported_modules("system_prompt_panels.py"),
+        imported_modules("voice_panels.py"),
+    )
 
     calls = []
     input_flow = SimpleNamespace(start_text_action=lambda *args, **kwargs: calls.append((args, kwargs)))
@@ -78,7 +89,7 @@ def test_help_no_longer_imports_input_flows_and_enum_uses_service():
     session = {"session_id": "session"}
     message = {"message_id": 41}
 
-    help_module.handle_enum_callback(
+    _owner_enum_callbacks.handle_enum_callback(
         db,
         "token",
         "chat",
@@ -163,7 +174,15 @@ def test_callback_dispatch_forwards_exact_input_flow_service(monkeypatch, *, app
 
 
 def test_input_flows_no_longer_imports_session_naming_or_status_panels():
-    imports = imported_modules("input_flows.py")
+    imports = set().union(
+        imported_modules("input_flows.py"),
+        imported_modules("pending_input.py"),
+        imported_modules("persona_callbacks.py"),
+        imported_modules("persona_input.py"),
+        imported_modules("persona_panels.py"),
+        imported_modules("settings_input.py"),
+        imported_modules("text_action_input.py"),
+    )
     assert "bridge.session_naming" not in imports
     assert "bridge.status_panels" not in imports
 
@@ -225,29 +244,28 @@ def test_pending_session_name_uses_injected_handler(monkeypatch, *, app_settings
 
 
 def test_director_goal_pending_action_uses_pure_panel_delivery(monkeypatch, *, app_settings_builder):
-    import bridge.input_flows as flows
 
     saved = []
     panels = []
     monkeypatch.setattr(
-        flows,
+        _owner_text_action_input,
         "set_director_goal",
         lambda db, chat_id, session_id, value: saved.append((db, chat_id, session_id, value)) or value,
     )
     monkeypatch.setattr(
-        flows,
+        _owner_text_action_input,
         "send_panel_request",
         lambda token, method, payload, **kwargs: panels.append((token, method, payload, kwargs)) or {},
     )
     monkeypatch.setattr(
-        flows,
+        _owner_text_action_input,
         "_cancel_pending",
         lambda *_args, **_kwargs: None,
     )
 
     db = object()
     session = {"session_id": "session"}
-    handled = flows._handle_text_action_input(
+    handled = _owner_text_action_input._handle_text_action_input(
         db,
         "token",
         "key",

@@ -5,6 +5,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.callbacks as _owner_callbacks
 import bridge.conversation_callbacks as _owner_conversation_callbacks
 import bridge.session_core as _owner_session_core
 
@@ -18,7 +19,6 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
@@ -30,7 +30,7 @@ class ResetBehaviorTests(SettingsTestCase):
         self.old_db = self.app_settings_builder.db_file
         self.old_reset = _m_message_commands.reset_session
         self.old_send = _owner_conversation_callbacks.send_text
-        self.old_remove = _m_media.remove_inline_keyboard
+        self.old_remove = _owner_callbacks.remove_inline_keyboard
         self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         self.session = _owner_session_core.ensure_session(

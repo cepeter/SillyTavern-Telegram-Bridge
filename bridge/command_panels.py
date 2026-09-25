@@ -2,29 +2,27 @@
 
 from __future__ import annotations
 
-from bridge.commands import send_note_menu, send_stscript_menu
+from bridge.databank_panels import send_databank_menu
 from bridge.expressions import send_expression_menu
-from bridge.groups import handle_group_command, send_group_menu
-from bridge.help import (
-    send_databank_menu,
-    send_memory_menu,
-    send_preset_menu,
-    send_settings_menu,
-    send_stream_menu,
-    send_stt_language_menu,
-    send_voice_input_menu,
-    send_voice_menu,
-)
+from bridge.feature_panels import send_summary_menu
+from bridge.group_commands import handle_group_command
+from bridge.group_panels import send_group_menu
 from bridge.image_generation import handle_imagine_prompt
-from bridge.input_flows import handle_inline_text_action, start_text_action_input
 from bridge.language import handle_language_command, send_language_menu
+from bridge.macro_commands import send_stscript_menu
 from bridge.memory import handle_memory_command
+from bridge.memory_panels import send_memory_menu
+from bridge.note_panels import send_note_menu
+from bridge.preset_panels import send_preset_menu
 from bridge.rag import handle_data_bank_command
 from bridge.session_core import update_session
-from bridge.status_panels import send_summary_menu, send_sync_menu
+from bridge.settings_panels import send_settings_menu, send_stream_menu
+from bridge.sync_panels import send_sync_menu
 from bridge.telegram import send_text
+from bridge.text_action_input import handle_inline_text_action, start_text_action_input
 from bridge.topic_scope import parse_topic_scope
 from bridge.update import send_update_menu
+from bridge.voice_panels import send_stt_language_menu, send_voice_input_menu, send_voice_menu
 
 
 def _handle_generation_panels(

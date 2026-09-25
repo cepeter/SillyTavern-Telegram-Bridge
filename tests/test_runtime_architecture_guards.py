@@ -119,7 +119,14 @@ class RuntimeArchitectureGuardTests(SettingsTestCase):
         self.assertEqual(offenders, {})
 
     def test_group_director_compatibility_wrappers_are_deleted(self):
-        source = (BRIDGE_DIR / "groups.py").read_text(encoding="utf-8")
+        source = "\n".join(
+            (
+                (BRIDGE_DIR / "group_callbacks.py").read_text(encoding="utf-8"),
+                (BRIDGE_DIR / "group_commands.py").read_text(encoding="utf-8"),
+                (BRIDGE_DIR / "group_panels.py").read_text(encoding="utf-8"),
+                (BRIDGE_DIR / "group_setup.py").read_text(encoding="utf-8"),
+            )
+        )
         for forbidden in (
             "def _compat_group_director_service(",
             "def group_director_plan(",

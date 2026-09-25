@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 import time
 
-from bridge.callbacks import close_panel_message, discard_panel_binding
+from bridge.callbacks import close_panel_message, discard_panel_binding, remove_inline_keyboard
 from bridge.card_content import get_system_prompt_choice
-from bridge.commands import send_note_menu
 from bridge.delivery_port import DeliveryPort
 from bridge.expressions import (
     discover_expression_assets,
@@ -15,12 +14,12 @@ from bridge.expressions import (
     expression_mode_key,
     send_expression_menu,
 )
-from bridge.help import send_system_prompt_menu
 from bridge.language import response_language_label, send_language_menu, set_response_language
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
-from bridge.media import remove_inline_keyboard
 from bridge.metadata import set_meta
+from bridge.note_panels import send_note_menu
 from bridge.session_core import update_session
+from bridge.system_prompt_panels import send_system_prompt_menu
 from bridge.telegram import send_text
 
 

@@ -13,10 +13,14 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
+import bridge.generation_settings as _owner_generation_settings
+import bridge.language as _owner_language
+import bridge.memory_backend as _owner_memory_backend
 import bridge.message_commands as _owner_message_commands
 import bridge.operations as _owner_operations
 import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
+from bridge import macro_commands, settings_input, text_action_input
 
 ensure_application_extensions()
 
@@ -31,9 +35,7 @@ from pathlib import Path
 import bridge.callbacks as _m_callbacks
 import bridge.cards as _m_cards
 import bridge.command_routes as _m_command_routes
-import bridge.commands as _m_commands
-import bridge.generation as _m_generation
-import bridge.input_flows as _m_input_flows
+import bridge.edit_messages as _m_commands
 import bridge.language as _m_language
 import bridge.main as _m_main
 import bridge.memory as _m_memory
@@ -43,7 +45,6 @@ import bridge.message_commands as _m_message_commands
 import bridge.provider_transport as _m_provider_transport
 import bridge.reset_panel as _m_reset_panel
 import bridge.session_naming as _m_session_naming
-import bridge.status_panels as _m_status_panels
 import bridge.sync_core as _m_sync_core
 import bridge.telegram as _m_telegram
 from bridge.model_router import ModelRouter
@@ -343,9 +344,9 @@ class AuditRegressionTests(SettingsTestCase):
         cleanup_patch = patch.object(_m_telegram, "telegram_request", deletions)
         cleanup_patch.start()
         self.addCleanup(cleanup_patch.stop)
-        original_send = _m_input_flows.send_text
+        original_send = text_action_input.send_text
         sent = []
-        _m_input_flows.send_text = lambda _token, _chat, text: sent.append(text) or [101]
+        text_action_input.send_text = lambda _token, _chat, text: sent.append(text) or [101]
         try:
             _m_command_routes.start_text_action_input(
                 self.db, "token", "chat", session["session_id"], "edit", "Send replacement"
@@ -372,7 +373,7 @@ class AuditRegressionTests(SettingsTestCase):
                 )
             )
         finally:
-            _m_input_flows.send_text = original_send
+            text_action_input.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "text_action_input:chat", ""), "")
         self.assertIn("Cancelled.", sent)
         deletions.assert_called_once_with("token", "deleteMessage", {"chat_id": "chat", "message_id": 101})
@@ -380,13 +381,13 @@ class AuditRegressionTests(SettingsTestCase):
     def test_memory_databank_and_stscript_panels_expose_new_actions(self):
         calls = []
         original_request = _m_cards.send_panel_request
-        original_stscript_request = _m_commands.send_panel_request
+        original_stscript_request = macro_commands.send_panel_request
 
         def request_stub(_token, _method, payload):
             return calls.append(payload) or {}
 
         _m_cards.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
-        _m_commands.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
+        macro_commands.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
             _command_panels.send_memory_menu(
                 "token",
@@ -407,7 +408,7 @@ class AuditRegressionTests(SettingsTestCase):
             )
         finally:
             _m_cards.send_panel_request = original_request
-            _m_commands.send_panel_request = original_stscript_request
+            macro_commands.send_panel_request = original_stscript_request
         callbacks = {
             button["callback_data"]
             for payload in calls
@@ -439,11 +440,11 @@ class AuditRegressionTests(SettingsTestCase):
             "post_history_instructions": "",
         }
         original_card = _m_message_commands.card_fields_from_file
-        original_menu = _m_input_flows.send_voice_input_menu
-        original_send = _m_input_flows.send_text
+        original_menu = settings_input.send_voice_input_menu
+        original_send = settings_input.send_text
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
-        _m_input_flows.send_voice_input_menu = lambda *_args, **_kwargs: None
-        _m_input_flows.send_text = lambda *_args, **_kwargs: []
+        settings_input.send_voice_input_menu = lambda *_args, **_kwargs: None
+        settings_input.send_text = lambda *_args, **_kwargs: []
         try:
             make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
@@ -456,8 +457,8 @@ class AuditRegressionTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_input_flows.send_voice_input_menu = original_menu
-            _m_input_flows.send_text = original_send
+            settings_input.send_voice_input_menu = original_menu
+            settings_input.send_text = original_send
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language:chat", ""), "id")
         self.assertEqual(_m_session_naming.get_meta(self.db, "stt_language_input:chat", ""), "")
 
@@ -542,11 +543,11 @@ class AuditRegressionTests(SettingsTestCase):
             json.dumps({"session_id": session["session_id"], "expires_at": time.time() + 600}),
         )
         original_card = _m_message_commands.card_fields_from_file
-        original_menu = _m_input_flows.send_preset_menu
-        original_send = _m_input_flows.send_text
+        original_menu = settings_input.send_preset_menu
+        original_send = settings_input.send_text
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
-        _m_input_flows.send_preset_menu = lambda *_args, **_kwargs: None
-        _m_input_flows.send_text = lambda *_args, **_kwargs: []
+        settings_input.send_preset_menu = lambda *_args, **_kwargs: None
+        settings_input.send_text = lambda *_args, **_kwargs: []
         try:
             make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
                 self.db,
@@ -559,9 +560,9 @@ class AuditRegressionTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_input_flows.send_preset_menu = original_menu
-            _m_input_flows.send_text = original_send
-        self.assertIsNotNone(_m_commands.load_generation_preset(self.db, "chat", "creative"))
+            settings_input.send_preset_menu = original_menu
+            settings_input.send_text = original_send
+        self.assertIsNotNone(_owner_generation_settings.load_generation_preset(self.db, "chat", "creative"))
         self.assertEqual(_m_session_naming.get_meta(self.db, "preset_save_input:chat", ""), "")
 
         session = _owner_session_core.ensure_session(
@@ -700,10 +701,10 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertIn("selected output language is English (en)", system)
         self.assertIn("MUST write all visible response text in English", system)
         self.assertGreater(system.index("## Mandatory response language"), system.index("## Final instruction"))
-        self.assertTrue(system.endswith(_m_generation.response_language_instruction("en")))
+        self.assertTrue(system.endswith(_owner_language.response_language_instruction("en")))
         self.assertIn(
             "MUST write all visible response text in Bahasa Indonesia",
-            _m_generation.response_language_instruction("id"),
+            _owner_language.response_language_instruction("id"),
         )
         self.assertEqual(messages[-2]["role"], "system")
         self.assertIn("## Runtime output constraint", messages[-2]["content"])
@@ -725,7 +726,7 @@ class AuditRegressionTests(SettingsTestCase):
         original_client = memory_backend.hindsight_client
         memory_backend.hindsight_client = lambda *, app_settings: FakeClient()
         try:
-            self.assertEqual(_m_status_panels.memory_scope(self.db, "chat"), "session")
+            self.assertEqual(_owner_memory_backend.memory_scope(self.db, "chat"), "session")
             self.assertEqual(
                 _m_memory.recall_memory_results(
                     self.db, "chat", session, "old fact", "Test", app_settings=self.app_settings_builder.build()

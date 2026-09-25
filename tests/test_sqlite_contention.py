@@ -3,6 +3,7 @@ from settings_test_support import SettingsTestCase
 
 import bridge.callback_tokens as _owner_callback_tokens
 import bridge.operations as _owner_operations
+import bridge.response_delivery as _owner_response_delivery
 import bridge.sqlite_store as _sqlite_store
 import bridge.telegram as _owner_telegram
 
@@ -18,7 +19,6 @@ import urllib
 from pathlib import Path
 
 import bridge.main as _m_main
-import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.runtime_lifecycle as _m_runtime
@@ -246,7 +246,7 @@ class SqliteContentionTests(SettingsTestCase):
                 self.rolled_back = True
 
         db = LockedDb()
-        persisted = _m_media.persist_assistant_delivery_ids(db, 42, [900])
+        persisted = _owner_response_delivery.persist_assistant_delivery_ids(db, 42, [900])
         self.assertFalse(persisted)
         self.assertFalse(db.rolled_back)
 

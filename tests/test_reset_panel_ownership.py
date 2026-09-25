@@ -5,6 +5,8 @@ import importlib
 import inspect
 from pathlib import Path
 
+import bridge.macro_commands as _owner_macro_commands
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -61,8 +63,25 @@ def test_reset_panel_builds_exact_edit_payload():
 
 
 def test_commands_and_help_do_not_import_message_commands():
-    assert "bridge.message_commands" not in imported_modules("commands.py")
-    assert "bridge.message_commands" not in imported_modules("help.py")
+    assert "bridge.message_commands" not in set().union(
+        imported_modules("edit_messages.py"),
+        imported_modules("image_messages.py"),
+        imported_modules("macro_commands.py"),
+        imported_modules("note_panels.py"),
+        imported_modules("preset_actions.py"),
+        imported_modules("prompt_diagnostics.py"),
+    )
+    assert "bridge.message_commands" not in set().union(
+        imported_modules("bot_commands.py"),
+        imported_modules("databank_panels.py"),
+        imported_modules("document_jobs.py"),
+        imported_modules("enum_callbacks.py"),
+        imported_modules("memory_panels.py"),
+        imported_modules("preset_panels.py"),
+        imported_modules("settings_panels.py"),
+        imported_modules("system_prompt_panels.py"),
+        imported_modules("voice_panels.py"),
+    )
 
 
 def test_message_commands_no_longer_owns_reset_panel_helper():
@@ -70,24 +89,22 @@ def test_message_commands_no_longer_owns_reset_panel_helper():
 
 
 def test_macro_command_requires_request_context_for_reset_panel_delivery():
-    import bridge.commands as commands
 
-    param = inspect.signature(commands.handle_macro_command).parameters.get("request_context")
+    param = inspect.signature(_owner_macro_commands.handle_macro_command).parameters.get("request_context")
     assert param is not None
     assert param.default is inspect.Parameter.empty
 
 
 def test_macro_reset_delivers_canonical_panel_with_request_context(monkeypatch):
-    import bridge.commands as commands
 
     calls = []
     monkeypatch.setattr(
-        commands,
+        _owner_macro_commands,
         "send_panel_request",
         lambda token, method, payload, **kwargs: calls.append((token, method, payload, kwargs)) or {},
     )
 
-    commands.handle_macro_command(
+    _owner_macro_commands.handle_macro_command(
         object(),
         "token",
         "chat",

@@ -38,7 +38,13 @@ def test_world_storage_is_canonical_owner_and_low_level():
     assert "bridge.catalog" not in imports
     assert "bridge.cards" not in imports
     assert "install_world_info_document" in top_level_functions("world_storage.py")
-    assert "install_world_info_document" not in top_level_functions("catalog.py")
+    assert "install_world_info_document" not in set().union(
+        top_level_functions("provider_discovery.py"),
+        top_level_functions("provider_panels.py"),
+        top_level_functions("telegram.py"),
+        top_level_functions("world_management.py"),
+        top_level_functions("world_panels.py"),
+    )
     assert "bridge.catalog" not in imported_modules("telegram.py")
 
 

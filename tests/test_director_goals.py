@@ -3,6 +3,8 @@ from functools import partial as _partial
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
+import bridge.card_content as _owner_card_content
+import bridge.generation_settings as _owner_generation_settings
 import bridge.model_selection as _owner_model_selection
 
 ensure_application_extensions()
@@ -13,7 +15,6 @@ from pathlib import Path
 
 import bridge.director_goals as _m_director_goals
 import bridge.group_core as _m_group_core
-import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
 import bridge.session_naming as _m_session_naming
 from bridge.group_director_service import GroupDirectorService
@@ -55,10 +56,14 @@ class DirectorGoalsTests(SettingsTestCase):
     def _service(self):
         return GroupDirectorService(
             load_group_state=_m_group_core.group_state,
-            safe_character=_partial(_m_groups.safe_character_path, app_settings=self.app_settings_builder.build()),
+            safe_character=_partial(
+                _owner_card_content.safe_character_path, app_settings=self.app_settings_builder.build()
+            ),
             member_labels=_partial(_m_group_core.group_member_labels, app_settings=self.app_settings_builder.build()),
-            card_fields=_partial(_m_groups.card_fields_from_file, app_settings=self.app_settings_builder.build()),
-            generation_settings=_m_groups.get_generation_settings,
+            card_fields=_partial(
+                _owner_card_content.card_fields_from_file, app_settings=self.app_settings_builder.build()
+            ),
+            generation_settings=_owner_generation_settings.get_generation_settings,
             generate_text=self._generate_text,
             director_policy=_partial(
                 _m_director_goals.director_goal_policy, app_settings=self.app_settings_builder.build()
@@ -100,11 +105,13 @@ class DirectorGoalsTests(SettingsTestCase):
             self.session["session_id"],
             "Let Bob discover the hidden door without resolving what is behind it.",
         )
-        old_safe = _m_groups.safe_character_path
-        old_fields = _m_groups.card_fields_from_file
+        old_safe = _owner_card_content.safe_character_path
+        old_fields = _owner_card_content.card_fields_from_file
         old_generate = self._generate_text
-        _m_groups.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
-        _m_groups.card_fields_from_file = lambda filename, *, app_settings=None: {"name": Path(filename).stem.title()}
+        _owner_card_content.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
+        _owner_card_content.card_fields_from_file = lambda filename, *, app_settings=None: {
+            "name": Path(filename).stem.title()
+        }
         calls = []
 
         def fake_generate(_key, model, messages, **kwargs):
@@ -123,8 +130,8 @@ class DirectorGoalsTests(SettingsTestCase):
             )
             after = self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
         finally:
-            _m_groups.safe_character_path = old_safe
-            _m_groups.card_fields_from_file = old_fields
+            _owner_card_content.safe_character_path = old_safe
+            _owner_card_content.card_fields_from_file = old_fields
             self._generate_text = old_generate
 
         self.assertEqual(plan[0], "bob.png")
@@ -151,12 +158,14 @@ class DirectorGoalsTests(SettingsTestCase):
             task="director",
         )
 
-        old_safe = _m_groups.safe_character_path
-        old_fields = _m_groups.card_fields_from_file
+        old_safe = _owner_card_content.safe_character_path
+        old_fields = _owner_card_content.card_fields_from_file
         old_generate = self._generate_text
         calls = []
-        _m_groups.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
-        _m_groups.card_fields_from_file = lambda filename, *, app_settings=None: {"name": Path(filename).stem.title()}
+        _owner_card_content.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
+        _owner_card_content.card_fields_from_file = lambda filename, *, app_settings=None: {
+            "name": Path(filename).stem.title()
+        }
 
         def fake_generate(_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
@@ -172,8 +181,8 @@ class DirectorGoalsTests(SettingsTestCase):
                 "Continue.",
             )
         finally:
-            _m_groups.safe_character_path = old_safe
-            _m_groups.card_fields_from_file = old_fields
+            _owner_card_content.safe_character_path = old_safe
+            _owner_card_content.card_fields_from_file = old_fields
             self._generate_text = old_generate
 
         self.assertEqual(calls[0][0], "director::special")
@@ -194,12 +203,14 @@ class DirectorGoalsTests(SettingsTestCase):
             task="director",
         )
 
-        old_safe = _m_groups.safe_character_path
-        old_fields = _m_groups.card_fields_from_file
+        old_safe = _owner_card_content.safe_character_path
+        old_fields = _owner_card_content.card_fields_from_file
         old_generate = self._generate_text
         calls = []
-        _m_groups.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
-        _m_groups.card_fields_from_file = lambda filename, *, app_settings=None: {"name": Path(filename).stem.title()}
+        _owner_card_content.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
+        _owner_card_content.card_fields_from_file = lambda filename, *, app_settings=None: {
+            "name": Path(filename).stem.title()
+        }
 
         def fake_generate(_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
@@ -215,8 +226,8 @@ class DirectorGoalsTests(SettingsTestCase):
                 "Continue.",
             )
         finally:
-            _m_groups.safe_character_path = old_safe
-            _m_groups.card_fields_from_file = old_fields
+            _owner_card_content.safe_character_path = old_safe
+            _owner_card_content.card_fields_from_file = old_fields
             self._generate_text = old_generate
 
         self.assertEqual(calls[0][0], "utility::fallback")
@@ -237,12 +248,14 @@ class DirectorGoalsTests(SettingsTestCase):
             task="utility",
         )
 
-        old_safe = _m_groups.safe_character_path
-        old_fields = _m_groups.card_fields_from_file
+        old_safe = _owner_card_content.safe_character_path
+        old_fields = _owner_card_content.card_fields_from_file
         old_generate = self._generate_text
         calls = []
-        _m_groups.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
-        _m_groups.card_fields_from_file = lambda filename, *, app_settings=None: {"name": Path(filename).stem.title()}
+        _owner_card_content.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
+        _owner_card_content.card_fields_from_file = lambda filename, *, app_settings=None: {
+            "name": Path(filename).stem.title()
+        }
 
         def fake_generate(_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
@@ -258,19 +271,21 @@ class DirectorGoalsTests(SettingsTestCase):
                 "Continue.",
             )
         finally:
-            _m_groups.safe_character_path = old_safe
-            _m_groups.card_fields_from_file = old_fields
+            _owner_card_content.safe_character_path = old_safe
+            _owner_card_content.card_fields_from_file = old_fields
             self._generate_text = old_generate
 
         self.assertEqual(calls[0][0], "primary::main")
 
     def test_director_policy_applies_model_and_token_budget_without_goal(self):
-        old_safe = _m_groups.safe_character_path
-        old_fields = _m_groups.card_fields_from_file
+        old_safe = _owner_card_content.safe_character_path
+        old_fields = _owner_card_content.card_fields_from_file
         old_generate = self._generate_text
         calls = []
-        _m_groups.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
-        _m_groups.card_fields_from_file = lambda filename, *, app_settings=None: {"name": Path(filename).stem.title()}
+        _owner_card_content.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
+        _owner_card_content.card_fields_from_file = lambda filename, *, app_settings=None: {
+            "name": Path(filename).stem.title()
+        }
 
         def fake_generate(_key, model, messages, **kwargs):
             calls.append((model, messages, kwargs))
@@ -286,8 +301,8 @@ class DirectorGoalsTests(SettingsTestCase):
                 "Continue.",
             )
         finally:
-            _m_groups.safe_character_path = old_safe
-            _m_groups.card_fields_from_file = old_fields
+            _owner_card_content.safe_character_path = old_safe
+            _owner_card_content.card_fields_from_file = old_fields
             self._generate_text = old_generate
 
         joined = "\n".join(str(message["content"]) for message in calls[0][1])
@@ -302,10 +317,12 @@ class DirectorGoalsTests(SettingsTestCase):
             self.session["session_id"],
             "Increase tension around the unopened letter.",
         )
-        old_safe = _m_groups.safe_character_path
-        old_fields = _m_groups.card_fields_from_file
-        _m_groups.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
-        _m_groups.card_fields_from_file = lambda filename, *, app_settings=None: {"name": Path(filename).stem.title()}
+        old_safe = _owner_card_content.safe_character_path
+        old_fields = _owner_card_content.card_fields_from_file
+        _owner_card_content.safe_character_path = lambda filename, *, app_settings=None: Path(filename)
+        _owner_card_content.card_fields_from_file = lambda filename, *, app_settings=None: {
+            "name": Path(filename).stem.title()
+        }
         try:
             context = self._service().prompt_context(
                 self.db,
@@ -315,8 +332,8 @@ class DirectorGoalsTests(SettingsTestCase):
                 "Keep the pace measured.",
             )
         finally:
-            _m_groups.safe_character_path = old_safe
-            _m_groups.card_fields_from_file = old_fields
+            _owner_card_content.safe_character_path = old_safe
+            _owner_card_content.card_fields_from_file = old_fields
 
         self.assertIn("unopened letter", context)
         self.assertIn("Never mention", context)

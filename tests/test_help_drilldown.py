@@ -8,8 +8,13 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.bot_commands as _owner_bot_commands
+import bridge.feature_panels as _owner_feature_panels
 import bridge.help_details as _owner_help_details
-import bridge.status_panels as _owner_status_panels
+import bridge.provider_discovery as _owner_provider_discovery
+import bridge.sync_panels as _owner_sync_panels
+import bridge.telegram as _owner_telegram
+from bridge import prompt_panels
 
 ensure_application_extensions()
 
@@ -18,15 +23,12 @@ import unittest
 from pathlib import Path
 
 import bridge.cards as _m_cards
-import bridge.catalog as _m_catalog
 import bridge.command_routes as _m_command_routes
 import bridge.director_goals as _m_director_goals
-import bridge.help as _m_help
 import bridge.help_details as _m_help_details
 import bridge.memory_curator as _m_memory_curator
 import bridge.scene_state as _m_scene_state
 import bridge.session_naming as _m_session_naming
-import bridge.status_panels as _m_status_panels
 import bridge.sync_core as _m_sync_core
 
 
@@ -130,14 +132,14 @@ class HelpDrilldownTests(SettingsTestCase):
 
     def test_command_detail_callback_rejects_stale_index(self):
         answers = []
-        original_answer = _m_catalog.answer_callback
-        _m_catalog.answer_callback = lambda _token, _callback_id, text: answers.append(text)
+        original_answer = _owner_telegram.answer_callback
+        _owner_telegram.answer_callback = lambda _token, _callback_id, text: answers.append(text)
         try:
             handled = _owner_help_details.handle_help_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
-                _m_catalog.answer_callback,
+                _owner_telegram.answer_callback,
                 "help:cmd:basic:99",
                 "chat",
                 {"message_id": 77},
@@ -150,7 +152,7 @@ class HelpDrilldownTests(SettingsTestCase):
                 ),
             )
         finally:
-            _m_catalog.answer_callback = original_answer
+            _owner_telegram.answer_callback = original_answer
         self.assertTrue(handled)
         self.assertEqual(answers, ["Help choice expired"])
 
@@ -196,12 +198,12 @@ class HelpDrilldownTests(SettingsTestCase):
         self.assertIn("nothing is applied", detail.lower())
 
         calls = []
-        original_request = _m_help.telegram_request
-        _m_help.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _owner_bot_commands.telegram_request
+        _owner_bot_commands.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
-            _m_help.set_bot_commands("token")
+            _owner_bot_commands.set_bot_commands("token")
         finally:
-            _m_help.telegram_request = original_request
+            _owner_bot_commands.telegram_request = original_request
 
         commands = {item["command"]: item["description"] for item in calls[-1][1]["commands"]}
         self.assertEqual(
@@ -211,12 +213,12 @@ class HelpDrilldownTests(SettingsTestCase):
 
     def test_telegram_command_menu_matches_help_top_level_commands(self):
         calls = []
-        original_request = _m_help.telegram_request
-        _m_help.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _owner_bot_commands.telegram_request
+        _owner_bot_commands.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
-            _m_help.set_bot_commands("token")
+            _owner_bot_commands.set_bot_commands("token")
         finally:
-            _m_help.telegram_request = original_request
+            _owner_bot_commands.telegram_request = original_request
 
         bot_commands = {"/" + item["command"] for item in calls[-1][1]["commands"]}
         help_bases = {
@@ -237,12 +239,12 @@ class HelpDrilldownTests(SettingsTestCase):
         self.assertNotIn("file sync", detail.lower())
         self.assertIn("Refresh status only redraws state", detail)
         calls = []
-        original_request = _m_help.telegram_request
-        _m_help.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
+        original_request = _owner_bot_commands.telegram_request
+        _owner_bot_commands.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
         try:
-            _m_help.set_bot_commands("token")
+            _owner_bot_commands.set_bot_commands("token")
         finally:
-            _m_help.telegram_request = original_request
+            _owner_bot_commands.telegram_request = original_request
         commands = {item["command"]: item["description"] for item in calls[-1][1]["commands"]}
         self.assertEqual(commands["sync"], "Open Live API Sync controls")
 
@@ -257,7 +259,7 @@ class HelpDrilldownTests(SettingsTestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _owner_status_panels.send_sync_menu(
+            _owner_sync_panels.send_sync_menu(
                 "token",
                 "chat",
                 self.db,
@@ -439,10 +441,13 @@ class HelpDrilldownTests(SettingsTestCase):
             app_settings=self.app_settings_builder.build(),
         )
         calls = []
-        original_panel = _m_status_panels.send_panel_message
-        original_groups = _m_catalog.get_model_groups
-        _m_status_panels.send_panel_message = lambda *args, **kwargs: calls.append((args, kwargs))
-        _m_catalog.get_model_groups = lambda *, app_settings=None: {}
+        original_prompt_panel = prompt_panels.send_panel_message
+        original_panel = _owner_feature_panels.send_panel_message
+        original_groups = _owner_provider_discovery.get_model_groups
+        _owner_feature_panels.send_panel_message = prompt_panels.send_panel_message = lambda *args, **kwargs: (
+            calls.append((args, kwargs))
+        )
+        _owner_provider_discovery.get_model_groups = lambda *, app_settings=None: {}
         try:
             _m_command_routes.send_prompt_menu(
                 "token",
@@ -472,7 +477,7 @@ class HelpDrilldownTests(SettingsTestCase):
             )
             self.assertIn("scene:refresh", str(scene_calls[-1]))
             _m_director_goals.set_director_goal(self.db, "chat", session["session_id"], "Reveal the door")
-            _m_status_panels.send_director_goal_menu(
+            _owner_feature_panels.send_director_goal_menu(
                 "token",
                 "chat",
                 self.db,
@@ -482,7 +487,7 @@ class HelpDrilldownTests(SettingsTestCase):
                 ),
             )
             self.assertIn("goal:set", str(calls[-1]))
-            _m_status_panels.send_curated_memory_menu(
+            _owner_feature_panels.send_curated_memory_menu(
                 "token",
                 "chat",
                 self.db,
@@ -493,8 +498,9 @@ class HelpDrilldownTests(SettingsTestCase):
             )
             self.assertIn("curated:refresh", str(calls[-1]))
         finally:
-            _m_status_panels.send_panel_message = original_panel
-            _m_catalog.get_model_groups = original_groups
+            _owner_feature_panels.send_panel_message = original_panel
+            prompt_panels.send_panel_message = original_prompt_panel
+            _owner_provider_discovery.get_model_groups = original_groups
 
 
 if __name__ == "__main__":

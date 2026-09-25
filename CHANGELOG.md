@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Maintenance
+
+- Separate settings, voice, Data Bank, group, persona, provider, media and generation workflows into canonical owners; retain panel routing and delivery behavior without compatibility re-export modules. Response-variant writes now preserve caller-owned transactions.
+
 ### Architecture
 
 - Retire aggregate database/repository facades in favor of domain SQL owners and explicit transactional use cases. Metadata, jobs, operation phases, settings/presets, panel bindings and sync identities now preserve enclosing rollback; replace the lock-only write callback with real short transaction scopes.

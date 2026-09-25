@@ -189,7 +189,7 @@ def _director_goal_command_route(
 
 
 def register_director_goal_extensions() -> None:
-    """Register Director Goal hooks once in the compatibility registry."""
+    """Register Director Goal hooks once in the extension registry."""
     snapshot = _extension_registry_snapshot()
     if "director_goals" not in snapshot["command_routes"]:
         _register_command_route(
