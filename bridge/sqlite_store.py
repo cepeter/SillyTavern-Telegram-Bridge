@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager as _contextmanager
+from contextlib import suppress as _suppress
 from pathlib import Path
 
 import bridge.limits as _limits
@@ -16,63 +18,177 @@ from bridge.settings import AppSettings
 _DB_WRITE_LOCK = threading.RLock()
 
 
-_WRITE_SQL_PREFIXES = ("INSERT", "UPDATE", "DELETE", "REPLACE", "CREATE", "ALTER", "DROP")
+def _statement_may_write(sql: str) -> bool:
+    """Conservative classification, not a SQL parser or extension sandbox.
+
+    WITH and PRAGMA are intentionally serialized even when used for reads.
+    Leading comments must not disguise a write or transaction-control statement.
+    """
+    if not isinstance(sql, str):
+        return True
+    statement = sql.lstrip()
+    while statement:
+        if statement.startswith("--"):
+            newline = statement.find("\n")
+            if newline < 0:
+                return False
+            statement = statement[newline + 1 :].lstrip()
+        elif statement.startswith("/*"):
+            end = statement.find("*/", 2)
+            if end < 0:
+                return True
+            statement = statement[end + 2 :].lstrip()
+        else:
+            break
+    if not statement:
+        return False
+    token = re.match(r"[A-Za-z]+", statement)
+    return token is None or token[0].upper() not in {"SELECT", "VALUES", "EXPLAIN"}
+
+
+class _SerializedSQLiteCursor(sqlite3.Cursor):
+    """Keep writing statements serialized until their result is consumed/closed."""
+
+    def _run_statement(self, sql, operation, *args, script=False):
+        db = self.connection
+        epoch = db._bridge_write_epoch
+        with db._serialized_call(script or _statement_may_write(sql)):
+            result = operation(sql, *args)
+            if self.description is not None and db._bridge_write_epoch != epoch:
+                db._bridge_pending_cursors.add(id(self))
+            else:
+                db._bridge_pending_cursors.discard(id(self))
+            return result
+
+    def execute(self, sql, parameters=()):
+        return self._run_statement(sql, super().execute, parameters)
+
+    def executemany(self, sql, seq_of_parameters):
+        return self._run_statement(sql, super().executemany, seq_of_parameters)
+
+    def executescript(self, sql_script):
+        return self._run_statement(sql_script, super().executescript, script=True)
+
+    def _read_result(self, operation, *args, all_rows=False, many=False, **kwargs):
+        db = self.connection
+        epoch = db._bridge_write_epoch
+        with db._serialized_call():
+            try:
+                result = operation(*args, **kwargs)
+            except StopIteration:
+                db._bridge_pending_cursors.discard(id(self))
+                raise
+            if all_rows or (many and not result):
+                db._bridge_pending_cursors.discard(id(self))
+            elif db._bridge_write_epoch != epoch:
+                # A SELECT may invoke a Python callback that writes through
+                # this connection; protect the enclosing cursor as well.
+                db._bridge_pending_cursors.add(id(self))
+            return result
+
+    def fetchone(self):
+        # Row factories may legitimately return None. Only StopIteration from
+        # SQLite's cursor iterator proves there are no more result rows.
+        try:
+            return self._read_result(super().__next__)
+        except StopIteration:
+            return None
+
+    def fetchmany(self, *args, **kwargs):
+        return self._read_result(super().fetchmany, *args, many=True, **kwargs)
+
+    def fetchall(self):
+        return self._read_result(super().fetchall, all_rows=True)
+
+    def __next__(self):
+        return self._read_result(super().__next__)
+
+    def close(self):
+        db = self.connection
+        with db._serialized_call():
+            result = super().close()
+            db._bridge_pending_cursors.discard(id(self))
+            return result
+
+    def __del__(self):
+        # Finalize the underlying SQLite statement BEFORE releasing its gate.
+        # Destruction after a connection already closed is harmless.
+        with _suppress(AttributeError, sqlite3.Error):
+            self.close()
 
 
 class _SerializedSQLiteConnection(sqlite3.Connection):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._bridge_write_lock_depth = 0
+        self._bridge_write_lock_held = False
+        self._bridge_active_calls = 0
+        self._bridge_pending_cursors: set[int] = set()
+        self._bridge_write_epoch = 0
+        self._bridge_closed = False
 
-    def _acquire_write_lock(self, sql: str) -> bool:
-        statement = str(sql).lstrip().upper()
-        if not statement.startswith(_WRITE_SQL_PREFIXES):
-            return False
-        if self._bridge_write_lock_depth == 0:
-            _DB_WRITE_LOCK.acquire()
-        self._bridge_write_lock_depth = 1
-        return True
+    def _release_if_idle(self) -> None:
+        if not self._bridge_write_lock_held or self._bridge_active_calls:
+            return
+        if not self._bridge_closed and (self.in_transaction or self._bridge_pending_cursors):
+            return
+        self._bridge_write_lock_held = False
+        _DB_WRITE_LOCK.release()
 
-    def _release_write_lock(self) -> None:
-        while self._bridge_write_lock_depth:
-            self._bridge_write_lock_depth -= 1
-            _DB_WRITE_LOCK.release()
+    @_contextmanager
+    def _serialized_call(self, may_write=False):
+        if self._bridge_closed:
+            raise sqlite3.ProgrammingError("Cannot operate on a closed database.")
+        if may_write:
+            if not self._bridge_write_lock_held:
+                _DB_WRITE_LOCK.acquire()
+                self._bridge_write_lock_held = True
+            self._bridge_write_epoch += 1
+        # This counts nested Python calls, not RLock acquisitions. One
+        # connection transaction owns exactly one latch acquisition.
+        self._bridge_active_calls += 1
+        try:
+            yield
+        finally:
+            self._bridge_active_calls -= 1
+            self._release_if_idle()
+
+    def cursor(self, factory=None):
+        factory = _SerializedSQLiteCursor if factory is None else factory
+        if not isinstance(factory, type) or not issubclass(factory, _SerializedSQLiteCursor):
+            raise TypeError("serialized connections require a serialized cursor factory")
+        return super().cursor(factory)
 
     def execute(self, sql, parameters=()):
-        acquired = self._acquire_write_lock(sql)
-        try:
-            return super().execute(sql, parameters)
-        except Exception:
-            if acquired:
-                self._release_write_lock()
-            raise
+        return self.cursor().execute(sql, parameters)
 
     def executemany(self, sql, seq_of_parameters):
-        acquired = self._acquire_write_lock(sql)
-        try:
-            return super().executemany(sql, seq_of_parameters)
-        except Exception:
-            if acquired:
-                self._release_write_lock()
-            raise
+        return self.cursor().executemany(sql, seq_of_parameters)
+
+    def executescript(self, sql_script):
+        return self.cursor().executescript(sql_script)
 
     def commit(self):
-        try:
+        with self._serialized_call():
             return super().commit()
-        finally:
-            self._release_write_lock()
 
     def rollback(self):
-        try:
+        with self._serialized_call():
             return super().rollback()
-        finally:
-            self._release_write_lock()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # sqlite3's context manager commits/rolls back in C, bypassing the
+        # Python methods above. Keep its original behavior and release after it.
+        with self._serialized_call():
+            return super().__exit__(exc_type, exc_value, traceback)
 
     def close(self):
-        try:
+        if self._bridge_closed:
             return super().close()
-        finally:
-            self._release_write_lock()
+        with self._serialized_call():
+            result = super().close()
+            self._bridge_closed = True
+            self._bridge_pending_cursors.clear()
+            return result
 
 
 def run_write_txn(db: sqlite3.Connection, operation):
@@ -93,11 +209,12 @@ def write_transaction(db: sqlite3.Connection):
         db.execute("BEGIN IMMEDIATE")
         try:
             yield db
-        except Exception:
+            db.commit()
+        except BaseException:
+            # Includes commit-time constraint failures and cancellation. Nested
+            # transactions still belong entirely to the caller above.
             db.rollback()
             raise
-        else:
-            db.commit()
 
 
 def _apply_connection_pragmas(

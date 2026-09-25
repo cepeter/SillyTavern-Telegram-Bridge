@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Persistence
+
+- Require caller-owned transactions for repository writes; conservatively serialize commented/CTE/PRAGMA statements and raw cursor calls, retain writer ownership after statement failures and through RETURNING results, and release it correctly on transaction/context completion.
+
 ### Fixed
 
 - Enforce manual group-turn ownership on native Telegram edits at ingress and execution, including recovered jobs and edits to a message in another session.

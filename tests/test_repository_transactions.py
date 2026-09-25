@@ -212,6 +212,7 @@ class RepositoryPrimitiveTests(SettingsTestCase):
         )
 
     def test_repository_write_does_not_commit(self):
+        self.db.execute("BEGIN")
         repositories.store_director_goal(self.db, "chat", "session", "goal", 1.0)
         self.assertTrue(self.db.in_transaction)
         self.db.rollback()
@@ -221,9 +222,11 @@ class RepositoryPrimitiveTests(SettingsTestCase):
         )
 
     def test_scene_state_upsert_rejects_stale_candidate(self):
+        self.db.execute("BEGIN")
         repositories.upsert_scene_state_if_fresh(self.db, "chat", "session", '{"v":10}', 10, 1.0)
         self.db.commit()
 
+        self.db.execute("BEGIN")
         accepted = repositories.upsert_scene_state_if_fresh(self.db, "chat", "session", '{"v":9}', 9, 2.0)
         self.assertFalse(accepted)
         row = repositories.load_scene_state_row(self.db, "chat", "session")
@@ -315,6 +318,7 @@ class RepositoryPrimitiveTests(SettingsTestCase):
         )
 
     def test_group_operation_claim_allows_retry_but_rejects_applied(self):
+        self.db.execute("BEGIN")
         self.assertTrue(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 1.0))
         self.assertTrue(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 2.0))
         repositories.mark_group_operation_applied(self.db, "op-1", "group_state", 3.0)
