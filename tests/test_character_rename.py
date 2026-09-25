@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_request_context
 from settings_test_support import SettingsTestCase
 
+import bridge.character_callbacks as _owner_character_callbacks
+
 ensure_application_extensions()
 
 import base64
@@ -14,7 +16,6 @@ from pathlib import Path
 import bridge.cards as _m_cards
 import bridge.character_identity as _m_character_identity
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
@@ -150,7 +151,7 @@ class CharacterRenameTests(SettingsTestCase):
             RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified")
         )
         try:
-            handled = _m_panel_callback_routes.handle_character_callback(
+            handled = _owner_character_callbacks.handle_character_callback(
                 self.db,
                 "token",
                 callback,

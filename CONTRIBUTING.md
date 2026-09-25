@@ -192,3 +192,15 @@ repository primitives. Hindsight cleanup precedes local deletion outside the
 write transaction. `session_panels.py` owns deletion views; `native_imports.py`
 owns character/World Info installation and document routing. `telegram.py` owns
 transport, bounded file transfer, text splitting and panel-message binding only.
+
+
+### Callback domain ownership
+
+`panel_callback_routes.py` only dispatches primary and entity callbacks in their
+established order. Character, session, World Info, provider/model, settings,
+conversation and sync handlers live in their corresponding `*_callbacks.py`
+modules. Domain callback modules must not import sibling callback modules; share
+application use cases, pure values or rendering helpers instead. Preserve the
+callback identifiers and common session/actor checks in `callback_dispatch.py`.
+Tests patch dependencies at their actual defining/calling owner rather than
+through a historical aggregate module.

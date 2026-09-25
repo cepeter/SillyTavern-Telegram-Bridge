@@ -5,6 +5,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.sync_callbacks as _owner_sync_callbacks
+
 ensure_application_extensions()
 
 import copy
@@ -21,7 +23,6 @@ from unittest.mock import patch
 
 import bridge.cards as _m_cards
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_core as _m_telegram
 import bridge.session_naming as _m_session_naming
 import bridge.sillytavern_api as _m_sillytavern_api
@@ -360,12 +361,12 @@ class Phase3SyncTests(SettingsTestCase):
                 side_effect=AssertionError("raw disable bypassed service"),
             ),
             patch.object(
-                _m_panel_callback_routes,
+                _owner_sync_callbacks,
                 "send_sync_menu",
                 return_value=None,
             ),
         ):
-            handled = _m_panel_callback_routes.handle_sync_callback(
+            handled = _owner_sync_callbacks.handle_sync_callback(
                 self.db,
                 "token",
                 callback,
@@ -401,12 +402,12 @@ class Phase3SyncTests(SettingsTestCase):
                 side_effect=AssertionError("raw toggle bypassed service"),
             ),
             patch.object(
-                _m_panel_callback_routes,
+                _owner_sync_callbacks,
                 "send_sync_menu",
                 return_value=None,
             ),
         ):
-            handled = _m_panel_callback_routes.handle_sync_callback(
+            handled = _owner_sync_callbacks.handle_sync_callback(
                 self.db,
                 "token",
                 callback,
@@ -435,8 +436,8 @@ class Phase3SyncTests(SettingsTestCase):
             "id": "cb",
             "message": {"message_id": 90, "chat": {"id": "chat"}},
         }
-        with patch.object(_m_panel_callback_routes, "send_sync_menu", return_value=None):
-            handled = _m_panel_callback_routes.handle_sync_callback(
+        with patch.object(_owner_sync_callbacks, "send_sync_menu", return_value=None):
+            handled = _owner_sync_callbacks.handle_sync_callback(
                 self.db,
                 "token",
                 callback,
@@ -700,7 +701,7 @@ class Phase3SyncTests(SettingsTestCase):
         original = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_sync_menu(
+            _owner_sync_callbacks.send_sync_menu(
                 "token",
                 "chat",
                 self.db,
@@ -724,15 +725,15 @@ class Phase3SyncTests(SettingsTestCase):
         self.db.execute("UPDATE sync_bindings SET realtime_enabled=1 WHERE chat_id='chat' AND session_id='live-sync'")
         self.db.commit()
         original_sync = _m_sync_api.live_sync_now
-        original_menu = _m_panel_callback_routes.send_sync_menu
+        original_menu = _owner_sync_callbacks.send_sync_menu
         _m_sync_api.live_sync_now = lambda *_args, app_settings=None, retain_memory=None: (_ for _ in ()).throw(
             _m_sillytavern_api.SillyTavernApiError("API unavailable", transient=True)
         )
-        _m_panel_callback_routes.send_sync_menu = lambda *_args, **_kwargs: None
+        _owner_sync_callbacks.send_sync_menu = lambda *_args, **_kwargs: None
         answers = []
         callback = {"id": "cb", "message": {"message_id": 90, "chat": {"id": "chat"}}}
         try:
-            handled = _m_panel_callback_routes.handle_sync_callback(
+            handled = _owner_sync_callbacks.handle_sync_callback(
                 self.db,
                 "token",
                 callback,
@@ -750,7 +751,7 @@ class Phase3SyncTests(SettingsTestCase):
             )
         finally:
             _m_sync_api.live_sync_now = original_sync
-            _m_panel_callback_routes.send_sync_menu = original_menu
+            _owner_sync_callbacks.send_sync_menu = original_menu
         self.assertTrue(handled)
         self.assertIn("Live API unavailable", answers[0])
         self.assertEqual(_m_sync_api.sync_binding(self.db, "chat", "live-sync")["realtime_enabled"], 0)

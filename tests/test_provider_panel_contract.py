@@ -8,7 +8,8 @@ import pytest
 from application_test_setup import make_test_request_context
 from settings_test_support import make_test_settings
 
-from bridge import catalog, command_routes, help_details, panel_callback_routes
+import bridge.provider_callbacks as _owner_provider_callbacks
+from bridge import catalog, command_routes, help_details
 from bridge.update_message_routing import is_long_running_command
 
 
@@ -81,11 +82,11 @@ def test_panel_buttons_still_run_their_real_action(monkeypatch, action):
     )
     monkeypatch.setattr(catalog, "send_panel_message", lambda *a, **kw: None)
     monkeypatch.setattr(
-        panel_callback_routes, "refresh_model_catalog", lambda **kw: calls.append(("refresh", kw)) or ({}, 2, 0)
+        _owner_provider_callbacks, "refresh_model_catalog", lambda **kw: calls.append(("refresh", kw)) or ({}, 2, 0)
     )
-    monkeypatch.setattr(panel_callback_routes, "send_text", lambda *a: None)
-    monkeypatch.setattr(panel_callback_routes, "send_model_menu", lambda *a, **kw: None)
-    handled = panel_callback_routes.handle_provider_model_callback(
+    monkeypatch.setattr(_owner_provider_callbacks, "send_text", lambda *a: None)
+    monkeypatch.setattr(_owner_provider_callbacks, "send_model_menu", lambda *a, **kw: None)
+    handled = _owner_provider_callbacks.handle_provider_model_callback(
         None,
         "token",
         {"id": "cb"},

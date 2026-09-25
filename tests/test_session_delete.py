@@ -1,6 +1,7 @@
 from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_request_context
 from settings_test_support import SettingsTestCase
 
+import bridge.cards as _owner_cards
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -15,7 +16,6 @@ import bridge.cards as _m_cards
 import bridge.memory as _m_memory
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
@@ -56,7 +56,7 @@ class SessionDeletionTests(SettingsTestCase):
         )
         self.db.commit()
 
-        deleted, reason = _m_panel_callback_routes.delete_session_data(
+        deleted, reason = _owner_session_core.delete_session_data(
             self.db,
             "chat",
             inactive["session_id"],
@@ -113,7 +113,7 @@ class SessionDeletionTests(SettingsTestCase):
             ("chat", inactive["session_id"], "user", "keep", time.time()),
         )
         self.db.commit()
-        deleted, reason = _m_panel_callback_routes.delete_session_data(
+        deleted, reason = _owner_session_core.delete_session_data(
             self.db,
             "chat",
             inactive["session_id"],
@@ -137,7 +137,7 @@ class SessionDeletionTests(SettingsTestCase):
         active = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
-        denied, reason = _m_panel_callback_routes.delete_session_data(
+        denied, reason = _owner_session_core.delete_session_data(
             self.db, "chat", active["session_id"], active["session_id"], memory_service=make_test_memory_service()
         )
         self.assertFalse(denied)
@@ -157,7 +157,7 @@ class SessionDeletionTests(SettingsTestCase):
             (801, "chat", inactive["session_id"], "1", "generation", "{}", "queued", time.time(), time.time()),
         )
         self.db.commit()
-        denied, reason = _m_panel_callback_routes.delete_session_data(
+        denied, reason = _owner_session_core.delete_session_data(
             self.db, "chat", inactive["session_id"], active["session_id"], memory_service=make_test_memory_service()
         )
         self.assertFalse(denied)
@@ -178,7 +178,7 @@ class SessionDeletionTests(SettingsTestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_session_menu(
+            _owner_cards.send_session_menu(
                 "token",
                 "chat",
                 [active, inactive],

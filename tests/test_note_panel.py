@@ -7,7 +7,9 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
+import bridge.commands as _owner_commands
 import bridge.session_core as _owner_session_core
+import bridge.settings_callbacks as _owner_settings_callbacks
 
 ensure_application_extensions()
 
@@ -25,7 +27,6 @@ import bridge.database as _m_database
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.telegram as _m_telegram
 
@@ -59,7 +60,7 @@ class NotePanelTests(SettingsTestCase):
             calls.append((method, payload)) or {}
         )
         try:
-            _m_panel_callback_routes.send_note_menu(
+            _owner_commands.send_note_menu(
                 "token",
                 "chat",
                 "existing note",
@@ -206,10 +207,10 @@ class NotePanelTests(SettingsTestCase):
         calls = []
         original_answer = _m_callback_dispatch.answer_callback
         original_request = _m_callbacks.telegram_request
-        original_send = _m_panel_callback_routes.send_text
+        original_send = _owner_settings_callbacks.send_text
         _m_callback_dispatch.answer_callback = lambda *_args, **_kwargs: None
         _m_callbacks.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {}
-        _m_panel_callback_routes.send_text = lambda _token, _chat_id, text: (
+        _owner_settings_callbacks.send_text = lambda _token, _chat_id, text: (
             calls.append(("sendText", {"text": text})) or [90]
         )
         callback = {
@@ -228,7 +229,7 @@ class NotePanelTests(SettingsTestCase):
         finally:
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
-            _m_panel_callback_routes.send_text = original_send
+            _owner_settings_callbacks.send_text = original_send
         self.assertEqual(calls[0][0], "deleteMessage")
         self.assertEqual(calls[0][1]["message_id"], 78)
         self.assertEqual(calls[1][0], "sendText")

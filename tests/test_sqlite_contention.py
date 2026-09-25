@@ -1,7 +1,10 @@
 from application_test_setup import ensure_application_extensions, make_test_request_context
 from settings_test_support import SettingsTestCase
 
+import bridge.callback_tokens as _owner_callback_tokens
+import bridge.database as _owner_database
 import bridge.sqlite_store as _sqlite_store
+import bridge.telegram as _owner_telegram
 
 ensure_application_extensions()
 
@@ -18,7 +21,6 @@ import bridge.main as _m_main
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.runtime_lifecycle as _m_runtime
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
@@ -84,7 +86,7 @@ class SqliteContentionTests(SettingsTestCase):
             AssertionError("opened nested SQLite connection")
         )
         try:
-            token = _m_panel_callback_routes.dynamic_callback_token("persona", "bridge-user.png", "chat", db=self.db)
+            token = _owner_callback_tokens.dynamic_callback_token("persona", "bridge-user.png", "chat", db=self.db)
         finally:
             _m_memory_curator.db_connect = original_connect
         self.assertIsNotNone(self.db.execute("SELECT 1 FROM callback_tokens WHERE token=?", (token,)).fetchone())
@@ -121,7 +123,7 @@ class SqliteContentionTests(SettingsTestCase):
 
     def test_begin_operation_commits_before_external_work(self):
         operation_id = "lock-release-test"
-        self.assertTrue(_m_panel_callback_routes.begin_operation(self.db, operation_id, "generation"))
+        self.assertTrue(_owner_database.begin_operation(self.db, operation_id, "generation"))
         self.assertFalse(self.db.in_transaction)
 
     def test_job_writers_from_separate_connections_do_not_lock_each_other(self):
@@ -213,9 +215,7 @@ class SqliteContentionTests(SettingsTestCase):
         urllib.request.urlopen = fake_urlopen
         time.sleep = lambda _seconds: None
         try:
-            result = _m_panel_callback_routes.telegram_request(
-                "token", "sendMessage", {"chat_id": "chat", "text": "panel"}
-            )
+            result = _owner_telegram.telegram_request("token", "sendMessage", {"chat_id": "chat", "text": "panel"})
         finally:
             urllib.request.urlopen = original_urlopen
             time.sleep = original_sleep
@@ -240,7 +240,7 @@ class SqliteContentionTests(SettingsTestCase):
 
     def test_native_edit_post_commit_failure_is_not_treated_as_uncommitted(self):
         operation_id = "edit-test"
-        self.assertTrue(_m_panel_callback_routes.begin_operation(self.db, operation_id, "edit"))
+        self.assertTrue(_owner_database.begin_operation(self.db, operation_id, "edit"))
         _m_message_commands.set_operation_phase(self.db, operation_id, "edit", "local_committed")
         self.assertTrue(
             _m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked"))

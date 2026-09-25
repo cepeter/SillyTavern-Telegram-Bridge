@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from settings_test_support import SettingsTestCase
 
+import bridge.callback_tokens as _owner_callback_tokens
 import bridge.limits as _limits
 
 REPO_ROOT = Path(__file__).parents[1]
@@ -440,7 +441,6 @@ class CardFoundationBoundaryTests(SettingsTestCase):
         import bridge.card_content as card_content
         import bridge.cards as cards
         import bridge.media as media
-        import bridge.panel_callback_routes as panel_callback_routes
         import bridge.panel_utils as panel_utils
         import bridge.session_naming as session_naming
         import bridge.telegram as telegram
@@ -461,7 +461,7 @@ class CardFoundationBoundaryTests(SettingsTestCase):
         self.assertFalse(hasattr(telegram, "panel_actor_context"))
         self.assertFalse(hasattr(telegram, "db_connection_context"))
         self.assertIs(
-            panel_callback_routes.dynamic_callback_token,
+            _owner_callback_tokens.dynamic_callback_token,
             callback_tokens.dynamic_callback_token,
         )
         self.assertTrue(callable(cards.send_character_menu))

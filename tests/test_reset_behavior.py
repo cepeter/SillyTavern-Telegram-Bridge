@@ -5,6 +5,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.conversation_callbacks as _owner_conversation_callbacks
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -20,7 +21,6 @@ from pathlib import Path
 import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
@@ -29,7 +29,7 @@ class ResetBehaviorTests(SettingsTestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = self.app_settings_builder.db_file
         self.old_reset = _m_message_commands.reset_session
-        self.old_send = _m_panel_callback_routes.send_text
+        self.old_send = _owner_conversation_callbacks.send_text
         self.old_remove = _m_media.remove_inline_keyboard
         self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
@@ -38,9 +38,9 @@ class ResetBehaviorTests(SettingsTestCase):
         )
 
     def tearDown(self):
-        _m_panel_callback_routes.reset_session = self.old_reset
-        _m_panel_callback_routes.send_text = self.old_send
-        _m_panel_callback_routes.remove_inline_keyboard = self.old_remove
+        _owner_conversation_callbacks.reset_session = self.old_reset
+        _owner_conversation_callbacks.send_text = self.old_send
+        _owner_conversation_callbacks.remove_inline_keyboard = self.old_remove
         self.db.close()
         self.app_settings_builder.db_file = self.old_db
         self.tmp.cleanup()
@@ -85,11 +85,11 @@ class ResetBehaviorTests(SettingsTestCase):
         def original_answer(*_args, **_kwargs):
             return None
 
-        _m_panel_callback_routes.reset_session = lambda *_args, **_kwargs: None
-        _m_panel_callback_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
-        _m_panel_callback_routes.remove_inline_keyboard = lambda _db, _token, callback: removed.append(callback)
+        _owner_conversation_callbacks.reset_session = lambda *_args, **_kwargs: None
+        _owner_conversation_callbacks.send_text = lambda _token, _chat, text: sent.append(text) or []
+        _owner_conversation_callbacks.remove_inline_keyboard = lambda _db, _token, callback: removed.append(callback)
         callback = {"id": "callback-1", "message": {"message_id": 10, "chat": {"id": "chat"}}}
-        handled = _m_panel_callback_routes.handle_reset_callback(
+        handled = _owner_conversation_callbacks.handle_reset_callback(
             self.db,
             "token",
             callback,

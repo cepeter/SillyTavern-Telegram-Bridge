@@ -6,6 +6,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.character_callbacks as _owner_character_callbacks
+import bridge.session_callbacks as _owner_session_callbacks
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -18,7 +20,6 @@ from pathlib import Path
 
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
@@ -46,19 +47,19 @@ class CharacterSessionChainTests(SettingsTestCase):
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
         opened = []
-        original_resolve = _m_panel_callback_routes.resolve_dynamic_callback_token
-        original_safe = _m_panel_callback_routes.safe_character_path
-        original_fields = _m_panel_callback_routes.card_fields_from_file
-        original_close = _m_panel_callback_routes.close_panel_message
-        original_menu = _m_panel_callback_routes.send_session_menu
-        _m_panel_callback_routes.resolve_dynamic_callback_token = lambda *_args, **_kwargs: "chosen.png"
-        _m_panel_callback_routes.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
-        _m_panel_callback_routes.card_fields_from_file = lambda _name, *, app_settings=None: {"name": "Chosen"}
-        _m_panel_callback_routes.close_panel_message = lambda *_args, **_kwargs: None
-        _m_panel_callback_routes.send_session_menu = lambda *_args, **_kwargs: opened.append(True)
+        original_resolve = _owner_character_callbacks.resolve_dynamic_callback_token
+        original_safe = _owner_character_callbacks.safe_character_path
+        original_fields = _owner_character_callbacks.card_fields_from_file
+        original_close = _owner_character_callbacks.close_panel_message
+        original_menu = _owner_character_callbacks.send_session_menu
+        _owner_character_callbacks.resolve_dynamic_callback_token = lambda *_args, **_kwargs: "chosen.png"
+        _owner_character_callbacks.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
+        _owner_character_callbacks.card_fields_from_file = lambda _name, *, app_settings=None: {"name": "Chosen"}
+        _owner_character_callbacks.close_panel_message = lambda *_args, **_kwargs: None
+        _owner_character_callbacks.send_session_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
             callback = self._callback("character:token")
-            handled = _m_panel_callback_routes.handle_character_callback(
+            handled = _owner_character_callbacks.handle_character_callback(
                 self.db,
                 "token",
                 callback,
@@ -75,11 +76,11 @@ class CharacterSessionChainTests(SettingsTestCase):
                 ),
             )
         finally:
-            _m_panel_callback_routes.resolve_dynamic_callback_token = original_resolve
-            _m_panel_callback_routes.safe_character_path = original_safe
-            _m_panel_callback_routes.card_fields_from_file = original_fields
-            _m_panel_callback_routes.close_panel_message = original_close
-            _m_panel_callback_routes.send_session_menu = original_menu
+            _owner_character_callbacks.resolve_dynamic_callback_token = original_resolve
+            _owner_character_callbacks.safe_character_path = original_safe
+            _owner_character_callbacks.card_fields_from_file = original_fields
+            _owner_character_callbacks.close_panel_message = original_close
+            _owner_character_callbacks.send_session_menu = original_menu
         self.assertTrue(handled)
         self.assertEqual(opened, [True])
         self.assertEqual(
@@ -114,15 +115,15 @@ class CharacterSessionChainTests(SettingsTestCase):
             json.dumps({"character_file": "chosen.png", "character_name": "Chosen", "expires_at": time.time() + 600}),
         )
         original_safe = _m_input_flows.safe_character_path
-        original_remove = _m_panel_callback_routes.remove_inline_keyboard
-        original_send = _m_panel_callback_routes.send_text
+        original_remove = _owner_session_callbacks.remove_inline_keyboard
+        original_send = _owner_session_callbacks.send_text
         _m_input_flows.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
-        _m_panel_callback_routes.remove_inline_keyboard = lambda *_args, **_kwargs: None
+        _owner_session_callbacks.remove_inline_keyboard = lambda *_args, **_kwargs: None
         sent = []
-        _m_panel_callback_routes.send_text = lambda _token, _chat, text: sent.append(text) or []
+        _owner_session_callbacks.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             callback = self._callback("session:target")
-            handled = _m_panel_callback_routes.handle_session_callback(
+            handled = _owner_session_callbacks.handle_session_callback(
                 self.db,
                 "token",
                 callback,
@@ -141,8 +142,8 @@ class CharacterSessionChainTests(SettingsTestCase):
             )
         finally:
             _m_input_flows.safe_character_path = original_safe
-            _m_panel_callback_routes.remove_inline_keyboard = original_remove
-            _m_panel_callback_routes.send_text = original_send
+            _owner_session_callbacks.remove_inline_keyboard = original_remove
+            _owner_session_callbacks.send_text = original_send
         self.assertTrue(handled)
         self.assertEqual(
             _m_memory_curator.load_session(

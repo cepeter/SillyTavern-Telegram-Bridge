@@ -1,6 +1,7 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
+import bridge.database as _owner_database
 import bridge.memory as _m_memory
 
 ensure_application_extensions()
@@ -14,7 +15,6 @@ from unittest.mock import patch
 import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.scene_state as _m_scene_state
 import bridge.session_naming as _m_session_naming
 
@@ -33,7 +33,7 @@ class SceneStateEngineTests(SettingsTestCase):
             title="Scene",
             app_settings=self.app_settings_builder.build(),
         )
-        _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
+        _owner_database.set_task_model(self.db, "chat", self.session["session_id"], "utility::model")
 
     def tearDown(self):
         self.db.close()

@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_request_context
 from settings_test_support import SettingsTestCase
 
+import bridge.sync_callbacks as _owner_sync_callbacks
+
 ensure_application_extensions()
 
 import time
@@ -9,7 +11,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.status_panels as _m_status_panels
 
 
@@ -126,7 +127,7 @@ class SyncUiBehaviorTests(SettingsTestCase):
             _m_status_panels,
             "send_panel_message",
         ) as send_panel:
-            _m_panel_callback_routes.send_sync_menu(
+            _owner_sync_callbacks.send_sync_menu(
                 "token",
                 "chat",
                 self.db,
@@ -181,7 +182,7 @@ class SyncUiBehaviorTests(SettingsTestCase):
         )
 
     def test_non_sync_callback_returns_false_with_explicit_service(self):
-        handled = _m_panel_callback_routes.handle_sync_callback(
+        handled = _owner_sync_callbacks.handle_sync_callback(
             self.db,
             "token",
             {"id": "cb"},
@@ -205,10 +206,10 @@ class SyncUiBehaviorTests(SettingsTestCase):
         message = {"message_id": 91}
 
         with patch.object(
-            _m_panel_callback_routes,
+            _owner_sync_callbacks,
             "close_panel_message",
         ) as close:
-            handled = _m_panel_callback_routes.handle_sync_callback(
+            handled = _owner_sync_callbacks.handle_sync_callback(
                 self.db,
                 "token",
                 callback,
@@ -243,10 +244,10 @@ class SyncUiBehaviorTests(SettingsTestCase):
             with self.subTest(data=data):
                 answer = Mock()
                 with patch.object(
-                    _m_panel_callback_routes,
+                    _owner_sync_callbacks,
                     "send_sync_menu",
                 ) as send_menu:
-                    handled = _m_panel_callback_routes.handle_sync_callback(
+                    handled = _owner_sync_callbacks.handle_sync_callback(
                         self.db,
                         "token",
                         {"id": "cb"},
@@ -282,10 +283,10 @@ class SyncUiBehaviorTests(SettingsTestCase):
         answer = Mock()
 
         with patch.object(
-            _m_panel_callback_routes,
+            _owner_sync_callbacks,
             "send_sync_menu",
         ) as send_menu:
-            handled = _m_panel_callback_routes.handle_sync_callback(
+            handled = _owner_sync_callbacks.handle_sync_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -326,10 +327,10 @@ class SyncUiBehaviorTests(SettingsTestCase):
         answer = Mock()
 
         with patch.object(
-            _m_panel_callback_routes,
+            _owner_sync_callbacks,
             "send_sync_menu",
         ) as send_menu:
-            handled = _m_panel_callback_routes.handle_sync_callback(
+            handled = _owner_sync_callbacks.handle_sync_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -368,7 +369,7 @@ class SyncUiBehaviorTests(SettingsTestCase):
     def test_unknown_sync_action_is_handled_without_mutation(self):
         answer = Mock()
 
-        handled = _m_panel_callback_routes.handle_sync_callback(
+        handled = _owner_sync_callbacks.handle_sync_callback(
             self.db,
             "token",
             {"id": "cb"},
@@ -405,8 +406,8 @@ class SyncUiOwnershipTests(SettingsTestCase):
             source,
         )
 
-    def test_panel_callback_routes_owns_sync_callback(self):
-        source = (Path(__file__).parents[1] / "bridge" / "panel_callback_routes.py").read_text(encoding="utf-8")
+    def test_sync_callbacks_owns_sync_callback(self):
+        source = (Path(__file__).parents[1] / "bridge" / "sync_callbacks.py").read_text(encoding="utf-8")
         self.assertIn(
             "\ndef handle_sync_callback(",
             source,

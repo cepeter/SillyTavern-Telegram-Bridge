@@ -63,6 +63,17 @@ LOW_LEVEL_IMPORTS = {
     "bridge.runtime_logging": frozenset({"bridge.settings"}),
     "bridge.sqlite_store": frozenset({"bridge.limits", "bridge.settings", "bridge.schema", "bridge.scheduler_safety"}),
 }
+CALLBACK_DOMAIN_MODULES = frozenset(
+    {
+        "bridge.settings_callbacks",
+        "bridge.conversation_callbacks",
+        "bridge.sync_callbacks",
+        "bridge.character_callbacks",
+        "bridge.session_callbacks",
+        "bridge.world_callbacks",
+        "bridge.provider_callbacks",
+    }
+)
 FORBIDDEN_OWNER_IMPORTS = {
     "bridge.command_panels": frozenset({"bridge.command_routes"}),
     "bridge.telegram": frozenset(
@@ -265,6 +276,10 @@ def check_dependency_direction(
     for module, allowed in LOW_LEVEL_IMPORTS.items():
         for imported in sorted(graph.get(module, set()) - allowed):
             errors.append(f"Low-level owner {module} imports {imported}")
+    for module in CALLBACK_DOMAIN_MODULES:
+        forbidden = CALLBACK_DOMAIN_MODULES - {module}
+        for imported in sorted(graph.get(module, set()) & forbidden):
+            errors.append(f"Callback domain violation: {module} imports sibling {imported}")
     for module, forbidden in FORBIDDEN_OWNER_IMPORTS.items():
         for imported in sorted(graph.get(module, set()) & forbidden):
             errors.append(f"Owner direction violation: {module} imports {imported}")

@@ -10,6 +10,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.message_commands as _owner_message_commands
 import bridge.sqlite_store as _sqlite_store
 
 ensure_application_extensions()
@@ -30,7 +31,6 @@ import bridge.memory_backend as _m_memory_backend
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.native_imports as _m_telegram
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 from bridge.memory_service import MemoryPromptContext, MemoryService
 
@@ -834,7 +834,7 @@ class MemoryServiceBoundaryTests(SettingsTestCase):
                     "optimize_database",
                 ),
             ):
-                _m_panel_callback_routes.reset_session(
+                _owner_message_commands.reset_session(
                     db,
                     "token",
                     "chat",

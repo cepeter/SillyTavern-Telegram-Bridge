@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_request_context
 from settings_test_support import make_test_settings
 
+import bridge.character_callbacks as _owner_character_callbacks
+
 ensure_application_extensions()
 
 import json
@@ -8,7 +10,6 @@ import sqlite3
 
 import pytest
 
-import bridge.panel_callback_routes as routes
 import bridge.telegram as telegram
 
 
@@ -34,15 +35,19 @@ def test_character_info_selection_sends_selected_png_as_bound_photo(tmp_path, mo
     sent = []
     closed = []
 
-    monkeypatch.setattr(routes, "resolve_dynamic_callback_token", lambda *_a, **_k: card.name)
-    monkeypatch.setattr(routes, "safe_character_path", lambda *_a, **_k: card)
-    monkeypatch.setattr(routes, "card_fields_from_file", lambda *_a, **_k: _info())
-    monkeypatch.setattr(routes, "send_panel_photo", lambda *a, **k: sent.append((a, k)), raising=False)
-    monkeypatch.setattr(routes, "close_panel_message", lambda *a, **k: closed.append((a, k)))
-    monkeypatch.setattr(routes, "send_panel_request", lambda *_a, **_k: pytest.fail("text fallback must not run"))
+    monkeypatch.setattr(_owner_character_callbacks, "resolve_dynamic_callback_token", lambda *_a, **_k: card.name)
+    monkeypatch.setattr(_owner_character_callbacks, "safe_character_path", lambda *_a, **_k: card)
+    monkeypatch.setattr(_owner_character_callbacks, "card_fields_from_file", lambda *_a, **_k: _info())
+    monkeypatch.setattr(
+        _owner_character_callbacks, "send_panel_photo", lambda *a, **k: sent.append((a, k)), raising=False
+    )
+    monkeypatch.setattr(_owner_character_callbacks, "close_panel_message", lambda *a, **k: closed.append((a, k)))
+    monkeypatch.setattr(
+        _owner_character_callbacks, "send_panel_request", lambda *_a, **_k: pytest.fail("text fallback must not run")
+    )
 
     try:
-        handled = routes.handle_character_callback(
+        handled = _owner_character_callbacks.handle_character_callback(
             db,
             "bot-token",
             _callback(),
@@ -83,20 +88,20 @@ def test_character_info_photo_failure_falls_back_to_existing_text_panel(tmp_path
     fallback = []
     closed = []
 
-    monkeypatch.setattr(routes, "resolve_dynamic_callback_token", lambda *_a, **_k: card.name)
-    monkeypatch.setattr(routes, "safe_character_path", lambda *_a, **_k: card)
-    monkeypatch.setattr(routes, "card_fields_from_file", lambda *_a, **_k: _info())
+    monkeypatch.setattr(_owner_character_callbacks, "resolve_dynamic_callback_token", lambda *_a, **_k: card.name)
+    monkeypatch.setattr(_owner_character_callbacks, "safe_character_path", lambda *_a, **_k: card)
+    monkeypatch.setattr(_owner_character_callbacks, "card_fields_from_file", lambda *_a, **_k: _info())
     monkeypatch.setattr(
-        routes,
+        _owner_character_callbacks,
         "send_panel_photo",
         lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("Telegram rejected photo")),
         raising=False,
     )
-    monkeypatch.setattr(routes, "close_panel_message", lambda *a, **k: closed.append((a, k)))
-    monkeypatch.setattr(routes, "send_panel_request", lambda *a, **k: fallback.append((a, k)) or {})
+    monkeypatch.setattr(_owner_character_callbacks, "close_panel_message", lambda *a, **k: closed.append((a, k)))
+    monkeypatch.setattr(_owner_character_callbacks, "send_panel_request", lambda *a, **k: fallback.append((a, k)) or {})
 
     try:
-        routes.handle_character_callback(
+        _owner_character_callbacks.handle_character_callback(
             db,
             "bot-token",
             _callback(),
@@ -128,11 +133,11 @@ def test_character_info_photo_back_closes_photo_and_opens_fresh_info_list(monkey
     closed = []
     opened = []
     answered = []
-    monkeypatch.setattr(routes, "close_panel_message", lambda *a, **k: closed.append((a, k)))
-    monkeypatch.setattr(routes, "send_character_info_menu", lambda *a, **k: opened.append((a, k)))
+    monkeypatch.setattr(_owner_character_callbacks, "close_panel_message", lambda *a, **k: closed.append((a, k)))
+    monkeypatch.setattr(_owner_character_callbacks, "send_character_info_menu", lambda *a, **k: opened.append((a, k)))
 
     try:
-        handled = routes.handle_character_callback(
+        handled = _owner_character_callbacks.handle_character_callback(
             db,
             "bot-token",
             _callback(data="characterinfo:back"),

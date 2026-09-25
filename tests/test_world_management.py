@@ -2,6 +2,7 @@ from application_test_setup import ensure_application_extensions, make_test_grou
 from settings_test_support import SettingsTestCase
 
 import bridge.session_core as _owner_session_core
+import bridge.world_callbacks as _owner_world_callbacks
 
 ensure_application_extensions()
 
@@ -13,7 +14,6 @@ from pathlib import Path
 
 import bridge.cards as _m_cards
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.world_storage as _m_world_storage
 
@@ -65,7 +65,7 @@ class WorldManagementTests(SettingsTestCase):
     def test_delete_removes_inactive_world_info_and_protects_references(self):
         path = self.app_settings_builder.world_dir / "lore.json"
         path.write_text(json.dumps({"entries": {}}), encoding="utf-8")
-        _m_panel_callback_routes.delete_world_info_file(
+        _owner_world_callbacks.delete_world_info_file(
             self.db, "chat", "lore.json", app_settings=self.app_settings_builder.build()
         )
         self.assertFalse(path.exists())
@@ -77,7 +77,7 @@ class WorldManagementTests(SettingsTestCase):
         )
         self.db.commit()
         with self.assertRaises(ValueError):
-            _m_panel_callback_routes.delete_world_info_file(
+            _owner_world_callbacks.delete_world_info_file(
                 self.db, "chat", "lore.json", app_settings=self.app_settings_builder.build()
             )
         self.assertTrue(path.exists())
@@ -88,7 +88,7 @@ class WorldManagementTests(SettingsTestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_world_menu(
+            _owner_world_callbacks.send_world_menu(
                 "token",
                 "chat",
                 "",
@@ -107,12 +107,12 @@ class WorldManagementTests(SettingsTestCase):
         callback = {"id": "cb", "data": "world:upload", "message": {"message_id": 7}}
         answers = []
         sent = []
-        original_send = _m_panel_callback_routes.send_text
-        original_discard = _m_panel_callback_routes.discard_panel_binding
-        _m_panel_callback_routes.send_text = lambda *_args, **_kwargs: sent.append(True) or []
-        _m_panel_callback_routes.discard_panel_binding = lambda *_args, **_kwargs: None
+        original_send = _owner_world_callbacks.send_text
+        original_discard = _owner_world_callbacks.discard_panel_binding
+        _owner_world_callbacks.send_text = lambda *_args, **_kwargs: sent.append(True) or []
+        _owner_world_callbacks.discard_panel_binding = lambda *_args, **_kwargs: None
         try:
-            _m_panel_callback_routes.handle_world_callback(
+            _owner_world_callbacks.handle_world_callback(
                 self.db,
                 "token",
                 callback,
@@ -129,8 +129,8 @@ class WorldManagementTests(SettingsTestCase):
                 ),
             )
         finally:
-            _m_panel_callback_routes.send_text = original_send
-            _m_panel_callback_routes.discard_panel_binding = original_discard
+            _owner_world_callbacks.send_text = original_send
+            _owner_world_callbacks.discard_panel_binding = original_discard
         state = json.loads(_m_session_naming.get_meta(self.db, "world_upload:chat"))
         self.assertEqual(state["session_id"], self.session["session_id"])
         self.assertGreater(state["expires_at"], time.time())

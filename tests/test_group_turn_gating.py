@@ -13,7 +13,10 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.callbacks as _callbacks
+import bridge.character_callbacks as _owner_character_callbacks
 import bridge.command_panels as _command_panels
+import bridge.groups as _owner_groups
+import bridge.world_callbacks as _owner_world_callbacks
 
 ensure_application_extensions()
 
@@ -29,7 +32,6 @@ import bridge.command_routes as _m_command_routes
 import bridge.group_core as _m_group_core
 import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_core as _m_telegram
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
@@ -111,7 +113,7 @@ class GroupTurnGatingTests(SettingsTestCase):
             state = _m_sync_api.group_state(self.db, "chat", "session")
             state["mode"] = "manual"
             self.group.save(self.db, "chat", "session", state)
-            _m_panel_callback_routes.send_group_menu(
+            _owner_groups.send_group_menu(
                 self.db,
                 "token",
                 "chat",
@@ -127,7 +129,7 @@ class GroupTurnGatingTests(SettingsTestCase):
             self.assertEqual(manual_callbacks & {"group:claim", "group:pass"}, {"group:claim", "group:pass"})
             state["mode"] = "round_robin"
             self.group.save(self.db, "chat", "session", state)
-            _m_panel_callback_routes.send_group_menu(
+            _owner_groups.send_group_menu(
                 self.db,
                 "token",
                 "chat",
@@ -150,7 +152,7 @@ class GroupTurnGatingTests(SettingsTestCase):
             RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified")
         )
         try:
-            _m_panel_callback_routes.send_group_menu(
+            _owner_groups.send_group_menu(
                 self.db,
                 "token",
                 "chat",
@@ -169,7 +171,7 @@ class GroupTurnGatingTests(SettingsTestCase):
         calls = []
         _m_cards.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
-            _m_panel_callback_routes.send_group_menu(
+            _owner_groups.send_group_menu(
                 self.db,
                 "token",
                 "chat|topic:7",
@@ -183,7 +185,7 @@ class GroupTurnGatingTests(SettingsTestCase):
                 button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row
             }
             self.assertIn("group:new_session", topic_callbacks)
-            _m_panel_callback_routes.send_group_menu(
+            _owner_groups.send_group_menu(
                 self.db,
                 "token",
                 "chat",
@@ -319,35 +321,36 @@ class GroupTurnGatingTests(SettingsTestCase):
             f"group_setup:{chat_id}",
             json.dumps({"session_id": session["session_id"], "stage": "character", "expires_at": time.time() + 600}),
         )
-        original_resolve = _m_panel_callback_routes.resolve_dynamic_callback_token
-        original_char_path = _m_panel_callback_routes.safe_character_path
-        original_world_path = _m_panel_callback_routes.safe_world_path
+        original_char_resolve = _owner_character_callbacks.resolve_dynamic_callback_token
+        original_world_resolve = _owner_world_callbacks.resolve_dynamic_callback_token
+        original_char_path = _owner_character_callbacks.safe_character_path
+        original_world_path = _owner_world_callbacks.safe_world_path
         original_canonical_world_path = card_content.safe_world_path
         original_telegram_world_path = _m_telegram.safe_world_path
-        original_fields = _m_panel_callback_routes.card_fields_from_file
-        original_close = _m_panel_callback_routes.close_panel_message
-        original_world_menu = _m_panel_callback_routes.send_world_menu
+        original_fields = _owner_character_callbacks.card_fields_from_file
+        original_close = _owner_character_callbacks.close_panel_message
+        original_world_menu = _owner_world_callbacks.send_world_menu
         original_groups_world_menu = _m_groups.send_world_menu
-        original_remove = _m_panel_callback_routes.remove_inline_keyboard
-        original_group_menu = _m_panel_callback_routes.send_group_menu
+        original_remove = _owner_world_callbacks.remove_inline_keyboard
+        original_group_menu = _owner_world_callbacks.send_group_menu
         opened_world = []
         opened_group = []
-        _m_panel_callback_routes.resolve_dynamic_callback_token = lambda _value, kind, _chat, **_kwargs: (
-            "chosen.png" if kind == "character" else "lore.json"
-        )
-        _m_panel_callback_routes.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
-        _m_panel_callback_routes.safe_world_path = lambda _name, *, app_settings=None: Path("/tmp/lore.json")
+        _owner_character_callbacks.resolve_dynamic_callback_token = (
+            _owner_world_callbacks.resolve_dynamic_callback_token
+        ) = lambda _value, kind, _chat, **_kwargs: "chosen.png" if kind == "character" else "lore.json"
+        _owner_character_callbacks.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
+        _owner_world_callbacks.safe_world_path = lambda _name, *, app_settings=None: Path("/tmp/lore.json")
         card_content.safe_world_path = lambda _name, *, app_settings=None: Path("/tmp/lore.json")
         _m_telegram.safe_world_path = lambda _name, *, app_settings=None: Path("/tmp/lore.json")
-        _m_panel_callback_routes.card_fields_from_file = lambda _name, *, app_settings=None: {"name": "Chosen"}
-        _m_panel_callback_routes.close_panel_message = lambda *_args, **_kwargs: None
-        _m_panel_callback_routes.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
+        _owner_character_callbacks.card_fields_from_file = lambda _name, *, app_settings=None: {"name": "Chosen"}
+        _owner_character_callbacks.close_panel_message = lambda *_args, **_kwargs: None
+        _owner_world_callbacks.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
         _m_groups.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
-        _m_panel_callback_routes.remove_inline_keyboard = lambda *_args, **_kwargs: None
-        _m_panel_callback_routes.send_group_menu = lambda *_args, **_kwargs: opened_group.append(True)
+        _owner_world_callbacks.remove_inline_keyboard = lambda *_args, **_kwargs: None
+        _owner_world_callbacks.send_group_menu = lambda *_args, **_kwargs: opened_group.append(True)
         try:
             character_callback = self._callback("character:character-token")
-            _m_panel_callback_routes.handle_character_callback(
+            _owner_character_callbacks.handle_character_callback(
                 self.db,
                 "token",
                 character_callback,
@@ -376,7 +379,7 @@ class GroupTurnGatingTests(SettingsTestCase):
                 "chosen.png",
             )
             world_callback = self._callback("world:world-token")
-            _m_panel_callback_routes.handle_world_callback(
+            _owner_world_callbacks.handle_world_callback(
                 self.db,
                 "token",
                 world_callback,
@@ -406,7 +409,7 @@ class GroupTurnGatingTests(SettingsTestCase):
                 ["lore.json"],
             )
             done_callback = self._callback("world:done")
-            _m_panel_callback_routes.handle_world_callback(
+            _owner_world_callbacks.handle_world_callback(
                 self.db,
                 "token",
                 done_callback,
@@ -423,17 +426,18 @@ class GroupTurnGatingTests(SettingsTestCase):
                 ),
             )
         finally:
-            _m_panel_callback_routes.resolve_dynamic_callback_token = original_resolve
-            _m_panel_callback_routes.safe_character_path = original_char_path
-            _m_panel_callback_routes.safe_world_path = original_world_path
+            _owner_character_callbacks.resolve_dynamic_callback_token = original_char_resolve
+            _owner_world_callbacks.resolve_dynamic_callback_token = original_world_resolve
+            _owner_character_callbacks.safe_character_path = original_char_path
+            _owner_world_callbacks.safe_world_path = original_world_path
             card_content.safe_world_path = original_canonical_world_path
             _m_telegram.safe_world_path = original_telegram_world_path
-            _m_panel_callback_routes.card_fields_from_file = original_fields
-            _m_panel_callback_routes.close_panel_message = original_close
-            _m_panel_callback_routes.send_world_menu = original_world_menu
+            _owner_character_callbacks.card_fields_from_file = original_fields
+            _owner_character_callbacks.close_panel_message = original_close
+            _owner_world_callbacks.send_world_menu = original_world_menu
             _m_groups.send_world_menu = original_groups_world_menu
-            _m_panel_callback_routes.remove_inline_keyboard = original_remove
-            _m_panel_callback_routes.send_group_menu = original_group_menu
+            _owner_world_callbacks.remove_inline_keyboard = original_remove
+            _owner_world_callbacks.send_group_menu = original_group_menu
         self.assertTrue(opened_world)
         self.assertEqual(opened_group, [True])
         self.assertEqual(_m_session_naming.get_meta(self.db, f"group_setup:{chat_id}", ""), "")
@@ -452,7 +456,7 @@ class GroupTurnGatingTests(SettingsTestCase):
         _m_session_naming.close_panel_message = lambda *_args, **_kwargs: None
         try:
             callback = self._callback("character:cancel")
-            handled = _m_panel_callback_routes.handle_character_callback(
+            handled = _owner_character_callbacks.handle_character_callback(
                 self.db,
                 "token",
                 callback,

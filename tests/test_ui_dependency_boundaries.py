@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 from application_test_setup import make_test_delivery_port, make_test_group_service, make_test_request_context
 
+import bridge.settings_callbacks as _owner_settings_callbacks
+
 ROOT = Path(__file__).parents[1]
 BRIDGE = ROOT / "bridge"
 
@@ -67,9 +69,8 @@ def test_expression_menu_requires_and_uses_delivery_port(monkeypatch):
 
 
 def test_expression_callback_requires_delivery_port():
-    import bridge.panel_callback_routes as routes
 
-    param = inspect.signature(routes.handle_expression_callback).parameters.get("delivery_port")
+    param = inspect.signature(_owner_settings_callbacks.handle_expression_callback).parameters.get("delivery_port")
     assert param is not None
     assert param.default is inspect.Parameter.empty
 

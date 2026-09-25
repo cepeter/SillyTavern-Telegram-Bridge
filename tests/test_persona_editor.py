@@ -9,6 +9,8 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.callback_tokens as _owner_callback_tokens
+import bridge.input_flows as _owner_input_flows
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -24,7 +26,6 @@ import bridge.command_routes as _m_command_routes
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.persona_sync as _m_persona_sync
 import bridge.session_naming as _m_session_naming
 import bridge.sillytavern_api as _m_sillytavern_api
@@ -182,7 +183,6 @@ class PersonaEditorTests(SettingsTestCase):
             self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
         )
         self.calls = []
-        self.old_panel_request = _m_panel_callback_routes.telegram_request
         self.old_cards_request = _m_cards.send_panel_request
         self.old_input_request = _m_input_flows.send_panel_request
         self.old_input_send_text = _m_input_flows.send_text
@@ -192,7 +192,6 @@ class PersonaEditorTests(SettingsTestCase):
         def request_stub(_token, method, payload, **_kwargs):
             return self.calls.append((method, payload)) or {"message_id": 500}
 
-        _m_panel_callback_routes.telegram_request = request_stub
         _m_cards.send_panel_request = request_stub
         _m_input_flows.send_panel_request = request_stub
 
@@ -215,7 +214,6 @@ class PersonaEditorTests(SettingsTestCase):
         self.addCleanup(cleanup_patch.stop)
 
     def tearDown(self):
-        _m_panel_callback_routes.telegram_request = self.old_panel_request
         _m_cards.send_panel_request = self.old_cards_request
         _m_input_flows.send_panel_request = self.old_input_request
         _m_input_flows.send_text = self.old_input_send_text
@@ -541,7 +539,7 @@ class PersonaEditorTests(SettingsTestCase):
             app_settings=self.app_settings_builder.build(),
         )
         answers = []
-        handled = _m_panel_callback_routes.handle_persona_callback(
+        handled = _owner_input_flows.handle_persona_callback(
             self.db,
             "token",
             {"id": "cb"},
@@ -563,7 +561,7 @@ class PersonaEditorTests(SettingsTestCase):
 
     def test_callback_select_uses_injected_persona_service(self):
         fake = FakePersonaService()
-        token_value = _m_panel_callback_routes.dynamic_callback_token(
+        token_value = _owner_callback_tokens.dynamic_callback_token(
             "persona",
             "other.png",
             "chat",
@@ -575,7 +573,7 @@ class PersonaEditorTests(SettingsTestCase):
             "update_session",
             side_effect=AssertionError("direct session mutation"),
         ):
-            handled = _m_panel_callback_routes.handle_persona_callback(
+            handled = _owner_input_flows.handle_persona_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -603,7 +601,7 @@ class PersonaEditorTests(SettingsTestCase):
             "update_session",
             side_effect=AssertionError("direct session mutation"),
         ):
-            handled = _m_panel_callback_routes.handle_persona_callback(
+            handled = _owner_input_flows.handle_persona_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -625,7 +623,7 @@ class PersonaEditorTests(SettingsTestCase):
 
     def test_callback_delete_uses_injected_persona_service(self):
         fake = FakePersonaService()
-        token_value = _m_panel_callback_routes.dynamic_callback_token(
+        token_value = _owner_callback_tokens.dynamic_callback_token(
             "persona",
             "other.png",
             "chat",
@@ -637,7 +635,7 @@ class PersonaEditorTests(SettingsTestCase):
             "delete_native_persona",
             side_effect=AssertionError("raw delete bypassed service"),
         ):
-            handled = _m_panel_callback_routes.handle_persona_callback(
+            handled = _owner_input_flows.handle_persona_callback(
                 self.db,
                 "token",
                 {"id": "cb"},
@@ -662,14 +660,14 @@ class PersonaEditorTests(SettingsTestCase):
     def test_callback_delete_maps_reference_refusal_feedback(self):
         fake = FakePersonaService()
         fake.delete_error = ValueError("Persona is used by another session")
-        token_value = _m_panel_callback_routes.dynamic_callback_token(
+        token_value = _owner_callback_tokens.dynamic_callback_token(
             "persona",
             "other.png",
             "chat",
             db=self.db,
         )
         answers = []
-        handled = _m_panel_callback_routes.handle_persona_callback(
+        handled = _owner_input_flows.handle_persona_callback(
             self.db,
             "token",
             {"id": "cb"},
@@ -701,10 +699,10 @@ class PersonaEditorTests(SettingsTestCase):
             app_settings=self.app_settings_builder.build(),
         )
         _m_session_naming.update_session(self.db, "other-chat", other["session_id"], persona_id=target)
-        token_value = _m_panel_callback_routes.dynamic_callback_token("persona", target, "chat", db=self.db)
+        token_value = _owner_callback_tokens.dynamic_callback_token("persona", target, "chat", db=self.db)
         answers = []
 
-        handled = _m_panel_callback_routes.handle_persona_callback(
+        handled = _owner_input_flows.handle_persona_callback(
             self.db,
             "token",
             {"id": "cb"},

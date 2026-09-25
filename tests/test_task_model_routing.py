@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
+import bridge.database as _owner_database
+
 ensure_application_extensions()
 
 import tempfile
@@ -10,7 +12,6 @@ from pathlib import Path
 
 import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 
 
@@ -43,7 +44,7 @@ class TaskModelRoutingTests(SettingsTestCase):
         )
 
     def test_summary_uses_session_utility_model(self):
-        _m_panel_callback_routes.set_task_model(
+        _owner_database.set_task_model(
             self.db,
             "chat",
             self.session["session_id"],
@@ -79,8 +80,8 @@ class TaskModelRoutingTests(SettingsTestCase):
         self.assertEqual(seen_models, ["cheap::summary-model"])
 
     def test_main_clears_utility_override(self):
-        _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "cheap::summary-model")
-        _m_panel_callback_routes.set_task_model(self.db, "chat", self.session["session_id"], "main")
+        _owner_database.set_task_model(self.db, "chat", self.session["session_id"], "cheap::summary-model")
+        _owner_database.set_task_model(self.db, "chat", self.session["session_id"], "main")
         self.assertEqual(
             _m_memory_curator.task_model_for_session(
                 self.db, "chat", self.session, "summary", app_settings=self.app_settings_builder.build()

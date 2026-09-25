@@ -12,7 +12,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.schema as _m_schema
 import bridge.schema as schema
 import bridge.session_naming as _m_session_naming
@@ -221,7 +220,7 @@ class SyncAuditHardeningTests(SettingsTestCase):
         self.db.execute("UPDATE sync_bindings SET realtime_enabled=1 WHERE chat_id='chat' AND session_id='inactive'")
         self.db.commit()
 
-        deleted, reason = _m_panel_callback_routes.delete_session_data(
+        deleted, reason = _owner_session_core.delete_session_data(
             self.db,
             "chat",
             inactive["session_id"],

@@ -24,7 +24,6 @@ import bridge.command_routes as _m_command_routes
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
 import bridge.session_titles as _m_session_titles
 import bridge.sync_api as _m_sync_api
@@ -72,7 +71,7 @@ class SessionNamingTests(SettingsTestCase):
             group_service=self.group,
             app_settings=self.app_settings_builder.build(),
         )
-        self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
+        self.assertEqual(len(_owner_session_core.list_sessions(self.db, "chat")), 1)
         self.assertTrue(
             make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
@@ -150,7 +149,7 @@ class SessionNamingTests(SettingsTestCase):
                 ),
             )
         )
-        self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
+        self.assertEqual(len(_owner_session_core.list_sessions(self.db, "chat")), 1)
         self.assertTrue(self._state())
         self.assertIn("cannot start with /", self.sent[-1])
 
@@ -185,7 +184,7 @@ class SessionNamingTests(SettingsTestCase):
                 ),
             )
         )
-        self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, "chat")), 1)
+        self.assertEqual(len(_owner_session_core.list_sessions(self.db, "chat")), 1)
         self.assertEqual(_m_session_naming.get_meta(self.db, "character_session_input:chat", ""), "")
 
     def test_cancel_with_bot_mention_leaves_no_empty_session(self):
@@ -284,7 +283,7 @@ class SessionNamingTests(SettingsTestCase):
                 group_service=self.group,
                 app_settings=self.app_settings_builder.build(),
             )
-            self.assertEqual(len(_m_panel_callback_routes.list_sessions(self.db, chat_id)), 1)
+            self.assertEqual(len(_owner_session_core.list_sessions(self.db, chat_id)), 1)
             make_test_input_flow_service(app_settings=self.app_settings_builder.build()).handle_pending(
                 self.db,
                 "token",

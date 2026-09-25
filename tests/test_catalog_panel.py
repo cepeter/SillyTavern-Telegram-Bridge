@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions, make_test_request_context
 from settings_test_support import SettingsTestCase
 
+import bridge.catalog as _owner_catalog
+
 ensure_application_extensions()
 
 import json
@@ -10,7 +12,6 @@ import unittest
 
 import bridge.cards as _m_cards
 import bridge.catalog as _m_catalog
-import bridge.panel_callback_routes as _m_panel_callback_routes
 
 
 class CatalogPanelTests(SettingsTestCase):
@@ -77,7 +78,7 @@ class CatalogPanelTests(SettingsTestCase):
             calls.append((method, payload)) or {"message_id": 1}
         )
         try:
-            _m_panel_callback_routes.send_model_target_menu(
+            _owner_catalog.send_model_target_menu(
                 "token",
                 "chat",
                 "main::model",
@@ -108,7 +109,7 @@ class CatalogPanelTests(SettingsTestCase):
             RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified")
         )
         try:
-            _m_panel_callback_routes.send_model_menu(
+            _owner_catalog.send_model_menu(
                 "token",
                 "chat",
                 "provider::model",
