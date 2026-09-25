@@ -53,6 +53,7 @@ from bridge.config import (
 )
 from bridge.config import SILLYTAVERN_DIR as SILLYTAVERN_DIR
 from bridge.config import WORLD_DIR as WORLD_DIR
+from bridge.config_values import read_int
 from bridge.environment import environment_file
 
 TOPIC_SCOPE_SEPARATOR = "|topic:"
@@ -80,7 +81,7 @@ def topic_scope_from_message(chat_id: str, message: dict | None) -> str:
     return topic_scope_id(chat_id, (message or {}).get("message_thread_id"))
 
 
-MODEL_REFRESH_SECONDS = int(os.environ.get("SILLYTAVERN_MODEL_REFRESH_SECONDS", "3600"))
+MODEL_REFRESH_SECONDS = read_int(os.environ, "SILLYTAVERN_MODEL_REFRESH_SECONDS", 3600, minimum=1, maximum=86400)
 IMAGE_MAX_BYTES = 8 * 1024 * 1024
 TTS_MAX_CHARS = 4000
 STT_MAX_BYTES = 20 * 1024 * 1024

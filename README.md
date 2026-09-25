@@ -254,6 +254,17 @@ The installation guide creates the private environment file at
 `~/.local/share/sillytavern-telegram/.env`. Keep that file outside Git and
 restrict it to your user account.
 
+On POSIX systems startup verifies the opened environment file is owned by the
+current user and has no group/other permissions (`chmod 600`). Symlinks and
+non-regular files are rejected; files are bounded to 1 MiB and parsed completely
+before any values are applied. Windows deployments must protect the file with
+an appropriate user-only ACL; POSIX mode/UID checks do not apply there.
+
+Numeric configuration is validated with the variable name in diagnostics, without
+printing its supplied value. Embedding dimensions must be 1–65,536; extracted
+characters 1–10,000,000; PDF pages 1–10,000; PDF timeout 1–300 seconds; model
+catalog refresh interval 1–86,400 seconds.
+
 The bare minimum you need to fill in:
 
 ```dotenv
@@ -868,7 +879,7 @@ and never replaces the original conversation history.
 - **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
   reverse imports from the isolated service/port layer. Ruff linting, security
   rules, and formatting cover the complete Python tree. Mypy currently checks
-  13 explicitly listed modules, including the network and callback-token policy.
+  15 explicitly listed modules, including the network and callback-token policy.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---

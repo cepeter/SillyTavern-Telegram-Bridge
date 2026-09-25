@@ -35,6 +35,7 @@ class EnvironmentBootstrapTests(unittest.TestCase):
                 encoding="utf-8",
             )
             target = {"KEEP": "process-value"}
+            path.chmod(0o600)
             load_environment_file(path, target)
 
         self.assertEqual(target["PLAIN"], "value")
@@ -48,6 +49,7 @@ class EnvironmentBootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
             path.write_text("NOT_AN_ASSIGNMENT\n", encoding="utf-8")
+            path.chmod(0o600)
             with self.assertRaisesRegex(RuntimeError, "invalid environment assignment"):
                 load_environment_file(path, {})
 
@@ -55,6 +57,7 @@ class EnvironmentBootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
             path.write_text("BAD-NAME=value\n", encoding="utf-8")
+            path.chmod(0o600)
             with self.assertRaisesRegex(RuntimeError, "invalid environment name"):
                 load_environment_file(path, {})
 
@@ -62,6 +65,7 @@ class EnvironmentBootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
             path.write_text('BROKEN="value\n', encoding="utf-8")
+            path.chmod(0o600)
             with self.assertRaisesRegex(RuntimeError, "unterminated quoted value"):
                 load_environment_file(path, {})
 
@@ -90,6 +94,7 @@ class EnvironmentBootstrapTests(unittest.TestCase):
             path.write_text("BOOTSTRAPPED=yes\n", encoding="utf-8")
             target = {"SILLYTAVERN_ENV_FILE": str(path)}
 
+            path.chmod(0o600)
             resolved = bootstrap_environment(target)
 
         self.assertEqual(resolved, path)
