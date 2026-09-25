@@ -295,7 +295,7 @@ SILLYTAVERN_MODEL=provider-one::provider-one/model-a
 `SILLYTAVERN_TELEGRAM_ALLOWED_USERS` must contain comma-separated **numeric**
 Telegram user IDs. `SILLYTAVERN_DEFAULT_CHARACTER` must name an existing card in
 the configured character directory. `SILLYTAVERN_MODEL` uses
-`provider-id::model-id` from the private provider catalog.
+`provider-id::model-id` from the private provider catalog. A bare model ID is accepted only when it exactly matches one provider; ambiguous or unknown IDs are refused. Qualified IDs must exist in the provider’s configured `models` or its opted-in discovery cache. Startup validates the route, endpoint policy, and credential before polling; seed the default model in YAML for a first install without a discovery cache.
 
 `SILLYTAVERN_DIR` defaults to `~/.local/share/SillyTavern`; set it when your
 SillyTavern installation lives elsewhere.
