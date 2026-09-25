@@ -111,6 +111,7 @@ def process_callback(
         group_service=services.group,
         memory_service=memory_service,
         persona_service=persona_service,
+        provider_port=services.provider,
         request_context=request_context,
     ):
         return
