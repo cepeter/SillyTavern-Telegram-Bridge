@@ -1,4 +1,5 @@
 """Explicit bridge/native SillyTavern persona interoperability."""
+
 from __future__ import annotations
 
 import copy
@@ -7,25 +8,29 @@ import json
 import logging
 import os
 import re
-import time
 import threading
+import time
 from pathlib import Path
 
-from bridge.config import BRIDGE_HOME, SILLYTAVERN_DIR, SYNC_MAX_BYTES
-
+import bridge.sillytavern_api as _st_api
+from bridge.common import IMAGE_MAX_BYTES
+from bridge.config import BRIDGE_HOME, CATALOG_MAX_ITEMS, SILLYTAVERN_DIR, SYNC_MAX_BYTES
 from bridge.persona_integrity import (
     IntegrityCheckedPersonaStore as _IntegrityCheckedPersonaStore,
 )
 
-
-NATIVE_PERSONA_SETTINGS_FILE = Path(os.environ.get(
-    "SILLYTAVERN_NATIVE_SETTINGS_FILE",
-    str(SILLYTAVERN_DIR / "data/default-user/settings.json"),
-))
-NATIVE_PERSONA_AVATAR_DIR = Path(os.environ.get(
-    "SILLYTAVERN_NATIVE_AVATAR_DIR",
-    str(SILLYTAVERN_DIR / "data/default-user/User Avatars"),
-))
+NATIVE_PERSONA_SETTINGS_FILE = Path(
+    os.environ.get(
+        "SILLYTAVERN_NATIVE_SETTINGS_FILE",
+        str(SILLYTAVERN_DIR / "data/default-user/settings.json"),
+    )
+)
+NATIVE_PERSONA_AVATAR_DIR = Path(
+    os.environ.get(
+        "SILLYTAVERN_NATIVE_AVATAR_DIR",
+        str(SILLYTAVERN_DIR / "data/default-user/User Avatars"),
+    )
+)
 NATIVE_PERSONA_BACKUP_DIR = BRIDGE_HOME / "backups" / "sillytavern" / "personas"
 _NATIVE_PERSONA_CACHE_LAST_REFRESH = 0.0
 _NATIVE_PERSONA_CACHE_SECONDS = 15.0
@@ -112,14 +117,8 @@ def default_persona_id() -> str:
     try:
         personas = load_personas()
         settings = _native_settings()
-        power_user = (
-            settings.get("power_user")
-            if isinstance(settings, dict)
-            else {}
-        )
-        configured = str(
-            (power_user or {}).get("default_persona") or ""
-        ).strip()
+        power_user = settings.get("power_user") if isinstance(settings, dict) else {}
+        configured = str((power_user or {}).get("default_persona") or "").strip()
         if configured in personas:
             return configured
     except Exception:
@@ -201,7 +200,11 @@ def _backup_native_settings(expected: dict) -> Path:
     if hashlib.sha256(backup.read_bytes()).digest() != hashlib.sha256(raw).digest():
         backup.unlink(missing_ok=True)
         raise OSError("native persona backup checksum verification failed")
-    backups = sorted(NATIVE_PERSONA_BACKUP_DIR.glob("settings-persona-*.json"), key=lambda item: item.stat().st_mtime_ns, reverse=True)
+    backups = sorted(
+        NATIVE_PERSONA_BACKUP_DIR.glob("settings-persona-*.json"),
+        key=lambda item: item.stat().st_mtime_ns,
+        reverse=True,
+    )
     for stale in backups[20:]:
         stale.unlink(missing_ok=True)
     return backup
@@ -235,7 +238,8 @@ def _choose_native_avatar(persona_id: str, persona: dict, settings: dict, native
     if mapped:
         return mapped
     matches = [
-        avatar for avatar, name in native_names.items()
+        avatar
+        for avatar, name in native_names.items()
         if str(name).casefold() == str(persona["name"]).casefold() and _valid_native_avatar(avatar)
     ]
     if len(matches) == 1:
@@ -256,7 +260,9 @@ def _choose_native_avatar(persona_id: str, persona: dict, settings: dict, native
 
 def _upsert_native_persona_storage(identifier: str, name: str, description: str, client=None) -> str:
     """Create or update one Persona directly in native SillyTavern settings."""
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(identifier or "")) and not _valid_native_avatar(str(identifier or "")):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(identifier or "")) and not _valid_native_avatar(
+        str(identifier or "")
+    ):
         raise ValueError("Persona ID must contain only letters, numbers, hyphens, or underscores")
     if not 1 <= len(name) <= 120 or not 1 <= len(description) <= 4000:
         raise ValueError("Persona name must be 1–120 characters and description 1–4,000 characters")
@@ -290,10 +296,10 @@ def _upsert_native_persona_storage(identifier: str, name: str, description: str,
     try:
         verified = _native_settings(api)
         _power, verified_names, verified_descriptions = _native_persona_maps(verified)
-    except Exception:
+    except Exception as exc:
         if created_avatar:
             (NATIVE_PERSONA_AVATAR_DIR / avatar).unlink(missing_ok=True)
-        raise save_error or RuntimeError("SillyTavern Persona readback failed")
+        raise (save_error or RuntimeError("SillyTavern Persona readback failed")) from exc
     target = verified_descriptions.get(avatar, {})
     if verified_names.get(avatar) != name or not isinstance(target, dict) or target.get("description") != description:
         if created_avatar and avatar not in verified_names:
@@ -351,9 +357,3 @@ def delete_native_persona(identifier: str, client=None) -> bool:
         identifier,
         client=client,
     )
-
-
-# Explicit late imports replace transitional dependency injection.
-from bridge.common import IMAGE_MAX_BYTES
-from bridge.config import CATALOG_MAX_ITEMS
-import bridge.sillytavern_api as _st_api

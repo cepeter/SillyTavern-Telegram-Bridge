@@ -5,6 +5,8 @@ ensure_application_extensions()
 import unittest
 
 import bridge.telegram as _m_telegram
+
+
 class SemanticTelegramSplitTests(unittest.TestCase):
     def test_prefers_paragraph_boundary(self):
         text = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."

@@ -4,6 +4,7 @@ The parent bridge sends one PDF on stdin and receives a small JSON response on
 stdout. This file intentionally has no bridge imports so the parser runs in an
 isolated interpreter.
 """
+
 from __future__ import annotations
 
 import argparse

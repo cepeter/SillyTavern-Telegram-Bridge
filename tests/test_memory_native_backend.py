@@ -2,23 +2,23 @@ from application_test_setup import ensure_application_extensions, make_test_prov
 
 ensure_application_extensions()
 
-import json
+import tempfile
+import time
+import unittest
 from pathlib import Path
 from types import SimpleNamespace
-import tempfile
-import unittest
 from unittest.mock import patch
 
-import bridge.extension_registry as registry
 import bridge.config as config
-import bridge.memory_backend as memory_backend
-import time
+import bridge.extension_registry as registry
 import bridge.main as _m_main
 import bridge.memory as _m_memory
+import bridge.memory_backend as memory_backend
 import bridge.memory_curator as _m_memory_curator
 import bridge.session_naming as _m_session_naming
 import bridge.sync_core as _m_sync_core
-import bridge.common as _m_common
+
+
 class _FakeDocuments:
     def __init__(self):
         self.documents = {}
@@ -41,12 +41,7 @@ class _FakeDocuments:
         for document_id, document_tags in self.documents.items():
             if q and q.casefold() not in document_id.casefold():
                 continue
-            if (
-                tags
-                and not set(tags).intersection(
-                    set(document_tags)
-                )
-            ):
+            if tags and not set(tags).intersection(set(document_tags)):
                 continue
             items.append(
                 SimpleNamespace(
@@ -54,7 +49,7 @@ class _FakeDocuments:
                     tags=document_tags,
                 )
             )
-        page = items[offset:offset + limit]
+        page = items[offset : offset + limit]
         return SimpleNamespace(
             items=page,
             total=len(items),
@@ -79,9 +74,7 @@ class _FakeHindsight:
 
     def retain(self, **kwargs):
         self.retained.append(kwargs)
-        self.documents.documents[
-            kwargs["document_id"]
-        ] = list(kwargs.get("tags") or [])
+        self.documents.documents[kwargs["document_id"]] = list(kwargs.get("tags") or [])
         return SimpleNamespace(success=True)
 
 
@@ -90,9 +83,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = config.DB_FILE
         self.old_hindsight = memory_backend.hindsight_client
-        config.DB_FILE = (
-            Path(self.tmp.name) / "bridge.sqlite3"
-        )
+        config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
         self.session = _m_session_naming.create_session(
             self.db,
@@ -111,9 +102,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
     def _add_message(self, content="old text"):
         self.db.execute(
-            "INSERT INTO messages("
-            "chat_id,session_id,role,content,created_at"
-            ") VALUES(?,?,?,?,?)",
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             (
                 "chat",
                 self.session["session_id"],
@@ -125,16 +114,8 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self.db.commit()
 
     def test_memory_module_owns_guard_and_persistence_helpers(self):
-        shell_source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "memory.py"
-        ).read_text(encoding="utf-8")
-        backend_source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "memory_backend.py"
-        ).read_text(encoding="utf-8")
+        shell_source = (Path(__file__).parents[1] / "bridge" / "memory.py").read_text(encoding="utf-8")
+        backend_source = (Path(__file__).parents[1] / "bridge" / "memory_backend.py").read_text(encoding="utf-8")
 
         self.assertIn(
             "_HINDSIGHT_STALE_GUARD = _HindsightStaleGuard(",
@@ -149,11 +130,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
             self.assertNotIn(f"def {name}(", shell_source)
 
     def test_malformed_and_negative_epoch_values_read_as_zero(self):
-        key = (
-            "hindsight_epoch:"
-            "chat:"
-            f"{self.session['session_id']}"
-        )
+        key = f"hindsight_epoch:chat:{self.session['session_id']}"
 
         _m_session_naming.set_meta(self.db, key, "not-an-int")
         self.assertEqual(
@@ -184,11 +161,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         with patch.object(
             _m_memory,
             "submit_background",
-            side_effect=lambda name, fn, *args, **kwargs: (
-                queued.append(
-                    (name, fn, args, kwargs)
-                )
-            ),
+            side_effect=lambda name, fn, *args, **kwargs: queued.append((name, fn, args, kwargs)),
         ):
             _m_memory._HINDSIGHT_STALE_GUARD.retain(
                 self.db,
@@ -198,15 +171,10 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 provider_port=self.provider,
             )
 
-        hindsight_jobs = [
-            item
-            for item in queued
-            if item[0] == "hindsight_retain"
-        ]
+        hindsight_jobs = [item for item in queued if item[0] == "hindsight_retain"]
         self.assertEqual(len(hindsight_jobs), 1)
         self.db.execute(
-            "UPDATE messages SET content='new text' "
-            "WHERE chat_id=? AND session_id=?",
+            "UPDATE messages SET content='new text' WHERE chat_id=? AND session_id=?",
             ("chat", self.session["session_id"]),
         )
         self.db.commit()
@@ -218,13 +186,9 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
     def test_successful_direct_guard_purge_advances_epoch_and_clears_mapping(self):
         self._add_message()
-        mapped = _m_memory.hindsight_conversation_document_id(
-            self.session["session_id"]
-        )
+        mapped = _m_memory.hindsight_conversation_document_id(self.session["session_id"])
         self.db.execute(
-            "INSERT INTO hindsight_documents("
-            "chat_id,session_id,document_id,kind,created_at"
-            ") VALUES(?,?,?,?,?)",
+            "INSERT INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
             (
                 "chat",
                 self.session["session_id"],
@@ -236,17 +200,13 @@ class MemoryNativeBackendTests(unittest.TestCase):
         self.db.commit()
 
         fake = _FakeHindsight()
-        fake.documents.documents[mapped] = [
-            f"session:{self.session['session_id']}"
-        ]
+        fake.documents.documents[mapped] = [f"session:{self.session['session_id']}"]
         memory_backend.hindsight_client = lambda: fake
 
-        old_epoch = (
-            _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
-                self.db,
-                "chat",
-                self.session["session_id"],
-            )
+        old_epoch = _m_memory._HINDSIGHT_STALE_GUARD.read_epoch(
+            self.db,
+            "chat",
+            self.session["session_id"],
         )
 
         deleted = _m_memory._HINDSIGHT_STALE_GUARD.purge(
@@ -266,21 +226,16 @@ class MemoryNativeBackendTests(unittest.TestCase):
         )
         self.assertEqual(
             self.db.execute(
-                "SELECT COUNT(*) FROM hindsight_documents "
-                "WHERE chat_id=? AND session_id=?",
+                "SELECT COUNT(*) FROM hindsight_documents WHERE chat_id=? AND session_id=?",
                 ("chat", self.session["session_id"]),
             ).fetchone()[0],
             0,
         )
 
     def test_failed_remote_purge_preserves_epoch_and_mapping(self):
-        mapped = _m_memory.hindsight_conversation_document_id(
-            self.session["session_id"]
-        )
+        mapped = _m_memory.hindsight_conversation_document_id(self.session["session_id"])
         self.db.execute(
-            "INSERT INTO hindsight_documents("
-            "chat_id,session_id,document_id,kind,created_at"
-            ") VALUES(?,?,?,?,?)",
+            "INSERT INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
             (
                 "chat",
                 self.session["session_id"],
@@ -291,11 +246,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         )
         self.db.commit()
 
-        key = (
-            "hindsight_epoch:"
-            "chat:"
-            f"{self.session['session_id']}"
-        )
+        key = f"hindsight_epoch:chat:{self.session['session_id']}"
         _m_session_naming.set_meta(self.db, key, "5")
 
         class BrokenDocuments(_FakeDocuments):
@@ -322,8 +273,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         )
         self.assertEqual(
             self.db.execute(
-                "SELECT COUNT(*) FROM hindsight_documents "
-                "WHERE chat_id=? AND session_id=?",
+                "SELECT COUNT(*) FROM hindsight_documents WHERE chat_id=? AND session_id=?",
                 ("chat", self.session["session_id"]),
             ).fetchone()[0],
             1,
@@ -338,11 +288,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         with patch.object(
             _m_memory,
             "submit_background",
-            side_effect=lambda name, fn, *args, **kwargs: (
-                queued.append(
-                    (name, fn, args, kwargs)
-                )
-            ),
+            side_effect=lambda name, fn, *args, **kwargs: queued.append((name, fn, args, kwargs)),
         ):
             _m_sync_core.retain_session_memory(
                 self.db,
@@ -352,16 +298,11 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 provider_port=self.provider,
             )
 
-        hindsight_jobs = [
-            item
-            for item in queued
-            if item[0] == "hindsight_retain"
-        ]
+        hindsight_jobs = [item for item in queued if item[0] == "hindsight_retain"]
         self.assertEqual(len(hindsight_jobs), 1)
 
         self.db.execute(
-            "UPDATE messages SET content='new text' "
-            "WHERE chat_id=? AND session_id=?",
+            "UPDATE messages SET content='new text' WHERE chat_id=? AND session_id=?",
             ("chat", self.session["session_id"]),
         )
         self.db.commit()
@@ -380,11 +321,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         with patch.object(
             _m_memory,
             "submit_background",
-            side_effect=lambda name, fn, *args, **kwargs: (
-                queued.append(
-                    (name, fn, args, kwargs)
-                )
-            ),
+            side_effect=lambda name, fn, *args, **kwargs: queued.append((name, fn, args, kwargs)),
         ):
             _m_sync_core.retain_session_memory(
                 self.db,
@@ -394,11 +331,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 provider_port=self.provider,
             )
 
-        hindsight_jobs = [
-            item
-            for item in queued
-            if item[0] == "hindsight_retain"
-        ]
+        hindsight_jobs = [item for item in queued if item[0] == "hindsight_retain"]
         self.assertEqual(len(hindsight_jobs), 1)
 
         _m_main.purge_hindsight_session(
@@ -421,11 +354,7 @@ class MemoryNativeBackendTests(unittest.TestCase):
         with patch.object(
             _m_memory,
             "submit_background",
-            side_effect=lambda name, fn, *args, **kwargs: (
-                queued.append(
-                    (name, fn, args, kwargs)
-                )
-            ),
+            side_effect=lambda name, fn, *args, **kwargs: queued.append((name, fn, args, kwargs)),
         ):
             _m_sync_core.retain_session_memory(
                 self.db,
@@ -435,16 +364,11 @@ class MemoryNativeBackendTests(unittest.TestCase):
                 provider_port=self.provider,
             )
 
-        hindsight_jobs = [
-            item
-            for item in queued
-            if item[0] == "hindsight_retain"
-        ]
+        hindsight_jobs = [item for item in queued if item[0] == "hindsight_retain"]
         self.assertEqual(len(hindsight_jobs), 1)
 
         self.db.execute(
-            "DELETE FROM sessions "
-            "WHERE chat_id=? AND session_id=?",
+            "DELETE FROM sessions WHERE chat_id=? AND session_id=?",
             ("chat", self.session["session_id"]),
         )
         self.db.commit()
@@ -502,19 +426,11 @@ class MemoryNativeBackendTests(unittest.TestCase):
 
 class HindsightSourceBoundaryTests(unittest.TestCase):
     def test_state_integrity_no_longer_owns_hindsight_safety(self):
-        path = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "state_integrity.py"
-        )
+        path = Path(__file__).parents[1] / "bridge" / "state_integrity.py"
         self.assertFalse(path.exists())
 
     def test_hindsight_integrity_has_no_runtime_import(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "hindsight_integrity.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "hindsight_integrity.py").read_text(encoding="utf-8")
 
         self.assertNotIn(
             "import bridge.runtime",

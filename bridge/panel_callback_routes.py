@@ -1,13 +1,141 @@
 """Handle System Prompt selection, disable, and pagination callbacks."""
+
 from __future__ import annotations
 
-def handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+import json
+import logging
+import time
+from pathlib import Path
+
+from bridge.callback_tokens import (
+    dynamic_callback_token,
+    resolve_dynamic_callback_token,
+)
+from bridge.callbacks import (
+    close_panel_message,
+    discard_panel_binding,
+)
+from bridge.card_content import (
+    active_world_files,
+    card_fields_from_file,
+    encode_world_files,
+    get_system_prompt_choice,
+    safe_character_path,
+    safe_world_path,
+)
+from bridge.cards import (
+    send_character_delete_confirm,
+    send_character_delete_menu,
+    send_character_info_menu,
+    send_character_menu,
+    send_panel_message,
+    send_session_menu,
+)
+from bridge.catalog import (
+    delete_world_info_file,
+    refresh_model_catalog,
+    send_model_menu,
+    send_model_target_menu,
+    send_provider_health_menu,
+    send_world_menu,
+)
+from bridge.commands import send_note_menu
+from bridge.config import (
+    CARD_FILE,
+    DEFAULT_CHARACTER_FILE,
+    DEFAULT_MODEL,
+    DEFAULT_USER_NAME,
+    PENDING_SETTINGS_TTL_SECONDS,
+)
+from bridge.database import (
+    begin_operation,
+    clear_model_target_selection,
+    get_meta,
+    get_model_target_selection,
+    record_operation,
+    set_meta,
+    set_model_target_selection,
+    set_task_model,
+    task_model_for_session,
+)
+from bridge.delivery_port import DeliveryPort
+from bridge.expressions import (
+    discover_expression_assets,
+    expression_last_key,
+    expression_mode_key,
+    send_expression_menu,
+)
+from bridge.generation import (
+    edit_swipe_menu,
+    keep_swipe_variant,
+    last_user_variants,
+    swipe_state_key,
+)
+from bridge.greetings import (
+    greeting_choice_label,
+    greeting_options,
+    send_character_greeting,
+    send_greeting_menu,
+)
+from bridge.group_service import GroupService
+from bridge.groups import (
+    apply_group_setup_character,
+    send_group_menu,
+)
+from bridge.help import send_system_prompt_menu
+from bridge.help_details import handle_help_callback
+from bridge.input_flows import (
+    handle_persona_callback,
+    pending_character_for_session,
+)
+from bridge.language import (
+    response_language_label,
+    send_language_menu,
+    set_response_language,
+)
+from bridge.media import (
+    delete_outgoing_messages,
+    remove_inline_keyboard,
+)
+from bridge.message_commands import reset_session
+from bridge.provider_port import ProviderPort
+from bridge.session_naming import start_session_name_input
+from bridge.status_panels import (
+    handle_prompt_and_feature_callback,
+    send_sync_menu,
+)
+from bridge.sync_service import SyncService
+from bridge.telegram import (
+    character_delete_references,
+    delete_session_data,
+    list_sessions,
+    send_panel_request,
+    send_session_delete_confirm,
+    send_session_delete_menu,
+    send_text,
+    telegram_request,
+    update_session,
+    verify_character_card_backup,
+)
+from bridge.update import handle_update_callback
+
+
+def handle_system_prompt_callback(
+    db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context
+):
     if data.startswith("systemprompt:"):
         value = data.split(":", 1)[1]
         if value.startswith("page:"):
             page = int(value.split(":", 1)[1])
             answer_callback(token, str(callback.get("id", "")), "Page")
-            send_system_prompt_menu( token, chat_id, session.get("system_prompt") or "", message.get("message_id"), page, request_context=request_context)
+            send_system_prompt_menu(
+                token,
+                chat_id,
+                session.get("system_prompt") or "",
+                message.get("message_id"),
+                page,
+                request_context=request_context,
+            )
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
@@ -30,7 +158,9 @@ def handle_system_prompt_callback(db, token, callback, answer_callback, data, ch
     return False
 
 
-def handle_note_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_note_callback(
+    db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context
+):
     """Handle Author's Note cancel, disable, and input callbacks."""
     if data.startswith("note:"):
         action = data.split(":", 1)[1]
@@ -40,9 +170,11 @@ def handle_note_callback(db, token, callback, answer_callback, data, chat_id, me
             close_panel_message(db, token, chat_id, callback)
             return True
         if action == "off":
-            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="author_note_off", author_note="")
+            update_session(
+                db, chat_id, session_id, operation_id=operation_id, operation_kind="author_note_off", author_note=""
+            )
             answer_callback(token, str(callback.get("id", "")), "Author's Note off")
-            send_note_menu( token, chat_id, "", message.get("message_id"), request_context=request_context)
+            send_note_menu(token, chat_id, "", message.get("message_id"), request_context=request_context)
             return True
         if action == "input":
             pending_note = {"session_id": session_id, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
@@ -50,7 +182,9 @@ def handle_note_callback(db, token, callback, answer_callback, data, chat_id, me
             answer_callback(token, str(callback.get("id", "")), "User input")
             discard_panel_binding(db, chat_id, message.get("message_id"))
             close_panel_message(db, token, chat_id, callback)
-            pending_note["prompt_message_ids"] = send_text(token, chat_id, "Send Author's Note text (1–2,000 characters). Send /cancel to cancel.")
+            pending_note["prompt_message_ids"] = send_text(
+                token, chat_id, "Send Author's Note text (1–2,000 characters). Send /cancel to cancel."
+            )
             set_meta(db, f"note_input:{chat_id}", json.dumps(pending_note))
             return True
         answer_callback(token, str(callback.get("id", "")), "Unknown note action")
@@ -58,21 +192,45 @@ def handle_note_callback(db, token, callback, answer_callback, data, chat_id, me
     return False
 
 
-def handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, delivery_port: DeliveryPort, request_context):
+def handle_language_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+):
     """Handle model response language selection and pagination callbacks."""
     if data.startswith("language:"):
         value = data.split(":", 1)[1]
         if value.startswith("page:"):
             page = int(value.split(":", 1)[1])
             answer_callback(token, str(callback.get("id", "")), "Page")
-            send_language_menu( token, chat_id, session.get("response_language") or "auto", message.get("message_id"), page, delivery_port=delivery_port, request_context=request_context)
+            send_language_menu(
+                token,
+                chat_id,
+                session.get("response_language") or "auto",
+                message.get("message_id"),
+                page,
+                delivery_port=delivery_port,
+                request_context=request_context,
+            )
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
             remove_inline_keyboard(db, token, callback)
             return True
         try:
-            language = set_response_language(db, chat_id, session_id, value, operation_id=operation_id, update_session=update_session)
+            language = set_response_language(
+                db, chat_id, session_id, value, operation_id=operation_id, update_session=update_session
+            )
         except ValueError:
             answer_callback(token, str(callback.get("id", "")), "Language choice expired")
             return True
@@ -83,7 +241,9 @@ def handle_language_callback(db, token, callback, answer_callback, data, chat_id
     return False
 
 
-def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service):
+def handle_reset_callback(
+    db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, memory_service
+):
     """Handle reset confirmation and cancellation callbacks."""
     if data.startswith("reset:"):
         action = data.split(":", 1)[1]
@@ -99,7 +259,9 @@ def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, m
         except Exception:
             logging.error("Reset failed for chat %s/session %s", chat_id, session_id, exc_info=True)
             answer_callback(token, str(callback.get("id", "")), "Reset failed; memory and session were preserved")
-            send_text(token, chat_id, "Reset cancelled because Hindsight memory purge failed. No session data was deleted.")
+            send_text(
+                token, chat_id, "Reset cancelled because Hindsight memory purge failed. No session data was deleted."
+            )
             return True
         answer_callback(token, str(callback.get("id", "")), "Reset complete")
         remove_inline_keyboard(db, token, callback)
@@ -108,7 +270,21 @@ def handle_reset_callback(db, token, callback, answer_callback, data, chat_id, m
     return False
 
 
-def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, delivery_port: DeliveryPort, request_context):
+def handle_swipe_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+):
     """Handle response variant browsing and keep/cancel callbacks."""
     if data.startswith("swipe:"):
         action = data.split(":", 1)[1]
@@ -127,7 +303,16 @@ def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, m
             position = indexes.index(current) if current in indexes else 0
             position = (position - 1) % len(indexes) if action == "prev" else (position + 1) % len(indexes)
             answer_callback(token, str(callback.get("id", "")), f"Variant {indexes[position]}")
-            edit_swipe_menu( token, db, callback, session_id, indexes[position], variants, delivery_port=delivery_port, request_context=request_context)
+            edit_swipe_menu(
+                token,
+                db,
+                callback,
+                session_id,
+                indexes[position],
+                variants,
+                delivery_port=delivery_port,
+                request_context=request_context,
+            )
             return True
         if action == "keep":
             if user_row:
@@ -137,13 +322,35 @@ def handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, m
                 answer_callback(token, str(callback.get("id", "")), "Variant not found")
                 return True
             answer_callback(token, str(callback.get("id", "")), "Kept")
-            telegram_request(token, "editMessageText", {"chat_id": chat_id, "message_id": message.get("message_id"), "text": f"✅ Kept variant {current}\n\n{selected[:3900]}"})
+            telegram_request(
+                token,
+                "editMessageText",
+                {
+                    "chat_id": chat_id,
+                    "message_id": message.get("message_id"),
+                    "text": f"✅ Kept variant {current}\n\n{selected[:3900]}",
+                },
+            )
             return True
         return True
     return False
 
 
-def handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, delivery_port: DeliveryPort, request_context):
+def handle_expression_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    delivery_port: DeliveryPort,
+    request_context,
+):
     """Handle manual, automatic, and disabled expression modes."""
     if not data.startswith("expression:"):
         return False
@@ -154,7 +361,16 @@ def handle_expression_callback(db, token, callback, answer_callback, data, chat_
         except ValueError:
             page = 0
         answer_callback(token, str(callback.get("id", "")), "Page updated")
-        send_expression_menu( token, chat_id, session, db, message.get("message_id"), page, delivery_port=delivery_port, request_context=request_context)
+        send_expression_menu(
+            token,
+            chat_id,
+            session,
+            db,
+            message.get("message_id"),
+            page,
+            delivery_port=delivery_port,
+            request_context=request_context,
+        )
         return True
     if value == "cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
@@ -167,7 +383,15 @@ def handle_expression_callback(db, token, callback, answer_callback, data, chat_
     set_meta(db, expression_last_key(chat_id, session_id), "")
     db.commit()
     answer_callback(token, str(callback.get("id", "")), "Expression updated")
-    send_expression_menu( token, chat_id, session, db, message.get("message_id"), delivery_port=delivery_port, request_context=request_context)
+    send_expression_menu(
+        token,
+        chat_id,
+        session,
+        db,
+        message.get("message_id"),
+        delivery_port=delivery_port,
+        request_context=request_context,
+    )
     return True
 
 
@@ -205,12 +429,7 @@ def handle_sync_callback(
             "Sync status",
         )
         send_sync_menu(
-            token,
-            chat_id,
-            db,
-            session,
-            message_id,
-            sync_service=sync_service, request_context=request_context
+            token, chat_id, db, session, message_id, sync_service=sync_service, request_context=request_context
         )
     elif action == "realtime":
         result = sync_service.toggle_realtime(
@@ -224,12 +443,7 @@ def handle_sync_callback(
             result[:200],
         )
         send_sync_menu(
-            token,
-            chat_id,
-            db,
-            session,
-            message_id,
-            sync_service=sync_service, request_context=request_context
+            token, chat_id, db, session, message_id, sync_service=sync_service, request_context=request_context
         )
     elif action == "now":
         result = sync_service.sync_now(
@@ -243,12 +457,7 @@ def handle_sync_callback(
             result[:200],
         )
         send_sync_menu(
-            token,
-            chat_id,
-            db,
-            session,
-            message_id,
-            sync_service=sync_service, request_context=request_context
+            token, chat_id, db, session, message_id, sync_service=sync_service, request_context=request_context
         )
     else:
         answer_callback(
@@ -316,7 +525,8 @@ def handle_greeting_callback(
             user_name,
             message_id=message_id,
             selected_index=selected_index,
-            page=page, request_context=request_context
+            page=page,
+            request_context=request_context,
         )
         return True
 
@@ -338,7 +548,8 @@ def handle_greeting_callback(
                 fields,
                 user_name,
                 message_id=message_id,
-                selected_index=selected_index, request_context=request_context
+                selected_index=selected_index,
+                request_context=request_context,
             )
             return True
 
@@ -366,7 +577,26 @@ def handle_greeting_callback(
     return True
 
 
-def handle_primary_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, provider_port: ProviderPort, delivery_port: DeliveryPort, memory_service, persona_service, sync_service: SyncService, request_context):
+def handle_primary_panel_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    group_service: GroupService,
+    provider_port: ProviderPort,
+    delivery_port: DeliveryPort,
+    memory_service,
+    persona_service,
+    sync_service: SyncService,
+    request_context,
+):
     """Dispatch System Prompt, Note, language, reset, help, swipe, and expression callbacks."""
     if data.startswith("update:"):
         return handle_update_callback(db, token, callback, data, chat_id)
@@ -385,15 +615,77 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         request_context=request_context,
     ):
         return True
-    if handle_expression_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, delivery_port=delivery_port, request_context=request_context):
+    if handle_expression_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        delivery_port=delivery_port,
+        request_context=request_context,
+    ):
         return True
-    if handle_system_prompt_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context):
+    if handle_system_prompt_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        request_context=request_context,
+    ):
         return True
-    if handle_note_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, request_context=request_context):
+    if handle_note_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        request_context=request_context,
+    ):
         return True
-    if handle_language_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, delivery_port=delivery_port, request_context=request_context):
+    if handle_language_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        delivery_port=delivery_port,
+        request_context=request_context,
+    ):
         return True
-    if handle_reset_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, memory_service=memory_service):
+    if handle_reset_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        memory_service=memory_service,
+    ):
         return True
     if handle_prompt_and_feature_callback(
         db,
@@ -442,36 +734,89 @@ def handle_primary_panel_callback(db, token, callback, answer_callback, data, ch
         request_context=request_context,
     ):
         return True
-    return handle_swipe_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, delivery_port=delivery_port, request_context=request_context)
+    return handle_swipe_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        delivery_port=delivery_port,
+        request_context=request_context,
+    )
 
 
-def handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context):
+def handle_character_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    group_service: GroupService,
+    request_context,
+):
     """Handle character selection, info, upload, and deletion callbacks."""
     message_id = message.get("message_id")
     if data == "character:protected":
         answer_callback(token, str(callback.get("id", "")), "Active/default character is protected")
-        send_character_menu( token, chat_id, session["character_file"], message_id, request_context=request_context)
+        send_character_menu(token, chat_id, session["character_file"], message_id, request_context=request_context)
         return True
     if data == "character:menu":
         answer_callback(token, str(callback.get("id", "")), "Refreshed")
-        send_character_menu( token, chat_id, session["character_file"], message.get("message_id"), request_context=request_context)
+        send_character_menu(
+            token, chat_id, session["character_file"], message.get("message_id"), request_context=request_context
+        )
         return True
     if data == "character:info":
         answer_callback(token, str(callback.get("id", "")), "Info")
-        send_character_info_menu( token, chat_id, message.get("message_id"), request_context=request_context)
+        send_character_info_menu(token, chat_id, message.get("message_id"), request_context=request_context)
         return True
     if data == "character:delete":
         answer_callback(token, str(callback.get("id", "")), "Delete")
-        send_character_delete_menu( token, chat_id, session["character_file"], message.get("message_id"), request_context=request_context)
+        send_character_delete_menu(
+            token, chat_id, session["character_file"], message.get("message_id"), request_context=request_context
+        )
         return True
     if data == "character:upload":
         answer_callback(token, str(callback.get("id", "")), "Upload")
-        send_panel_request( token, "editMessageText", {"chat_id": chat_id, "message_id": message.get("message_id"), "text": "Send the character card as a Telegram Document (PNG with SillyTavern chara metadata). The upload will be validated and queued safely.", "reply_markup": {"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "character:menu"}, {"text": "❌ Close", "callback_data": "character:cancel"}]]}}, request_context=request_context)
+        send_panel_request(
+            token,
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": message.get("message_id"),
+                "text": (
+                    "Send the character card as a Telegram Document (PNG with SillyTavern "
+                    "chara metadata). The upload will be validated and queued safely."
+                ),
+                "reply_markup": {
+                    "inline_keyboard": [
+                        [
+                            {"text": "⬅️ Back", "callback_data": "character:menu"},
+                            {"text": "❌ Close", "callback_data": "character:cancel"},
+                        ]
+                    ]
+                },
+            },
+            request_context=request_context,
+        )
         return True
     if data.startswith("characterinfo:"):
         value = data.split(":", 1)[1]
         if value.startswith("page:"):
-            send_character_info_menu( token, chat_id, message.get("message_id"), int(value.split(":", 1)[1]), request_context=request_context)
+            send_character_info_menu(
+                token, chat_id, message.get("message_id"), int(value.split(":", 1)[1]), request_context=request_context
+            )
             return True
         filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
         if not safe_character_path(filename):
@@ -479,19 +824,59 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
             return True
         info = card_fields_from_file(filename)
         answer_callback(token, str(callback.get("id", "")), "Info")
-        send_panel_request( token, "editMessageText", {"chat_id": chat_id, "message_id": message.get("message_id"), "text": f"Character: {info['name']}\nFile: {filename}\nDescription: {len(info['description'])} chars\nPersonality: {len(info['personality'])} chars\nScenario: {len(info['scenario'])} chars\nFirst message: {len(info['first_mes'])} chars", "reply_markup": {"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "character:info"}, {"text": "❌ Close", "callback_data": "character:cancel"}]]}}, request_context=request_context)
+        send_panel_request(
+            token,
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": message.get("message_id"),
+                "text": (
+                    "Character: "
+                    f"""{info["name"]}"""
+                    "\nFile: "
+                    f"""{filename}"""
+                    "\nDescription: "
+                    f"""{len(info["description"])}"""
+                    " chars\nPersonality: "
+                    f"""{len(info["personality"])}"""
+                    " chars\nScenario: "
+                    f"""{len(info["scenario"])}"""
+                    " chars\nFirst message: "
+                    f"""{len(info["first_mes"])}"""
+                    " chars"
+                ),
+                "reply_markup": {
+                    "inline_keyboard": [
+                        [
+                            {"text": "⬅️ Back", "callback_data": "character:info"},
+                            {"text": "❌ Close", "callback_data": "character:cancel"},
+                        ]
+                    ]
+                },
+            },
+            request_context=request_context,
+        )
         return True
     if data.startswith("characterdelete:"):
         value = data.split(":", 1)[1]
         if value.startswith("page:"):
-            send_character_delete_menu( token, chat_id, session["character_file"], message.get("message_id"), int(value.split(":", 1)[1]), request_context=request_context)
+            send_character_delete_menu(
+                token,
+                chat_id,
+                session["character_file"],
+                message.get("message_id"),
+                int(value.split(":", 1)[1]),
+                request_context=request_context,
+            )
             return True
         filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
         if not safe_character_path(filename) or filename == session["character_file"]:
             answer_callback(token, str(callback.get("id", "")), "Character choice invalid")
             return True
         answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
-        send_character_delete_confirm( token, chat_id, filename, message.get("message_id"), request_context=request_context)
+        send_character_delete_confirm(
+            token, chat_id, filename, message.get("message_id"), request_context=request_context
+        )
         return True
     if data.startswith("characterdeleteconfirm:"):
         filename = resolve_dynamic_callback_token(data.split(":", 1)[1], "character", chat_id, db=db) or ""
@@ -501,7 +886,7 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
         if not path or filename == session["character_file"] or is_default or references:
             reason = "active/default/referenced character" if path else "character not found"
             answer_callback(token, str(callback.get("id", "")), f"Deletion refused: {reason}")
-            send_character_menu( token, chat_id, session["character_file"], message_id, request_context=request_context)
+            send_character_menu(token, chat_id, session["character_file"], message_id, request_context=request_context)
             return True
         try:
             verify_character_card_backup(path, path.read_bytes())
@@ -515,7 +900,9 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
         record_operation(db, operation_id, "character_delete")
         db.commit()
         answer_callback(token, str(callback.get("id", "")), "Deleted")
-        send_character_menu( token, chat_id, session["character_file"], message.get("message_id"), request_context=request_context)
+        send_character_menu(
+            token, chat_id, session["character_file"], message.get("message_id"), request_context=request_context
+        )
         return True
     if data.startswith("character:"):
         value = data.split(":", 1)[1]
@@ -523,7 +910,14 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
             value = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
         if value.startswith("page:"):
             answer_callback(token, str(callback.get("id", "")), "Page")
-            send_character_menu( token, chat_id, session["character_file"], message.get("message_id"), int(value.split(":", 1)[1]), request_context=request_context)
+            send_character_menu(
+                token,
+                chat_id,
+                session["character_file"],
+                message.get("message_id"),
+                int(value.split(":", 1)[1]),
+                request_context=request_context,
+            )
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
@@ -537,23 +931,68 @@ def handle_character_callback(db, token, callback, answer_callback, data, chat_i
             character_name = card_fields_from_file(value)["name"]
             setup = group_service.setup_state(db, chat_id, session_id)
             if setup and setup.get("stage") == "character":
-                return apply_group_setup_character(db, token, callback, answer_callback, chat_id, message, session_id, operation_id, value, character_name, group_service=group_service, request_context=request_context)
-            set_meta(db, f"character_session_input:{chat_id}", json.dumps({"character_file": Path(value).name, "character_name": character_name, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}))
+                return apply_group_setup_character(
+                    db,
+                    token,
+                    callback,
+                    answer_callback,
+                    chat_id,
+                    message,
+                    session_id,
+                    operation_id,
+                    value,
+                    character_name,
+                    group_service=group_service,
+                    request_context=request_context,
+                )
+            set_meta(
+                db,
+                f"character_session_input:{chat_id}",
+                json.dumps(
+                    {
+                        "character_file": Path(value).name,
+                        "character_name": character_name,
+                        "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS,
+                    }
+                ),
+            )
             answer_callback(token, str(callback.get("id", "")), "Choose session")
             discard_panel_binding(db, chat_id, message.get("message_id"))
             close_panel_message(db, token, chat_id, callback)
-            send_session_menu( token, chat_id, list_sessions(db, chat_id), session_id, request_context=request_context)
+            send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, request_context=request_context)
         else:
             answer_callback(token, str(callback.get("id", "")), "Character not found")
         return True
     return False
 
 
-def handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, memory_service, request_context):
+def handle_session_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    group_service: GroupService,
+    memory_service,
+    request_context,
+):
     """Handle session selection, creation, and deletion callbacks."""
     if data == "session:protected":
         answer_callback(token, str(callback.get("id", "")), "Active session is protected")
-        send_session_menu( token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"), request_context=request_context)
+        send_session_menu(
+            token,
+            chat_id,
+            list_sessions(db, chat_id),
+            session_id,
+            message.get("message_id"),
+            request_context=request_context,
+        )
         return True
     if data.startswith("sessiondeleteconfirm:"):
         target_session_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "session", chat_id, db=db) or ""
@@ -561,19 +1000,36 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
         if target is None:
             answer_callback(token, str(callback.get("id", "")), "Session choice expired")
             return True
-        deleted, reason = delete_session_data(db, chat_id, target_session_id, session_id, operation_id=operation_id, memory_service=memory_service)
+        deleted, reason = delete_session_data(
+            db, chat_id, target_session_id, session_id, operation_id=operation_id, memory_service=memory_service
+        )
         if not deleted:
             answer_callback(token, str(callback.get("id", "")), f"Deletion refused: {reason}")
             return True
         answer_callback(token, str(callback.get("id", "")), "Session deleted")
         remove_inline_keyboard(db, token, callback)
-        send_session_menu( token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"), request_context=request_context)
+        send_session_menu(
+            token,
+            chat_id,
+            list_sessions(db, chat_id),
+            session_id,
+            message.get("message_id"),
+            request_context=request_context,
+        )
         return True
     if data.startswith("sessiondelete:"):
         value = data.split(":", 1)[1]
         if value.startswith("page:"):
             answer_callback(token, str(callback.get("id", "")), "Page")
-            send_session_delete_menu( token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"), int(value.split(":", 1)[1]), request_context=request_context)
+            send_session_delete_menu(
+                token,
+                chat_id,
+                list_sessions(db, chat_id),
+                session_id,
+                message.get("message_id"),
+                int(value.split(":", 1)[1]),
+                request_context=request_context,
+            )
             return True
         target_session_id = resolve_dynamic_callback_token(value, "session", chat_id, db=db) or ""
         target = next((item for item in list_sessions(db, chat_id) if item["session_id"] == target_session_id), None)
@@ -581,21 +1037,50 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
             answer_callback(token, str(callback.get("id", "")), "Only an inactive session can be deleted")
             return True
         answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
-        send_session_delete_confirm( token, chat_id, target_session_id, target["title"], message.get("message_id"), request_context=request_context)
+        send_session_delete_confirm(
+            token,
+            chat_id,
+            target_session_id,
+            target["title"],
+            message.get("message_id"),
+            request_context=request_context,
+        )
         return True
     if data.startswith("session:"):
         value = data.split(":", 1)[1]
         if value.startswith("page:"):
             answer_callback(token, str(callback.get("id", "")), "Page")
-            send_session_menu( token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"), int(value.split(":", 1)[1]), request_context=request_context)
+            send_session_menu(
+                token,
+                chat_id,
+                list_sessions(db, chat_id),
+                session_id,
+                message.get("message_id"),
+                int(value.split(":", 1)[1]),
+                request_context=request_context,
+            )
             return True
         if value == "delete":
             answer_callback(token, str(callback.get("id", "")), "Delete session")
-            send_session_delete_menu( token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"), request_context=request_context)
+            send_session_delete_menu(
+                token,
+                chat_id,
+                list_sessions(db, chat_id),
+                session_id,
+                message.get("message_id"),
+                request_context=request_context,
+            )
             return True
         if value == "back":
             answer_callback(token, str(callback.get("id", "")), "Back")
-            send_session_menu( token, chat_id, list_sessions(db, chat_id), session_id, message.get("message_id"), request_context=request_context)
+            send_session_menu(
+                token,
+                chat_id,
+                list_sessions(db, chat_id),
+                session_id,
+                message.get("message_id"),
+                request_context=request_context,
+            )
             return True
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
@@ -611,12 +1096,33 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
                 answer_callback(token, str(callback.get("id", "")), "Session selected")
                 pending_character = pending_character_for_session(db, chat_id)
                 if pending_character:
-                    target_title = next((item["title"] for item in list_sessions(db, chat_id) if item["session_id"] == value), value)
-                    update_session(db, chat_id, value, operation_id=operation_id, operation_kind="character_select", character_file=Path(pending_character["character_file"]).name)
+                    target_title = next(
+                        (item["title"] for item in list_sessions(db, chat_id) if item["session_id"] == value), value
+                    )
+                    update_session(
+                        db,
+                        chat_id,
+                        value,
+                        operation_id=operation_id,
+                        operation_kind="character_select",
+                        character_file=Path(pending_character["character_file"]).name,
+                    )
                     set_meta(db, f"character_session_input:{chat_id}", "")
                 remove_inline_keyboard(db, token, callback)
                 if pending_character:
-                    send_text(token, chat_id, f"Character selected for session '{target_title}': {pending_character.get('character_name') or Path(pending_character['character_file']).stem}")
+                    character_label = (
+                        pending_character.get("character_name") or Path(pending_character["character_file"]).stem
+                    )
+                    send_text(
+                        token,
+                        chat_id,
+                        (
+                            "Character selected for session '"
+                            f"""{target_title}"""
+                            "': "
+                            f"{character_label}"
+                        ),
+                    )
                 else:
                     send_text(token, chat_id, f"Session selected: {value}")
             else:
@@ -625,7 +1131,21 @@ def handle_session_callback(db, token, callback, answer_callback, data, chat_id,
     return False
 
 
-def handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, request_context):
+def handle_world_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    group_service: GroupService,
+    request_context,
+):
     """Handle World Info selection, upload, deletion, and pagination callbacks."""
     message_id = message.get("message_id")
     if data.startswith("worlddeleteconfirm:"):
@@ -637,7 +1157,7 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
             send_text(token, chat_id, str(exc))
         else:
             answer_callback(token, str(callback.get("id", "")), "World Info deleted")
-            send_world_menu( token, chat_id, session["world_file"], message_id, 0, request_context=request_context)
+            send_world_menu(token, chat_id, session["world_file"], message_id, 0, request_context=request_context)
         return True
     if data.startswith("worlddelete:"):
         value = resolve_dynamic_callback_token(data.split(":", 1)[1], "world", chat_id, db=db) or ""
@@ -645,7 +1165,25 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
             answer_callback(token, str(callback.get("id", "")), "World Info file not found")
             return True
         answer_callback(token, str(callback.get("id", "")), "Confirm deletion")
-        send_panel_message( token, chat_id, f"Delete World Info '{Path(value).name}'? This cannot be undone.", {"inline_keyboard": [[{"text": "🗑️ Delete", "callback_data": "worlddeleteconfirm:" + dynamic_callback_token("world", value, chat_id, db=db)}, {"text": "Cancel", "callback_data": "world:cancel"}]]}, message_id, request_context=request_context)
+        send_panel_message(
+            token,
+            chat_id,
+            f"Delete World Info '{Path(value).name}'? This cannot be undone.",
+            {
+                "inline_keyboard": [
+                    [
+                        {
+                            "text": "🗑️ Delete",
+                            "callback_data": "worlddeleteconfirm:"
+                            + dynamic_callback_token("world", value, chat_id, db=db),
+                        },
+                        {"text": "Cancel", "callback_data": "world:cancel"},
+                    ]
+                ]
+            },
+            message_id,
+            request_context=request_context,
+        )
         return True
     if data.startswith("world:"):
         setup = group_service.setup_state(db, chat_id, session_id)
@@ -654,7 +1192,14 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
             value = resolve_dynamic_callback_token(value, "world", chat_id, db=db) or ""
         if value.startswith("page:"):
             answer_callback(token, str(callback.get("id", "")), "Page")
-            send_world_menu( token, chat_id, session["world_file"], message.get("message_id"), int(value.split(":", 1)[1]), request_context=request_context)
+            send_world_menu(
+                token,
+                chat_id,
+                session["world_file"],
+                message.get("message_id"),
+                int(value.split(":", 1)[1]),
+                request_context=request_context,
+            )
             return True
         if value == "upload":
             pending = {"session_id": session_id, "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS}
@@ -673,12 +1218,16 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
                 set_meta(db, f"group_setup:{chat_id}", "")
             remove_inline_keyboard(db, token, callback)
             if setup:
-                send_group_menu( db, token, chat_id, session, group_service=group_service, request_context=request_context)
+                send_group_menu(
+                    db, token, chat_id, session, group_service=group_service, request_context=request_context
+                )
         elif value == "off":
-            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="world_clear", world_file="")
+            update_session(
+                db, chat_id, session_id, operation_id=operation_id, operation_kind="world_clear", world_file=""
+            )
             session["world_file"] = ""
             answer_callback(token, str(callback.get("id", "")), "All World Info cleared")
-            send_world_menu( token, chat_id, "", message.get("message_id"), 0, request_context=request_context)
+            send_world_menu(token, chat_id, "", message.get("message_id"), 0, request_context=request_context)
         elif safe_world_path(value):
             selected = active_world_files(session["world_file"])
             filename = Path(value).name
@@ -688,21 +1237,78 @@ def handle_world_callback(db, token, callback, answer_callback, data, chat_id, m
             else:
                 selected.append(filename)
                 status = "World Info enabled"
-            update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="world_select", world_file=encode_world_files(selected))
+            update_session(
+                db,
+                chat_id,
+                session_id,
+                operation_id=operation_id,
+                operation_kind="world_select",
+                world_file=encode_world_files(selected),
+            )
             session["world_file"] = encode_world_files(selected)
             answer_callback(token, str(callback.get("id", "")), status)
-            send_world_menu( token, chat_id, encode_world_files(selected), message.get("message_id"), 0, request_context=request_context)
+            send_world_menu(
+                token,
+                chat_id,
+                encode_world_files(selected),
+                message.get("message_id"),
+                0,
+                request_context=request_context,
+            )
         else:
             answer_callback(token, str(callback.get("id", "")), "World Info file not found")
         return True
     return False
 
 
-def handle_entity_panel_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, group_service: GroupService, memory_service, persona_service, request_context):
+def handle_entity_panel_callback(
+    db,
+    token,
+    callback,
+    answer_callback,
+    data,
+    chat_id,
+    message,
+    session,
+    session_id,
+    operation_id,
+    *,
+    group_service: GroupService,
+    memory_service,
+    persona_service,
+    request_context,
+):
     """Dispatch character, session, persona, and World Info callbacks."""
-    if handle_character_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, request_context=request_context):
+    if handle_character_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        group_service=group_service,
+        request_context=request_context,
+    ):
         return True
-    if handle_session_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, memory_service=memory_service, request_context=request_context):
+    if handle_session_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        group_service=group_service,
+        memory_service=memory_service,
+        request_context=request_context,
+    ):
         return True
     if handle_persona_callback(
         db,
@@ -719,27 +1325,64 @@ def handle_entity_panel_callback(db, token, callback, answer_callback, data, cha
         request_context=request_context,
     ):
         return True
-    return handle_world_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, group_service=group_service, request_context=request_context)
+    return handle_world_callback(
+        db,
+        token,
+        callback,
+        answer_callback,
+        data,
+        chat_id,
+        message,
+        session,
+        session_id,
+        operation_id,
+        group_service=group_service,
+        request_context=request_context,
+    )
 
 
-def handle_provider_model_callback(db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context):
+def handle_provider_model_callback(
+    db, token, callback, answer_callback, data, chat_id, message, session, session_id, operation_id, *, request_context
+):
     """Handle provider, model, and catalog-only callbacks."""
     message_id = message.get("message_id")
     if data.startswith("models:providers:"):
         page = int(data.rsplit(":", 1)[1])
         answer_callback(token, str(callback.get("id", "")), "Page")
-        send_model_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, page=page, request_context=request_context)
+        send_model_menu(
+            token,
+            chat_id,
+            session["model_id"] or DEFAULT_MODEL,
+            message_id=message_id,
+            page=page,
+            request_context=request_context,
+        )
         return True
     if data.startswith("models:model:"):
         parts = data.split(":")
         provider_id = resolve_dynamic_callback_token(parts[2], "provider", chat_id, db=db) or ""
         page = int(parts[3])
         answer_callback(token, str(callback.get("id", "")), "Page")
-        send_model_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, provider_id, message_id, page, request_context=request_context)
+        send_model_menu(
+            token,
+            chat_id,
+            session["model_id"] or DEFAULT_MODEL,
+            provider_id,
+            message_id,
+            page,
+            request_context=request_context,
+        )
         return True
     if data == "models:target":
         answer_callback(token, str(callback.get("id", "")), "Back to target")
-        send_model_target_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, task_model_for_session(db, chat_id, session, "utility"), message_id, request_context=request_context)
+        send_model_target_menu(
+            token,
+            chat_id,
+            session["model_id"] or DEFAULT_MODEL,
+            task_model_for_session(db, chat_id, session, "utility"),
+            message_id,
+            request_context=request_context,
+        )
         return True
     if data == "models:cancel":
         answer_callback(token, str(callback.get("id", "")), "Cancelled")
@@ -747,30 +1390,47 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
         return True
     if data == "models:back":
         answer_callback(token, str(callback.get("id", "")), "Back to providers")
-        send_model_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context)
+        send_model_menu(
+            token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context
+        )
         return True
     if data == "provider:health":
         answer_callback(token, str(callback.get("id", "")), "Health")
-        send_provider_health_menu( token, chat_id, message_id, request_context=request_context)
+        send_provider_health_menu(token, chat_id, message_id, request_context=request_context)
         return True
     if data == "provider:refresh":
         _config, refreshed, failed = refresh_model_catalog(force=True)
         answer_callback(token, str(callback.get("id", "")), "Refreshed")
         send_text(token, chat_id, f"Model catalog refreshed: {refreshed} providers updated; {failed} failed.")
-        send_model_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context)
+        send_model_menu(
+            token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context
+        )
         return True
     if data == "provider:back":
-        send_model_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context)
+        send_model_menu(
+            token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context
+        )
         return True
     if data.startswith("provider:"):
         provider_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "provider", chat_id, db=db) or ""
         answer_callback(token, str(callback.get("id", "")), "Provider selected")
-        send_model_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, provider_id, message_id=message_id, request_context=request_context)
+        send_model_menu(
+            token,
+            chat_id,
+            session["model_id"] or DEFAULT_MODEL,
+            provider_id,
+            message_id=message_id,
+            request_context=request_context,
+        )
         return True
     if data.startswith("unsupported:"):
         provider_id = resolve_dynamic_callback_token(data.split(":", 1)[1], "provider", chat_id, db=db) or ""
         answer_callback(token, str(callback.get("id", "")), "Catalog only: adapter not enabled")
-        send_text(token, chat_id, f"Provider '{provider_id}' is visible in the bridge catalog, but its adapter is not enabled yet.")
+        send_text(
+            token,
+            chat_id,
+            f"Provider '{provider_id}' is visible in the bridge catalog, but its adapter is not enabled yet.",
+        )
         return True
     if data.startswith("modeltarget:"):
         target = data.split(":", 1)[1]
@@ -779,7 +1439,9 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
             return True
         set_model_target_selection(db, chat_id, session_id, target)
         answer_callback(token, str(callback.get("id", "")), "Target selected")
-        send_model_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context)
+        send_model_menu(
+            token, chat_id, session["model_id"] or DEFAULT_MODEL, message_id=message_id, request_context=request_context
+        )
         return True
     if not data.startswith("model:"):
         return False
@@ -790,10 +1452,19 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
     target = get_model_target_selection(db, chat_id, session_id)
     if not target:
         answer_callback(token, str(callback.get("id", "")), "Choose Story or Utility first")
-        send_model_target_menu( token, chat_id, session["model_id"] or DEFAULT_MODEL, task_model_for_session(db, chat_id, session, "utility"), message_id, request_context=request_context)
+        send_model_target_menu(
+            token,
+            chat_id,
+            session["model_id"] or DEFAULT_MODEL,
+            task_model_for_session(db, chat_id, session, "utility"),
+            message_id,
+            request_context=request_context,
+        )
         return True
     if target == "story":
-        update_session(db, chat_id, session_id, operation_id=operation_id, operation_kind="model_select", model_id=model)
+        update_session(
+            db, chat_id, session_id, operation_id=operation_id, operation_kind="model_select", model_id=model
+        )
         message = f"Story model updated: {model}"
     else:
         set_task_model(db, chat_id, session_id, model, "utility")
@@ -801,123 +1472,12 @@ def handle_provider_model_callback(db, token, callback, answer_callback, data, c
     clear_model_target_selection(db, chat_id, session_id)
     answer_callback(token, str(callback.get("id", "")), "Model updated")
     send_text(token, chat_id, message)
-    send_model_target_menu( token, chat_id, model if target == "story" else session["model_id"] or DEFAULT_MODEL, task_model_for_session(db, chat_id, session, "utility"), message_id, request_context=request_context)
+    send_model_target_menu(
+        token,
+        chat_id,
+        model if target == "story" else session["model_id"] or DEFAULT_MODEL,
+        task_model_for_session(db, chat_id, session, "utility"),
+        message_id,
+        request_context=request_context,
+    )
     return True
-
-
-# Explicit late imports replace transitional dependency injection.
-import json
-import logging
-import time
-from bridge.callback_tokens import (
-    dynamic_callback_token,
-    resolve_dynamic_callback_token,
-)
-from bridge.callbacks import (
-    close_panel_message,
-    discard_panel_binding,
-)
-from bridge.card_content import (
-    active_world_files,
-    card_fields_from_file,
-    encode_world_files,
-    get_system_prompt_choice,
-    safe_character_path,
-    safe_world_path,
-)
-from bridge.cards import (
-    send_character_delete_confirm,
-    send_character_delete_menu,
-    send_character_info_menu,
-    send_character_menu,
-    send_panel_message,
-    send_session_menu,
-)
-from bridge.catalog import (
-    delete_world_info_file,
-    refresh_model_catalog,
-    send_model_menu,
-    send_model_target_menu,
-    send_provider_health_menu,
-    send_world_menu,
-)
-from bridge.commands import send_note_menu
-from bridge.config import (
-    CARD_FILE,
-    DEFAULT_CHARACTER_FILE,
-    DEFAULT_MODEL,
-    DEFAULT_USER_NAME,
-    PENDING_SETTINGS_TTL_SECONDS,
-)
-from bridge.database import (
-    begin_operation,
-    clear_model_target_selection,
-    get_meta,
-    get_model_target_selection,
-    record_operation,
-    set_meta,
-    set_model_target_selection,
-    set_task_model,
-    task_model_for_session,
-)
-from bridge.expressions import (
-    discover_expression_assets,
-    expression_last_key,
-    expression_mode_key,
-    send_expression_menu,
-)
-from bridge.generation import (
-    edit_swipe_menu,
-    keep_swipe_variant,
-    last_user_variants,
-    swipe_state_key,
-)
-from bridge.greetings import (
-    greeting_choice_label,
-    greeting_options,
-    send_character_greeting,
-    send_greeting_menu,
-)
-from bridge.group_service import GroupService
-from bridge.delivery_port import DeliveryPort
-from bridge.provider_port import ProviderPort
-from bridge.groups import (
-    apply_group_setup_character,
-    send_group_menu,
-)
-from bridge.help import send_system_prompt_menu
-from bridge.help_details import handle_help_callback
-from bridge.input_flows import (
-    handle_persona_callback,
-    pending_character_for_session,
-)
-from bridge.language import (
-    response_language_label,
-    send_language_menu,
-    set_response_language,
-)
-from bridge.media import (
-    delete_outgoing_messages,
-    remove_inline_keyboard,
-)
-from bridge.message_commands import reset_session
-from bridge.session_naming import start_session_name_input
-from bridge.status_panels import (
-    handle_prompt_and_feature_callback,
-    send_sync_menu,
-)
-from bridge.sync_service import SyncService
-from bridge.telegram import (
-    send_panel_request,
-    character_delete_references,
-    delete_session_data,
-    list_sessions,
-    send_session_delete_confirm,
-    send_session_delete_menu,
-    send_text,
-    telegram_request,
-    update_session,
-    verify_character_card_backup,
-)
-from bridge.update import handle_update_callback
-from pathlib import Path

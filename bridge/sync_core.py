@@ -1,17 +1,49 @@
 """Shared transcript and checkpoint primitives for Live API Sync."""
+
 from __future__ import annotations
 
-import json
-from pathlib import Path
+import logging
 import sqlite3
 import time
+from pathlib import Path
 
-from bridge.config import DEFAULT_MODEL, SYNC_MAX_BYTES
-
+from bridge.card_content import (
+    active_world_files,
+    card_fields_from_file,
+    encode_world_files,
+    safe_character_path,
+    safe_world_path,
+)
+from bridge.config import (
+    DEFAULT_MODEL,
+    DEFAULT_USER_NAME,
+    GENERATION_DEFAULTS,
+    SYNC_MAX_BYTES,
+)
+from bridge.database import (
+    ensure_sync_binding,
+    get_generation_settings,
+    parse_generation_setting,
+    sync_transcript_hash,
+    update_generation_settings,
+)
+from bridge.generation import save_response_variant
+from bridge.language import normalize_response_language
+from bridge.memory import (
+    get_session_summary,
+    retain_session_memory,
+)
+from bridge.persona_sync import (
+    get_persona,
+    persona_name,
+)
 from bridge.sync_integrity import (
     SyncSnapshotIntegrityAdapter as _SyncSnapshotIntegrityAdapter,
 )
-
+from bridge.telegram import (
+    load_session,
+    update_session,
+)
 
 SYNC_MAX_PAYLOAD_BYTES = SYNC_MAX_BYTES
 
@@ -27,10 +59,22 @@ def sync_binding(db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[
     ).fetchone()
     if row is None:
         raise ValueError("sync binding could not be created")
-    base.update(dict(zip(
-        ("conflict", "last_error", "last_checked_at", "realtime_enabled", "realtime_failures", "realtime_next_retry_at"),
-        row,
-    )))
+    base.update(
+        dict(
+            zip(
+                (
+                    "conflict",
+                    "last_error",
+                    "last_checked_at",
+                    "realtime_enabled",
+                    "realtime_failures",
+                    "realtime_next_retry_at",
+                ),
+                row,
+                strict=False,
+            )
+        )
+    )
     return base
 
 
@@ -42,8 +86,7 @@ def sync_file_id(binding: dict[str, object]) -> str:
 def sync_local_rows(db: sqlite3.Connection, chat_id: str, session_id: str) -> list[tuple[int, str, str, float]]:
     """Load the complete ordered bridge transcript."""
     return db.execute(
-        "SELECT rowid,role,content,created_at FROM messages "
-        "WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
+        "SELECT rowid,role,content,created_at FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at,rowid",
         (chat_id, session_id),
     ).fetchall()
 
@@ -174,8 +217,13 @@ def _apply_sync_snapshot_backend(
         ordered = [value for pos, value in enumerate(swipes) if pos != selected] + [swipes[selected]]
         for response in ordered:
             save_response_variant(
-                db, chat_id, session["session_id"], user_content, response,
-                user_rowid=user_rowid, commit=False,
+                db,
+                chat_id,
+                session["session_id"],
+                user_content,
+                response,
+                user_rowid=user_rowid,
+                commit=False,
             )
     db.commit()
     return sync_transcript_hash(messages)
@@ -184,8 +232,7 @@ def _apply_sync_snapshot_backend(
 _SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
     apply_backend=_apply_sync_snapshot_backend,
     update_session=(
-        lambda db, chat_id, session_id, **updates:
-        update_session(
+        lambda db, chat_id, session_id, **updates: update_session(
             db,
             chat_id,
             session_id,
@@ -193,8 +240,7 @@ _SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
         )
     ),
     load_session=(
-        lambda db, chat_id, session_id, default_model:
-        load_session(
+        lambda db, chat_id, session_id, default_model: load_session(
             db,
             chat_id,
             session_id,
@@ -202,23 +248,16 @@ _SYNC_SNAPSHOT_INTEGRITY = _SyncSnapshotIntegrityAdapter(
         )
     ),
     retain_memory=(
-        lambda db, chat_id, session, fields:
-        retain_session_memory(
+        lambda db, chat_id, session, fields: retain_session_memory(
             db,
             chat_id,
             session,
             fields,
         )
     ),
-    card_fields=(
-        lambda character_file:
-        card_fields_from_file(character_file)
-    ),
+    card_fields=(lambda character_file: card_fields_from_file(character_file)),
     default_model=DEFAULT_MODEL,
-    log_warning=(
-        lambda message, **kwargs:
-        logging.warning(message, **kwargs)
-    ),
+    log_warning=(lambda message, **kwargs: logging.warning(message, **kwargs)),
 )
 
 
@@ -257,39 +296,3 @@ def set_sync_state(
         (local_hash, direction, time.time(), conflict, error[:1000], time.time(), chat_id, session_id),
     )
     db.commit()
-
-
-# Explicit late imports replace transitional dependency injection.
-import logging
-from bridge.card_content import (
-    active_world_files,
-    card_fields_from_file,
-    encode_world_files,
-    safe_character_path,
-    safe_world_path,
-)
-from bridge.persona_sync import (
-    get_persona,
-    persona_name,
-)
-from bridge.config import (
-    DEFAULT_USER_NAME,
-    GENERATION_DEFAULTS,
-)
-from bridge.database import (
-    ensure_sync_binding,
-    get_generation_settings,
-    parse_generation_setting,
-    sync_transcript_hash,
-    update_generation_settings,
-)
-from bridge.generation import save_response_variant
-from bridge.language import normalize_response_language
-from bridge.memory import (
-    get_session_summary,
-    retain_session_memory,
-)
-from bridge.telegram import (
-    load_session,
-    update_session,
-)

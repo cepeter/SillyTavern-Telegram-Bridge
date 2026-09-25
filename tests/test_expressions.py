@@ -7,13 +7,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import bridge.expressions as _m_expressions
 import bridge.config as config
-import bridge.main as _m_main
+import bridge.expressions as _m_expressions
 import bridge.media as _m_media
 import bridge.panel_callback_routes as _m_panel_callback_routes
-import bridge.persona_sync as _m_persona_sync
 import bridge.session_naming as _m_session_naming
+
+
 class ExpressionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

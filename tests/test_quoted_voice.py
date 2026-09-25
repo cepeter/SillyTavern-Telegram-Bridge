@@ -6,9 +6,9 @@ import unittest
 
 import bridge.help_details as _m_help_details
 import bridge.media as _m_media
-import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
-import bridge.session_naming as _m_session_naming
+
+
 class QuotedVoiceTests(unittest.TestCase):
     def test_extracts_only_double_quoted_dialogue(self):
         text = '*walks closer* "I am here." *smiles* "Are you ready?"'
@@ -27,7 +27,9 @@ class QuotedVoiceTests(unittest.TestCase):
         _m_media.get_meta = lambda *_args: "tts"
         _m_media.submit_background = lambda *args: calls.append(args) or True
         try:
-            queued = _m_message_commands.queue_user_quote_tts("token", "chat", '*waves* "Hello there."', object(), "session", 44)
+            queued = _m_message_commands.queue_user_quote_tts(
+                "token", "chat", '*waves* "Hello there."', object(), "session", 44
+            )
         finally:
             _m_media.get_meta = original_meta
             _m_media.submit_background = original_submit
@@ -42,7 +44,9 @@ class QuotedVoiceTests(unittest.TestCase):
         _m_media.get_meta = lambda *_args: "off"
         _m_media.submit_background = lambda *args: calls.append(args) or True
         try:
-            queued = _m_message_commands.queue_user_quote_tts("token", "chat", '"Hello there."', object(), "session", 44)
+            queued = _m_message_commands.queue_user_quote_tts(
+                "token", "chat", '"Hello there."', object(), "session", 44
+            )
         finally:
             _m_media.get_meta = original_meta
             _m_media.submit_background = original_submit
@@ -52,7 +56,6 @@ class QuotedVoiceTests(unittest.TestCase):
     def test_tts_command_is_not_in_help(self):
         commands = [command for entries in _m_help_details.HELP_CATEGORIES.values() for command, _summary in entries]
         self.assertNotIn("/tts", commands)
-
 
     def test_assistant_tts_uses_content_scoped_idempotency_key(self):
         class FakeDB:

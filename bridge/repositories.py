@@ -1,4 +1,5 @@
 """SQL-only persistence primitives for current application domains."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -24,8 +25,7 @@ def store_director_goal(
     updated_at: float,
 ) -> None:
     db.execute(
-        "INSERT OR REPLACE INTO director_goals"
-        "(chat_id,session_id,goal,updated_at) VALUES(?,?,?,?)",
+        "INSERT OR REPLACE INTO director_goals(chat_id,session_id,goal,updated_at) VALUES(?,?,?,?)",
         (str(chat_id), str(session_id), str(goal), float(updated_at)),
     )
 
@@ -47,8 +47,7 @@ def load_scene_state_row(
     session_id: str,
 ) -> tuple[str, int] | None:
     row = db.execute(
-        "SELECT state_json,updated_through_rowid FROM scene_states "
-        "WHERE chat_id=? AND session_id=?",
+        "SELECT state_json,updated_through_rowid FROM scene_states WHERE chat_id=? AND session_id=?",
         (str(chat_id), str(session_id)),
     ).fetchone()
     return (str(row[0] or "{}"), int(row[1] or 0)) if row else None
@@ -118,7 +117,6 @@ def store_meta_value(
     )
 
 
-
 def count_persona_references(
     db: sqlite3.Connection,
     persona_id: str,
@@ -130,15 +128,13 @@ def count_persona_references(
     return int(row[0] or 0) if row else 0
 
 
-
 def count_session_messages(
     db: sqlite3.Connection,
     chat_id: str,
     session_id: str,
 ) -> int:
     row = db.execute(
-        "SELECT COUNT(*) FROM messages "
-        "WHERE chat_id=? AND session_id=?",
+        "SELECT COUNT(*) FROM messages WHERE chat_id=? AND session_id=?",
         (str(chat_id), str(session_id)),
     ).fetchone()
     return int(row[0] or 0) if row else 0
@@ -202,9 +198,7 @@ def try_claim_group_operation(
         return True
     operation_id = str(operation_id)
     cursor = db.execute(
-        "INSERT OR IGNORE INTO operations("
-        "operation_id,kind,state,created_at,updated_at"
-        ") VALUES(?,?,'in_progress',?,?)",
+        "INSERT OR IGNORE INTO operations(operation_id,kind,state,created_at,updated_at) VALUES(?,?,'in_progress',?,?)",
         (operation_id, str(kind), float(now), float(now)),
     )
     if cursor.rowcount == 1:
@@ -225,7 +219,6 @@ def mark_group_operation_applied(
     if operation_id is None:
         return
     db.execute(
-        "UPDATE operations SET state='applied',kind=?,updated_at=? "
-        "WHERE operation_id=?",
+        "UPDATE operations SET state='applied',kind=?,updated_at=? WHERE operation_id=?",
         (str(kind), float(now), str(operation_id)),
     )

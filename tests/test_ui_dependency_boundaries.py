@@ -33,9 +33,7 @@ def test_expressions_no_longer_imports_telegram():
 def test_expression_menu_requires_and_uses_delivery_port(monkeypatch):
     import bridge.expressions as expressions
 
-    param = inspect.signature(expressions.send_expression_menu).parameters.get(
-        "delivery_port"
-    )
+    param = inspect.signature(expressions.send_expression_menu).parameters.get("delivery_port")
     assert param is not None
     assert param.default is inspect.Parameter.empty
 
@@ -73,9 +71,7 @@ def test_expression_menu_requires_and_uses_delivery_port(monkeypatch):
 def test_expression_callback_requires_delivery_port():
     import bridge.panel_callback_routes as routes
 
-    param = inspect.signature(routes.handle_expression_callback).parameters.get(
-        "delivery_port"
-    )
+    param = inspect.signature(routes.handle_expression_callback).parameters.get("delivery_port")
     assert param is not None
     assert param.default is inspect.Parameter.empty
 
@@ -90,9 +86,7 @@ def test_input_flow_service_requires_session_name_backend_and_delegates():
 
     service = InputFlowService(
         handle_pending_backend=lambda *_args, **_kwargs: False,
-        start_session_name_backend=lambda *args, **kwargs: (
-            calls.append((args, kwargs))
-        ),
+        start_session_name_backend=lambda *args, **kwargs: calls.append((args, kwargs)),
         start_text_action_backend=lambda *_args, **_kwargs: None,
         handle_session_name_backend=lambda *_args, **_kwargs: False,
     )
@@ -110,9 +104,7 @@ def test_group_new_session_uses_injected_input_flow_service():
 
     calls = []
     group_service = make_test_group_service()
-    input_flow = SimpleNamespace(
-        start_session_name=lambda *args, **kwargs: calls.append((args, kwargs))
-    )
+    input_flow = SimpleNamespace(start_session_name=lambda *args, **kwargs: calls.append((args, kwargs)))
     db = object()
     session = {"session_id": "session", "character_file": "mira.png"}
     message = {"message_id": 41}

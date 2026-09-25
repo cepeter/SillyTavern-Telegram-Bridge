@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 import subprocess
 import sys
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -67,17 +67,19 @@ class CallbackDispatchBoundaryTests(unittest.TestCase):
             persona=object(),
             sync=object(),
         )
-        with patch.object(callback_dispatch, "answer_callback", external_answer), \
-             patch.object(
-                 callback_dispatch,
-                 "ensure_session",
-                 return_value={"session_id": "session"},
-             ), \
-             patch.object(
-                 callback_dispatch,
-                 "handle_primary_panel_callback",
-                 routed,
-             ):
+        with (
+            patch.object(callback_dispatch, "answer_callback", external_answer),
+            patch.object(
+                callback_dispatch,
+                "ensure_session",
+                return_value={"session_id": "session"},
+            ),
+            patch.object(
+                callback_dispatch,
+                "handle_primary_panel_callback",
+                routed,
+            ),
+        ):
             callback_dispatch.process_callback(
                 object(),
                 "token",
@@ -89,11 +91,7 @@ class CallbackDispatchBoundaryTests(unittest.TestCase):
         external_answer.assert_not_called()
 
     def test_callbacks_import_does_not_load_route_module(self):
-        code = (
-            "import sys\n"
-            "import bridge.callbacks\n"
-            "assert 'bridge.panel_callback_routes' not in sys.modules\n"
-        )
+        code = "import sys\nimport bridge.callbacks\nassert 'bridge.panel_callback_routes' not in sys.modules\n"
         completed = subprocess.run(
             [sys.executable, "-c", code],
             capture_output=True,

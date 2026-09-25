@@ -1,9 +1,10 @@
 """Ordinary integrity adapter for Live Sync snapshot imports."""
+
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
-import sqlite3
 
 
 @dataclass(frozen=True)
@@ -35,19 +36,12 @@ class SyncSnapshotIntegrityAdapter:
         )
 
         updates = {}
-        if (
-            "persona" in metadata
-            and not str(metadata.get("persona") or "").strip()
-        ):
+        if "persona" in metadata and not str(metadata.get("persona") or "").strip():
             updates["persona_id"] = ""
 
         if "world_info" in metadata:
             raw_worlds = metadata.get("world_info")
-            candidates = (
-                raw_worlds
-                if isinstance(raw_worlds, list)
-                else ([raw_worlds] if raw_worlds else [])
-            )
+            candidates = raw_worlds if isinstance(raw_worlds, list) else ([raw_worlds] if raw_worlds else [])
             if not candidates:
                 updates["world_file"] = ""
 
@@ -66,9 +60,7 @@ class SyncSnapshotIntegrityAdapter:
                 session["session_id"],
                 self.default_model,
             )
-            fields = self.card_fields(
-                refreshed["character_file"]
-            )
+            fields = self.card_fields(refreshed["character_file"])
             self.retain_memory(
                 db,
                 chat_id,

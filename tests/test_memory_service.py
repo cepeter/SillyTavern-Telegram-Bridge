@@ -1,35 +1,35 @@
-from application_test_setup import make_test_conversation_service, make_test_group_service, make_test_input_flow_service, make_test_provider_port
-
-from application_test_setup import ensure_application_extensions, make_test_application_services, make_test_persona_service, make_test_request_context
+from application_test_setup import (
+    ensure_application_extensions,
+    make_test_application_services,
+    make_test_conversation_service,
+    make_test_group_service,
+    make_test_input_flow_service,
+    make_test_persona_service,
+    make_test_provider_port,
+    make_test_request_context,
+)
 
 ensure_application_extensions()
 
-from pathlib import Path
-from types import SimpleNamespace
 import sqlite3
 import tempfile
+import time
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-import bridge.config as config
-import time
+import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
+import bridge.config as config
+import bridge.database as _m_database
 import bridge.help as _m_help
 import bridge.memory as _m_memory
+import bridge.memory_backend as _m_memory_backend
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
-import bridge.card_content as _m_card_content
-import bridge.command_routes as _m_command_routes
-import bridge.database as _m_database
-import bridge.generation as _m_generation
-import bridge.group_core as _m_group_core
-import bridge.input_flows as _m_input_flows
-import bridge.language as _m_language
-import bridge.media as _m_media
-import bridge.memory_backend as _m_memory_backend
-import bridge.rag_core as _m_rag_core
 import bridge.telegram as _m_telegram
 from bridge.memory_service import MemoryPromptContext, MemoryService
 
@@ -64,12 +64,10 @@ class MemoryServiceTests(unittest.TestCase):
         calls = []
         service = self._service(
             recall=lambda db, chat_id, session, fields, query: (
-                calls.append(("recall", chat_id, session["session_id"], fields["name"], query))
-                or "remembered fact"
+                calls.append(("recall", chat_id, session["session_id"], fields["name"], query)) or "remembered fact"
             ),
             summary=lambda db, chat_id, session: (
-                calls.append(("summary", chat_id, session["session_id"]))
-                or "continuity summary"
+                calls.append(("summary", chat_id, session["session_id"])) or "continuity summary"
             ),
             summary_state=lambda *_args: (_ for _ in ()).throw(
                 AssertionError("normal prompt must not read summary state")
@@ -147,9 +145,7 @@ class MemoryServiceTests(unittest.TestCase):
     def test_retain_delegates_to_injected_provider(self):
         calls = []
         service = self._service(
-            retain=lambda db, chat_id, session, fields: calls.append(
-                (db, chat_id, session, fields)
-            )
+            retain=lambda db, chat_id, session, fields: calls.append((db, chat_id, session, fields))
         )
 
         service.retain(self.db, "chat", self.session, self.fields)
@@ -161,11 +157,7 @@ class MemoryServiceTests(unittest.TestCase):
 
     def test_purge_session_returns_injected_provider_result(self):
         calls = []
-        service = self._service(
-            purge=lambda db, chat_id, session_id: (
-                calls.append((db, chat_id, session_id)) or 7
-            )
-        )
+        service = self._service(purge=lambda db, chat_id, session_id: calls.append((db, chat_id, session_id)) or 7)
 
         result = service.purge_session(self.db, "chat", "session-1")
 
@@ -176,8 +168,7 @@ class MemoryServiceTests(unittest.TestCase):
         calls = []
         service = self._service(
             summary_state=lambda db, chat_id, session_id: (
-                calls.append((db, chat_id, session_id))
-                or ("stored summary", 23)
+                calls.append((db, chat_id, session_id)) or ("stored summary", 23)
             )
         )
 
@@ -260,37 +251,74 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         def legacy_called(*_args, **_kwargs):
             raise AssertionError("legacy memory global must not run")
 
-        with patch.object(
-            _m_memory_backend,
-            "recall_memory_context",
-            side_effect=legacy_called,
-        ), patch.object(
-            _m_memory,
-            "session_summary_for_prompt",
-            side_effect=legacy_called,
-        ), patch.object(
-            _m_memory,
-            "retain_session_memory",
-            side_effect=legacy_called,
-        ), patch.object(_m_message_commands, "rag_retrieval_bundle",
-            return_value={},
-        ), patch.object(_m_message_commands, "rag_context_for_prompt",
-            return_value="",
-        ), patch.object(_m_message_commands, "rag_citation_footer",
-            return_value="",
-        ), patch.object(_m_message_commands, "build_chat_messages",
-            side_effect=build_messages,
-        ), patch.object(_m_message_commands, "send_typing",
-        ), patch.object(_m_message_commands, "normalize_response_language",
-            return_value="en",
-        ), patch.object(_m_message_commands, "get_generation_settings",
-            return_value={},
-        ), patch.object(_m_message_commands, "render_response_language",
-            side_effect=lambda _key, _model, reply, *_args, **_kwargs: reply,
-        ), patch.object(_m_message_commands, "save_response_variant",
-            return_value=1,
-        ), patch.object(_m_message_commands, "queue_user_quote_tts",
-        ), patch.object(_m_message_commands, "send_reply",
+        with (
+            patch.object(
+                _m_memory_backend,
+                "recall_memory_context",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_memory,
+                "session_summary_for_prompt",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_memory,
+                "retain_session_memory",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_message_commands,
+                "rag_retrieval_bundle",
+                return_value={},
+            ),
+            patch.object(
+                _m_message_commands,
+                "rag_context_for_prompt",
+                return_value="",
+            ),
+            patch.object(
+                _m_message_commands,
+                "rag_citation_footer",
+                return_value="",
+            ),
+            patch.object(
+                _m_message_commands,
+                "build_chat_messages",
+                side_effect=build_messages,
+            ),
+            patch.object(
+                _m_message_commands,
+                "send_typing",
+            ),
+            patch.object(
+                _m_message_commands,
+                "normalize_response_language",
+                return_value="en",
+            ),
+            patch.object(
+                _m_message_commands,
+                "get_generation_settings",
+                return_value={},
+            ),
+            patch.object(
+                _m_message_commands,
+                "render_response_language",
+                side_effect=lambda _key, _model, reply, *_args, **_kwargs: reply,
+            ),
+            patch.object(
+                _m_message_commands,
+                "save_response_variant",
+                return_value=1,
+            ),
+            patch.object(
+                _m_message_commands,
+                "queue_user_quote_tts",
+            ),
+            patch.object(
+                _m_message_commands,
+                "send_reply",
+            ),
         ):
             _m_message_commands.generate_and_store_reply(
                 self.db,
@@ -306,7 +334,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "",
                 None,
                 None,
-                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: 'reply'), group_service=make_test_group_service(),
+                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "reply"),
+                group_service=make_test_group_service(),
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
             )
@@ -322,14 +351,12 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
     def test_edited_turn_recovery_uses_injected_memory_service(self):
         now = time.time()
         user_cursor = self.db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
-            "VALUES(?,?,?,?,?)",
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", self.session["session_id"], "user", "old text", now),
         )
         user_rowid = int(user_cursor.lastrowid)
         self.db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
-            "VALUES(?,?,?,?,?)",
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             ("chat", self.session["session_id"], "assistant", "old reply", now + 0.001),
         )
         self.db.commit()
@@ -368,35 +395,64 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             captured.update(kwargs)
             return [{"role": "user", "content": text}]
 
-        with patch.object(
-            _m_memory_backend,
-            "recall_memory_context",
-            side_effect=legacy_called,
-        ), patch.object(
-            _m_memory,
-            "get_session_summary",
-            side_effect=legacy_called,
-        ), patch.object(
-            _m_memory,
-            "session_summary_for_prompt",
-            side_effect=legacy_called,
-        ), patch.object(
-            _m_memory,
-            "retain_session_memory",
-            side_effect=legacy_called,
-        ), patch.object(_m_commands, "rag_retrieval_bundle",
-            return_value={},
-        ), patch.object(_m_commands, "rag_context_for_prompt",
-            return_value="",
-        ), patch.object(_m_commands, "build_chat_messages",
-            side_effect=build_messages,
-        ), patch.object(_m_commands, "send_typing",
-        ), patch.object(_m_commands, "rag_citation_footer",
-            return_value="",
-        ), patch.object(_m_commands, "render_session_response",
-            side_effect=lambda _api_key, _session, reply, _chat_id, _settings, **_kwargs: reply,
-        ), patch.object(_m_commands, "save_response_variant",
-        ), patch.object(_m_commands, "send_reply",
+        with (
+            patch.object(
+                _m_memory_backend,
+                "recall_memory_context",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_memory,
+                "get_session_summary",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_memory,
+                "session_summary_for_prompt",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_memory,
+                "retain_session_memory",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_commands,
+                "rag_retrieval_bundle",
+                return_value={},
+            ),
+            patch.object(
+                _m_commands,
+                "rag_context_for_prompt",
+                return_value="",
+            ),
+            patch.object(
+                _m_commands,
+                "build_chat_messages",
+                side_effect=build_messages,
+            ),
+            patch.object(
+                _m_commands,
+                "send_typing",
+            ),
+            patch.object(
+                _m_commands,
+                "rag_citation_footer",
+                return_value="",
+            ),
+            patch.object(
+                _m_commands,
+                "render_session_response",
+                side_effect=lambda _api_key, _session, reply, _chat_id, _settings, **_kwargs: reply,
+            ),
+            patch.object(
+                _m_commands,
+                "save_response_variant",
+            ),
+            patch.object(
+                _m_commands,
+                "send_reply",
+            ),
         ):
             _m_commands.regenerate_edited_turn(
                 self.db,
@@ -407,7 +463,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "chat",
                 user_rowid,
                 "new text",
-                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: 'new reply'), memory_service=FakeMemory(),
+                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "new reply"),
+                memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
             )
 
@@ -429,12 +486,17 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
         def fake_regen(*args, **kwargs):
             captured.update(kwargs)
 
-        with patch.object(
-            _m_command_routes,
-            "_dispatch_extension_command_routes",
-            return_value=False,
-        ), patch.object(_m_command_routes, "regenerate_last",
-            side_effect=fake_regen,
+        with (
+            patch.object(
+                _m_command_routes,
+                "_dispatch_extension_command_routes",
+                return_value=False,
+            ),
+            patch.object(
+                _m_command_routes,
+                "regenerate_last",
+                side_effect=fake_regen,
+            ),
         ):
             handled = _m_command_routes.handle_command_route(
                 self.db,
@@ -524,34 +586,65 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             advance_turn=lambda *_args, **_kwargs: None,
         )
 
-        with patch.object(
-            _m_memory_backend,
-            "recall_memory_context",
-            side_effect=legacy_called,
-        ), patch.object(
-            _m_memory,
-            "session_summary_for_prompt",
-            side_effect=legacy_called,
-        ), patch.object(
-            _m_memory,
-            "retain_session_memory",
-            side_effect=legacy_called,
-        ), patch.object(_m_commands, "rag_retrieval_bundle",
-            return_value={},
-        ), patch.object(_m_commands, "rag_context_for_prompt",
-            return_value="",
-        ), patch.object(_m_commands, "build_chat_messages",
-            side_effect=build_messages,
-        ), patch.object(_m_commands, "send_typing",
-        ), patch.object(_m_commands, "get_generation_settings",
-            return_value={},
-        ), patch.object(_m_commands, "rag_citation_footer",
-            return_value="",
-        ), patch.object(_m_commands, "render_session_response",
-            side_effect=lambda _key, _session, reply, *_args, **_kwargs: reply,
-        ), patch.object(_m_commands, "save_response_variant",
-            return_value=1,
-        ), patch.object(_m_commands, "send_reply",
+        with (
+            patch.object(
+                _m_memory_backend,
+                "recall_memory_context",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_memory,
+                "session_summary_for_prompt",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_memory,
+                "retain_session_memory",
+                side_effect=legacy_called,
+            ),
+            patch.object(
+                _m_commands,
+                "rag_retrieval_bundle",
+                return_value={},
+            ),
+            patch.object(
+                _m_commands,
+                "rag_context_for_prompt",
+                return_value="",
+            ),
+            patch.object(
+                _m_commands,
+                "build_chat_messages",
+                side_effect=build_messages,
+            ),
+            patch.object(
+                _m_commands,
+                "send_typing",
+            ),
+            patch.object(
+                _m_commands,
+                "get_generation_settings",
+                return_value={},
+            ),
+            patch.object(
+                _m_commands,
+                "rag_citation_footer",
+                return_value="",
+            ),
+            patch.object(
+                _m_commands,
+                "render_session_response",
+                side_effect=lambda _key, _session, reply, *_args, **_kwargs: reply,
+            ),
+            patch.object(
+                _m_commands,
+                "save_response_variant",
+                return_value=1,
+            ),
+            patch.object(
+                _m_commands,
+                "send_reply",
+            ),
         ):
             _m_commands.process_image_message(
                 self.db,
@@ -562,7 +655,8 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
                 "chat",
                 "describe this",
                 b"image-bytes",
-                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: 'image reply'), group_service=group_service,
+                provider_port=make_test_provider_port(generate_backend=lambda *_args, **_kwargs: "image reply"),
+                group_service=group_service,
                 memory_service=FakeMemory(),
                 persona_service=make_test_persona_service(),
                 group_director_service=make_test_application_services().group_director,
@@ -570,10 +664,13 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
 
         self.assertEqual(captured["memory_context"], "image recall")
         self.assertEqual(captured["session_summary"], "image summary")
-        self.assertEqual(calls, [
-            ("context", "describe this"),
-            ("retain", self.session["session_id"]),
-        ])
+        self.assertEqual(
+            calls,
+            [
+                ("context", "describe this"),
+                ("retain", self.session["session_id"]),
+            ],
+        )
 
     def test_png_document_adapter_propagates_memory_service(self):
         memory = object()
@@ -585,22 +682,32 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             "caption": "caption",
         }
 
-        with patch.object(
-            _m_telegram,
-            "_consume_world_upload",
-            return_value=False,
-        ), patch.object(
-            _m_telegram,
-            "download_telegram_file",
-            return_value=b"not-a-card",
-        ), patch.object(_m_telegram, "parse_png_chara_bytes",
-            side_effect=ValueError("not card"),
-        ), patch.object(
-            _m_telegram,
-            "ensure_session",
-            return_value=self.session,
-        ), patch.object(_m_telegram, "card_fields_from_file",
-            return_value=self.fields,
+        with (
+            patch.object(
+                _m_telegram,
+                "_consume_world_upload",
+                return_value=False,
+            ),
+            patch.object(
+                _m_telegram,
+                "download_telegram_file",
+                return_value=b"not-a-card",
+            ),
+            patch.object(
+                _m_telegram,
+                "parse_png_chara_bytes",
+                side_effect=ValueError("not card"),
+            ),
+            patch.object(
+                _m_telegram,
+                "ensure_session",
+                return_value=self.session,
+            ),
+            patch.object(
+                _m_telegram,
+                "card_fields_from_file",
+                return_value=self.fields,
+            ),
         ):
             _m_help.import_telegram_document(
                 self.db,
@@ -616,7 +723,6 @@ class MemoryServiceMessageIntegrationTests(unittest.TestCase):
             )
 
         self.assertIs(captured["memory_service"], memory)
-
 
 
 class MemoryServiceExplicitInjectionBoundaryTests(unittest.TestCase):
@@ -671,8 +777,7 @@ class MemoryServiceBoundaryTests(unittest.TestCase):
                 session_id="reset-memory",
             )
             db.execute(
-                "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
-                "VALUES(?,?,?,?,?)",
+                "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
                 ("chat", "reset-memory", "user", "hello", time.time()),
             )
             db.commit()
@@ -683,13 +788,16 @@ class MemoryServiceBoundaryTests(unittest.TestCase):
                     calls.append((current_db, chat_id, session_id))
                     return 1
 
-            with patch.object(
-                _m_memory,
-                "purge_hindsight_session",
-                side_effect=AssertionError("raw purge must not run"),
-            ), patch.object(
-                _m_database,
-                "optimize_database",
+            with (
+                patch.object(
+                    _m_memory,
+                    "purge_hindsight_session",
+                    side_effect=AssertionError("raw purge must not run"),
+                ),
+                patch.object(
+                    _m_database,
+                    "optimize_database",
+                ),
             ):
                 _m_panel_callback_routes.reset_session(
                     db,
@@ -711,6 +819,7 @@ class MemoryServiceBoundaryTests(unittest.TestCase):
         finally:
             config.DB_FILE = old_db
             tmp.cleanup()
+
 
 if __name__ == "__main__":
     unittest.main()

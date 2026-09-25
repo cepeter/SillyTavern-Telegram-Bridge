@@ -1,27 +1,28 @@
-from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_persona_service, make_test_request_context
+from application_test_setup import (
+    ensure_application_extensions,
+    make_test_group_service,
+    make_test_persona_service,
+    make_test_request_context,
+)
 
 ensure_application_extensions()
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
-import bridge.config as config
-import bridge.callbacks as _m_callbacks
 import bridge.cards as _m_cards
-import bridge.character_identity as _m_character_identity
 import bridge.command_routes as _m_command_routes
-import bridge.groups as _m_groups
+import bridge.config as config
 import bridge.group_core as _m_group_core
+import bridge.groups as _m_groups
 import bridge.help as _m_help
 import bridge.input_flows as _m_input_flows
-import bridge.main as _m_main
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
-import bridge.persona_sync as _m_persona_sync
-import bridge.status_panels as _m_status_panels
-import bridge.sync_api as _m_sync_api
 import bridge.telegram as _m_telegram
+
+
 class ItemPanelLayoutTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -30,7 +31,9 @@ class ItemPanelLayoutTests(unittest.TestCase):
         config.DB_FILE = Path(self.tmp.name) / "bridge.sqlite3"
         self.db = _m_memory_curator.db_connect()
         self.calls = []
-        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: self.calls.append((method, payload)) or {"message_id": 1}
+        _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: (
+            self.calls.append((method, payload)) or {"message_id": 1}
+        )
 
     def tearDown(self):
         _m_cards.send_panel_request = self.old_request
@@ -44,7 +47,9 @@ class ItemPanelLayoutTests(unittest.TestCase):
 
     def test_persona_rows_have_delete_callbacks(self):
         persona_service = make_test_persona_service(personas={"p1": {"name": "Punto"}, "p2": {"name": "Alt"}})
-        _m_command_routes.send_persona_menu("bot", "chat", "p1", persona_service=persona_service, request_context=make_test_request_context(self.db))
+        _m_command_routes.send_persona_menu(
+            "bot", "chat", "p1", persona_service=persona_service, request_context=make_test_request_context(self.db)
+        )
         callbacks = self._callbacks(self.calls[-1][1])
         self.assertEqual(sum(value.startswith("persona:delete:") for value in callbacks), 2)
         self.assertNotIn("persona:delete", callbacks)
@@ -63,7 +68,9 @@ class ItemPanelLayoutTests(unittest.TestCase):
         _m_help.data_bank_documents = lambda _db, _chat: [("doc-1", "lore.json", 1, 2)]
         _m_help.rag_embedding_coverage = lambda _db, _chat: (2, 2)
         try:
-            _m_command_routes.send_databank_menu("bot", "chat", self.db, request_context=make_test_request_context(self.db))
+            _m_command_routes.send_databank_menu(
+                "bot", "chat", self.db, request_context=make_test_request_context(self.db)
+            )
         finally:
             _m_help.data_bank_documents = old_docs
             _m_help.rag_embedding_coverage = old_coverage
@@ -102,13 +109,30 @@ class ItemPanelLayoutTests(unittest.TestCase):
         session = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         old_fields = _m_groups.card_fields_from_file
         _m_groups.card_fields_from_file = lambda _filename: {"name": "Member"}
-        _m_group_core.save_group_state(self.db, "chat", session["session_id"], {
-            "title": "Group", "enabled": True, "turn_index": 0,
-            "mode": "round_robin", "forced_speaker": "",
-            "members": ["member.png"], "turn_user_id": "", "turn_users": [],
-        })
+        _m_group_core.save_group_state(
+            self.db,
+            "chat",
+            session["session_id"],
+            {
+                "title": "Group",
+                "enabled": True,
+                "turn_index": 0,
+                "mode": "round_robin",
+                "forced_speaker": "",
+                "members": ["member.png"],
+                "turn_user_id": "",
+                "turn_users": [],
+            },
+        )
         try:
-            _m_panel_callback_routes.send_group_menu(self.db, "bot", "chat", session, group_service=make_test_group_service(), request_context=make_test_request_context(self.db, session["session_id"]))
+            _m_panel_callback_routes.send_group_menu(
+                self.db,
+                "bot",
+                "chat",
+                session,
+                group_service=make_test_group_service(),
+                request_context=make_test_request_context(self.db, session["session_id"]),
+            )
         finally:
             _m_groups.card_fields_from_file = old_fields
         callbacks = self._callbacks(self.calls[-1][1])

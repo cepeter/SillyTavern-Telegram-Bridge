@@ -1,10 +1,11 @@
 """Application service for canonical group state and turn operations."""
+
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-import sqlite3
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,14 @@ class GroupService:
     def state(self, db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
         return self.load_state(db, chat_id, session_id)
 
-    def save(self, db: sqlite3.Connection, chat_id: str, session_id: str, state: dict[str, object], operation_id: int | str | None = None) -> bool:
+    def save(
+        self,
+        db: sqlite3.Connection,
+        chat_id: str,
+        session_id: str,
+        state: dict[str, object],
+        operation_id: int | str | None = None,
+    ) -> bool:
         return bool(self.save_state(db, chat_id, session_id, state, operation_id))
 
     def user_turn_allowed(self, db: sqlite3.Connection, chat_id: str, session_id: str, sender_id: str) -> bool:
@@ -48,8 +56,12 @@ class GroupService:
     def member_labels(self, member_files: list[str]) -> list[str]:
         return list(self.member_labels_backend(member_files))
 
-    def current_speaker(self, db: sqlite3.Connection, chat_id: str, session: dict[str, str], user_text: str = "") -> tuple[str, dict[str, object]] | None:
+    def current_speaker(
+        self, db: sqlite3.Connection, chat_id: str, session: dict[str, str], user_text: str = ""
+    ) -> tuple[str, dict[str, object]] | None:
         return self.current_speaker_backend(db, chat_id, session, user_text)
 
-    def advance_turn(self, db: sqlite3.Connection, chat_id: str, session_id: str, operation_id: int | str | None = None) -> None:
+    def advance_turn(
+        self, db: sqlite3.Connection, chat_id: str, session_id: str, operation_id: int | str | None = None
+    ) -> None:
         self.advance_turn_backend(db, chat_id, session_id, operation_id)

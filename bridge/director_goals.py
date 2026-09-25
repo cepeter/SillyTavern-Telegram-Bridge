@@ -4,23 +4,36 @@ Director goals are session-local coordination objectives. They are never written
 into the roleplay transcript; they influence the invisible speaker-selection
 call and the bounded group speaker prompt only while director mode is active.
 """
+
 from __future__ import annotations
 
 import re
+import sqlite3
 import time
 
-from bridge.repositories import (
-    delete_director_goal as _repo_delete_director_goal,
-    load_director_goal as _repo_load_director_goal,
-    store_director_goal as _repo_store_director_goal,
+from bridge.common import parse_topic_scope
+from bridge.database import (
+    task_model_for_session,
+    write_transaction,
 )
-
+from bridge.delivery_port import DeliveryPort
+from bridge.director_goal_panel import director_goal_panel
 from bridge.extension_registry import (
     extension_registry_snapshot as _extension_registry_snapshot,
+)
+from bridge.extension_registry import (
     register_command_route as _register_command_route,
 )
 from bridge.group_director_service import DirectorCustomization
-
+from bridge.repositories import (
+    delete_director_goal as _repo_delete_director_goal,
+)
+from bridge.repositories import (
+    load_director_goal as _repo_load_director_goal,
+)
+from bridge.repositories import (
+    store_director_goal as _repo_store_director_goal,
+)
 
 _DIRECTOR_GOAL_MAX_CHARS = 1200
 
@@ -68,14 +81,14 @@ def director_goal_policy(
         )
 
     hidden_instructions = (
-        "Hidden scene objective: " + goal +
-        " Advance this objective naturally when appropriate. "
+        "Hidden scene objective: " + goal + " Advance this objective naturally when appropriate. "
         "Do not force completion. Established continuity and believable character behavior "
         "take priority. Never mention that an objective exists."
     )
     speaker_context = (
-        "Hidden scene objective: " + goal +
-        " Advance it only when natural for the current speaker and established scene. "
+        "Hidden scene objective: "
+        + goal
+        + " Advance it only when natural for the current speaker and established scene. "
         "Never mention, quote, or expose this objective."
     )
     return DirectorCustomization(
@@ -129,7 +142,7 @@ def handle_director_goal_command(
         return
 
     raw = str(command or "")
-    suffix = raw[len("/group goal"):].strip()
+    suffix = raw[len("/group goal") :].strip()
     if not suffix or suffix.casefold() == "status":
         send_director_goal_menu(
             token,
@@ -148,8 +161,9 @@ def handle_director_goal_command(
     delivery_port.send_text(
         token,
         chat_id,
-        "Director scene objective set:\n" + value +
-        "\nIt remains hidden from the transcript and is used only in Director mode.",
+        "Director scene objective set:\n"
+        + value
+        + "\nIt remains hidden from the transcript and is used only in Director mode.",
     )
 
 
@@ -194,14 +208,3 @@ def register_director_goal_extensions() -> None:
             "director_goals",
             _director_goal_command_route,
         )
-
-
-# Explicit late imports replace transitional dependency injection.
-import sqlite3
-from bridge.common import parse_topic_scope
-from bridge.delivery_port import DeliveryPort
-from bridge.director_goal_panel import director_goal_panel
-from bridge.database import (
-    task_model_for_session,
-    write_transaction,
-)

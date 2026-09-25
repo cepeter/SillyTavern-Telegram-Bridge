@@ -52,7 +52,7 @@ def test_real_loopback_range_is_allowed(url):
     network.validate_provider_endpoint(url)
 
 
-@pytest.mark.parametrize("address", ["169.254.169.254", "0.0.0.0", "224.0.0.1", "::", "fe80::1", "ff02::1"])
+@pytest.mark.parametrize("address", ["169.254.169.254", "0.0.0.0", "224.0.0.1", "::", "fe80::1", "ff02::1"])  # noqa: S104 -- rejected-address fixture; no socket is bound
 def test_metadata_and_unroutable_addresses_never_allowed(address, monkeypatch):
     monkeypatch.setenv("SILLYTAVERN_PROVIDER_ALLOWED_HOSTS", address)
     monkeypatch.setenv("SILLYTAVERN_PROVIDER_PRIVATE_HOSTS", address)

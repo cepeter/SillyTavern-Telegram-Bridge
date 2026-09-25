@@ -1,6 +1,6 @@
 import sqlite3
-from dataclasses import replace
 import unittest
+from dataclasses import replace
 
 from bridge.group_director_service import DirectorCustomization, GroupDirectorService
 
@@ -8,13 +8,9 @@ from bridge.group_director_service import DirectorCustomization, GroupDirectorSe
 class GroupDirectorServiceTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
-        self.db.execute(
-            "CREATE TABLE messages("
-            "chat_id TEXT,session_id TEXT,role TEXT,content TEXT,created_at REAL)"
-        )
+        self.db.execute("CREATE TABLE messages(chat_id TEXT,session_id TEXT,role TEXT,content TEXT,created_at REAL)")
         self.db.executemany(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) "
-            "VALUES(?,?,?,?,?)",
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
             [
                 ("chat", "session", "user", "hello", 1.0),
                 ("chat", "session", "assistant", "hi", 2.0),
@@ -67,12 +63,9 @@ class GroupDirectorServiceTests(unittest.TestCase):
             load_group_state=lambda _db, _chat_id, _session_id: dict(self.state),
             safe_character=lambda filename: filename in {"alice.png", "bob.png"},
             member_labels=lambda filenames: [
-                {"alice.png": "Alice", "bob.png": "Bob"}[filename]
-                for filename in filenames
+                {"alice.png": "Alice", "bob.png": "Bob"}[filename] for filename in filenames
             ],
-            card_fields=lambda filename: {
-                "name": {"alice.png": "Alice", "bob.png": "Bob"}[filename]
-            },
+            card_fields=lambda filename: {"name": {"alice.png": "Alice", "bob.png": "Bob"}[filename]},
             generation_settings=lambda _db, _chat_id, _session_id: {
                 "temperature": 0.85,
                 "max_tokens": 1800,
@@ -210,9 +203,7 @@ class GroupDirectorServiceTests(unittest.TestCase):
         )
 
     def test_prompt_context_appends_policy_speaker_context(self):
-        self.customization = DirectorCustomization(
-            speaker_context="Keep the goal implicit."
-        )
+        self.customization = DirectorCustomization(speaker_context="Keep the goal implicit.")
 
         context = self.service.prompt_context(
             self.db,

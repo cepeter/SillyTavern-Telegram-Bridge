@@ -1,4 +1,4 @@
-from application_test_setup import ensure_application_extensions, make_test_request_context, make_test_group_service
+from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_request_context
 
 ensure_application_extensions()
 
@@ -8,15 +8,15 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.config as config
-import bridge.callbacks as _m_callbacks
-import bridge.telegram as _m_telegram
-import bridge.catalog as _m_catalog
-import bridge.world_storage as _m_world_storage
 import bridge.cards as _m_cards
+import bridge.config as config
 import bridge.memory_curator as _m_memory_curator
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
+import bridge.telegram as _m_telegram
+import bridge.world_storage as _m_world_storage
+
+
 class WorldManagementTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -49,7 +49,7 @@ class WorldManagementTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _m_world_storage.install_world_info_document("not-world.txt", raw)
         with self.assertRaises(ValueError):
-            _m_world_storage.install_world_info_document("bad.json", b"{}");
+            _m_world_storage.install_world_info_document("bad.json", b"{}")
 
     def test_delete_removes_inactive_world_info_and_protects_references(self):
         path = config.WORLD_DIR / "lore.json"
@@ -58,7 +58,10 @@ class WorldManagementTests(unittest.TestCase):
         self.assertFalse(path.exists())
 
         path.write_text(json.dumps({"entries": {}}), encoding="utf-8")
-        self.db.execute("UPDATE sessions SET world_file=? WHERE chat_id=? AND session_id=?", ("lore.json", "chat", self.session["session_id"]))
+        self.db.execute(
+            "UPDATE sessions SET world_file=? WHERE chat_id=? AND session_id=?",
+            ("lore.json", "chat", self.session["session_id"]),
+        )
         self.db.commit()
         with self.assertRaises(ValueError):
             _m_panel_callback_routes.delete_world_info_file(self.db, "chat", "lore.json")
@@ -70,7 +73,9 @@ class WorldManagementTests(unittest.TestCase):
         original_request = _m_cards.send_panel_request
         _m_cards.send_panel_request = lambda _token, method, payload, **_kwargs: calls.append((method, payload)) or {}
         try:
-            _m_panel_callback_routes.send_world_menu("token", "chat", "", request_context=make_test_request_context(self.db, self.session["session_id"]))
+            _m_panel_callback_routes.send_world_menu(
+                "token", "chat", "", request_context=make_test_request_context(self.db, self.session["session_id"])
+            )
         finally:
             _m_cards.send_panel_request = original_request
         keyboard = calls[-1][1]["reply_markup"]["inline_keyboard"]
@@ -87,7 +92,20 @@ class WorldManagementTests(unittest.TestCase):
         _m_panel_callback_routes.send_text = lambda *_args, **_kwargs: sent.append(True) or []
         _m_panel_callback_routes.discard_panel_binding = lambda *_args, **_kwargs: None
         try:
-            _m_panel_callback_routes.handle_world_callback(self.db, "token", callback, lambda *_args: answers.append(True), callback["data"], "chat", callback["message"], self.session, self.session["session_id"], None, group_service=make_test_group_service(), request_context=make_test_request_context(self.db, self.session["session_id"]))
+            _m_panel_callback_routes.handle_world_callback(
+                self.db,
+                "token",
+                callback,
+                lambda *_args: answers.append(True),
+                callback["data"],
+                "chat",
+                callback["message"],
+                self.session,
+                self.session["session_id"],
+                None,
+                group_service=make_test_group_service(),
+                request_context=make_test_request_context(self.db, self.session["session_id"]),
+            )
         finally:
             _m_panel_callback_routes.send_text = original_send
             _m_panel_callback_routes.discard_panel_binding = original_discard

@@ -23,9 +23,7 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
             return dict(self.personas)
 
         def upsert(identifier, name, description, client=None):
-            self.upserts.append(
-                (identifier, name, description, client)
-            )
+            self.upserts.append((identifier, name, description, client))
             return str(identifier)
 
         def delete(identifier, client=None):
@@ -37,11 +35,7 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
             upsert_backend=upsert,
             delete_backend=delete,
             valid_avatar=lambda value: (
-                str(value)
-                if str(value).endswith(
-                    (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
-                )
-                else ""
+                str(value) if str(value).endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")) else ""
             ),
             edit_lock=lambda: self.lock,
         )
@@ -76,12 +70,14 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
         self.assertEqual(result, "native.png")
         self.assertEqual(
             self.upserts,
-            [(
-                "native.png",
-                "Updated",
-                "Updated description",
-                "client",
-            )],
+            [
+                (
+                    "native.png",
+                    "Updated",
+                    "Updated description",
+                    "client",
+                )
+            ],
         )
 
     def test_delete_delegates_and_preserves_client(self):
@@ -100,9 +96,7 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
         original = RuntimeError("offline")
         store = IntegrityCheckedPersonaStore(
             load_personas=lambda force=False: {},
-            upsert_backend=lambda *_args, **_kwargs: (
-                (_ for _ in ()).throw(original)
-            ),
+            upsert_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(original),
             delete_backend=lambda *_args, **_kwargs: True,
             valid_avatar=lambda _value: "",
             edit_lock=lambda: self.lock,
@@ -131,15 +125,9 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
 
         store = IntegrityCheckedPersonaStore(
             load_personas=lambda force=False: {},
-            upsert_backend=lambda *_args, **_kwargs: (
-                backend_enter() or "avatar.png"
-            ),
-            delete_backend=lambda *_args, **_kwargs: (
-                backend_enter() or True
-            ),
-            valid_avatar=lambda value: (
-                str(value) if str(value).endswith(".png") else ""
-            ),
+            upsert_backend=lambda *_args, **_kwargs: backend_enter() or "avatar.png",
+            delete_backend=lambda *_args, **_kwargs: backend_enter() or True,
+            valid_avatar=lambda value: str(value) if str(value).endswith(".png") else "",
             edit_lock=lambda: self.lock,
         )
 
@@ -150,10 +138,7 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
             except Exception as exc:
                 errors.append(exc)
 
-        threads = [
-            threading.Thread(target=run, args=(operation,))
-            for operation in operations
-        ]
+        threads = [threading.Thread(target=run, args=(operation,)) for operation in operations]
         for thread in threads:
             thread.start()
         start.wait(timeout=2)
@@ -164,29 +149,33 @@ class IntegrityCheckedPersonaStoreTests(unittest.TestCase):
         return maximum
 
     def test_two_upserts_are_serialized(self):
-        maximum = self._maximum_backend_parallelism([
-            lambda store: store.upsert(
-                "one",
-                "One",
-                "Description",
-            ),
-            lambda store: store.upsert(
-                "two",
-                "Two",
-                "Description",
-            ),
-        ])
+        maximum = self._maximum_backend_parallelism(
+            [
+                lambda store: store.upsert(
+                    "one",
+                    "One",
+                    "Description",
+                ),
+                lambda store: store.upsert(
+                    "two",
+                    "Two",
+                    "Description",
+                ),
+            ]
+        )
         self.assertEqual(maximum, 1)
 
     def test_upsert_and_delete_are_serialized(self):
-        maximum = self._maximum_backend_parallelism([
-            lambda store: store.upsert(
-                "writer",
-                "Writer",
-                "Description",
-            ),
-            lambda store: store.delete("native.png"),
-        ])
+        maximum = self._maximum_backend_parallelism(
+            [
+                lambda store: store.upsert(
+                    "writer",
+                    "Writer",
+                    "Description",
+                ),
+                lambda store: store.delete("native.png"),
+            ]
+        )
         self.assertEqual(maximum, 1)
 
 

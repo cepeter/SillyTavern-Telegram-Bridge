@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import time
 import unittest
+from pathlib import Path
 
 import bridge.database as database
 
@@ -98,7 +98,6 @@ class RetryModelTurnOnlyTests(unittest.TestCase):
         self.assertEqual(str(failed[0]), "41")
         self.assertEqual(failed[1], "normal user prompt")
 
-
     def test_failed_turn_records_resolved_session_model(self):
         now = time.time()
         self.db.execute(
@@ -176,8 +175,7 @@ class RetryModelTurnOnlyTests(unittest.TestCase):
         )
 
         self.db.execute(
-            "UPDATE sessions SET model_id=? "
-            "WHERE chat_id=? AND session_id=?",
+            "UPDATE sessions SET model_id=? WHERE chat_id=? AND session_id=?",
             (
                 "cline-pass::cline-pass/glm-5.2",
                 "chat",

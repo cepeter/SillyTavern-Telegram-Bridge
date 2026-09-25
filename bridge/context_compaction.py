@@ -6,13 +6,13 @@ retrieved RAG/memory context, then the continuity summary. If the fixed prompt
 alone exceeds the configured budget it reports that condition rather than
 silently truncating character instructions.
 """
+
 from __future__ import annotations
 
 import copy
 import math
 import os
 import re
-
 
 DEFAULT_CONTEXT_WINDOW_TOKENS = 32768
 DEFAULT_CONTEXT_OUTPUT_RESERVE_TOKENS = 4096
@@ -118,7 +118,7 @@ def _trim_middle(value: str, maximum: int) -> str:
         return value[:maximum]
     head = maximum * 2 // 3
     tail = maximum - head - 18
-    return value[:head].rstrip() + "\n…[compacted]…\n" + value[-max(0, tail):].lstrip()
+    return value[:head].rstrip() + "\n…[compacted]…\n" + value[-max(0, tail) :].lstrip()
 
 
 def _shrink_tagged_section(text: str, tag: str, target_chars: int) -> tuple[str, bool]:
@@ -134,7 +134,7 @@ def _shrink_tagged_section(text: str, tag: str, target_chars: int) -> tuple[str,
     if trimmed == body:
         return text, False
     replacement = match.group(1) + trimmed + match.group(3)
-    return text[:match.start()] + replacement + text[match.end():], True
+    return text[: match.start()] + replacement + text[match.end() :], True
 
 
 def _shrink_summary_section(text: str, target_chars: int) -> tuple[str, bool]:
@@ -169,22 +169,16 @@ def compact_chat_messages(
     rag_trimmed = memory_trimmed = summary_trimmed = False
 
     def current_tokens() -> int:
-        return estimate_message_tokens(
-            [message for message in compacted if not message.get("_drop_for_context")]
-        )
+        return estimate_message_tokens([message for message in compacted if not message.get("_drop_for_context")])
 
     def drop_old_turns(floor: int) -> None:
         """Mark the oldest removable turns as dropped until budget or the floor."""
         nonlocal compacted, dropped_history
         conversation_indices = [
-            index for index, message in enumerate(compacted)
-            if message.get("role") in {"user", "assistant"}
+            index for index, message in enumerate(compacted) if message.get("role") in {"user", "assistant"}
         ]
         protected_latest = conversation_indices[-1] if conversation_indices else -1
-        removable = [
-            index for index in conversation_indices
-            if index != protected_latest
-        ]
+        removable = [index for index in conversation_indices if index != protected_latest]
         while current_tokens() > budget and len(removable) > floor:
             index = removable.pop(0)
             compacted[index]["_drop_for_context"] = True

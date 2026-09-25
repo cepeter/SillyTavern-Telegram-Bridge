@@ -40,6 +40,7 @@ def test_native_persona_store_and_service_share_canonical_lock():
 
 def test_session_title_contract_has_pure_owner():
     import importlib
+
     import bridge.session_naming as session_naming
 
     owner = BRIDGE / "session_titles.py"
@@ -53,6 +54,7 @@ def test_session_title_contract_has_pure_owner():
 
 def test_session_title_contract_behavior_is_unchanged():
     import importlib
+
     import pytest
 
     owner = BRIDGE / "session_titles.py"
@@ -126,8 +128,12 @@ def test_image_worker_rejects_oversize_before_transport(monkeypatch):
     )
 
     workers.process_image_job(
-        services, "chat", "file-id", "caption",
-        IMAGE_MAX_BYTES + 1, 55,
+        services,
+        "chat",
+        "file-id",
+        "caption",
+        IMAGE_MAX_BYTES + 1,
+        55,
     )
 
     assert delegated == []
@@ -233,7 +239,12 @@ def test_committed_image_recovery_returns_before_download(monkeypatch):
     monkeypatch.setattr(workers, "clear_failed_turn", lambda *_args: None)
 
     workers.process_image_job(
-        services, "chat", "file-id", "caption", 12, 55,
+        services,
+        "chat",
+        "file-id",
+        "caption",
+        12,
+        55,
         queued_session_id="queued-session",
     )
 
@@ -243,6 +254,7 @@ def test_committed_image_recovery_returns_before_download(monkeypatch):
 
 def _assert_document_injection_signature():
     import inspect
+
     import bridge.telegram as telegram
 
     params = inspect.signature(telegram.import_telegram_document).parameters
@@ -348,6 +360,7 @@ def test_document_data_bank_branch_does_not_call_image_collaborator(monkeypatch)
 def test_document_job_passes_configured_api_key_and_canonical_image_collaborator(monkeypatch):
     import sqlite3
     from types import SimpleNamespace
+
     import bridge.help as help_module
 
     captured = {}
@@ -390,9 +403,8 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
 
 def test_document_image_collaborator_has_explicit_callable_contract():
     import inspect
+
     import bridge.telegram as telegram
 
-    annotation = inspect.signature(
-        telegram.import_telegram_document
-    ).parameters["process_image"].annotation
+    annotation = inspect.signature(telegram.import_telegram_document).parameters["process_image"].annotation
     assert str(annotation) == "Callable[..., None]"

@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import sqlite3
 
+from bridge.telegram import telegram_request
+
 
 def close_panel_message(
     db: sqlite3.Connection,
@@ -94,6 +96,3 @@ def is_session_scoped_panel_callback(data: str) -> bool:
             "enum:stt",
         )
     )
-
-
-from bridge.telegram import telegram_request

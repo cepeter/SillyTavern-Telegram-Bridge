@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import inspect
 from dataclasses import MISSING
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,13 +44,9 @@ def test_input_flow_service_requires_final_backends_and_injects_handler():
     text_calls = []
 
     service = InputFlowService(
-        handle_pending_backend=lambda *args, **kwargs: (
-            pending_calls.append((args, kwargs)) or True
-        ),
+        handle_pending_backend=lambda *args, **kwargs: pending_calls.append((args, kwargs)) or True,
         start_session_name_backend=lambda *_args, **_kwargs: None,
-        start_text_action_backend=lambda *args, **kwargs: text_calls.append(
-            (args, kwargs)
-        ),
+        start_text_action_backend=lambda *args, **kwargs: text_calls.append((args, kwargs)),
         handle_session_name_backend=session_handler,
     )
 
@@ -67,9 +62,7 @@ def test_input_flow_service_requires_final_backends_and_injects_handler():
     ]
 
     service.start_text_action("db", "token", action="memory_search")
-    assert text_calls == [
-        (("db", "token"), {"action": "memory_search"})
-    ]
+    assert text_calls == [(("db", "token"), {"action": "memory_search"})]
 
 
 def test_help_no_longer_imports_input_flows_and_enum_uses_service():
@@ -78,9 +71,7 @@ def test_help_no_longer_imports_input_flows_and_enum_uses_service():
     assert "bridge.input_flows" not in imported_modules("help.py")
 
     calls = []
-    input_flow = SimpleNamespace(
-        start_text_action=lambda *args, **kwargs: calls.append((args, kwargs))
-    )
+    input_flow = SimpleNamespace(start_text_action=lambda *args, **kwargs: calls.append((args, kwargs)))
     db = object()
     session = {"session_id": "session"}
     message = {"message_id": 41}
@@ -179,7 +170,10 @@ def test_pending_session_name_uses_injected_handler(monkeypatch):
     import bridge.input_flows as flows
 
     calls = []
-    handler = lambda *args, **kwargs: calls.append((args, kwargs)) or True
+
+    def handler(*args, **kwargs):
+        return calls.append((args, kwargs)) or True
+
     db = object()
     session = {
         "session_id": "session",
@@ -194,8 +188,7 @@ def test_pending_session_name_uses_injected_handler(monkeypatch):
     monkeypatch.setattr(
         flows,
         "_pending_state",
-        lambda _db, key, *_args:
-        pending if key.startswith("session_name_input:") else {},
+        lambda _db, key, *_args: pending if key.startswith("session_name_input:") else {},
     )
 
     handled = flows.handle_pending_input(
@@ -241,14 +234,12 @@ def test_director_goal_pending_action_uses_pure_panel_delivery(monkeypatch):
     monkeypatch.setattr(
         flows,
         "set_director_goal",
-        lambda db, chat_id, session_id, value:
-        saved.append((db, chat_id, session_id, value)) or value,
+        lambda db, chat_id, session_id, value: saved.append((db, chat_id, session_id, value)) or value,
     )
     monkeypatch.setattr(
         flows,
         "send_panel_request",
-        lambda token, method, payload, **kwargs:
-        panels.append((token, method, payload, kwargs)) or {},
+        lambda token, method, payload, **kwargs: panels.append((token, method, payload, kwargs)) or {},
     )
     monkeypatch.setattr(
         flows,
@@ -282,18 +273,12 @@ def test_director_goal_pending_action_uses_pure_panel_delivery(monkeypatch):
     )
 
     assert handled is True
-    assert saved == [
-        (db, "chat", "session", "Protect the witness")
-    ]
+    assert saved == [(db, "chat", "session", "Protect the witness")]
     assert len(panels) == 1
     token, method, payload, kwargs = panels[0]
     assert token == "token"
     assert method == "sendMessage"
     assert payload["chat_id"] == "chat"
-    assert payload["text"] == (
-        "Director objective\n\nProtect the witness"
-    )
-    assert payload["reply_markup"]["inline_keyboard"][0][0][
-        "callback_data"
-    ] == "goal:set"
+    assert payload["text"] == ("Director objective\n\nProtect the witness")
+    assert payload["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == "goal:set"
     assert kwargs["request_context"].session_id == "session"

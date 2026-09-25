@@ -3,17 +3,17 @@ from application_test_setup import ensure_application_extensions
 ensure_application_extensions()
 
 import json
-import unittest
-
 import os
 import threading
+import unittest
+
 import bridge.generation as _m_generation
 import bridge.provider_transport as _m_provider_transport
+import bridge.sync_core as _m_sync_core
 from bridge.model_router import ModelRoute
 from bridge.provider_port import ProviderPort
-import bridge.memory_curator as _m_memory_curator
-import bridge.message_commands as _m_message_commands
-import bridge.sync_core as _m_sync_core
+
+
 class _FakeResponse:
     def __init__(self, payload, status=200):
         self.payload = payload
@@ -92,16 +92,15 @@ class GenerationContinuationTests(unittest.TestCase):
                 "id": "response-id",
                 "object": "chat.completion",
                 "model": "test/model",
-                "choices": [
-                    {"message": {"content": ""}, "finish_reason": "stop"}
-                ],
+                "choices": [{"message": {"content": ""}, "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": 12, "completion_tokens": 0},
             },
             status=502,
         )
         with self.assertLogs("bridge.provider_transport", level="WARNING") as captured:
             with self.assertRaisesRegex(RuntimeError, "backend returned no assistant content"):
-                _m_provider_transport.generate_provider_text(self.router,
+                _m_provider_transport.generate_provider_text(
+                    self.router,
                     "",
                     "test",
                     [{"role": "user", "content": "Write a complete answer."}],
@@ -117,7 +116,6 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertIn("response_keys=", logs)
         self.assertNotIn("Write a complete answer", logs)
         self.assertNotIn("test-only", logs)
-
 
     def test_nested_data_choices_returns_assistant_content(self):
         _m_provider_transport.strict_urlopen = lambda _request, **_kwargs: _FakeResponse(
@@ -246,12 +244,11 @@ class GenerationContinuationTests(unittest.TestCase):
 
         def fake_urlopen(_request, timeout):
             seen.append(timeout)
-            return _FakeResponse(
-                {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
-            )
+            return _FakeResponse({"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]})
 
         _m_provider_transport.strict_urlopen = fake_urlopen
-        result = _m_provider_transport.generate_provider_text(self.router,
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
             "",
             "test",
             [{"role": "user", "content": "Reply OK."}],
@@ -265,15 +262,19 @@ class GenerationContinuationTests(unittest.TestCase):
     def test_empty_stream_length_retries_with_larger_non_stream_budget(self):
         self.spec["streaming"] = True
         responses = [
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"reasoning":"thinking"},"finish_reason":null}]}\n',
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ]),
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Recovered answer."},"finish_reason":"stop"}]}\n',
-                "data: [DONE]\n",
-            ]),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"reasoning":"thinking"},"finish_reason":null}]}\n',
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Recovered answer."},"finish_reason":"stop"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
         ]
         requests = []
 
@@ -282,7 +283,8 @@ class GenerationContinuationTests(unittest.TestCase):
             return responses.pop(0)
 
         _m_provider_transport.strict_urlopen = fake_urlopen
-        result = _m_provider_transport.generate_provider_text(self.router,
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
@@ -298,15 +300,19 @@ class GenerationContinuationTests(unittest.TestCase):
     def test_streaming_length_continuation_stays_streaming(self):
         self.spec["streaming"] = True
         responses = [
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ]),
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":"stop"}]}\n',
-                "data: [DONE]\n",
-            ]),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":"stop"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
         ]
         requests = []
 
@@ -315,7 +321,8 @@ class GenerationContinuationTests(unittest.TestCase):
             return responses.pop(0)
 
         _m_provider_transport.strict_urlopen = fake_urlopen
-        result = _m_provider_transport.generate_provider_text(self.router,
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
@@ -339,7 +346,8 @@ class GenerationContinuationTests(unittest.TestCase):
             return _FakeResponse(payloads.pop(0))
 
         _m_provider_transport.strict_urlopen = fake_urlopen
-        result = _m_provider_transport.generate_provider_text(self.router,
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
@@ -365,7 +373,8 @@ class GenerationContinuationTests(unittest.TestCase):
             raise RuntimeError("temporary provider failure")
 
         _m_provider_transport.strict_urlopen = fake_urlopen
-        result = _m_provider_transport.generate_provider_text(self.router,
+        result = _m_provider_transport.generate_provider_text(
+            self.router,
             "",
             "test",
             [{"role": "user", "content": "Write a complete answer."}],
@@ -375,20 +384,22 @@ class GenerationContinuationTests(unittest.TestCase):
         self.assertEqual(result, "Partial but usable.")
         self.assertEqual(calls, 2)
 
-
-
     def test_streaming_length_continuation_callback_is_cumulative(self):
         self.spec["streaming"] = True
         responses = [
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ]),
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":"stop"}]}\n',
-                "data: [DONE]\n",
-            ]),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":"stop"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
         ]
         callbacks = []
 
@@ -419,11 +430,13 @@ class GenerationContinuationTests(unittest.TestCase):
             calls += 1
             if calls > 1:
                 raise AssertionError("continuation request must not start after cancellation")
-            return _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ])
+            return _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            )
 
         def callback(partial):
             if partial == "Part one.":
@@ -447,16 +460,22 @@ class GenerationContinuationTests(unittest.TestCase):
         self.spec["streaming"] = True
         cancel_event = threading.Event()
         responses = [
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ]),
-            _CancelAfterLineStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":null}]}\n',
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ], cancel_event, 1),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Part one."},"finish_reason":null}]}\n',
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
+            _CancelAfterLineStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Part two."},"finish_reason":null}]}\n',
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ],
+                cancel_event,
+                1,
+            ),
         ]
         calls = 0
         callbacks = []
@@ -486,15 +505,19 @@ class GenerationContinuationTests(unittest.TestCase):
     def test_empty_stream_length_recovery_forwards_stream_callback(self):
         self.spec["streaming"] = True
         responses = [
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"reasoning":"thinking"},"finish_reason":null}]}\n',
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ]),
-            _FakeStreamResponse([
-                'data: {"choices":[{"delta":{"content":"Recovered answer."},"finish_reason":"stop"}]}\n',
-                "data: [DONE]\n",
-            ]),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"reasoning":"thinking"},"finish_reason":null}]}\n',
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
+            _FakeStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{"content":"Recovered answer."},"finish_reason":"stop"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            ),
         ]
         callbacks = []
 
@@ -524,10 +547,14 @@ class GenerationContinuationTests(unittest.TestCase):
             calls += 1
             if calls > 1:
                 raise AssertionError("recovery request must not start after cancellation")
-            return _CancelAfterLineStreamResponse([
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ], cancel_event, 0)
+            return _CancelAfterLineStreamResponse(
+                [
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ],
+                cancel_event,
+                0,
+            )
 
         _m_provider_transport.strict_urlopen = fake_urlopen
         with self.assertRaisesRegex(RuntimeError, "returned no visible content"):
@@ -547,11 +574,13 @@ class GenerationContinuationTests(unittest.TestCase):
         segments = ["One.", "Two.", "Three.", "Four."]
         requests = []
         responses = [
-            _FakeStreamResponse([
-                f'data: {{"choices":[{{"delta":{{"content":"{segment}"}},"finish_reason":null}}]}}\n',
-                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
-                "data: [DONE]\n",
-            ])
+            _FakeStreamResponse(
+                [
+                    f"""data: {{"choices":[{{"delta":{{"content":"{segment}"}},"finish_reason":null}}]}}\n""",
+                    'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n',
+                    "data: [DONE]\n",
+                ]
+            )
             for segment in segments
         ]
 
@@ -581,12 +610,15 @@ class GenerationContinuationTests(unittest.TestCase):
 
     def test_auto_language_render_returns_original_without_backend_call(self):
         provider = ProviderPort(
-            generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                AssertionError("auto must not render")
-            )
+            generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("auto must not render"))
         )
         result = _m_generation.render_response_language(
-            "", "model", "original", "auto", "session", {},
+            "",
+            "model",
+            "original",
+            "auto",
+            "session",
+            {},
             provider_port=provider,
         )
         self.assertEqual(result, "original")
@@ -600,7 +632,11 @@ class GenerationContinuationTests(unittest.TestCase):
 
         provider = ProviderPort(generate_backend=fake_generate)
         result = _m_generation.render_response_language(
-            "", "model", "English source", "id", "telegram:chat:session",
+            "",
+            "model",
+            "English source",
+            "id",
+            "telegram:chat:session",
             dict(_m_sync_core.GENERATION_DEFAULTS),
             provider_port=provider,
         )

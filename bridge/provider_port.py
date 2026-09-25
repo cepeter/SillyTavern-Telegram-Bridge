@@ -1,14 +1,14 @@
 """Pure application port for model-provider generation."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Protocol
 from dataclasses import dataclass
+from typing import Protocol
 
 
 class CancellationEvent(Protocol):
     def is_set(self) -> bool: ...
-
 
 
 @dataclass(frozen=True)

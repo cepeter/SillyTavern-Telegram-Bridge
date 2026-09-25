@@ -12,11 +12,7 @@ BRIDGE = ROOT / "bridge"
 
 def top_level_functions(filename: str) -> set[str]:
     tree = ast.parse((BRIDGE / filename).read_text(encoding="utf-8"))
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
 def function_source(filename: str, function_name: str) -> str:
@@ -25,27 +21,16 @@ def function_source(filename: str, function_name: str) -> str:
     node = next(
         item
         for item in tree.body
-        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and item.name == function_name
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == function_name
     )
     lines = source.splitlines()
-    return "\n".join(lines[node.lineno - 1:node.end_lineno])
+    return "\n".join(lines[node.lineno - 1 : node.end_lineno])
 
 
 def route_db() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
-    db.execute(
-        "CREATE TABLE processed_updates("
-        "update_id INTEGER PRIMARY KEY,"
-        "processed_at REAL NOT NULL"
-        ")"
-    )
-    db.execute(
-        "CREATE TABLE meta("
-        "key TEXT PRIMARY KEY,"
-        "value TEXT NOT NULL"
-        ")"
-    )
+    db.execute("CREATE TABLE processed_updates(update_id INTEGER PRIMARY KEY,processed_at REAL NOT NULL)")
+    db.execute("CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
     return db
 
 
@@ -67,9 +52,7 @@ def test_focused_routing_modules_exist_and_own_expected_functions():
     assert callback_path.is_file()
     assert message_path.is_file()
 
-    assert "route_callback_update" in top_level_functions(
-        "update_callback_routing.py"
-    )
+    assert "route_callback_update" in top_level_functions("update_callback_routing.py")
     message_functions = top_level_functions("update_message_routing.py")
     assert "route_edited_message_update" in message_functions
     assert "route_message_update" in message_functions
@@ -133,8 +116,7 @@ def test_duplicate_update_skips_helpers_and_completes_once(monkeypatch):
     monkeypatch.setattr(
         routing,
         "complete_update",
-        lambda _db, update_id, offset:
-        completions.append((update_id, offset)),
+        lambda _db, update_id, offset: completions.append((update_id, offset)),
     )
 
     try:
@@ -210,8 +192,7 @@ def test_callback_and_edit_success_complete_once(
     monkeypatch.setattr(
         routing,
         "complete_update",
-        lambda _db, update_id, offset:
-        completions.append((update_id, offset)),
+        lambda _db, update_id, offset: completions.append((update_id, offset)),
     )
 
     try:
@@ -228,9 +209,7 @@ def test_callback_and_edit_success_complete_once(
 
     assert result == update["update_id"] + 1
     assert calls == [expected_helper]
-    assert completions == [
-        (update["update_id"], update["update_id"] + 1)
-    ]
+    assert completions == [(update["update_id"], update["update_id"] + 1)]
 
 
 def test_handled_ordinary_message_completes_once(monkeypatch):
@@ -256,8 +235,7 @@ def test_handled_ordinary_message_completes_once(monkeypatch):
     monkeypatch.setattr(
         routing,
         "complete_update",
-        lambda _db, update_id, offset:
-        completions.append((update_id, offset)),
+        lambda _db, update_id, offset: completions.append((update_id, offset)),
     )
 
     try:
@@ -292,8 +270,7 @@ def test_unroutable_ordinary_message_does_not_complete(monkeypatch):
     monkeypatch.setattr(
         routing,
         "complete_update",
-        lambda _db, update_id, offset:
-        completions.append((update_id, offset)),
+        lambda _db, update_id, offset: completions.append((update_id, offset)),
     )
 
     try:
@@ -325,8 +302,7 @@ def test_helper_exception_propagates_without_completion(monkeypatch):
     monkeypatch.setattr(
         routing,
         "complete_update",
-        lambda _db, update_id, offset:
-        completions.append((update_id, offset)),
+        lambda _db, update_id, offset: completions.append((update_id, offset)),
     )
 
     try:

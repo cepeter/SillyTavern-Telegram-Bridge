@@ -3,11 +3,12 @@
 The composition root supplies concrete collaborators; this module imports no
 Telegram adapter, command router, provider transport, or application container.
 """
+
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
-import sqlite3
 from typing import Any
 
 
@@ -53,7 +54,13 @@ class ConversationService:
         services: Any,
     ) -> None:
         prepared = self.prepare_message(
-            db, token, api_key, model, fields, chat_id, text,
+            db,
+            token,
+            api_key,
+            model,
+            fields,
+            chat_id,
+            text,
             telegram_message_id,
             queued_session_id=queued_session_id,
             operation_id=operation_id,
@@ -66,10 +73,19 @@ class ConversationService:
         # Exceptions propagate to the durable worker. A failed command must
         # never fall through into ordinary character generation.
         if self.dispatch_command(
-            db, token, api_key, model, prepared.fields, chat_id,
-            prepared.stripped, prepared.command, prepared.session,
-            prepared.session_id, prepared.current_model,
-            prepared.current_persona, prepared.user_name,
+            db,
+            token,
+            api_key,
+            model,
+            prepared.fields,
+            chat_id,
+            prepared.stripped,
+            prepared.command,
+            prepared.session,
+            prepared.session_id,
+            prepared.current_model,
+            prepared.current_persona,
+            prepared.user_name,
             operation_id=operation_id,
             request_context=prepared.request_context,
             services=services,
@@ -77,10 +93,19 @@ class ConversationService:
             return
 
         self.generate_reply(
-            db, token, api_key, prepared.fields, chat_id, text,
-            prepared.session, prepared.session_id, prepared.current_model,
-            prepared.group_turn, prepared.group_context,
-            telegram_message_id, operation_id,
+            db,
+            token,
+            api_key,
+            prepared.fields,
+            chat_id,
+            text,
+            prepared.session,
+            prepared.session_id,
+            prepared.current_model,
+            prepared.group_turn,
+            prepared.group_context,
+            telegram_message_id,
+            operation_id,
             group_service=services.group,
             provider_port=services.provider,
             memory_service=services.memory,

@@ -28,8 +28,7 @@ def test_director_goal_panel_is_pure_and_exact():
     assert path.is_file()
     module = importlib.import_module("bridge.director_goal_panel")
     assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("director_goal_panel.py")
+        name == "bridge" or name.startswith("bridge.") for name in imported_modules("director_goal_panel.py")
     )
 
     text, markup = module.director_goal_panel("")
@@ -57,9 +56,7 @@ def test_director_goals_has_no_status_panels_or_telegram_imports():
 def test_director_goal_command_requires_delivery_port():
     import bridge.director_goals as goals
 
-    param = inspect.signature(goals.handle_director_goal_command).parameters.get(
-        "delivery_port"
-    )
+    param = inspect.signature(goals.handle_director_goal_command).parameters.get("delivery_port")
     assert param is not None
     assert param.default is inspect.Parameter.empty
 

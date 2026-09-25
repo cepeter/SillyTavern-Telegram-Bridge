@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 import json
 import logging
 import sqlite3
+from collections.abc import Callable
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

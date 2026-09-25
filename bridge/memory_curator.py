@@ -5,29 +5,53 @@ extension adds a second, deterministic curated document per session containing a
 small canonical set of durable facts. Extraction runs after persisted turns on
 the background executor and uses the session utility-model route.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import re
+import sqlite3
 import time
 
-from bridge.repositories import (
-    load_meta_value as _repo_load_meta_value,
-    store_meta_value as _repo_store_meta_value,
+from bridge.common import submit_background
+from bridge.config import DEFAULT_MODEL
+from bridge.curated_memory_panel import curated_memory_panel
+from bridge.database import (
+    db_connect,
+    get_generation_settings,
+    task_model_for_session,
+    write_transaction,
 )
-
+from bridge.delivery_port import DeliveryPort
 from bridge.extension_registry import (
     extension_registry_snapshot as _extension_registry_snapshot,
+)
+from bridge.extension_registry import (
     register_command_route as _register_command_route,
+)
+from bridge.extension_registry import (
     register_post_retain_hook as _register_post_retain_hook,
 )
-
+from bridge.memory_backend import (
+    _retain_with_client,
+    hindsight_session_prefix,
+    memory_mode,
+)
+from bridge.provider_port import ProviderPort
+from bridge.repositories import (
+    load_meta_value as _repo_load_meta_value,
+)
+from bridge.repositories import (
+    store_meta_value as _repo_store_meta_value,
+)
+from bridge.telegram import load_session
 
 _MEMORY_CURATOR_MAX_ITEMS = 24
 _MEMORY_CURATOR_TRANSCRIPT_MESSAGES = 20
 _MEMORY_CURATOR_MIN_NEW_MESSAGES = 4
+
 
 def memory_curator_key(chat_id: str, session_id: str) -> str:
     return f"memory_curator:{chat_id}:{session_id}"
@@ -57,7 +81,7 @@ def parse_curated_memories(raw: str) -> list[dict[str, object]] | None:
         return None
 
     by_key: dict[str, dict[str, object]] = {}
-    for item in memories[:_MEMORY_CURATOR_MAX_ITEMS * 2]:
+    for item in memories[: _MEMORY_CURATOR_MAX_ITEMS * 2]:
         if not isinstance(item, dict):
             continue
         memory_text = _clean_curated_text(item.get("text"), 700)
@@ -135,8 +159,7 @@ def _curator_source_rows(
         where += " AND rowid<=?"
         params.append(int(through_rowid))
     rows = db.execute(
-        "SELECT rowid,role,content FROM messages WHERE " + where +  # nosec B608 - where is built from fixed predicates and parameters
-        " ORDER BY created_at DESC,rowid DESC LIMIT ?",
+        "SELECT rowid,role,content FROM messages WHERE " + where + " ORDER BY created_at DESC,rowid DESC LIMIT ?",  # noqa: S608 -- SQL structure uses fixed columns/placeholders; all values are bound
         (*params, _MEMORY_CURATOR_TRANSCRIPT_MESSAGES),
     ).fetchall()
     return list(reversed(rows))
@@ -161,10 +184,7 @@ def curate_memory_now(
     if target_rowid <= covered:
         return existing
 
-    transcript = "\n".join(
-        f"{role}: {str(content)[:1800]}"
-        for _rowid, role, content in rows
-    )[-22000:]
+    transcript = "\n".join(f"{role}: {str(content)[:1800]}" for _rowid, role, content in rows)[-22000:]
     curator_messages = [
         {
             "role": "system",
@@ -183,19 +203,22 @@ def curate_memory_now(
             "role": "user",
             "content": (
                 "Primary character: " + str(character_name)[:200] + "\n"
-                "Existing curated memories:\n" +
-                (json.dumps(existing, ensure_ascii=False, sort_keys=True) if existing else "[]") +
-                "\n\nRecent transcript:\n" + transcript
+                "Existing curated memories:\n"
+                + (json.dumps(existing, ensure_ascii=False, sort_keys=True) if existing else "[]")
+                + "\n\nRecent transcript:\n"
+                + transcript
             ),
         },
     ]
     settings = get_generation_settings(db, chat_id, session_id)
-    settings.update({
-        "temperature": 0.0,
-        "max_tokens": 1400,
-        "reasoning_budget": 0,
-        "stop_sequences": "",
-    })
+    settings.update(
+        {
+            "temperature": 0.0,
+            "max_tokens": 1400,
+            "reasoning_budget": 0,
+            "stop_sequences": "",
+        }
+    )
     try:
         model = task_model_for_session(db, chat_id, session, "memory_curator")
         raw = provider_port.generate(
@@ -235,10 +258,7 @@ def curate_memory_now(
 
     if memory_mode(db, chat_id) == "on":
         content = "Curated durable memories:\n" + (
-            "\n".join(
-                f"- [{item['kind']}:{item['key']}] {item['text']}"
-                for item in items
-            ) if items else "(none)"
+            "\n".join(f"- [{item['kind']}:{item['key']}] {item['text']}" for item in items) if items else "(none)"
         )
         _retain_with_client(
             chat_id,
@@ -294,14 +314,13 @@ def queue_memory_curator(
         return False
     session_id = str(session["session_id"])
     row = db.execute(
-        "SELECT rowid FROM messages WHERE chat_id=? AND session_id=? "
-        "ORDER BY created_at DESC,rowid DESC LIMIT 1",
+        "SELECT rowid FROM messages WHERE chat_id=? AND session_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1",
         (str(chat_id), session_id),
     ).fetchone()
     if not row:
         return False
     target_rowid = int(row[0])
-    existing, covered = get_curated_memory_state(db, chat_id, session_id)
+    _existing, covered = get_curated_memory_state(db, chat_id, session_id)
     if target_rowid <= covered:
         return False
     if covered:
@@ -377,7 +396,7 @@ def handle_curated_memory_command(
     delivery_port: DeliveryPort,
     request_context,
 ) -> None:
-    suffix = command[len("/memory curated"):].strip().casefold()
+    suffix = command[len("/memory curated") :].strip().casefold()
     if suffix in {"", "status"}:
         send_curated_memory_menu(
             token,
@@ -404,8 +423,12 @@ def handle_curated_memory_command(
         delivery_port.send_text(
             token,
             chat_id,
-            "Curated memory refreshed:\n" +
-            (curated_memory_text(db, chat_id, session["session_id"]) if items is not None else "No curated memory update was produced."),
+            "Curated memory refreshed:\n"
+            + (
+                curated_memory_text(db, chat_id, session["session_id"])
+                if items is not None
+                else "No curated memory update was produced."
+            ),
         )
         return
     delivery_port.send_text(token, chat_id, "Use /memory curated or /memory curated refresh.")
@@ -431,7 +454,18 @@ def _memory_curator_command_route(
     services,
 ):
     if command == "/memory curated" or command.startswith("/memory curated "):
-        handle_curated_memory_command(db, token, api_key, chat_id, session, fields, command, provider_port=services.provider, delivery_port=services.delivery, request_context=request_context)
+        handle_curated_memory_command(
+            db,
+            token,
+            api_key,
+            chat_id,
+            session,
+            fields,
+            command,
+            provider_port=services.provider,
+            delivery_port=services.delivery,
+            request_context=request_context,
+        )
         return True
     return False
 
@@ -449,24 +483,3 @@ def register_memory_curator_extensions() -> None:
             "memory_curator",
             _memory_curator_command_route,
         )
-
-
-# Explicit late imports replace transitional dependency injection.
-import sqlite3
-from bridge.common import submit_background
-from bridge.config import DEFAULT_MODEL
-from bridge.database import (
-    db_connect,
-    get_generation_settings,
-    task_model_for_session,
-    write_transaction,
-)
-from bridge.delivery_port import DeliveryPort
-from bridge.curated_memory_panel import curated_memory_panel
-from bridge.provider_port import ProviderPort
-from bridge.memory_backend import (
-    _retain_with_client,
-    hindsight_session_prefix,
-    memory_mode,
-)
-from bridge.telegram import load_session

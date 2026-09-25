@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from application_test_setup import make_test_delivery_port, make_test_provider_port
 
 ROOT = Path(__file__).parents[1]
@@ -27,11 +26,7 @@ def imported_modules(filename: str) -> set[str]:
 
 def top_level_functions(filename: str) -> set[str]:
     tree = ast.parse((BRIDGE / filename).read_text(encoding="utf-8"))
-    return {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    return {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
 
 def test_world_storage_is_canonical_owner_and_low_level():
@@ -73,8 +68,7 @@ def test_curated_memory_panel_is_pure_and_exact():
     assert path.is_file()
     module = importlib.import_module("bridge.curated_memory_panel")
     assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("curated_memory_panel.py")
+        name == "bridge" or name.startswith("bridge.") for name in imported_modules("curated_memory_panel.py")
     )
 
     text, markup = module.curated_memory_panel("")
@@ -97,9 +91,7 @@ def test_memory_curator_does_not_import_status_panels_and_requires_delivery_port
     import bridge.memory_curator as curator
 
     assert "bridge.status_panels" not in imported_modules("memory_curator.py")
-    param = inspect.signature(curator.handle_curated_memory_command).parameters.get(
-        "delivery_port"
-    )
+    param = inspect.signature(curator.handle_curated_memory_command).parameters.get("delivery_port")
     assert param is not None
     assert param.default is inspect.Parameter.empty
 

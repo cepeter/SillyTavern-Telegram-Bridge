@@ -1,4 +1,5 @@
 """Durable worker execution and recovery orchestration."""
+
 from __future__ import annotations
 
 import json
@@ -8,6 +9,7 @@ import sqlite3
 from bridge.callback_dispatch import process_callback
 from bridge.card_content import card_fields_from_file
 from bridge.commands import edit_telegram_user_message, process_image_message
+from bridge.common import IMAGE_MAX_BYTES, chat_job_lock
 from bridge.composition import BridgeServices
 from bridge.database import (
     clear_failed_turn,
@@ -22,7 +24,7 @@ from bridge.help import process_document_job
 from bridge.job_service import DurableJob, JobSubmission
 from bridge.media import process_voice_job, send_reply
 from bridge.telegram import ensure_session, load_session
-from bridge.common import IMAGE_MAX_BYTES, chat_job_lock
+
 
 def process_message_job(
     services: BridgeServices,
@@ -46,7 +48,11 @@ def process_message_job(
             actor_id = jobs.actor_id(db, job_id)
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
-                recovery_session = load_session(db, chat_id, queued_session_id, model) if queued_session_id else ensure_session(db, chat_id, model)
+                recovery_session = (
+                    load_session(db, chat_id, queued_session_id, model)
+                    if queued_session_id
+                    else ensure_session(db, chat_id, model)
+                )
                 if services.group.current_speaker(db, chat_id, recovery_session, text):
                     services.group.advance_turn(
                         db,
@@ -88,7 +94,10 @@ def process_message_job(
                 jobs.fail(db, job_id, exc)
             if str(text).lstrip().startswith("/"):
                 if "Telegram sendMessage failed" in str(exc):
-                    failure_message = "Telegram could not deliver this command. The character backend was not called; retry the command."
+                    failure_message = (
+                        "Telegram could not deliver this command. The character backend was not "
+                        "called; retry the command."
+                    )
                 else:
                     failure_message = "The command failed. Use /status for details, then retry the command."
             else:
@@ -177,7 +186,9 @@ def process_image_job(
             logging.error("Background image processing failed: %s", exc, exc_info=True)
             if job_id is not None:
                 jobs.fail(db, job_id, exc)
-            services.telegram.send_text(token, chat_id, "Image processing failed. The selected model may not support vision.")
+            services.telegram.send_text(
+                token, chat_id, "Image processing failed. The selected model may not support vision."
+            )
         finally:
             db.close()
 
@@ -195,11 +206,7 @@ def process_callback_job(
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
-            actor_id = (
-                jobs.actor_id(db, job_id)
-                if job_id is not None
-                else ""
-            )
+            actor_id = jobs.actor_id(db, job_id) if job_id is not None else ""
             if job_id is not None and operation_was_applied(db, job_id):
                 jobs.complete(db, job_id)
                 return
@@ -212,9 +219,11 @@ def process_callback_job(
                 services=services,
             )
             if job_id is not None:
+
                 def write_callback_operation():
                     record_operation(db, job_id, "callback")
                     db.commit()
+
                 run_write_txn(db, write_callback_operation)
                 jobs.complete(db, job_id)
         except Exception as exc:
@@ -277,7 +286,9 @@ def process_edit_job(
                 return
             if job_id is not None:
                 jobs.fail(db, job_id, exc)
-            services.telegram.send_text(token, chat_id, "Native message edit failed; the previous branch was preserved.")
+            services.telegram.send_text(
+                token, chat_id, "Native message edit failed; the previous branch was preserved."
+            )
         finally:
             db.close()
 
@@ -288,14 +299,8 @@ def resolve_recovered_job_submission(
     job: DurableJob,
 ) -> JobSubmission | None:
     payload = job.payload
-    model_override = str(
-        payload.get("model") or services.config.default_model
-    )
-    session_for_job = (
-        None
-        if payload.get("resolve_active")
-        else job.session_id
-    )
+    model_override = str(payload.get("model") or services.config.default_model)
+    session_for_job = None if payload.get("resolve_active") else job.session_id
 
     if job.kind in {"generation", "command"}:
         return JobSubmission(

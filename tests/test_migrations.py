@@ -2,18 +2,18 @@ from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
 
-from pathlib import Path
 import sqlite3
 import tempfile
 import time
 import unittest
+from pathlib import Path
 
 import bridge.config as config
 import bridge.director_goals as _m_director_goals
 import bridge.memory_curator as _m_memory_curator
 import bridge.scene_state as _m_scene_state
-import bridge.session_naming as _m_session_naming
 import bridge.schema as schema
+import bridge.session_naming as _m_session_naming
 from bridge.migrations import Migration, MigrationError, run_migrations
 
 
@@ -45,9 +45,7 @@ class MigrationEngineTests(unittest.TestCase):
 
         self.assertEqual(calls, ["first", "second"])
         self.assertEqual(
-            self.db.execute(
-                "SELECT version,name FROM schema_migrations ORDER BY version"
-            ).fetchall(),
+            self.db.execute("SELECT version,name FROM schema_migrations ORDER BY version").fetchall(),
             [(1, "first"), (2, "second")],
         )
 
@@ -81,26 +79,18 @@ class MigrationEngineTests(unittest.TestCase):
 
         self.assertEqual(calls, ["first", "broken"])
         self.assertEqual(
-            self.db.execute(
-                "SELECT version,name FROM schema_migrations ORDER BY version"
-            ).fetchall(),
+            self.db.execute("SELECT version,name FROM schema_migrations ORDER BY version").fetchall(),
             [(1, "first")],
         )
         self.assertIsNone(
-            self.db.execute(
-                "SELECT 1 FROM sqlite_master "
-                "WHERE type='table' AND name='rolled_back_table'"
-            ).fetchone()
+            self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='rolled_back_table'").fetchone()
         )
 
     def test_history_name_drift_is_rejected_before_apply(self):
         self.db.execute(
-            "CREATE TABLE schema_migrations("
-            "version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at REAL NOT NULL)"
+            "CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at REAL NOT NULL)"
         )
-        self.db.execute(
-            "INSERT INTO schema_migrations VALUES(1,'old_name',1.0)"
-        )
+        self.db.execute("INSERT INTO schema_migrations VALUES(1,'old_name',1.0)")
         self.db.commit()
         called = []
 
@@ -114,8 +104,7 @@ class MigrationEngineTests(unittest.TestCase):
 
     def test_history_gap_is_rejected_before_apply(self):
         self.db.execute(
-            "CREATE TABLE schema_migrations("
-            "version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at REAL NOT NULL)"
+            "CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at REAL NOT NULL)"
         )
         self.db.executemany(
             "INSERT INTO schema_migrations VALUES(?,?,?)",
@@ -135,8 +124,7 @@ class MigrationEngineTests(unittest.TestCase):
 
     def test_unknown_future_version_is_rejected(self):
         self.db.execute(
-            "CREATE TABLE schema_migrations("
-            "version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at REAL NOT NULL)"
+            "CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at REAL NOT NULL)"
         )
         self.db.executemany(
             "INSERT INTO schema_migrations VALUES(?,?,?)",
@@ -214,9 +202,7 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
         schema.initialize_database_schema(self.db)
 
         self.assertEqual(
-            self.db.execute(
-                "SELECT version,name FROM schema_migrations ORDER BY version"
-            ).fetchall(),
+            self.db.execute("SELECT version,name FROM schema_migrations ORDER BY version").fetchall(),
             [(1, "initial_schema")],
         )
 
@@ -248,8 +234,7 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
             with self.subTest(table=table):
                 self.assertIsNotNone(
                     self.db.execute(
-                        "SELECT 1 FROM sqlite_master "
-                        "WHERE type IN ('table','view') AND name=?",
+                        "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name=?",
                         (table,),
                     ).fetchone()
                 )
@@ -272,28 +257,18 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
         schema.initialize_database_schema(self.db)
 
         embedding_columns = {
-            row[1]: row
-            for row in self.db.execute(
-                "PRAGMA table_info(data_bank_embeddings)"
-            ).fetchall()
+            row[1]: row for row in self.db.execute("PRAGMA table_info(data_bank_embeddings)").fetchall()
         }
         self.assertEqual(embedding_columns["embedding_namespace"][3], 1)
         self.assertIsNone(embedding_columns["embedding_namespace"][4])
         self.assertEqual(embedding_columns["vector_signature"][3], 1)
         self.assertEqual(embedding_columns["vector_norm"][3], 1)
 
-        cache_columns = {
-            row[1]: row
-            for row in self.db.execute(
-                "PRAGMA table_info(rag_embedding_cache)"
-            ).fetchall()
-        }
+        cache_columns = {row[1]: row for row in self.db.execute("PRAGMA table_info(rag_embedding_cache)").fetchall()}
         self.assertEqual(cache_columns["vector_norm"][3], 1)
 
     def test_production_schema_has_no_preproduction_upgrade_paths(self):
-        source = (
-            Path(__file__).parents[1] / "bridge" / "schema.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "schema.py").read_text(encoding="utf-8")
 
         self.assertNotIn("ALTER TABLE", source)
         self.assertNotIn("PRAGMA table_info", source)
@@ -304,29 +279,15 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
 
     def test_preproduction_core_baseline_ledger_is_rejected(self):
         self.db.execute(
-            "CREATE TABLE schema_migrations("
-            "version INTEGER PRIMARY KEY,"
-            "name TEXT NOT NULL,"
-            "applied_at REAL NOT NULL)"
+            "CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at REAL NOT NULL)"
         )
+        self.db.execute("INSERT INTO schema_migrations VALUES(1,'core_baseline',1.0)")
         self.db.execute(
-            "INSERT INTO schema_migrations VALUES(1,'core_baseline',1.0)"
+            "CREATE TABLE sessions(chat_id TEXT NOT NULL,session_id TEXT NOT NULL,PRIMARY KEY(chat_id, session_id))"
         )
-        self.db.execute(
-            "CREATE TABLE sessions("
-            "chat_id TEXT NOT NULL,"
-            "session_id TEXT NOT NULL,"
-            "PRIMARY KEY(chat_id, session_id))"
-        )
-        self.db.execute(
-            "CREATE TABLE sync_bindings("
-            "chat_id TEXT NOT NULL,"
-            "session_id TEXT NOT NULL)"
-        )
+        self.db.execute("CREATE TABLE sync_bindings(chat_id TEXT NOT NULL,session_id TEXT NOT NULL)")
         self.db.execute("CREATE TABLE sentinel(value TEXT NOT NULL)")
-        self.db.execute(
-            "INSERT INTO sentinel(value) VALUES('preserve-me')"
-        )
+        self.db.execute("INSERT INTO sentinel(value) VALUES('preserve-me')")
         self.db.commit()
 
         with self.assertRaisesRegex(MigrationError, "name mismatch"):
@@ -337,9 +298,7 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
             "preserve-me",
         )
         self.assertEqual(
-            self.db.execute(
-                "SELECT version,name FROM schema_migrations ORDER BY version"
-            ).fetchall(),
+            self.db.execute("SELECT version,name FROM schema_migrations ORDER BY version").fetchall(),
             [(1, "core_baseline")],
         )
 
@@ -351,28 +310,17 @@ class ApplicationSchemaMigrationTests(unittest.TestCase):
             (old,),
         )
         self.db.execute(
-            "INSERT INTO callback_tokens(token,kind,value,chat_id,expires_at) "
-            "VALUES('expired','x','x','chat',?)",
+            "INSERT INTO callback_tokens(token,kind,value,chat_id,expires_at) VALUES('expired','x','x','chat',?)",
             (time.time() - 10,),
         )
         self.db.commit()
 
         schema.initialize_database_schema(self.db)
 
-        self.assertIsNone(
-            self.db.execute(
-                "SELECT 1 FROM processed_updates WHERE update_id=1"
-            ).fetchone()
-        )
-        self.assertIsNone(
-            self.db.execute(
-                "SELECT 1 FROM callback_tokens WHERE token='expired'"
-            ).fetchone()
-        )
+        self.assertIsNone(self.db.execute("SELECT 1 FROM processed_updates WHERE update_id=1").fetchone())
+        self.assertIsNone(self.db.execute("SELECT 1 FROM callback_tokens WHERE token='expired'").fetchone())
         self.assertEqual(
-            self.db.execute(
-                "SELECT COUNT(*) FROM schema_migrations"
-            ).fetchone()[0],
+            self.db.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
             1,
         )
 
@@ -405,10 +353,9 @@ class RequestTimeSchemaRegressionTests(unittest.TestCase):
             self.db.set_trace_callback(None)
 
         structural = [
-            sql for sql in traced
-            if sql.lstrip().upper().startswith(
-                ("CREATE TABLE", "CREATE INDEX", "CREATE TRIGGER", "ALTER TABLE")
-            )
+            sql
+            for sql in traced
+            if sql.lstrip().upper().startswith(("CREATE TABLE", "CREATE INDEX", "CREATE TRIGGER", "ALTER TABLE"))
         ]
         self.assertEqual(structural, [], structural)
 

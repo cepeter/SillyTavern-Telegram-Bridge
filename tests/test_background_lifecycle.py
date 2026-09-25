@@ -98,9 +98,7 @@ class BackgroundLifecycleTests(unittest.TestCase):
             _m_common._UTILITY_EXECUTOR = utility
             _m_common._BACKGROUND_ACCEPTING = True
 
-            self.assertTrue(
-                _m_common.shutdown_background_executors(timeout=0.0)
-            )
+            self.assertTrue(_m_common.shutdown_background_executors(timeout=0.0))
             self.assertIsNone(_m_common._GENERATION_EXECUTOR)
             self.assertIsNone(_m_common._UTILITY_EXECUTOR)
             generation.shutdown.assert_called_once_with(
@@ -112,9 +110,7 @@ class BackgroundLifecycleTests(unittest.TestCase):
                 cancel_futures=False,
             )
 
-            self.assertTrue(
-                _m_common.shutdown_background_executors(timeout=0.0)
-            )
+            self.assertTrue(_m_common.shutdown_background_executors(timeout=0.0))
         finally:
             _m_common._GENERATION_EXECUTOR = old_generation
             _m_common._UTILITY_EXECUTOR = old_utility

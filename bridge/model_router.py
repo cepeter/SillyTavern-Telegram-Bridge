@@ -1,4 +1,5 @@
 """Pure model-to-provider routing policy."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping

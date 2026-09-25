@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import MISSING
 import importlib
 import inspect
+from dataclasses import MISSING
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,10 +26,7 @@ def test_input_flow_service_is_pure_and_delegates():
     path = BRIDGE / "input_flow_service.py"
     assert path.is_file(), "InputFlowService module is missing"
     module = importlib.import_module("bridge.input_flow_service")
-    assert not any(
-        name == "bridge" or name.startswith("bridge.")
-        for name in imported_modules("input_flow_service.py")
-    )
+    assert not any(name == "bridge" or name.startswith("bridge.") for name in imported_modules("input_flow_service.py"))
     calls = []
 
     def backend(*args, **kwargs):
@@ -77,6 +74,7 @@ def test_startup_composes_canonical_pending_handler():
 
 def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
     import bridge.message_commands as message_commands
+
     module = importlib.import_module("bridge.input_flow_service")
 
     captured = []
@@ -93,9 +91,7 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
     memory = object()
     persona = object()
     input_flow = module.InputFlowService(
-        handle_pending_backend=lambda *args, **kwargs: (
-            captured.append((args, kwargs)) or True
-        ),
+        handle_pending_backend=lambda *args, **kwargs: captured.append((args, kwargs)) or True,
         start_session_name_backend=lambda *_args, **_kwargs: None,
         start_text_action_backend=lambda *_args, **_kwargs: None,
         handle_session_name_backend=lambda *_args, **_kwargs: False,

@@ -2,21 +2,20 @@ from application_test_setup import ensure_application_extensions, make_test_prov
 
 ensure_application_extensions()
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import bridge.config as config
-import bridge.character_identity as _m_character_identity
 import bridge.director_goals as _m_director_goals
-import bridge.groups as _m_groups
 import bridge.group_core as _m_group_core
+import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
-import bridge.message_commands as _m_message_commands
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
-import bridge.sync_api as _m_sync_api
 from bridge.group_director_service import GroupDirectorService
+
+
 class DirectorGoalsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -48,7 +47,6 @@ class DirectorGoalsTests(unittest.TestCase):
                 "turn_users": [],
             },
         )
-
 
     def _service(self):
         return GroupDirectorService(

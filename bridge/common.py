@@ -5,81 +5,54 @@ This keeps the configured character card data and per-Telegram-user chat
 history locally, then sends the assembled conversation to an
 OpenAI-compatible backend.
 """
+
 from __future__ import annotations
 
-import argparse
-import asyncio
-import base64
+import base64 as base64
 import concurrent.futures
-from collections import deque
-import hashlib
-import html
-import io
-import json
+import hashlib as hashlib
+import io as io
+import json as json
 import logging
-from logging.handlers import RotatingFileHandler
-import math
 import os
-import re
-import random
-import signal
-import sqlite3
-import struct
-import subprocess  # nosec B404 - fixed local subprocess arguments only
-import tempfile
+import re as re
+import signal as signal
+import sqlite3 as sqlite3
 import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
-import zipfile
-from defusedxml import ElementTree as ET
+import urllib.request  # noqa: F401 -- public module namespace used by consumers
+from collections import deque
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from bridge.config import (
     BRIDGE_HOME,
-    CARD_FIELD_MAX_CHARS,
-    CARD_FILE,
-    CARD_TOTAL_MAX_CHARS,
-    CATALOG_MAX_ITEMS,
-    CHARACTER_BACKUP_DIR as _CHARACTER_BACKUP_DIR,
-    CHARACTER_DIR,
     DB_FILE,
-    DEFAULT_CHARACTER_FILE,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_MODEL,
-    DEFAULT_USER_NAME,
-    GENERATION_DEFAULTS,
-    HINDSIGHT_CONTEXT_MAX_CHARS,
-    HINDSIGHT_DEFAULT_URL,
-    HINDSIGHT_RECALL_MAX_TOKENS,
-    HINDSIGHT_RETAIN_MAX_MESSAGES,
-    LOG_FILE as _LOG_FILE,
-    MODEL_CACHE_FILE as _MODEL_CACHE_FILE,
-    PROVIDER_CONFIG_FILE as _PROVIDER_CONFIG_FILE,
-    RAG_CHUNK_CHARS,
-    RAG_CHUNK_OVERLAP,
-    RAG_EMBEDDING_DIMENSIONS,
-    RAG_EMBEDDING_MODEL,
-    RAG_EMBEDDING_URL,
-    RAG_MAX_CONTEXT_CHARS,
-    RAG_MAX_EXTRACTED_CHARS,
-    RAG_MAX_FILE_BYTES,
-    RAG_MAX_PDF_PAGES,
-    RAG_PDF_PARSE_TIMEOUT_SECONDS,
-    RAG_SUPPORTED_SUFFIXES,
-    SUMMARY_MAX_CHARS,
-    SUMMARY_MAX_OUTPUT_TOKENS,
-    SUMMARY_RECENT_MESSAGES,
-    SUMMARY_TRIGGER_MESSAGES,
-    SUMMARY_UPDATE_INTERVAL,
-    SYNC_MAX_BYTES,
-    PENDING_SETTINGS_TTL_SECONDS,
-    REASONING_LEVELS,
-    SILLYTAVERN_DIR,
     SYSTEM_PROMPTS_DIR,
-    WORLD_DIR,
 )
+from bridge.config import CHARACTER_BACKUP_DIR as _CHARACTER_BACKUP_DIR
+from bridge.config import CHARACTER_DIR as CHARACTER_DIR
+from bridge.config import DEFAULT_CHARACTER_FILE as DEFAULT_CHARACTER_FILE
+from bridge.config import (
+    DEFAULT_MAX_TOKENS as DEFAULT_MAX_TOKENS,
+)
+from bridge.config import DEFAULT_MODEL as DEFAULT_MODEL
+from bridge.config import (
+    GENERATION_DEFAULTS as GENERATION_DEFAULTS,
+)
+from bridge.config import LOG_FILE as _LOG_FILE
+from bridge.config import MODEL_CACHE_FILE as _MODEL_CACHE_FILE
+from bridge.config import (
+    PENDING_SETTINGS_TTL_SECONDS as PENDING_SETTINGS_TTL_SECONDS,
+)
+from bridge.config import PROVIDER_CONFIG_FILE as _PROVIDER_CONFIG_FILE
+from bridge.config import (
+    REASONING_LEVELS as REASONING_LEVELS,
+)
+from bridge.config import SILLYTAVERN_DIR as SILLYTAVERN_DIR
+from bridge.config import WORLD_DIR as WORLD_DIR
 from bridge.environment import environment_file
 
 TOPIC_SCOPE_SEPARATOR = "|topic:"
@@ -118,14 +91,14 @@ MAX_HISTORY_MESSAGES = 24
 MAX_TELEGRAM_LENGTH = 4000
 MODEL_CHOICES = []
 
+
 def configure_logging(log_file: Path = _LOG_FILE) -> None:
     """Install the bridge rotating file handler and set root logging to INFO."""
     target = Path(log_file).expanduser().resolve()
     root = logging.getLogger()
 
     if any(
-        isinstance(handler, RotatingFileHandler)
-        and Path(handler.baseFilename).resolve() == target
+        isinstance(handler, RotatingFileHandler) and Path(handler.baseFilename).resolve() == target
         for handler in root.handlers
     ):
         return
@@ -136,9 +109,7 @@ def configure_logging(log_file: Path = _LOG_FILE) -> None:
         maxBytes=10 * 1024 * 1024,
         backupCount=5,
     )
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     root.addHandler(handler)
     root.setLevel(logging.INFO)
 
@@ -252,7 +223,9 @@ def submit_background(label: str, function, *args, **kwargs) -> bool:
         slot.release()
         error = done.exception()
         if error:
-            logging.error("Background %s job failed: %s", label, error, exc_info=(type(error), error, error.__traceback__))
+            logging.error(
+                "Background %s job failed: %s", label, error, exc_info=(type(error), error, error.__traceback__)
+            )
         _dispatch_waiting_chat_jobs()
 
     future.add_done_callback(complete)
@@ -337,15 +310,19 @@ def _start_next_chat_job(chat_id: str) -> None:
             _CHAT_QUEUES.setdefault(chat_id, deque()).appendleft((label, function, args, kwargs))
         slot.release()
         return
+
     def complete(done):
         slot.release()
         with _CHAT_LOCKS_GUARD:
             _CHAT_IN_FLIGHT.discard(chat_id)
         error = done.exception()
         if error:
-            logging.error("Ordered background %s job failed: %s", label, error, exc_info=(type(error), error, error.__traceback__))
+            logging.error(
+                "Ordered background %s job failed: %s", label, error, exc_info=(type(error), error, error.__traceback__)
+            )
         _start_next_chat_job(chat_id)
         _dispatch_waiting_chat_jobs()
+
     future.add_done_callback(complete)
 
 
@@ -370,10 +347,13 @@ def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) 
         _start_next_chat_job(chat_id)
     return True
 
+
 def enforce_runtime_permissions() -> None:
     private_dirs = {DB_FILE.parent, _LOG_FILE.parent, BRIDGE_HOME / "backups", _CHARACTER_BACKUP_DIR}
     enforce_prompt_permissions = os.environ.get("SILLYTAVERN_ENFORCE_PROMPT_PERMISSIONS", "false").casefold() == "true"
-    if SYSTEM_PROMPTS_DIR.exists() and (enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)):
+    if SYSTEM_PROMPTS_DIR.exists() and (
+        enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)
+    ):
         private_dirs.add(SYSTEM_PROMPTS_DIR)
     for directory in private_dirs:
         try:
@@ -382,7 +362,9 @@ def enforce_runtime_permissions() -> None:
         except OSError:
             logging.warning("Could not protect runtime directory %s", directory, exc_info=True)
     private_files = {environment_file(), DB_FILE, _LOG_FILE, _PROVIDER_CONFIG_FILE, _MODEL_CACHE_FILE}
-    if SYSTEM_PROMPTS_DIR.exists() and (enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)):
+    if SYSTEM_PROMPTS_DIR.exists() and (
+        enforce_prompt_permissions or SYSTEM_PROMPTS_DIR.is_relative_to(BRIDGE_HOME.parent)
+    ):
         private_files.update(SYSTEM_PROMPTS_DIR.glob("*.txt"))
         private_files.update(SYSTEM_PROMPTS_DIR.glob("*.json"))
     private_files.update(DB_FILE.parent.glob(DB_FILE.name + "-*"))

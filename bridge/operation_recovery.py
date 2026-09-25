@@ -1,9 +1,10 @@
 """Ordinary crash-recovery mechanics for durable bridge operations."""
+
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
-import json
 
 
 @dataclass(frozen=True)
@@ -82,9 +83,7 @@ class OperationRecovery:
         if phase == "local_committed":
             deliver_recovered()
             return False
-        return bool(
-            self.begin_operation(db, operation_id, kind)
-        )
+        return bool(self.begin_operation(db, operation_id, kind))
 
     @staticmethod
     def message_ids_from_rows(rows) -> list[str]:
@@ -97,11 +96,7 @@ class OperationRecovery:
             except (TypeError, json.JSONDecodeError):
                 decoded = []
             if isinstance(decoded, list):
-                result.extend(
-                    str(item)
-                    for item in decoded
-                    if item not in {None, ""}
-                )
+                result.extend(str(item) for item in decoded if item not in {None, ""})
         return list(dict.fromkeys(result))
 
     def outgoing_ids_after(

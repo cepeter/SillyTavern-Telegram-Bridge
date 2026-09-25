@@ -1,17 +1,17 @@
 """Loopback SillyTavern HTTP API infrastructure."""
+
 from __future__ import annotations
 
 import json
 import os
-from http.cookiejar import CookieJar
-from pathlib import Path
 import threading
-from urllib.parse import urlparse
 import urllib.error
 import urllib.request
+from http.cookiejar import CookieJar
+from pathlib import Path
+from urllib.parse import urlparse
 
 from bridge.config import SYNC_MAX_BYTES
-
 
 LIVE_SYNC_API_URL = ""
 LIVE_SYNC_API_HANDLE = ""
@@ -45,12 +45,8 @@ def refresh_sillytavern_api_config() -> None:
     global LIVE_SYNC_API_URL, LIVE_SYNC_API_HANDLE, LIVE_SYNC_API_PASSWORD
     global LIVE_SYNC_TIMEOUT_SECONDS, _CLIENT
 
-    LIVE_SYNC_API_URL = (
-        os.environ.get("SILLYTAVERN_SYNC_API_URL", "").strip().rstrip("/")
-    )
-    LIVE_SYNC_API_HANDLE = (
-        os.environ.get("SILLYTAVERN_SYNC_API_HANDLE", "").strip()
-    )
+    LIVE_SYNC_API_URL = os.environ.get("SILLYTAVERN_SYNC_API_URL", "").strip().rstrip("/")
+    LIVE_SYNC_API_HANDLE = os.environ.get("SILLYTAVERN_SYNC_API_HANDLE", "").strip()
     LIVE_SYNC_API_PASSWORD = os.environ.get("SILLYTAVERN_SYNC_API_PASSWORD")
     LIVE_SYNC_TIMEOUT_SECONDS = _bounded_number(
         os.environ.get("SILLYTAVERN_SYNC_API_TIMEOUT_SECONDS", "10"),
@@ -88,22 +84,14 @@ def validate_live_sync_api_url(value: str) -> str:
     """Accept only an origin URL using a loopback host."""
     raw = str(value or "").strip().rstrip("/")
     parsed = urlparse(raw)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or (parsed.hostname or "").casefold()
-        not in {"127.0.0.1", "::1", "localhost"}
-    ):
+    if parsed.scheme not in {"http", "https"} or (parsed.hostname or "").casefold() not in {
+        "127.0.0.1",
+        "::1",
+        "localhost",
+    }:
         raise ValueError("Live Sync requires a loopback SillyTavern API URL")
-    if (
-        parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-        or parsed.path not in {"", "/"}
-    ):
-        raise ValueError(
-            "Live Sync API URL must be a credential-free origin"
-        )
+    if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in {"", "/"}:
+        raise ValueError("Live Sync API URL must be a credential-free origin")
     return raw
 
 
@@ -137,9 +125,7 @@ class SillyTavernApiClient:
         use_csrf: bool = False,
     ):
         if path not in _ALLOWED_PATHS:
-            raise SillyTavernApiError(
-                "SillyTavern API path is not allowed"
-            )
+            raise SillyTavernApiError("SillyTavern API path is not allowed")
         headers = {
             "Accept": "application/json",
             "User-Agent": "SillyTavern-Telegram-Bridge/LiveSync",
@@ -158,7 +144,7 @@ class SillyTavernApiClient:
                     status=403,
                 )
             headers["X-CSRF-Token"] = self.csrf_token
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310 -- constructor validates loopback origin and request path allowlist
             self.base_url + path,
             data=data,
             headers=headers,
@@ -174,8 +160,7 @@ class SillyTavernApiClient:
             raise SillyTavernApiError(
                 f"SillyTavern API returned HTTP {exc.code}",
                 status=int(exc.code),
-                transient=int(exc.code)
-                in {429, 500, 502, 503, 504},
+                transient=int(exc.code) in {429, 500, 502, 503, 504},
             ) from exc
         except (OSError, TimeoutError) as exc:
             raise SillyTavernApiError(
@@ -183,26 +168,18 @@ class SillyTavernApiClient:
                 transient=True,
             ) from exc
         if len(raw) > SYNC_MAX_BYTES:
-            raise SillyTavernApiError(
-                "SillyTavern API response exceeds the sync limit"
-            )
+            raise SillyTavernApiError("SillyTavern API response exceeds the sync limit")
         try:
             return json.loads(raw.decode("utf-8")) if raw else {}
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise SillyTavernApiError(
-                "SillyTavern API returned invalid JSON"
-            ) from exc
+            raise SillyTavernApiError("SillyTavern API returned invalid JSON") from exc
 
     def authenticate(self, force: bool = False) -> None:
         with self.lock:
             if self.authenticated and not force:
                 return
             token = self._raw("GET", "/csrf-token")
-            self.csrf_token = (
-                str(token.get("token") or "")
-                if isinstance(token, dict)
-                else ""
-            )
+            self.csrf_token = str(token.get("token") or "") if isinstance(token, dict) else ""
             if not self.csrf_token:
                 raise SillyTavernApiError(
                     "SillyTavern did not provide a CSRF token",
@@ -218,11 +195,7 @@ class SillyTavernApiClient:
                     },
                     use_csrf=True,
                 )
-                if (
-                    not isinstance(result, dict)
-                    or str(result.get("handle") or "")
-                    != self.handle
-                ):
+                if not isinstance(result, dict) or str(result.get("handle") or "") != self.handle:
                     raise SillyTavernApiError(
                         "SillyTavern login failed",
                         status=403,
@@ -258,24 +231,15 @@ class SillyTavernApiClient:
         try:
             settings = json.loads(raw) if isinstance(raw, str) else raw
         except json.JSONDecodeError as exc:
-            raise SillyTavernApiError(
-                "SillyTavern settings are invalid JSON"
-            ) from exc
+            raise SillyTavernApiError("SillyTavern settings are invalid JSON") from exc
         if not isinstance(settings, dict):
-            raise SillyTavernApiError(
-                "SillyTavern settings response has an invalid shape"
-            )
+            raise SillyTavernApiError("SillyTavern settings response has an invalid shape")
         return settings
 
     def save_settings(self, settings: dict) -> None:
         result = self.post("/api/settings/save", settings)
-        if (
-            not isinstance(result, dict)
-            or result.get("result") != "ok"
-        ):
-            raise SillyTavernApiError(
-                "SillyTavern refused the persona settings update"
-            )
+        if not isinstance(result, dict) or result.get("result") != "ok":
+            raise SillyTavernApiError("SillyTavern refused the persona settings update")
 
     def get_chat(
         self,
@@ -292,26 +256,16 @@ class SillyTavernApiClient:
             result = self.post(
                 "/api/chats/get",
                 {
-                    "avatar_url": Path(
-                        session["character_file"]
-                    ).name,
+                    "avatar_url": Path(session["character_file"]).name,
                     "file_name": file_id,
                 },
             )
         if result == {}:
             return []
-        if (
-            isinstance(result, dict)
-            and isinstance(result.get("chat"), list)
-        ):
+        if isinstance(result, dict) and isinstance(result.get("chat"), list):
             result = result["chat"]
-        if (
-            not isinstance(result, list)
-            or not all(isinstance(item, dict) for item in result)
-        ):
-            raise SillyTavernApiError(
-                "SillyTavern chat response has an invalid shape"
-            )
+        if not isinstance(result, list) or not all(isinstance(item, dict) for item in result):
+            raise SillyTavernApiError("SillyTavern chat response has an invalid shape")
         return result
 
     def save_chat(
@@ -334,20 +288,13 @@ class SillyTavernApiClient:
                 "ch_name": fields["name"],
                 "file_name": file_id,
                 "chat": records,
-                "avatar_url": Path(
-                    session["character_file"]
-                ).name,
+                "avatar_url": Path(session["character_file"]).name,
                 "force": False,
             }
             path = "/api/chats/save"
         result = self.post(path, payload)
-        if (
-            not isinstance(result, dict)
-            or result.get("ok") is not True
-        ):
-            raise SillyTavernApiError(
-                "SillyTavern refused the chat update"
-            )
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise SillyTavernApiError("SillyTavern refused the chat update")
 
 
 def live_sync_api_configured() -> bool:
@@ -363,9 +310,7 @@ def live_sync_api_configured() -> bool:
 def live_sync_client() -> SillyTavernApiClient:
     global _CLIENT
     if not live_sync_api_configured():
-        raise SillyTavernApiError(
-            "Live Sync API is not configured"
-        )
+        raise SillyTavernApiError("Live Sync API is not configured")
     with _CLIENT_LOCK:
         identity = (
             LIVE_SYNC_API_URL,

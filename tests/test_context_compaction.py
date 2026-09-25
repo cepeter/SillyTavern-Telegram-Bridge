@@ -11,18 +11,14 @@ class SmartContextCompactionTests(unittest.TestCase):
         messages = [{"role": "system", "content": "System rules."}]
         for index in range(20):
             role = "user" if index % 2 == 0 else "assistant"
-            messages.append(
-                {"role": role, "content": f"OLD-{index} " + ("history " * 300)}
-            )
+            messages.append({"role": role, "content": f"OLD-{index} " + ("history " * 300)})
         messages.append(
             {
                 "role": "user",
                 "content": (
                     "<untrusted_memory>\n" + ("memory " * 400) + "\n</untrusted_memory>\n\n"
                     "CURRENT QUESTION MUST SURVIVE"
-                    "\n\n<untrusted_data_bank_references>\n"
-                    + ("rag " * 500)
-                    + "\n</untrusted_data_bank_references>\n"
+                    "\n\n<untrusted_data_bank_references>\n" + ("rag " * 500) + "\n</untrusted_data_bank_references>\n"
                 ),
             }
         )
@@ -51,9 +47,7 @@ class SmartContextCompactionTests(unittest.TestCase):
                 "content": (
                     "<untrusted_memory>\n" + ("memory " * 900) + "\n</untrusted_memory>\n"
                     "CURRENT"
-                    "\n<untrusted_data_bank_references>\n"
-                    + ("rag " * 1000)
-                    + "\n</untrusted_data_bank_references>"
+                    "\n<untrusted_data_bank_references>\n" + ("rag " * 1000) + "\n</untrusted_data_bank_references>"
                 ),
             },
         ]

@@ -7,16 +7,16 @@ Loopback services remain supported; metadata and unroutable addresses never do.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
 import http.client
 import ipaddress
 import os
 import re
 import socket
-from typing import Any
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
 
 
 class EndpointPolicyError(RuntimeError):

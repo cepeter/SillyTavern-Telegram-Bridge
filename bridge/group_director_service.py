@@ -1,12 +1,13 @@
 """Application service for Group Director speaker selection and prompt context."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import logging
-from pathlib import Path
 import re
 import sqlite3
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, cast
 
 
@@ -84,9 +85,7 @@ class GroupDirectorService:
             aliases[filename.casefold()] = filename
             aliases[Path(filename).stem.casefold()] = filename
             try:
-                aliases[
-                    str(self.card_fields(filename)["name"]).casefold()
-                ] = filename
+                aliases[str(self.card_fields(filename)["name"]).casefold()] = filename
             except Exception:
                 logging.debug(
                     "Could not read group character alias",
@@ -106,16 +105,8 @@ class GroupDirectorService:
     ) -> tuple[str, dict[str, object], str] | None:
         """Choose one Director-mode speaker and a bounded pacing note."""
         state = self.load_group_state(db, chat_id, session["session_id"])
-        members = [
-            name
-            for name in cast(list[str], state["members"])
-            if self.safe_character(str(name))
-        ]
-        if (
-            not state["enabled"]
-            or state.get("mode") != "director"
-            or len(members) < 2
-        ):
+        members = [name for name in cast(list[str], state["members"]) if self.safe_character(str(name))]
+        if not state["enabled"] or state.get("mode") != "director" or len(members) < 2:
             return None
 
         forced = str(state.get("forced_speaker") or "")
@@ -129,10 +120,7 @@ class GroupDirectorService:
             "ORDER BY created_at DESC,rowid DESC LIMIT 12",
             (chat_id, session["session_id"]),
         ).fetchall()
-        transcript = "\n".join(
-            f"{role}: {str(content)[:1200]}"
-            for role, content in reversed(recent)
-        )[-9000:]
+        transcript = "\n".join(f"{role}: {str(content)[:1200]}" for role, content in reversed(recent))[-9000:]
 
         customization = self._load_director_customization(
             db,
@@ -154,9 +142,7 @@ class GroupDirectorService:
                 ):
                     model = normalized_model
 
-            hidden_instructions = str(
-                getattr(customization, "hidden_instructions", "") or ""
-            ).strip()
+            hidden_instructions = str(getattr(customization, "hidden_instructions", "") or "").strip()
 
             requested = getattr(customization, "max_tokens", None)
             if requested is not None:
@@ -170,11 +156,7 @@ class GroupDirectorService:
                         16000,
                     )
 
-        policy_block = (
-            "\nHidden Director policy:\n" + hidden_instructions
-            if hidden_instructions
-            else ""
-        )
+        policy_block = "\nHidden Director policy:\n" + hidden_instructions if hidden_instructions else ""
         director_messages = [
             {
                 "role": "system",
@@ -222,9 +204,7 @@ class GroupDirectorService:
                 api_key,
                 model,
                 director_messages,
-                session_id=(
-                    f"group-director:{chat_id}:{session['session_id']}"
-                ),
+                session_id=(f"group-director:{chat_id}:{session['session_id']}"),
                 settings=settings,
                 force_non_stream=True,
             )
@@ -239,9 +219,7 @@ class GroupDirectorService:
         if decision:
             return decision[0], state, decision[1]
 
-        index = int(
-            cast(int | str, state["turn_index"])
-        ) % len(members)
+        index = int(cast(int | str, state["turn_index"])) % len(members)
         return members[index], state, ""
 
     def prompt_context(
@@ -254,16 +232,10 @@ class GroupDirectorService:
     ) -> str:
         """Build the bounded prompt context for the selected group speaker."""
         state = self.load_group_state(db, chat_id, session["session_id"])
-        members = [
-            str(name)
-            for name in cast(list[str], state["members"])
-            if self.safe_character(str(name))
-        ]
+        members = [str(name) for name in cast(list[str], state["members"]) if self.safe_character(str(name))]
         labels = self.member_labels(members)
         speaker = str(self.card_fields(speaker_file)["name"])
-        others = ", ".join(
-            label for label in labels if label != speaker
-        ) or "none"
+        others = ", ".join(label for label in labels if label != speaker) or "none"
 
         if state.get("mode") == "autonomous":
             return (
@@ -282,10 +254,7 @@ class GroupDirectorService:
             "Speak only as the current speaker. Do not write dialogue or "
             "actions for the user or other characters."
         )
-        if (
-            state.get("mode") == "director"
-            and director_instruction
-        ):
+        if state.get("mode") == "director" and director_instruction:
             base += (
                 "\nInvisible director guidance: "
                 + director_instruction[:500]

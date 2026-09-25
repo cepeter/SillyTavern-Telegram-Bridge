@@ -1,10 +1,9 @@
 """Runtime import-boundary regression tests."""
 
-from pathlib import Path
 import subprocess
 import sys
 import unittest
-
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[1]
 
@@ -20,9 +19,7 @@ class RuntimeImportBoundaryTests(unittest.TestCase):
         )
 
     def test_schema_owns_processed_update_retention_default(self):
-        self.assertFalse(
-            (REPO_ROOT / "bridge" / "runtime_defaults.py").exists()
-        )
+        self.assertFalse((REPO_ROOT / "bridge" / "runtime_defaults.py").exists())
         completed = self._run_python(
             "import sys\n"
             "import bridge.schema as schema\n"
@@ -67,7 +64,6 @@ class RuntimeImportBoundaryTests(unittest.TestCase):
             completed.stdout + completed.stderr,
         )
 
-
     def test_runtime_boundary_modules_do_not_import_bridge_runtime(self):
         for filename in (
             "performance.py",
@@ -75,11 +71,7 @@ class RuntimeImportBoundaryTests(unittest.TestCase):
             "schema.py",
         ):
             with self.subTest(filename=filename):
-                source = (
-                    REPO_ROOT
-                    / "bridge"
-                    / filename
-                ).read_text(encoding="utf-8")
+                source = (REPO_ROOT / "bridge" / filename).read_text(encoding="utf-8")
                 self.assertNotIn(
                     "import bridge.runtime",
                     source,
@@ -89,9 +81,7 @@ class RuntimeImportBoundaryTests(unittest.TestCase):
                     source,
                 )
 
-
     def test_runtime_boundary_objects_are_owned_directly(self):
-        import bridge.main  # completes transitional ordinary dependency bindings
         import bridge.message_commands as message_commands
         import bridge.native_cache as native_cache
         import bridge.performance as performance
@@ -115,6 +105,7 @@ class RuntimeImportBoundaryTests(unittest.TestCase):
             native_cache._TEXT_CACHE.pop(key, None)
         self.assertEqual(first, "first")
         self.assertEqual(second, "first")
+
 
 if __name__ == "__main__":
     unittest.main()

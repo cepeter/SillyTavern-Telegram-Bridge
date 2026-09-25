@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from dataclasses import MISSING
 import ast
 import inspect
 import unittest
+from dataclasses import MISSING
+from pathlib import Path
 
 from bridge.composition import BridgeServices, build_bridge_services
-
 
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
@@ -41,25 +40,14 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
             hits = [token for token in forbidden_tokens if token in source]
             tree = ast.parse(source)
             imports_runtime_context = any(
-                (
-                    isinstance(node, ast.Import)
-                    and any(
-                        alias.name == "bridge.runtime_context"
-                        for alias in node.names
-                    )
-                )
-                or (
-                    isinstance(node, ast.ImportFrom)
-                    and node.module == "bridge.runtime_context"
-                )
+                (isinstance(node, ast.Import) and any(alias.name == "bridge.runtime_context" for alias in node.names))
+                or (isinstance(node, ast.ImportFrom) and node.module == "bridge.runtime_context")
                 for node in ast.walk(tree)
             )
             if imports_runtime_context:
                 hits.append("import bridge.runtime_context")
             if hits:
-                offenders[path.relative_to(REPO_ROOT).as_posix()] = sorted(
-                    set(hits)
-                )
+                offenders[path.relative_to(REPO_ROOT).as_posix()] = sorted(set(hits))
         self.assertEqual(offenders, {})
 
     def test_runtime_test_facade_is_deleted(self):
@@ -70,9 +58,7 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
         self.assertFalse((BRIDGE_DIR / "ordinary_dependencies.py").exists())
 
     def test_test_setup_has_no_patch_propagation_magic(self):
-        source = (TESTS_DIR / "application_test_setup.py").read_text(
-            encoding="utf-8"
-        )
+        source = (TESTS_DIR / "application_test_setup.py").read_text(encoding="utf-8")
         for forbidden in (
             "ModuleType",
             "sys.modules",
@@ -82,7 +68,6 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, source)
-
 
     def test_durable_job_compatibility_module_is_deleted(self):
         self.assertFalse((BRIDGE_DIR / "job_runtime.py").exists())
@@ -102,9 +87,7 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
                     MISSING,
                 )
                 self.assertIs(
-                    inspect.signature(build_bridge_services)
-                    .parameters[name]
-                    .default,
+                    inspect.signature(build_bridge_services).parameters[name].default,
                     inspect.Parameter.empty,
                 )
                 self.assertNotIn(
@@ -191,12 +174,8 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
         self.assertEqual(offenders, {})
 
     def test_startup_path_ownership_has_no_legacy_common_definitions(self):
-        common_source = (BRIDGE_DIR / "common.py").read_text(
-            encoding="utf-8"
-        )
-        config_source = (BRIDGE_DIR / "config.py").read_text(
-            encoding="utf-8"
-        )
+        common_source = (BRIDGE_DIR / "common.py").read_text(encoding="utf-8")
+        config_source = (BRIDGE_DIR / "config.py").read_text(encoding="utf-8")
         for forbidden in (
             "ENV_FILE =",
             "PROVIDER_CONFIG_FILE =",
@@ -238,12 +217,8 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
         self.assertEqual(offenders, {})
 
     def test_late_environment_loader_is_deleted(self):
-        common_source = (BRIDGE_DIR / "common.py").read_text(
-            encoding="utf-8"
-        )
-        main_source = (BRIDGE_DIR / "main.py").read_text(
-            encoding="utf-8"
-        )
+        common_source = (BRIDGE_DIR / "common.py").read_text(encoding="utf-8")
+        main_source = (BRIDGE_DIR / "main.py").read_text(encoding="utf-8")
         self.assertNotIn("def load_env_file(", common_source)
         self.assertNotIn("load_env_file", main_source)
 
@@ -271,22 +246,14 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
 
         self.assertFalse(
             any(
-                dotted_name(call.func) == "logging.basicConfig"
-                or dotted_name(call.func).endswith(".mkdir")
+                dotted_name(call.func) == "logging.basicConfig" or dotted_name(call.func).endswith(".mkdir")
                 for call in top_level_calls
             )
         )
-        self.assertFalse(
-            any(
-                dotted_name(call.func).endswith(".ThreadPoolExecutor")
-                for call in executor_assignments
-            )
-        )
+        self.assertFalse(any(dotted_name(call.func).endswith(".ThreadPoolExecutor") for call in executor_assignments))
 
     def test_launcher_has_no_local_environment_parser(self):
-        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(
-            encoding="utf-8"
-        )
+        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(encoding="utf-8")
         self.assertNotIn("def bootstrap_env(", source)
         self.assertIn(
             "from bridge.environment import bootstrap_environment",
@@ -304,14 +271,8 @@ class RuntimeArchitectureGuardTests(unittest.TestCase):
                 source = path.read_text(encoding="utf-8")
                 tree = ast.parse(source)
                 imports_runtime = any(
-                    (
-                        isinstance(node, ast.Import)
-                        and any(alias.name == "bridge.runtime" for alias in node.names)
-                    )
-                    or (
-                        isinstance(node, ast.ImportFrom)
-                        and node.module in {"bridge.runtime", "runtime_test_facade"}
-                    )
+                    (isinstance(node, ast.Import) and any(alias.name == "bridge.runtime" for alias in node.names))
+                    or (isinstance(node, ast.ImportFrom) and node.module in {"bridge.runtime", "runtime_test_facade"})
                     for node in ast.walk(tree)
                 )
                 if imports_runtime:

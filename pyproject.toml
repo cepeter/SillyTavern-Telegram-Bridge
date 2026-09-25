@@ -3,7 +3,15 @@ target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E5", "E7", "E9", "F", "I", "B", "S", "RUF"]
+# User-visible Unicode punctuation is intentional, not an identifier-confusable risk.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# These files must establish environment/extension setup before importing the app.
+"sillytavern_telegram_bridge.py" = ["E402"]
+# Assertion statements, synthetic credentials/paths and subprocess probes are test fixtures.
+"tests/**" = ["E402", "S101", "S105", "S106", "S108", "S603"]
 
 [tool.mypy]
 python_version = "3.11"

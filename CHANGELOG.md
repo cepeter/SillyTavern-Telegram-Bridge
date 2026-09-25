@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Quality
+
+- Enforce whole-tree Ruff linting, security rules and formatting; separate incremental type coverage from graph isolation and include both security policy modules.
+
 ### Security
 
 - Replace deterministic callback IDs with random chat-scoped handles, remove the process cache, and preserve caller transaction ownership during token creation and lookup.

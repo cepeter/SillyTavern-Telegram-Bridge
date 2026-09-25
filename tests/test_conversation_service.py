@@ -1,10 +1,11 @@
 """Command-versus-generation orchestration has one injected owner."""
-from dataclasses import MISSING
+
 import ast
 import importlib
-from pathlib import Path
 import subprocess
 import sys
+from dataclasses import MISSING
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -44,8 +45,10 @@ def test_entrypoints_do_not_import_old_message_dispatch(owner):
 
 
 def test_service_is_required_by_composition():
-    from bridge.composition import BridgeServices, build_bridge_services
     import inspect
+
+    from bridge.composition import BridgeServices, build_bridge_services
+
     assert "conversation" in BridgeServices.__dataclass_fields__
     assert BridgeServices.__dataclass_fields__["conversation"].default is MISSING
     assert inspect.signature(build_bridge_services).parameters["conversation"].default is inspect.Parameter.empty
@@ -55,10 +58,16 @@ def test_service_has_no_concrete_bridge_imports():
     service_module()
     assert not any(name == "bridge" or name.startswith("bridge.") for name in imports("conversation_service"))
     result = subprocess.run(
-        [sys.executable, "-c", "import sys; import bridge.conversation_service; "
-         "assert 'bridge.telegram' not in sys.modules; "
-         "assert 'bridge.command_routes' not in sys.modules"],
-        cwd=ROOT, text=True, capture_output=True,
+        [
+            sys.executable,
+            "-c",
+            "import sys; import bridge.conversation_service; "
+            "assert 'bridge.telegram' not in sys.modules; "
+            "assert 'bridge.command_routes' not in sys.modules",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -69,10 +78,17 @@ def make_service(*, handled=False, prepare_handled=False, route_error=False):
     services = SimpleNamespace(memory=object(), persona=object(), group=object(), provider=object())
     context = SimpleNamespace(db=object(), session_id="queued-session", actor_id="actor")
     prepared = module.PreparedMessage(
-        stripped="hello", command="hello", fields={"name": "character"},
-        session={"session_id": "queued-session"}, session_id="queued-session",
-        current_model="resolved-model", current_persona="persona", user_name="user",
-        group_turn=None, group_context="group-context", request_context=context,
+        stripped="hello",
+        command="hello",
+        fields={"name": "character"},
+        session={"session_id": "queued-session"},
+        session_id="queued-session",
+        current_model="resolved-model",
+        current_persona="persona",
+        user_name="user",
+        group_turn=None,
+        group_context="group-context",
+        request_context=context,
     )
 
     def prepare(*args, **kwargs):
@@ -89,15 +105,26 @@ def make_service(*, handled=False, prepare_handled=False, route_error=False):
         events.append(("generate", args, kwargs))
 
     service = module.ConversationService(
-        prepare_message=prepare, dispatch_command=dispatch, generate_reply=generate,
+        prepare_message=prepare,
+        dispatch_command=dispatch,
+        generate_reply=generate,
     )
     return service, services, events, prepared
 
 
 def run_message(service, services):
     service.process_message(
-        "db", "token", "key", "queue-default", {}, "chat", "hello", 123,
-        queued_session_id="queued-session", operation_id=456, actor_id="actor",
+        "db",
+        "token",
+        "key",
+        "queue-default",
+        {},
+        "chat",
+        "hello",
+        123,
+        queued_session_id="queued-session",
+        operation_id=456,
+        actor_id="actor",
         services=services,
     )
 
@@ -121,15 +148,33 @@ def test_unhandled_message_generates_with_resolved_model_and_original_identity()
     run_message(service, services)
     assert [event[0] for event in events] == ["prepare", "command", "generate"]
     assert events[0][2] == dict(
-        queued_session_id="queued-session", operation_id=456,
-        actor_id="actor", services=services,
+        queued_session_id="queued-session",
+        operation_id=456,
+        actor_id="actor",
+        services=services,
     )
     args, kwargs = events[2][1:]
     assert args == (
-        "db", "token", "key", prepared.fields, "chat", "hello", prepared.session,
-        "queued-session", "resolved-model", None, "group-context", 123, 456,
+        "db",
+        "token",
+        "key",
+        prepared.fields,
+        "chat",
+        "hello",
+        prepared.session,
+        "queued-session",
+        "resolved-model",
+        None,
+        "group-context",
+        123,
+        456,
     )
-    assert kwargs == dict(group_service=services.group, provider_port=services.provider, memory_service=services.memory, persona_service=services.persona)
+    assert kwargs == dict(
+        group_service=services.group,
+        provider_port=services.provider,
+        memory_service=services.memory,
+        persona_service=services.persona,
+    )
 
 
 def test_command_exception_propagates_without_generation():

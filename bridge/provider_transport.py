@@ -1,4 +1,5 @@
 """Infrastructure adapters for configured model-provider HTTP transports."""
+
 from __future__ import annotations
 
 import hashlib
@@ -13,6 +14,7 @@ from bridge.common import DEFAULT_PROVIDER_URL
 from bridge.config import DEFAULT_MAX_TOKENS, GENERATION_DEFAULTS
 from bridge.model_router import ModelRouter
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
+
 
 def anthropic_content(value):
     if isinstance(value, str):
@@ -29,6 +31,7 @@ def anthropic_content(value):
                 blocks.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}})
     return blocks or [{"type": "text", "text": ""}]
 
+
 def _stream_text(value) -> str:
     if isinstance(value, str):
         return value
@@ -44,29 +47,18 @@ def _openai_response_choices(result: object) -> list[dict]:
 
     top_level = result.get("choices")
     if isinstance(top_level, list) and top_level:
-        return [
-            choice
-            for choice in top_level
-            if isinstance(choice, dict)
-        ]
+        return [choice for choice in top_level if isinstance(choice, dict)]
 
     data = result.get("data")
     if isinstance(data, dict):
         nested = data.get("choices")
         if isinstance(nested, list):
-            return [
-                choice
-                for choice in nested
-                if isinstance(choice, dict)
-            ]
+            return [choice for choice in nested if isinstance(choice, dict)]
 
     if isinstance(top_level, list):
-        return [
-            choice
-            for choice in top_level
-            if isinstance(choice, dict)
-        ]
+        return [choice for choice in top_level if isinstance(choice, dict)]
     return []
+
 
 def _recovery_settings(settings: dict[str, object]) -> dict[str, object] | None:
     """Increase the output budget when a provider spends the whole budget reasoning."""
@@ -78,6 +70,7 @@ def _recovery_settings(settings: dict[str, object]) -> dict[str, object] | None:
     recovered["max_tokens"] = target
     return recovered
 
+
 _CONTINUATION_INSTRUCTION = (
     "Continue from the exact ending without repeating existing text. "
     "Preserve the response language exactly. Output only the continuation."
@@ -86,11 +79,7 @@ _MAX_VISIBLE_CONTINUATIONS = 3
 
 
 def _join_visible_stream(prefix: str, segment: str) -> str:
-    return " ".join(
-        part
-        for part in (str(prefix or "").strip(), str(segment or "").strip())
-        if part
-    )
+    return " ".join(part for part in (str(prefix or "").strip(), str(segment or "").strip()) if part)
 
 
 def _read_openai_stream_segment(
@@ -126,14 +115,8 @@ def _read_openai_stream_segment(
                 parts.append(text_delta)
             if choice.get("finish_reason"):
                 finish_reason = str(choice["finish_reason"])
-        if (
-            stream_callback
-            and parts
-            and time.monotonic() - last_emit >= 0.5
-        ):
-            stream_callback(
-                _join_visible_stream(prefix, "".join(parts))
-            )
+        if stream_callback and parts and time.monotonic() - last_emit >= 0.5:
+            stream_callback(_join_visible_stream(prefix, "".join(parts)))
             last_emit = time.monotonic()
 
     content = "".join(parts).strip()
@@ -143,8 +126,10 @@ def _read_openai_stream_segment(
         cancelled = True
     return content, finish_reason, cancelled
 
+
 def _parse_stop_sequences(raw: object) -> list[str]:
     return [item for item in str(raw or "").split("\n") if item]
+
 
 def _resolve_provider_credential(spec: dict, api_key: str, default_env: str, label: str) -> str:
     """Prefer the provider-specific env key; fall back to the caller-supplied key."""
@@ -157,7 +142,16 @@ def _resolve_provider_credential(spec: dict, api_key: str, default_env: str, lab
         raise RuntimeError(f"Missing {label} credential: {key_env}")
     return resolved
 
-def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str, request_timeout: float | None = None) -> str:
+
+def anthropic_generate(
+    api_key: str,
+    actual_model: str,
+    messages: list[dict],
+    settings: dict[str, object],
+    spec: dict,
+    session_id: str,
+    request_timeout: float | None = None,
+) -> str:
     system_parts = [str(message.get("content") or "") for message in messages if message.get("role") == "system"]
     conversation = []
     for message in messages:
@@ -177,10 +171,19 @@ def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], se
             conversation.append({"role": role, "content": content})
     while conversation and conversation[0]["role"] == "assistant":
         opening = conversation.pop(0)["content"]
-        system_parts.append("## Opening character message\n" + (opening if isinstance(opening, str) else json.dumps(opening, ensure_ascii=False)))
+        system_parts.append(
+            "## Opening character message\n"
+            + (opening if isinstance(opening, str) else json.dumps(opening, ensure_ascii=False))
+        )
     if not conversation:
         conversation = [{"role": "user", "content": "Begin the conversation."}]
-    body = {"model": actual_model, "messages": conversation, "max_tokens": int(settings["max_tokens"]), "temperature": float(settings["temperature"]), "stream": True}
+    body = {
+        "model": actual_model,
+        "messages": conversation,
+        "max_tokens": int(settings["max_tokens"]),
+        "temperature": float(settings["temperature"]),
+        "stream": True,
+    }
     if system_parts:
         body["system"] = "\n\n".join(system_parts)
     if float(settings.get("top_p", 1.0)) < 1.0:
@@ -191,9 +194,15 @@ def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], se
     endpoint = str(spec.get("api_endpoint") or spec.get("api") or "").rstrip("/")
     validate_provider_endpoint(endpoint)
     endpoint = endpoint if endpoint.endswith("/messages") else endpoint + "/messages"
-    headers = {"x-api-key": api_key, "anthropic-version": str(spec.get("anthropic_version") or "2023-06-01"), "Content-Type": "application/json", "Accept": "text/event-stream", "User-Agent": "SillyTavernTelegramBridge/1.0"}
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": str(spec.get("anthropic_version") or "2023-06-01"),
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "User-Agent": "SillyTavernTelegramBridge/1.0",
+    }
     headers.update(spec.get("extra_headers") or {})
-    request = urllib.request.Request(endpoint, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
+    request = urllib.request.Request(endpoint, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
     with strict_urlopen(request, timeout=240 if request_timeout is None else request_timeout) as response:
         parts = []
         for raw_line in response:
@@ -212,6 +221,7 @@ def anthropic_generate(api_key: str, actual_model: str, messages: list[dict], se
             raise RuntimeError("Anthropic Messages returned no visible content")
         return content
 
+
 def opencode_muse_headers(session_id: str) -> dict[str, str]:
     base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
     digest = hashlib.sha256(f"opencode\\0{session_id}".encode("utf-8")).digest()
@@ -219,9 +229,23 @@ def opencode_muse_headers(session_id: str) -> dict[str, str]:
     request_digest = hashlib.sha256(f"opencode-request\\0{session_key}\\0{time.time_ns()}".encode("utf-8")).digest()
     request_id = f"msg_{request_digest[:6].hex()}" + "".join(base62[value % 62] for value in request_digest[6:20])
     version = os.environ.get("OPENCODE_CLIENT_VERSION", "1.18.31")
-    return {"Authorization": "", "x-opencode-session": session_key, "x-opencode-request": request_id, "x-opencode-client": "cli", "User-Agent": f"opencode/{version}", "Origin": "https://opencode.ai", "Referer": "https://opencode.ai/", "HTTP-Referer": "https://opencode.ai/", "X-Title": "opencode", "Content-Type": "application/json", "Accept": "application/json"}
+    return {
+        "Authorization": "",
+        "x-opencode-session": session_key,
+        "x-opencode-request": request_id,
+        "x-opencode-client": "cli",
+        "User-Agent": f"opencode/{version}",
+        "Origin": "https://opencode.ai",
+        "Referer": "https://opencode.ai/",
+        "HTTP-Referer": "https://opencode.ai/",
+        "X-Title": "opencode",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
 
 OPENCODE_FINGERPRINT_TOOLS = ("bash", "glob", "grep", "read")
+
 
 def _opencode_tool_name(tool: object) -> str:
     if not isinstance(tool, dict):
@@ -231,6 +255,7 @@ def _opencode_tool_name(tool: object) -> str:
         return function["name"].strip()
     name = tool.get("name")
     return name.strip() if isinstance(name, str) else ""
+
 
 def _merge_opencode_responses_tools(body: dict) -> None:
     """Add the OpenCode Free fingerprint without discarding caller tools."""
@@ -242,14 +267,17 @@ def _merge_opencode_responses_tools(body: dict) -> None:
     for name in OPENCODE_FINGERPRINT_TOOLS:
         if name in present:
             continue
-        tools.append({
-            "type": "function",
-            "name": name,
-            "description": "This tool is currently unavailable and must not be used.",
-            "parameters": {"type": "object", "properties": {}},
-        })
+        tools.append(
+            {
+                "type": "function",
+                "name": name,
+                "description": "This tool is currently unavailable and must not be used.",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        )
         present.add(name)
     body["tool_choice"] = "auto"
+
 
 def _opencode_json_text(payload: dict) -> str:
     output_text = payload.get("output_text")
@@ -261,6 +289,7 @@ def _opencode_json_text(payload: dict) -> str:
             if content.get("type") in {"output_text", "text"} and content.get("text"):
                 chunks.append(str(content["text"]))
     return "".join(chunks).strip()
+
 
 def _opencode_responses_text(raw: str) -> str:
     """Read both JSON and the SSE stream required by OpenCode Free."""
@@ -291,7 +320,15 @@ def _opencode_responses_text(raw: str) -> str:
             completed_text = completed_text or _opencode_json_text(response)
     return "".join(chunks).strip() or completed_text
 
-def opencode_muse_generate(actual_model: str, messages: list[dict], settings: dict[str, object], spec: dict, session_id: str, request_timeout: float | None = None) -> str:
+
+def opencode_muse_generate(
+    actual_model: str,
+    messages: list[dict],
+    settings: dict[str, object],
+    spec: dict,
+    session_id: str,
+    request_timeout: float | None = None,
+) -> str:
     endpoint = str(spec.get("api_endpoint") or spec.get("api") or "https://opencode.ai/zen/v1").rstrip("/")
     validate_provider_endpoint(endpoint)
     inputs = []
@@ -299,7 +336,12 @@ def opencode_muse_generate(actual_model: str, messages: list[dict], settings: di
         content = message.get("content")
         if isinstance(content, list):
             content = "\\n".join(str(item.get("text") or "") for item in content if isinstance(item, dict))
-        inputs.append({"role": str(message.get("role") or "user"), "content": [{"type": "input_text", "text": str(content or "")}]})
+        inputs.append(
+            {
+                "role": str(message.get("role") or "user"),
+                "content": [{"type": "input_text", "text": str(content or "")}],
+            }
+        )
     requested = int(settings.get("max_tokens") or 0)
     body = {
         "model": actual_model,
@@ -314,7 +356,7 @@ def opencode_muse_generate(actual_model: str, messages: list[dict], settings: di
     # and Chat Completions. The latest 9router fixes (#4132/#4188/#4215)
     # require the quartet even when the caller supplied no tools.
     _merge_opencode_responses_tools(body)
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
         endpoint + "/responses",
         data=json.dumps(body).encode("utf-8"),
         headers={**opencode_muse_headers(session_id), "Accept": "text/event-stream"},
@@ -327,7 +369,20 @@ def opencode_muse_generate(actual_model: str, messages: list[dict], settings: di
         raise RuntimeError("OpenCode Muse returned no assistant content")
     return output_text
 
-def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, messages: list[dict], session_id: str = "telegram", settings: dict[str, object] | None = None, stream_callback=None, cancel_event=None, force_non_stream: bool = False, request_timeout: float | None = None, _recovery_attempt: int = 0) -> str:
+
+def generate_provider_text(
+    model_router: ModelRouter,
+    api_key: str,
+    model: str,
+    messages: list[dict],
+    session_id: str = "telegram",
+    settings: dict[str, object] | None = None,
+    stream_callback=None,
+    cancel_event=None,
+    force_non_stream: bool = False,
+    request_timeout: float | None = None,
+    _recovery_attempt: int = 0,
+) -> str:
     """Generate through the selected bridge provider adapter."""
     route = model_router.route(model)
     provider_id = route.provider_id
@@ -337,13 +392,19 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
     generation = dict(GENERATION_DEFAULTS)
     generation.update(settings or {})
     if transport == "opencode_muse":
-        return opencode_muse_generate(actual_model, messages, generation, spec, session_id, request_timeout=request_timeout)
+        return opencode_muse_generate(
+            actual_model, messages, generation, spec, session_id, request_timeout=request_timeout
+        )
     if transport == "anthropic_messages":
         anthropic_key = _resolve_provider_credential(spec, api_key, "ANTHROPIC_API_KEY", "Anthropic")
-        return anthropic_generate(anthropic_key, actual_model, messages, generation, spec, session_id, request_timeout=request_timeout)
+        return anthropic_generate(
+            anthropic_key, actual_model, messages, generation, spec, session_id, request_timeout=request_timeout
+        )
     if transport not in {"chat_completions", "openai", "openai_compatible"}:
         raise RuntimeError(f"Provider transport '{transport}' is not supported")
-    endpoint_base = str(spec.get("api_endpoint") or spec.get("api") or DEFAULT_PROVIDER_URL.rsplit("/chat/completions", 1)[0]).rstrip("/")
+    endpoint_base = str(
+        spec.get("api_endpoint") or spec.get("api") or DEFAULT_PROVIDER_URL.rsplit("/chat/completions", 1)[0]
+    ).rstrip("/")
     validate_provider_endpoint(endpoint_base)
     endpoint = endpoint_base + "/chat/completions"
     request_key = _resolve_provider_credential(spec, api_key, "LLM_API_KEY", "provider")
@@ -374,13 +435,15 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
         "X-Title": "SillyTavern Telegram Bridge",
     }
     headers.update(spec.get("extra_headers") or {})
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
         endpoint,
         data=json.dumps(body).encode("utf-8"),
         headers=headers,
         method="POST",
     )
-    with strict_urlopen(request, timeout=(240 if is_streaming else 180) if request_timeout is None else request_timeout) as response:
+    with strict_urlopen(
+        request, timeout=(240 if is_streaming else 180) if request_timeout is None else request_timeout
+    ) as response:
         if not is_streaming:
             result = json.loads(response.read().decode("utf-8"))
             choices = _openai_response_choices(result)
@@ -390,7 +453,17 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
                 if finish_reason == "length" and _recovery_attempt < 2:
                     recovered = _recovery_settings(generation)
                     if recovered:
-                        return generate_provider_text(model_router, api_key, model, messages, session_id=session_id, settings=recovered, force_non_stream=True, request_timeout=request_timeout, _recovery_attempt=_recovery_attempt + 1)
+                        return generate_provider_text(
+                            model_router,
+                            api_key,
+                            model,
+                            messages,
+                            session_id=session_id,
+                            settings=recovered,
+                            force_non_stream=True,
+                            request_timeout=request_timeout,
+                            _recovery_attempt=_recovery_attempt + 1,
+                        )
                 http_status = getattr(response, "status", None)
                 if http_status is None:
                     getcode = getattr(response, "getcode", None)
@@ -414,26 +487,32 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
             segments = [content]
             continuation_messages = list(body["messages"])
             for _attempt in range(3):
-                continuation_messages.extend([
-                    {"role": "assistant", "content": segments[-1]},
-                    {
-                        "role": "user",
-                        "content": _CONTINUATION_INSTRUCTION,
-                    },
-                ])
+                continuation_messages.extend(
+                    [
+                        {"role": "assistant", "content": segments[-1]},
+                        {
+                            "role": "user",
+                            "content": _CONTINUATION_INSTRUCTION,
+                        },
+                    ]
+                )
                 continuation_body = dict(body)
                 continuation_body["messages"] = continuation_messages
-                continuation_request = urllib.request.Request(
+                continuation_request = urllib.request.Request(  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
                     endpoint,
                     data=json.dumps(continuation_body).encode("utf-8"),
                     headers=headers,
                     method="POST",
                 )
                 try:
-                    with strict_urlopen(continuation_request, timeout=180 if request_timeout is None else request_timeout) as continuation_response:
+                    with strict_urlopen(
+                        continuation_request, timeout=180 if request_timeout is None else request_timeout
+                    ) as continuation_response:
                         continuation_result = json.loads(continuation_response.read().decode("utf-8"))
                     continuation_choices = _openai_response_choices(continuation_result)
-                    continuation = continuation_choices[0].get("message", {}).get("content") if continuation_choices else None
+                    continuation = (
+                        continuation_choices[0].get("message", {}).get("content") if continuation_choices else None
+                    )
                     continuation_reason = continuation_choices[0].get("finish_reason") if continuation_choices else None
                 except Exception:
                     logging.warning("Automatic continuation failed after %s segment(s)", len(segments), exc_info=True)
@@ -457,10 +536,7 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
                 finish_reason == "length"
                 and _recovery_attempt < 2
                 and not cancelled
-                and not (
-                    cancel_event is not None
-                    and cancel_event.is_set()
-                )
+                and not (cancel_event is not None and cancel_event.is_set())
             )
             if can_recover:
                 recovered = _recovery_settings(generation)
@@ -478,43 +554,32 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
                         request_timeout=request_timeout,
                         _recovery_attempt=_recovery_attempt + 1,
                     )
-            raise RuntimeError(
-                f"{provider_id} returned no visible content "
-                f"(finish_reason={finish_reason})"
-            )
+            raise RuntimeError(f"{provider_id} returned no visible content (finish_reason={finish_reason})")
 
         segments = [content]
-        if (
-            finish_reason != "length"
-            or cancelled
-            or (
-                cancel_event is not None
-                and cancel_event.is_set()
-            )
-        ):
+        if finish_reason != "length" or cancelled or (cancel_event is not None and cancel_event.is_set()):
             return content
 
         continuation_messages = list(messages)
         for _attempt in range(_MAX_VISIBLE_CONTINUATIONS):
-            if (
-                cancel_event is not None
-                and cancel_event.is_set()
-            ):
+            if cancel_event is not None and cancel_event.is_set():
                 break
 
-            continuation_messages.extend([
-                {
-                    "role": "assistant",
-                    "content": segments[-1],
-                },
-                {
-                    "role": "user",
-                    "content": _CONTINUATION_INSTRUCTION,
-                },
-            ])
+            continuation_messages.extend(
+                [
+                    {
+                        "role": "assistant",
+                        "content": segments[-1],
+                    },
+                    {
+                        "role": "user",
+                        "content": _CONTINUATION_INSTRUCTION,
+                    },
+                ]
+            )
             continuation_body = dict(body)
             continuation_body["messages"] = continuation_messages
-            continuation_request = urllib.request.Request(
+            continuation_request = urllib.request.Request(  # noqa: S310 -- Request is opened only through DNS-pinned strict_urlopen
                 endpoint,
                 data=json.dumps(continuation_body).encode("utf-8"),
                 headers=headers,
@@ -523,17 +588,9 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
             try:
                 with strict_urlopen(
                     continuation_request,
-                    timeout=(
-                        240
-                        if request_timeout is None
-                        else request_timeout
-                    ),
+                    timeout=(240 if request_timeout is None else request_timeout),
                 ) as continuation_response:
-                    prefix = " ".join(
-                        segment
-                        for segment in segments
-                        if segment
-                    )
+                    prefix = " ".join(segment for segment in segments if segment)
                     (
                         continuation,
                         continuation_reason,
@@ -562,16 +619,9 @@ def generate_provider_text(model_router: ModelRouter, api_key: str, model: str, 
             segments.append(continuation)
             if (
                 continuation_cancelled
-                or (
-                    cancel_event is not None
-                    and cancel_event.is_set()
-                )
+                or (cancel_event is not None and cancel_event.is_set())
                 or continuation_reason != "length"
             ):
                 break
 
-        return " ".join(
-            segment
-            for segment in segments
-            if segment
-        )
+        return " ".join(segment for segment in segments if segment)

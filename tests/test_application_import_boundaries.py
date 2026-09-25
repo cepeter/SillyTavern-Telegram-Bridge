@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import ast
 import builtins
-from pathlib import Path
 import subprocess
 import symtable
 import sys
 import unittest
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
@@ -141,9 +141,7 @@ class ApplicationImportBoundaryTests(unittest.TestCase):
             module = "bridge." + filename.removesuffix(".py")
             with self.subTest(module=module):
                 completed = self._run_python(
-                    "import sys\n"
-                    f"import {module}\n"
-                    "assert 'bridge.runtime' not in sys.modules\n"
+                    f"import sys\nimport {module}\nassert 'bridge.runtime' not in sys.modules\n"
                 )
                 self.assertEqual(
                     completed.returncode,
@@ -159,19 +157,13 @@ class ApplicationImportBoundaryTests(unittest.TestCase):
             source = (BRIDGE_DIR / filename).read_text(encoding="utf-8")
             bound = _module_bound_names(source)
             unresolved = sorted(
-                _referenced_globals(source, filename)
-                - bound
-                - builtin_names
-                - {"__file__", "__name__", "__package__"}
+                _referenced_globals(source, filename) - bound - builtin_names - {"__file__", "__name__", "__package__"}
             )
             if unresolved:
                 detail = []
                 for name in unresolved:
                     candidates = owners.get(name, [])
-                    detail.append(
-                        name
-                        + (" <- " + ",".join(candidates) if candidates else "")
-                    )
+                    detail.append(name + (" <- " + ",".join(candidates) if candidates else ""))
                 failures.append(filename + ": " + "; ".join(detail))
         self.assertEqual(failures, [], "\n".join(failures))
 
@@ -190,22 +182,31 @@ class ApplicationImportBoundaryTests(unittest.TestCase):
                 self.assertNotIn("import bridge.runtime", source)
                 self.assertNotIn("from bridge.runtime import", source)
 
-
     def test_application_owners_are_directly_importable(self):
-        import bridge.callbacks as callbacks
         import bridge.callback_dispatch as callback_dispatch
         import bridge.cards as cards
         import bridge.command_routes as command_routes
         import bridge.generation as generation
         import bridge.message_commands as message_commands
         import bridge.model_router as model_router
-        import bridge.provider_port as provider_port
-        import bridge.provider_transport as provider_transport
         import bridge.panel_callback_routes as panel_callback_routes
         import bridge.persona_sync as persona_sync
+        import bridge.provider_port as provider_port
+        import bridge.provider_transport as provider_transport
 
         expectations = (
-            (cards, ("send_panel_message", "send_persona_menu", "send_character_menu", "send_character_info_menu", "send_character_delete_menu", "send_character_delete_confirm", "send_session_menu")),
+            (
+                cards,
+                (
+                    "send_panel_message",
+                    "send_persona_menu",
+                    "send_character_menu",
+                    "send_character_info_menu",
+                    "send_character_delete_menu",
+                    "send_character_delete_confirm",
+                    "send_session_menu",
+                ),
+            ),
             (persona_sync, ("get_persona", "default_persona_id", "persona_name")),
             (generation, ("build_chat_messages", "regenerate_last", "continue_last")),
             (model_router.ModelRouter, ("route", "provider_spec")),
@@ -220,7 +221,6 @@ class ApplicationImportBoundaryTests(unittest.TestCase):
             for name in names:
                 with self.subTest(module=module.__name__, name=name):
                     self.assertTrue(hasattr(module, name))
-
 
     def test_extension_modules_expose_explicit_registration(self):
         import bridge.director_goals as director_goals

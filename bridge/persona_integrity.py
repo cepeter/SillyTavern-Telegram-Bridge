@@ -1,4 +1,5 @@
 """Ordinary Persona-store integrity decorator."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -20,10 +21,7 @@ class IntegrityCheckedPersonaStore:
         if self.valid_avatar(value):
             return False
         expected_stem = f"bridge-{value}"
-        return any(
-            Path(str(avatar)).stem == expected_stem
-            for avatar in self.load_personas(force=True)
-        )
+        return any(Path(str(avatar)).stem == expected_stem for avatar in self.load_personas(force=True))
 
     def upsert(
         self,

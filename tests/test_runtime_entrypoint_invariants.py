@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import ast
 import builtins
-from pathlib import Path
 import subprocess
 import symtable
 import sys
 import unittest
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[1]
 BRIDGE_DIR = REPO_ROOT / "bridge"
@@ -113,12 +113,8 @@ class RuntimeEntrypointInvariantTests(unittest.TestCase):
         )
 
     def test_entrypoint_bootstraps_environment_before_importing_main(self):
-        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(
-            encoding="utf-8"
-        )
-        bootstrap_import = source.index(
-            "from bridge.environment import bootstrap_environment"
-        )
+        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(encoding="utf-8")
+        bootstrap_import = source.index("from bridge.environment import bootstrap_environment")
         bootstrap_call = source.index("bootstrap_environment()")
         main_import = source.index("from bridge.main import main")
 
@@ -127,23 +123,16 @@ class RuntimeEntrypointInvariantTests(unittest.TestCase):
         self.assertNotIn("def bootstrap_env(", source)
 
     def test_entrypoint_imports_main_directly(self):
-        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(
-            encoding="utf-8"
-        )
+        source = (REPO_ROOT / "sillytavern_telegram_bridge.py").read_text(encoding="utf-8")
         self.assertIn("from bridge.main import main", source)
         self.assertNotIn("from bridge.runtime import main", source)
-
 
     def test_no_production_exec_calls_remain(self):
         offenders = []
         for path in sorted(BRIDGE_DIR.glob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
-                if (
-                    isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Name)
-                    and node.func.id == "exec"
-                ):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "exec":
                     offenders.append(f"{path.name}:{node.lineno}")
         self.assertEqual(offenders, [])
 
@@ -158,14 +147,7 @@ class RuntimeEntrypointInvariantTests(unittest.TestCase):
             - {"__file__", "__name__", "__package__"}
         )
         owners = _owner_index()
-        detail = [
-            name + (
-                " <- " + ",".join(owners[name])
-                if owners.get(name)
-                else ""
-            )
-            for name in unresolved
-        ]
+        detail = [name + (" <- " + ",".join(owners[name]) if owners.get(name) else "") for name in unresolved]
         self.assertEqual(detail, [], "\n".join(detail))
 
     def test_main_has_no_transitional_dependency_composition(self):

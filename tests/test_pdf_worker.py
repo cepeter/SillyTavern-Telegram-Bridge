@@ -2,18 +2,18 @@ from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import bridge.config as config
-import bridge.callbacks as _m_callbacks
-import bridge.telegram as _m_telegram
-import bridge.memory_curator as _m_memory_curator
-import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.language as _m_language
+import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
 import bridge.session_naming as _m_session_naming
+import bridge.telegram as _m_telegram
+
+
 class PdfWorkerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -30,7 +30,10 @@ class PdfWorkerTests(unittest.TestCase):
         objects = [
             b"<< /Type /Catalog /Pages 2 0 R >>",
             b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+            (
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+                b"/Resources << /Font << /F1 5 0 R >> >> >>"
+            ),
             b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
             b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         ]
@@ -50,13 +53,18 @@ class PdfWorkerTests(unittest.TestCase):
 
         first = _m_telegram.ensure_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL)
         _m_language.set_response_language(
-            self.db, "chat", first["session_id"], "id",
+            self.db,
+            "chat",
+            first["session_id"],
+            "id",
             update_session=_m_telegram.update_session,
         )
         second = _m_session_naming.create_session(self.db, "chat", _m_memory_curator.DEFAULT_MODEL, session_id="second")
 
         self.assertEqual(
-            _m_memory_curator.load_session(self.db, "chat", first["session_id"], _m_memory_curator.DEFAULT_MODEL)["response_language"],
+            _m_memory_curator.load_session(self.db, "chat", first["session_id"], _m_memory_curator.DEFAULT_MODEL)[
+                "response_language"
+            ],
             "id",
         )
         self.assertEqual(second["response_language"], "auto")

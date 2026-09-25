@@ -1,6 +1,5 @@
 import unittest
 
-import bridge.main  # completes transitional ordinary dependency bindings
 import bridge.telegram as telegram
 
 
@@ -8,10 +7,7 @@ class TelegramPreviewTests(unittest.TestCase):
     def test_send_text_disables_link_previews(self):
         calls = []
         original_request = telegram.telegram_request
-        telegram.telegram_request = (
-            lambda _token, method, payload:
-            calls.append((method, payload)) or {"message_id": 1}
-        )
+        telegram.telegram_request = lambda _token, method, payload: calls.append((method, payload)) or {"message_id": 1}
         try:
             self.assertEqual(
                 telegram.send_text(

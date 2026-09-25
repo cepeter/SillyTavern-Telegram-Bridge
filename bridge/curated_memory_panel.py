@@ -1,4 +1,5 @@
 """Pure presentation data for the Curated Memory panel."""
+
 from __future__ import annotations
 
 

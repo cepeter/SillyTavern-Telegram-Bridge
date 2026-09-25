@@ -3,6 +3,7 @@
 Large corpora use a compact angular signature to shortlist candidates globally.
 Only the shortlisted JSON vectors are decoded for exact cosine scoring.
 """
+
 from __future__ import annotations
 
 import heapq
@@ -21,17 +22,23 @@ EMBEDDING_SIGNATURE_BITS = 63
 _MASK64 = (1 << 64) - 1
 
 
-def cosine_similarity(left: list[float], right: list[float], left_norm: float | None = None, right_norm: float | None = None) -> float:
+def cosine_similarity(
+    left: list[float], right: list[float], left_norm: float | None = None, right_norm: float | None = None
+) -> float:
     if len(left) != len(right) or not left:
         return 0.0
     if _numpy is not None:
         left_array = _numpy.asarray(left, dtype=float)
         right_array = _numpy.asarray(right, dtype=float)
         numerator = float(_numpy.dot(left_array, right_array))
-        denominator = float(left_norm or _numpy.linalg.norm(left_array)) * float(right_norm or _numpy.linalg.norm(right_array))
+        denominator = float(left_norm or _numpy.linalg.norm(left_array)) * float(
+            right_norm or _numpy.linalg.norm(right_array)
+        )
         return numerator / denominator if denominator else 0.0
-    denominator = float(left_norm or math.sqrt(sum(value * value for value in left))) * float(right_norm or math.sqrt(sum(value * value for value in right)))
-    return sum(a * b for a, b in zip(left, right)) / denominator if denominator else 0.0
+    denominator = float(left_norm or math.sqrt(sum(value * value for value in left))) * float(
+        right_norm or math.sqrt(sum(value * value for value in right))
+    )
+    return sum(a * b for a, b in zip(left, right, strict=False)) / denominator if denominator else 0.0
 
 
 def _mix_dimension(index: int) -> int:
@@ -107,14 +114,14 @@ def semantic_candidate_chunk_ids(
     lexical = tuple(dict.fromkeys(int(value) for value in lexical_chunk_ids if value is not None))
     if lexical:
         placeholders = ",".join("?" for _ in lexical)
-        rows = db.execute(  # nosec B608 - placeholders are generated from parameter count
-            "SELECT DISTINCT n.chunk_id, ABS(n.chunk_index-hit.chunk_index) AS distance "
+        rows = db.execute(
+            "SELECT DISTINCT n.chunk_id, ABS(n.chunk_index-hit.chunk_index) AS distance "  # noqa: S608 -- SQL structure uses fixed columns/placeholders; all values are bound
             "FROM data_bank_chunks hit "
             "JOIN data_bank_chunks n "
             "  ON n.chat_id=hit.chat_id AND n.document_id=hit.document_id "
             "JOIN data_bank_embeddings e "
             "  ON e.chunk_id=n.chunk_id AND e.embedding_namespace=? "
-            f"WHERE hit.chat_id=? AND hit.chunk_id IN ({placeholders}) "  # nosec B608 - placeholders are generated from parameter count
+            f"WHERE hit.chat_id=? AND hit.chunk_id IN ({placeholders}) "
             "  AND n.chunk_index BETWEEN hit.chunk_index-? AND hit.chunk_index+? "
             "ORDER BY distance, n.chunk_id LIMIT ?",
             (
@@ -153,9 +160,7 @@ def semantic_candidate_chunk_ids(
                 heapq.heappush(nearest, entry)
             elif entry > nearest[0]:
                 heapq.heapreplace(nearest, entry)
-        for _negative_distance, _negative_chunk_id, chunk_id in sorted(
-            nearest, key=lambda item: (-item[0], item[2])
-        ):
+        for _negative_distance, _negative_chunk_id, chunk_id in sorted(nearest, key=lambda item: (-item[0], item[2])):
             add(chunk_id)
 
     return tuple(selected)

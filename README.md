@@ -866,8 +866,9 @@ and never replaces the original conversation history.
   messages to the character.
 - **✅ `/stscript` is allowlisted** and cannot execute arbitrary commands.
 - **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
-  reverse imports from the isolated service/port layer; Ruff and mypy run on
-  that stabilized boundary on every protected PR.
+  reverse imports from the isolated service/port layer. Ruff linting, security
+  rules, and formatting cover the complete Python tree. Mypy currently checks
+  13 explicitly listed modules, including the network and callback-token policy.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---

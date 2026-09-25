@@ -3,10 +3,13 @@ import time
 
 from bridge.migrations import (
     Migration as _Migration,
+)
+from bridge.migrations import (
     run_migrations as _run_migrations,
 )
 
 PROCESSED_UPDATE_RETENTION_SECONDS = 30 * 86400
+
 
 def _create_core_tables(db: sqlite3.Connection) -> None:
     """Create metadata, messages, sessions, and response variant tables."""
@@ -37,8 +40,15 @@ def _create_core_tables(db: sqlite3.Connection) -> None:
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS messages_session_idx ON messages(chat_id, session_id, created_at)")
     db.execute("CREATE INDEX IF NOT EXISTS messages_telegram_idx ON messages(chat_id, telegram_message_id)")
-    db.execute("CREATE INDEX IF NOT EXISTS messages_session_created_idx ON messages(chat_id, session_id, created_at DESC)")
-    db.execute("CREATE INDEX IF NOT EXISTS messages_chat_telegram_session_idx ON messages(chat_id, telegram_message_id, session_id)")
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS messages_session_created_idx ON messages(chat_id, session_id, created_at DESC)"
+    )
+    db.execute(
+        (
+            "CREATE INDEX IF NOT EXISTS messages_chat_telegram_session_idx ON "
+            "messages(chat_id, telegram_message_id, session_id)"
+        )
+    )
     db.execute("""CREATE TABLE IF NOT EXISTS response_variants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_id TEXT NOT NULL,
@@ -50,7 +60,12 @@ def _create_core_tables(db: sqlite3.Connection) -> None:
         selected INTEGER NOT NULL DEFAULT 1,
         created_at REAL NOT NULL
     )""")
-    db.execute("CREATE INDEX IF NOT EXISTS variants_session_idx ON response_variants(chat_id, session_id, user_rowid, created_at)")
+    db.execute(
+        (
+            "CREATE INDEX IF NOT EXISTS variants_session_idx ON "
+            "response_variants(chat_id, session_id, user_rowid, created_at)"
+        )
+    )
 
 
 def _create_generation_tables(db: sqlite3.Connection) -> None:
@@ -94,7 +109,6 @@ def _create_generation_tables(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS hindsight_documents_chat_idx ON hindsight_documents(chat_id, kind)")
 
 
-
 def _create_rag_tables(db: sqlite3.Connection) -> None:
     """Create Data Bank and embedding tables."""
     db.execute("""CREATE TABLE IF NOT EXISTS data_bank_documents (
@@ -124,10 +138,25 @@ def _create_rag_tables(db: sqlite3.Connection) -> None:
         vector_signature INTEGER NOT NULL,
         vector_norm REAL NOT NULL
     )""")
-    db.execute("CREATE INDEX IF NOT EXISTS data_bank_documents_active_idx ON data_bank_documents(chat_id, active, filename, version_number)")
+    db.execute(
+        (
+            "CREATE INDEX IF NOT EXISTS data_bank_documents_active_idx ON "
+            "data_bank_documents(chat_id, active, filename, version_number)"
+        )
+    )
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_chunks_chat_chunk_idx ON data_bank_chunks(chat_id, chunk_id)")
-    db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_namespace_chunk_idx ON data_bank_embeddings(embedding_namespace, chunk_id)")
-    db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_namespace_signature_idx ON data_bank_embeddings(embedding_namespace, vector_signature, chunk_id)")
+    db.execute(
+        (
+            "CREATE INDEX IF NOT EXISTS data_bank_embeddings_namespace_chunk_idx ON "
+            "data_bank_embeddings(embedding_namespace, chunk_id)"
+        )
+    )
+    db.execute(
+        (
+            "CREATE INDEX IF NOT EXISTS data_bank_embeddings_namespace_signature_idx "
+            "ON data_bank_embeddings(embedding_namespace, vector_signature, chunk_id)"
+        )
+    )
     db.execute("""CREATE TABLE IF NOT EXISTS rag_embedding_cache (
         cache_key TEXT PRIMARY KEY,
         dimensions INTEGER NOT NULL,
@@ -135,6 +164,7 @@ def _create_rag_tables(db: sqlite3.Connection) -> None:
         vector_norm REAL NOT NULL,
         created_at REAL NOT NULL
     )""")
+
 
 def _create_job_tables(db: sqlite3.Connection) -> None:
     """Create durable update, failed-turn, and job tables and clean old rows."""
@@ -174,7 +204,6 @@ def _create_job_tables(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS jobs_updated_idx ON jobs(updated_at)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_chunks_chat_idx ON data_bank_chunks(chat_id, document_id)")
     db.execute("CREATE INDEX IF NOT EXISTS data_bank_embeddings_chunk_idx ON data_bank_embeddings(chunk_id)")
-
 
 
 def _create_application_tables(db: sqlite3.Connection) -> None:
@@ -221,7 +250,12 @@ def _create_application_tables(db: sqlite3.Connection) -> None:
         PRIMARY KEY(chat_id, session_id),
         UNIQUE(chat_id, sync_id)
     )""")
-    db.execute("CREATE INDEX IF NOT EXISTS sync_bindings_realtime_idx ON sync_bindings(realtime_enabled, realtime_next_retry_at)")
+    db.execute(
+        (
+            "CREATE INDEX IF NOT EXISTS sync_bindings_realtime_idx ON "
+            "sync_bindings(realtime_enabled, realtime_next_retry_at)"
+        )
+    )
     db.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS data_bank_fts USING fts5(
         content,
         chat_id UNINDEXED,
@@ -244,7 +278,6 @@ def _create_application_tables(db: sqlite3.Connection) -> None:
         updated_at REAL NOT NULL,
         PRIMARY KEY(chat_id, session_id)
     )""")
-
 
 
 def _run_startup_database_cleanup(db: sqlite3.Connection) -> None:
@@ -347,9 +380,7 @@ def _create_initial_schema(db: sqlite3.Connection) -> None:
     )
 
 
-SCHEMA_MIGRATIONS = (
-    _Migration(1, "initial_schema", _create_initial_schema),
-)
+SCHEMA_MIGRATIONS = (_Migration(1, "initial_schema", _create_initial_schema),)
 
 
 def initialize_database_schema(db: sqlite3.Connection) -> None:

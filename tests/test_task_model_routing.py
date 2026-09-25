@@ -2,17 +2,18 @@ from application_test_setup import ensure_application_extensions, make_test_prov
 
 ensure_application_extensions()
 
-from pathlib import Path
 import tempfile
+import time
 import unittest
+from pathlib import Path
 
 import bridge.config as config
-import time
 import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
-import bridge.memory as _m_memory
 import bridge.panel_callback_routes as _m_panel_callback_routes
 import bridge.session_naming as _m_session_naming
+
+
 class TaskModelRoutingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -58,8 +59,9 @@ class TaskModelRoutingTests(unittest.TestCase):
 
         seen_models = []
         provider = make_test_provider_port(
-            generate_backend=lambda _key, model, _messages, **_kwargs:
-            seen_models.append(model) or "Blue key in drawer."
+            generate_backend=lambda _key, model, _messages, **_kwargs: (
+                seen_models.append(model) or "Blue key in drawer."
+            )
         )
         summary = _m_groups.generate_session_summary(
             self.db,

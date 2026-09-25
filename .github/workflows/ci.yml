@@ -95,8 +95,11 @@ jobs:
       - name: Check dependency direction
         run: python tools/static_analysis.py
 
-      - name: Run Ruff static surface
-        run: python tools/static_analysis.py --print-targets | xargs python -m ruff check
+      - name: Lint complete Python tree
+        run: python -m ruff check .
+
+      - name: Check Python formatting
+        run: python -m ruff format --check .
 
       - name: Run mypy static surface
-        run: python tools/static_analysis.py --print-targets | xargs python -m mypy
+        run: python tools/static_analysis.py --print-type-targets | xargs python -m mypy

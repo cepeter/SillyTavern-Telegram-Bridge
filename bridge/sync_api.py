@@ -1,34 +1,46 @@
 """Optional near-real-time sync through SillyTavern's loopback HTTP API."""
+
 from __future__ import annotations
 
-import json
 import logging
 import os
-from pathlib import Path
 import sqlite3
 import threading
 import time
-from http.cookiejar import CookieJar
-from urllib.parse import urlparse
-import urllib.error
-import urllib.request
 
 import bridge.sillytavern_api as _st_api
-
-from bridge.repositories import (
-    count_session_messages as _count_session_messages,
+from bridge.card_content import card_fields_from_file
+from bridge.common import chat_job_lock
+from bridge.config import DEFAULT_MODEL
+from bridge.database import (
+    db_connect,
+    run_write_txn,
+    sync_transcript_hash,
+)
+from bridge.group_core import group_state
+from bridge.sync_core import (
+    apply_sync_snapshot,
+    build_sync_records,
+    set_sync_state,
+    sync_binding,
+    sync_file_id,
+    sync_local_rows,
 )
 from bridge.sync_poll_safety import (
     SyncPollSafetyAdapter as _SyncPollSafetyAdapter,
 )
 from bridge.sync_service import SyncService as _SyncService
-
+from bridge.telegram import load_session
 
 LIVE_SYNC_INTERVAL_SECONDS = 2.0
 _LIVE_SYNC_WORKER_LOCK = threading.Lock()
 _LIVE_SYNC_WORKER = None
 _LIVE_SYNC_STOP_EVENT = threading.Event()
-_LIVE_SYNC_STOP_RESULTS = {"sync ID mismatch; realtime stopped", "initial divergence; realtime stopped", "conflict detected; realtime stopped"}
+_LIVE_SYNC_STOP_RESULTS = {
+    "sync ID mismatch; realtime stopped",
+    "initial divergence; realtime stopped",
+    "conflict detected; realtime stopped",
+}
 _LIVE_SYNC_MAX_MESSAGE_CHARS = 12000
 _LIVE_SYNC_MAX_TOTAL_CHARS = 200000
 
@@ -56,7 +68,14 @@ def refresh_live_sync_config() -> None:
 refresh_live_sync_config()
 
 
-def _live_sync_records(db: sqlite3.Connection, chat_id: str, session: dict[str, str], fields: dict[str, str], binding: dict[str, object], rows: list[tuple]) -> list[dict]:
+def _live_sync_records(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session: dict[str, str],
+    fields: dict[str, str],
+    binding: dict[str, object],
+    rows: list[tuple],
+) -> list[dict]:
     return build_sync_records(db, chat_id, session, fields, str(binding["sync_id"]), rows)
 
 
@@ -96,15 +115,31 @@ def _live_sync_snapshot(records: list[dict]) -> tuple[dict, list[tuple[str, str]
 
 def _live_sync_reset_failures(db: sqlite3.Connection, chat_id: str, session_id: str) -> None:
     def write():
-        db.execute("UPDATE sync_bindings SET realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE chat_id=? AND session_id=?", (chat_id, session_id))
+        db.execute(
+            (
+                "UPDATE sync_bindings SET "
+                "realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE "
+                "chat_id=? AND session_id=?"
+            ),
+            (chat_id, session_id),
+        )
         db.commit()
+
     run_write_txn(db, write)
 
 
 def _live_sync_disable(db: sqlite3.Connection, chat_id: str, session_id: str, error: str) -> None:
     def write():
-        db.execute("UPDATE sync_bindings SET realtime_enabled=0,last_error=?,realtime_next_retry_at=0 WHERE chat_id=? AND session_id=?", (error[:1000], chat_id, session_id))
+        db.execute(
+            (
+                "UPDATE sync_bindings SET "
+                "realtime_enabled=0,last_error=?,realtime_next_retry_at=0 WHERE chat_id=? "
+                "AND session_id=?"
+            ),
+            (error[:1000], chat_id, session_id),
+        )
         db.commit()
+
     run_write_txn(db, write)
 
 
@@ -121,14 +156,18 @@ def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
     remote_records = client.get_chat(session, file_id, is_group)
     fields = card_fields_from_file(session["character_file"])
     if not remote_records:
-        client.save_chat(session, fields, file_id, is_group, _live_sync_records(db, chat_id, session, fields, binding, rows))
+        client.save_chat(
+            session, fields, file_id, is_group, _live_sync_records(db, chat_id, session, fields, binding, rows)
+        )
         set_sync_state(db, chat_id, session_id, local_hash, "bridge_to_sillytavern_api")
         _live_sync_reset_failures(db, chat_id, session_id)
         return "created SillyTavern API chat"
     metadata, remote_messages, remote_variants = _live_sync_snapshot(remote_records)
     remote_sync = metadata.get("bridge_sync") if isinstance(metadata.get("bridge_sync"), dict) else {}
     if remote_sync.get("sync_id") and remote_sync.get("sync_id") != binding["sync_id"]:
-        set_sync_state(db, chat_id, session_id, local_hash, "", "sync_id_mismatch", "API chat sync ID does not match this session")
+        set_sync_state(
+            db, chat_id, session_id, local_hash, "", "sync_id_mismatch", "API chat sync ID does not match this session"
+        )
         _live_sync_disable(db, chat_id, session_id, "sync ID mismatch")
         return "sync ID mismatch; realtime stopped"
     remote_hash = sync_transcript_hash(remote_messages)
@@ -138,7 +177,9 @@ def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
         _live_sync_reset_failures(db, chat_id, session_id)
         return "unchanged"
     if not baseline:
-        set_sync_state(db, chat_id, session_id, local_hash, "", "initial_divergence", "API chat has no common checkpoint")
+        set_sync_state(
+            db, chat_id, session_id, local_hash, "", "initial_divergence", "API chat has no common checkpoint"
+        )
         _live_sync_disable(db, chat_id, session_id, "initial divergence")
         return "initial divergence; realtime stopped"
     if local_hash == baseline and remote_hash != baseline:
@@ -147,7 +188,9 @@ def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str) -> str:
         _live_sync_reset_failures(db, chat_id, session_id)
         return "imported SillyTavern API changes"
     if remote_hash == baseline and local_hash != baseline:
-        client.save_chat(session, fields, file_id, is_group, _live_sync_records(db, chat_id, session, fields, binding, rows))
+        client.save_chat(
+            session, fields, file_id, is_group, _live_sync_records(db, chat_id, session, fields, binding, rows)
+        )
         set_sync_state(db, chat_id, session_id, local_hash, "bridge_to_sillytavern_api")
         _live_sync_reset_failures(db, chat_id, session_id)
         return "exported bridge changes through API"
@@ -170,9 +213,18 @@ def live_sync_toggle_realtime(db: sqlite3.Connection, chat_id: str, session_id: 
         return f"realtime API unavailable: {exc}"
     if result in _LIVE_SYNC_STOP_RESULTS:
         return result
+
     def mark_enabled():
-        db.execute("UPDATE sync_bindings SET realtime_enabled=1,realtime_failures=0,realtime_next_retry_at=0,last_error='' WHERE chat_id=? AND session_id=?", (chat_id, session_id))
+        db.execute(
+            (
+                "UPDATE sync_bindings SET "
+                "realtime_enabled=1,realtime_failures=0,realtime_next_retry_at=0,last_err"
+                "or='' WHERE chat_id=? AND session_id=?"
+            ),
+            (chat_id, session_id),
+        )
         db.commit()
+
     run_write_txn(db, mark_enabled)
     return "realtime API sync enabled; " + result
 
@@ -186,20 +238,15 @@ def live_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: str)
 
 _SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
     sync_now=(
-        lambda db, chat_id, session_id:
-        live_sync_now(
+        lambda db, chat_id, session_id: live_sync_now(
             db,
             chat_id,
             session_id,
         )
     ),
-    chat_lock=(
-        lambda chat_id:
-        chat_job_lock(chat_id)
-    ),
+    chat_lock=(lambda chat_id: chat_job_lock(chat_id)),
     disable_realtime=(
-        lambda db, chat_id, session_id, error:
-        _live_sync_disable(
+        lambda db, chat_id, session_id, error: _live_sync_disable(
             db,
             chat_id,
             session_id,
@@ -210,17 +257,10 @@ _SYNC_POLL_SAFETY = _SyncPollSafetyAdapter(
         _st_api.SillyTavernApiError,
         ValueError,
     ),
-    sync_interval=(
-        lambda:
-        LIVE_SYNC_INTERVAL_SECONDS
-    ),
-    now=(
-        lambda:
-        time.time()
-    ),
+    sync_interval=(lambda: LIVE_SYNC_INTERVAL_SECONDS),
+    now=(lambda: time.time()),
     log_warning=(
-        lambda message, *args, **kwargs:
-        logging.warning(
+        lambda message, *args, **kwargs: logging.warning(
             message,
             *args,
             **kwargs,
@@ -293,24 +333,3 @@ def stop_live_sync_worker(timeout: float = 5.0) -> bool:
     if stopped:
         _LIVE_SYNC_WORKER = None
     return stopped
-
-
-# Explicit late imports replace transitional dependency injection.
-from bridge.card_content import card_fields_from_file
-from bridge.common import chat_job_lock
-from bridge.config import DEFAULT_MODEL
-from bridge.database import (
-    db_connect,
-    run_write_txn,
-    sync_transcript_hash,
-)
-from bridge.group_core import group_state
-from bridge.sync_core import (
-    apply_sync_snapshot,
-    build_sync_records,
-    set_sync_state,
-    sync_binding,
-    sync_file_id,
-    sync_local_rows,
-)
-from bridge.telegram import load_session

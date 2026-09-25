@@ -1,13 +1,21 @@
 """Recover session character references after native SillyTavern renames."""
+
 from __future__ import annotations
 
 import hashlib
 import logging
-from pathlib import Path
 import sqlite3
 import struct
+from pathlib import Path
 
-from bridge.card_content import character_display_name
+from bridge.card_content import (
+    character_card_paths,
+    character_display_name,
+    safe_character_path,
+)
+from bridge.common import IMAGE_MAX_BYTES
+from bridge.config import CHARACTER_BACKUP_DIR
+from bridge.telegram import update_session
 
 
 def character_image_fingerprint(path: Path) -> str:
@@ -24,12 +32,12 @@ def character_image_fingerprint(path: Path) -> str:
     seen_header = seen_image = False
     position = 8
     while position + 12 <= len(raw):
-        size = struct.unpack(">I", raw[position:position + 4])[0]
+        size = struct.unpack(">I", raw[position : position + 4])[0]
         end = position + 12 + size
         if end > len(raw):
             return ""
-        chunk_type = raw[position + 4:position + 8]
-        chunk = raw[position + 8:position + 8 + size]
+        chunk_type = raw[position + 4 : position + 8]
+        chunk = raw[position + 8 : position + 8 + size]
         if chunk_type in {b"IHDR", b"PLTE", b"IDAT"}:
             digest.update(chunk_type)
             digest.update(chunk)
@@ -64,7 +72,9 @@ def resolve_renamed_character(filename: str) -> str:
         if len(fingerprint_matches) == 1:
             return fingerprint_matches[0]
     expected = " ".join(Path(filename).stem.replace("_", " ").split()).casefold()
-    name_matches = [path.name for path in cards if " ".join(character_display_name(path).split()).casefold() == expected]
+    name_matches = [
+        path.name for path in cards if " ".join(character_display_name(path).split()).casefold() == expected
+    ]
     return name_matches[0] if len(name_matches) == 1 else ""
 
 
@@ -79,13 +89,3 @@ def reconcile_session_character(db: sqlite3.Connection, chat_id: str, session: d
     updated["character_file"] = replacement
     logging.info("Rebound renamed character for session %s: %s -> %s", session["session_id"], old_name, replacement)
     return updated
-
-
-# Explicit late imports replace transitional dependency injection.
-from bridge.card_content import (
-    character_card_paths,
-    safe_character_path,
-)
-from bridge.common import IMAGE_MAX_BYTES
-from bridge.config import CHARACTER_BACKUP_DIR
-from bridge.telegram import update_session

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from application_test_setup import (
@@ -46,9 +46,7 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
         )
         now = time.time()
         cursor = self.db.execute(
-            "INSERT INTO messages("
-            "chat_id,session_id,role,content,telegram_message_id,created_at"
-            ") VALUES(?,?,?,?,?,?)",
+            "INSERT INTO messages(chat_id,session_id,role,content,telegram_message_id,created_at) VALUES(?,?,?,?,?,?)",
             ("chat", "session-a", "user", "original", "77", now),
         )
         self.db.commit()
@@ -105,18 +103,22 @@ class NativeEditedMessageSessionTests(unittest.TestCase):
         provider = make_test_provider_port()
         memory = make_test_memory_service()
         persona = make_test_persona_service()
-        with patch.object(
-            commands,
-            "card_fields_from_file",
-            side_effect=fake_card_fields,
-        ), patch.object(
-            commands,
-            "regenerate_edited_turn",
-            side_effect=fake_regenerate,
-        ), patch.object(
-            commands,
-            "send_text",
-            side_effect=lambda _token, _chat_id, text: sent.append(text),
+        with (
+            patch.object(
+                commands,
+                "card_fields_from_file",
+                side_effect=fake_card_fields,
+            ),
+            patch.object(
+                commands,
+                "regenerate_edited_turn",
+                side_effect=fake_regenerate,
+            ),
+            patch.object(
+                commands,
+                "send_text",
+                side_effect=lambda _token, _chat_id, text: sent.append(text),
+            ),
         ):
             commands.edit_telegram_user_message(
                 self.db,

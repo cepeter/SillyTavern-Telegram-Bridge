@@ -2,11 +2,11 @@ from application_test_setup import ensure_application_extensions
 
 ensure_application_extensions()
 
-from pathlib import Path
 import sqlite3
 import tempfile
 import threading
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import bridge.database as database
@@ -136,9 +136,7 @@ class DurableWorkerGuardTests(unittest.TestCase):
         raise exc
 
     def test_locked_worker_requeues_scheduled_job_and_reraises(self):
-        self.db.execute(
-            "INSERT INTO jobs(job_id,state) VALUES(1,'scheduled')"
-        )
+        self.db.execute("INSERT INTO jobs(job_id,state) VALUES(1,'scheduled')")
         self.db.commit()
         original = sqlite3.OperationalError("database is locked")
         wrapped = self.guard.prepare(
@@ -151,32 +149,24 @@ class DurableWorkerGuardTests(unittest.TestCase):
             wrapped()
 
         self.assertIs(caught.exception, original)
-        state, error = self.db.execute(
-            "SELECT state,last_error FROM jobs WHERE job_id=1"
-        ).fetchone()
+        state, error = self.db.execute("SELECT state,last_error FROM jobs WHERE job_id=1").fetchone()
         self.assertEqual(state, "queued")
         self.assertIn("worker database startup failed", error)
         self.assertEqual(self.sleeps, [])
 
     def test_busy_worker_does_not_move_running_job_backwards(self):
-        self.db.execute(
-            "INSERT INTO jobs(job_id,state) VALUES(2,'running')"
-        )
+        self.db.execute("INSERT INTO jobs(job_id,state) VALUES(2,'running')")
         self.db.commit()
         wrapped = self.guard.prepare(
             self.db,
             2,
-            lambda: self._raise(
-                sqlite3.OperationalError("database is busy")
-            ),
+            lambda: self._raise(sqlite3.OperationalError("database is busy")),
         )
 
         with self.assertRaises(sqlite3.OperationalError):
             wrapped()
 
-        state = self.db.execute(
-            "SELECT state FROM jobs WHERE job_id=2"
-        ).fetchone()[0]
+        state = self.db.execute("SELECT state FROM jobs WHERE job_id=2").fetchone()[0]
         self.assertEqual(state, "running")
 
     def test_non_transient_operational_error_does_not_open_requeue_connection(self):
@@ -188,9 +178,7 @@ class DurableWorkerGuardTests(unittest.TestCase):
         wrapped = guard.prepare(
             self.db,
             3,
-            lambda: self._raise(
-                sqlite3.OperationalError("no such table")
-            ),
+            lambda: self._raise(sqlite3.OperationalError("no such table")),
         )
 
         with self.assertRaisesRegex(sqlite3.OperationalError, "no such table"):
@@ -232,9 +220,7 @@ class DurableWorkerGuardTests(unittest.TestCase):
         wrapped = guard.prepare(
             self.db,
             5,
-            lambda: self._raise(
-                sqlite3.OperationalError("database is locked")
-            ),
+            lambda: self._raise(sqlite3.OperationalError("database is locked")),
         )
 
         with self.assertRaises(sqlite3.OperationalError):
@@ -306,14 +292,10 @@ class CanonicalRecoveryTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_database_recover_jobs_is_bounded_in_canonical_source(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "database.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "database.py").read_text(encoding="utf-8")
         start = source.index("def recover_jobs(")
         end = source.find("\ndef ", start + 4)
-        chunk = source[start:end if end >= 0 else None]
+        chunk = source[start : end if end >= 0 else None]
         self.assertIn("LIMIT 128", chunk)
         self.assertNotIn(
             'limit_clause = "" if recover_running else " LIMIT 128"',
@@ -380,14 +362,10 @@ class CanonicalRecoveryTests(unittest.TestCase):
 
 class DatabaseSourceBoundaryTests(unittest.TestCase):
     def test_canonical_db_connect_does_not_depend_on_legacy_readiness_globals(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "database.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "database.py").read_text(encoding="utf-8")
         start = source.index("def db_connect(")
         end = source.find("\ndef ", start + 4)
-        chunk = source[start:end if end >= 0 else None]
+        chunk = source[start : end if end >= 0 else None]
         self.assertIn("_DB_CONNECTION_GATE.connect", chunk)
         self.assertNotIn("_DB_SCHEMA_READY", chunk)
         self.assertNotIn("_DB_SCHEMA_READY_PATHS", chunk)
@@ -396,11 +374,7 @@ class DatabaseSourceBoundaryTests(unittest.TestCase):
 
 class SchedulerSafetySourceBoundaryTests(unittest.TestCase):
     def test_module_has_no_late_override_capture_or_compat_submitter(self):
-        source = (
-            Path(__file__).parents[1]
-            / "bridge"
-            / "scheduler_safety.py"
-        ).read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "bridge" / "scheduler_safety.py").read_text(encoding="utf-8")
         self.assertNotIn("_ORIGINAL_DB_CONNECT", source)
         self.assertNotIn("def db_connect(", source)
         self.assertNotIn("def recover_jobs(", source)

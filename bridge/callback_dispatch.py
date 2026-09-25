@@ -1,4 +1,5 @@
 """Route Telegram callbacks through explicit application dependencies."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -43,18 +44,13 @@ def process_callback(
 
     callback_answer = answer_callback
     if callback.get("_queued"):
+
         def callback_answer(*_args, **_kwargs):
             return None
 
     message_id = message.get("message_id")
-    bound_session_id = (
-        panel_session_for_message(db, chat_id, message_id)
-        if message_id else None
-    )
-    bound_owner_id = (
-        panel_owner_for_message(db, chat_id, message_id)
-        if message_id else ""
-    )
+    bound_session_id = panel_session_for_message(db, chat_id, message_id) if message_id else None
+    bound_owner_id = panel_owner_for_message(db, chat_id, message_id) if message_id else ""
 
     if message_id and bound_owner_id and sender != bound_owner_id:
         feedback = "This panel belongs to another user"
@@ -146,9 +142,7 @@ def process_callback(
         if data.startswith("groupchars:") and not data.startswith("groupchars:page:"):
             parts = data.split(":", 2)
             if len(parts) == 3:
-                resolved = resolve_dynamic_callback_token(
-                    parts[2], "group_character", chat_id, db=db
-                )
+                resolved = resolve_dynamic_callback_token(parts[2], "group_character", chat_id, db=db)
                 data = f"groupchars:{parts[1]}:{resolved or ''}"
         handle_group_panel_callback(
             db,
