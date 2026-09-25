@@ -23,7 +23,13 @@ STATIC_TARGETS: tuple[str, ...] = (
 
 
 # Type coverage grows independently of the deliberately isolated service layer.
-TYPE_TARGETS: tuple[str, ...] = (*STATIC_TARGETS, "bridge/network_security.py", "bridge/callback_tokens.py")
+TYPE_TARGETS: tuple[str, ...] = (
+    *STATIC_TARGETS,
+    "bridge/network_security.py",
+    "bridge/callback_tokens.py",
+    "bridge/config_values.py",
+    "bridge/environment.py",
+)
 
 
 class DependencyReport(NamedTuple):

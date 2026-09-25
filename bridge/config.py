@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from bridge.config_values import read_int
+
 BRIDGE_HOME = Path(
     os.environ.get(
         "SILLYTAVERN_BRIDGE_HOME",
@@ -110,10 +112,14 @@ RAG_EMBEDDING_MODEL = os.environ.get(
     "SILLYTAVERN_RAG_EMBEDDING_MODEL",
     "text-embedding-3-small",
 )
-RAG_EMBEDDING_DIMENSIONS = int(os.environ.get("SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS", "1536"))
-RAG_MAX_EXTRACTED_CHARS = int(os.environ.get("SILLYTAVERN_RAG_MAX_EXTRACTED_CHARS", "1000000"))
-RAG_MAX_PDF_PAGES = int(os.environ.get("SILLYTAVERN_RAG_MAX_PDF_PAGES", "200"))
-RAG_PDF_PARSE_TIMEOUT_SECONDS = int(os.environ.get("SILLYTAVERN_RAG_PDF_PARSE_TIMEOUT_SECONDS", "45"))
+RAG_EMBEDDING_DIMENSIONS = read_int(os.environ, "SILLYTAVERN_RAG_EMBEDDING_DIMENSIONS", 1536, minimum=1, maximum=65536)
+RAG_MAX_EXTRACTED_CHARS = read_int(
+    os.environ, "SILLYTAVERN_RAG_MAX_EXTRACTED_CHARS", 1000000, minimum=1, maximum=10000000
+)
+RAG_MAX_PDF_PAGES = read_int(os.environ, "SILLYTAVERN_RAG_MAX_PDF_PAGES", 200, minimum=1, maximum=10000)
+RAG_PDF_PARSE_TIMEOUT_SECONDS = read_int(
+    os.environ, "SILLYTAVERN_RAG_PDF_PARSE_TIMEOUT_SECONDS", 45, minimum=1, maximum=300
+)
 
 REASONING_LEVELS = {
     "none": 0,
