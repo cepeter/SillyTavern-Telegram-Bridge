@@ -879,7 +879,7 @@ and never replaces the original conversation history.
 - **🧱 Architecture is CI-enforced.** The repository rejects import cycles and
   reverse imports from the isolated service/port layer. Ruff linting, security
   rules, and formatting cover the complete Python tree. Mypy currently checks
-  15 explicitly listed modules, including the network and callback-token policy.
+  16 explicitly listed modules, including the network and callback-token policy.
 - **🛡️ Use the systemd hardening template** for production deployments.
 
 ---
@@ -899,16 +899,51 @@ one. The bridge does not automatically convert or delete an older database.
 
 ### Updating
 
-`/update` is confirmation-gated. If you're already on the latest release, it
-does nothing. Otherwise it requires a clean checkout and fast-forwards only to
-the exact published release tag shown in the panel, then syncs the live bridge
-and restarts the service.
+`/update` verifies stable release metadata through the fixed GitHub HTTPS policy.
+The confirmation is bound to the version displayed in the panel; a changed
+release requires a new confirmation. An already-current installation is a no-op.
 
-The user systemd template sets `SILLYTAVERN_BRIDGE_SOURCE_DIR` to the default
-checkout at `~/sillytavern-telegram-bridge` and stages updater copies under
-`~/.local/share/sillytavern-telegram/live`. If you installed the source or
-runtime data elsewhere, update `SILLYTAVERN_BRIDGE_SOURCE_DIR`,
-`SILLYTAVERN_LIVE_BRIDGE_DIR`, and the related service paths.
+Automatic installation now requires an **SSH-signed annotated release tag** and
+an independently provisioned OpenSSH allowed-signers file. Set
+`SILLYTAVERN_UPDATE_ALLOWED_SIGNERS` to that file outside both the source checkout
+and the live mirror. Its public keys must come from an independently verified
+maintainer channel, not the repository being fetched. The file must be owned by
+the current user and not writable by group/others. Historical unsigned tags are
+not rewritten or grandfathered into trust; use reviewed manual installation for
+those releases. No signing key is generated or trusted automatically.
+
+The updater requires Git, `ssh-keygen`, and the configured user systemd service
+(`SILLYTAVERN_UPDATE_SERVICE`, default `sillytavern-telegram.service`). The source
+must be a clean `main` checkout. The checkout directory and the live directory's
+parent must be user-owned and not group/other-writable (`chmod go-w` on those
+directories). The dedicated live mirror must be empty or contain the updater's
+`.bridge-deployment.json` marker; roots, the home directory, overlapping paths,
+symlinks and unmarked nonempty directories are refused. For a pre-hardening
+installation, archive the old **live code mirror only** elsewhere and leave an
+empty mirror directory. Do not move or reset the SQLite data directory.
+
+Verification and preparation occur in an isolated directory: the exact tag
+object is signature-checked against a snapshot of the external trust file, the
+commit must descend from the current checkout, and archive paths, file types,
+size and Python syntax are checked before activation. A changed runtime
+`requirements.lock` requires a manual locked-dependency installation; the
+updater never silently mutates the running Python environment.
+
+Only after preparation passes does it fast-forward the unchanged checkout and
+replace the managed live mirror. Obsolete modules are not carried into the new
+mirror. A previous mirror is retained as `.bridge-previous-*` beside the live
+directory for recovery; remove old backups only after verifying the deployment.
+Activation spans the source checkout and live directory, so it is **not one
+filesystem-wide atomic transaction**. A failure after the source advances is
+reported explicitly and requires operator inspection. A failed service restart
+is reported as restart-required; a successful nonblocking restart request is
+not represented as proof that the new process is healthy.
+
+The user systemd template runs from `~/sillytavern-telegram-bridge` and uses
+`~/.local/share/sillytavern-telegram/live` for the managed updater mirror.
+Keep `SILLYTAVERN_BRIDGE_SOURCE_DIR`, `SILLYTAVERN_LIVE_BRIDGE_DIR`, and the service
+paths aligned with your installation. The update path never copies or resets
+session databases, private environment files or native SillyTavern content.
 
 ---
 

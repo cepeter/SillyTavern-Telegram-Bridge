@@ -29,6 +29,7 @@ TYPE_TARGETS: tuple[str, ...] = (
     "bridge/callback_tokens.py",
     "bridge/config_values.py",
     "bridge/environment.py",
+    "bridge/self_update.py",
 )
 
 
