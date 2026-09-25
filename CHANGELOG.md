@@ -2,6 +2,12 @@
 
 All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
+## [Unreleased]
+
+### Maintenance
+
+- Consolidate overlapping architecture/quality regression files into their canonical policy suites, remove exact duplicate historical tests, and explicitly ignore local pytest/mypy/Ruff caches. Runtime ownership modules and intentional example files remain unchanged.
+
 ## [0.2.025] - 2026-09-24
 
 ### Maintenance

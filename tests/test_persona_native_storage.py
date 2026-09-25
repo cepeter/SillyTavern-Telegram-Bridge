@@ -182,10 +182,6 @@ class NativePersonaSourceBoundaryTests(SettingsTestCase):
             persona_sync,
         )
 
-    def test_state_integrity_no_longer_owns_persona_storage(self):
-        path = Path(__file__).parents[1] / "bridge" / "state_integrity.py"
-        self.assertFalse(path.exists())
-
 
 if __name__ == "__main__":
     unittest.main()

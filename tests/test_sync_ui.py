@@ -405,10 +405,6 @@ class SyncUiOwnershipTests(SettingsTestCase):
             source,
         )
 
-    def test_recovery_compatibility_file_is_absent(self):
-        recovery = Path(__file__).parents[1] / "bridge" / "recovery.py"
-        self.assertFalse(recovery.exists())
-
     def test_panel_callback_routes_owns_sync_callback(self):
         source = (Path(__file__).parents[1] / "bridge" / "panel_callback_routes.py").read_text(encoding="utf-8")
         self.assertIn(

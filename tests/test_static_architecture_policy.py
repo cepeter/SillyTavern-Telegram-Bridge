@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
+import subprocess
+import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -180,3 +184,94 @@ def test_panel_owner_cannot_import_root_command_dispatch(tmp_path):
     write_module(bridge, "command_routes", "")
     report = policy.check_dependency_direction(bridge, static_targets=())
     assert any("command_panels" in error and "command_routes" in error for error in report.errors)
+
+
+def owner_definitions(filename: str) -> set[str]:
+    path = BRIDGE / filename
+    assert path.is_file(), f"canonical owner missing: {filename}"
+    return {node.name for node in ast.parse(path.read_text()).body if isinstance(node, (ast.FunctionDef, ast.ClassDef))}
+
+
+def test_shared_runtime_bag_is_retired():
+    assert not (BRIDGE / "common.py").exists()
+
+
+def test_topic_logging_and_scheduler_owners_are_separate():
+    assert {"topic_scope_id", "parse_topic_scope", "topic_scope_from_message"} <= owner_definitions("topic_scope.py")
+    assert {"configure_logging", "enforce_runtime_permissions"} <= owner_definitions("runtime_logging.py")
+    assert {"submit_chat_background", "submit_background", "shutdown_background_executors"} <= owner_definitions(
+        "background.py"
+    )
+
+
+def test_sqlite_mechanics_have_one_owner():
+    expected = {
+        "db_connect",
+        "_lightweight_db_connect",
+        "_open_initialized_database",
+        "run_write_txn",
+        "write_transaction",
+        "run_database_maintenance",
+    }
+    assert expected <= owner_definitions("sqlite_store.py")
+    assert not expected & owner_definitions("database.py")
+
+
+def test_grouped_panel_commands_are_not_owned_by_root_dispatch():
+    expected = {"_handle_panels", "_handle_generation_panels", "_handle_memory_media", "_handle_voice_panels"}
+    assert expected <= owner_definitions("command_panels.py")
+    assert not expected & owner_definitions("command_routes.py")
+
+
+def test_resource_limits_have_one_data_only_owner():
+    source = BRIDGE / "limits.py"
+    assert source.is_file()
+    tree = ast.parse(source.read_text())
+    assert not any(isinstance(node, (ast.Import, ast.ImportFrom, ast.Call)) for node in ast.walk(tree))
+    assigned = {
+        target.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    assert {
+        "IMAGE_MAX_BYTES",
+        "SYNC_MAX_BYTES",
+        "CATALOG_MAX_ITEMS",
+        "RAG_MAX_FILE_BYTES",
+        "MAX_TELEGRAM_LENGTH",
+        "_BACKGROUND_MAX_QUEUED_PER_CHAT",
+    } <= assigned
+
+
+def test_ci_lints_complete_tree():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "python -m ruff check ." in workflow
+    assert "xargs python -m ruff check" not in workflow
+
+
+def test_ci_checks_formatting():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "python -m ruff format --check ." in workflow
+
+
+def test_bug_and_security_rules_enabled():
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    assert {"E4", "E5", "E7", "E9", "F", "I", "B", "S", "RUF"} <= set(config["tool"]["ruff"]["lint"]["select"])
+
+
+def test_type_gate_includes_security_modules_separately_from_layer_rule():
+    policy = load_policy()
+    assert {"bridge/network_security.py", "bridge/callback_tokens.py"} <= set(policy.TYPE_TARGETS)
+    assert "bridge/network_security.py" not in policy.STATIC_TARGETS
+
+
+def test_quality_manifest_cli_and_graph_cli_work():
+    command = [sys.executable, str(POLICY)]
+    typed = subprocess.run([*command, "--print-type-targets"], capture_output=True, text=True)
+    assert typed.returncode == 0, typed.stderr
+    assert "bridge/network_security.py" in typed.stdout.splitlines()
+    graph = subprocess.run(command, capture_output=True, text=True)
+    assert graph.returncode == 0, graph.stderr
+    assert "cyclic_modules=0" in graph.stdout

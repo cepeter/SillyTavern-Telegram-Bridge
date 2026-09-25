@@ -121,7 +121,7 @@ class SyncSnapshotIntegrityAdapterTests(SettingsTestCase):
             [{"persona_id": ""}],
         )
 
-    def test_absent_persona_does_not_clear_persona(self):
+    def test_absent_persona_and_world_info_preserve_assignments(self):
         self.adapter.apply(
             self.db,
             "chat",
@@ -177,18 +177,6 @@ class SyncSnapshotIntegrityAdapterTests(SettingsTestCase):
             self.updates,
             [{"world_file": ""}],
         )
-
-    def test_absent_world_info_does_not_clear_world_file(self):
-        self.adapter.apply(
-            self.db,
-            "chat",
-            self.session,
-            {},
-            [("user", "remote")],
-            {},
-        )
-
-        self.assertEqual(self.updates, [])
 
     def test_combined_explicit_clears_use_one_update(self):
         self.adapter.apply(

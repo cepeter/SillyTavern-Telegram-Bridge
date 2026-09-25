@@ -426,10 +426,6 @@ class MemoryNativeBackendTests(SettingsTestCase):
 
 
 class HindsightSourceBoundaryTests(SettingsTestCase):
-    def test_state_integrity_no_longer_owns_hindsight_safety(self):
-        path = Path(__file__).parents[1] / "bridge" / "state_integrity.py"
-        self.assertFalse(path.exists())
-
     def test_hindsight_integrity_has_no_runtime_import(self):
         source = (Path(__file__).parents[1] / "bridge" / "hindsight_integrity.py").read_text(encoding="utf-8")
 

@@ -116,7 +116,7 @@ class SyncAuditHardeningTests(SettingsTestCase):
             lock.release()
             _m_sync_api.live_sync_now = original
 
-    def test_live_sync_poll_scans_past_32_locked_candidates(self):
+    def test_public_poll_scans_past_32_locked_candidates(self):
         self._many_bindings()
         calls = []
         original = _m_sync_api.live_sync_now
@@ -203,33 +203,6 @@ class SyncAuditHardeningTests(SettingsTestCase):
         self.assertEqual(row[0], 0)
         self.assertEqual(row[1], 5)
         self.assertEqual(row[2], "unexpected Live Sync polling failure")
-
-    def test_public_poll_uses_hardened_adapter(self):
-        self._many_bindings()
-        calls = []
-        original = _m_sync_api.live_sync_now
-
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None, retain_memory=None: (
-            calls.append((chat_id, session_id))
-        )
-        locks = [_m_sync_api.chat_job_lock(f"a{index:02d}") for index in range(32)]
-        for lock in locks:
-            lock.acquire()
-        try:
-            _m_sync_api.live_sync_poll(
-                self.db,
-                app_settings=self.app_settings_builder.build(),
-                retain_memory=lambda _db, _chat, _session, _fields: None,
-            )
-        finally:
-            for lock in locks:
-                lock.release()
-            _m_sync_api.live_sync_now = original
-
-        self.assertEqual(
-            calls,
-            [("z-eligible", "s32")],
-        )
 
     def test_session_delete_cascades_sync_binding_cleanup(self):
         active = _m_telegram.ensure_session(
