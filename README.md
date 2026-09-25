@@ -799,9 +799,11 @@ delivery are idempotent — **no duplicates after a crash**.
 ### Characters
 
 `/character` lets you pick from native PNG cards, view metadata, get upload
-guidance, and delete cards through a protected flow. Uploaded cards are
-validated as real SillyTavern PNGs. Backups are made before any replacement or
-deletion.
+guidance, and delete cards through a protected flow. Character Info displays the
+selected card PNG directly in Telegram with its metadata summary and panel
+controls; if Telegram cannot render the PNG, the bridge falls back to the text-only
+info view. Uploaded cards are validated as real SillyTavern PNGs. Backups are made
+before any replacement or deletion.
 
 The active card and any cards referenced by sessions or groups are protected —
 you can't accidentally delete a card that's in use.
