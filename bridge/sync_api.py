@@ -11,12 +11,11 @@ from functools import partial as _partial
 import bridge.sillytavern_api as _st_api
 from bridge.background import chat_job_lock
 from bridge.card_content import card_fields_from_file
-from bridge.database import sync_transcript_hash
 from bridge.group_core import group_state
 from bridge.port_contracts import RetainSessionMemory
 from bridge.session_core import load_session
 from bridge.settings import AppSettings
-from bridge.sqlite_store import db_connect, run_write_txn
+from bridge.sqlite_store import db_connect, write_transaction
 from bridge.sync_core import (
     apply_sync_snapshot,
     build_sync_records,
@@ -27,6 +26,7 @@ from bridge.sync_core import (
 )
 from bridge.sync_poll_safety import SyncPollSafetyAdapter as _SyncPollSafetyAdapter
 from bridge.sync_service import SyncService as _SyncService
+from bridge.sync_state import sync_transcript_hash
 
 _LIVE_SYNC_WORKER_LOCK = threading.Lock()
 _LIVE_SYNC_WORKER = None
@@ -97,9 +97,9 @@ def _live_sync_reset_failures(db: sqlite3.Connection, chat_id: str, session_id: 
             ),
             (chat_id, session_id),
         )
-        db.commit()
 
-    run_write_txn(db, write)
+    with write_transaction(db):
+        write()
 
 
 def _live_sync_disable(db: sqlite3.Connection, chat_id: str, session_id: str, error: str) -> None:
@@ -112,9 +112,9 @@ def _live_sync_disable(db: sqlite3.Connection, chat_id: str, session_id: str, er
             ),
             (error[:1000], chat_id, session_id),
         )
-        db.commit()
 
-    run_write_txn(db, write)
+    with write_transaction(db):
+        write()
 
 
 def live_sync_now(
@@ -228,9 +228,9 @@ def live_sync_toggle_realtime(
             ),
             (chat_id, session_id),
         )
-        db.commit()
 
-    run_write_txn(db, mark_enabled)
+    with write_transaction(db):
+        mark_enabled()
     return "realtime API sync enabled; " + result
 
 

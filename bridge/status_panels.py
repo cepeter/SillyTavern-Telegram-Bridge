@@ -11,10 +11,10 @@ from bridge.cards import send_panel_message
 from bridge.commands import prompt_diagnostics
 from bridge.context_compaction import context_history_candidate_limit, context_input_budget_tokens
 from bridge.curated_memory_panel import curated_memory_panel
-from bridge.database import get_generation_settings, get_meta, task_model_for_session
 from bridge.director_goal_panel import director_goal_panel
 from bridge.director_goals import get_director_goal, set_director_goal
 from bridge.expressions import expression_mode_key
+from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
 from bridge.groups import handle_summary_command
 from bridge.help import send_memory_menu
@@ -24,6 +24,8 @@ from bridge.media import send_typing
 from bridge.memory import get_session_summary
 from bridge.memory_backend import memory_mode, memory_scope
 from bridge.memory_curator import curate_memory_now, curated_memory_text
+from bridge.metadata import get_meta
+from bridge.model_selection import task_model_for_session
 from bridge.persona_sync import persona_name
 from bridge.provider_port import ProviderPort
 from bridge.rag_core import data_bank_documents, rag_mode

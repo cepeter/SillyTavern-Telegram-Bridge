@@ -7,7 +7,7 @@ from pathlib import Path
 
 from settings_test_support import SettingsTestCase
 
-import bridge.database as database
+import bridge.failed_turns as _owner_failed_turns
 import bridge.sqlite_store as _sqlite_store
 
 
@@ -33,7 +33,7 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
             ),
             start=1,
         ):
-            database.record_failed_turn(
+            _owner_failed_turns.record_failed_turn(
                 self.db,
                 "chat",
                 index,
@@ -48,10 +48,10 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
             ("chat",),
         ).fetchone()[0]
         self.assertEqual(count, 0)
-        self.assertIsNone(database.latest_failed_turn(self.db, "chat"))
+        self.assertIsNone(_owner_failed_turns.latest_failed_turn(self.db, "chat"))
 
     def test_start_with_text_remains_retryable_model_turn(self):
-        database.record_failed_turn(
+        _owner_failed_turns.record_failed_turn(
             self.db,
             "chat",
             51,
@@ -61,14 +61,14 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
             "session-b",
         )
 
-        failed = database.latest_failed_turn(self.db, "chat")
+        failed = _owner_failed_turns.latest_failed_turn(self.db, "chat")
 
         self.assertIsNotNone(failed)
         self.assertEqual(str(failed[0]), "51")
         self.assertEqual(failed[1], "start hello")
 
     def test_latest_failed_turn_skips_legacy_command_rows(self):
-        database.record_failed_turn(
+        _owner_failed_turns.record_failed_turn(
             self.db,
             "chat",
             41,
@@ -97,7 +97,7 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
         )
         self.db.commit()
 
-        failed = database.latest_failed_turn(self.db, "chat")
+        failed = _owner_failed_turns.latest_failed_turn(self.db, "chat")
 
         self.assertIsNotNone(failed)
         self.assertEqual(str(failed[0]), "41")
@@ -128,7 +128,7 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
         )
         self.db.commit()
 
-        database.record_failed_turn(
+        _owner_failed_turns.record_failed_turn(
             self.db,
             "chat",
             61,
@@ -138,7 +138,7 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
             "session-model",
         )
 
-        failed = database.latest_failed_turn(self.db, "chat")
+        failed = _owner_failed_turns.latest_failed_turn(self.db, "chat")
         self.assertIsNotNone(failed)
         self.assertEqual(
             failed[2],
@@ -169,7 +169,7 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
             ),
         )
         self.db.commit()
-        database.record_failed_turn(
+        _owner_failed_turns.record_failed_turn(
             self.db,
             "chat",
             62,
@@ -188,7 +188,7 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
             ),
         )
         self.db.commit()
-        database.record_failed_turn(
+        _owner_failed_turns.record_failed_turn(
             self.db,
             "chat",
             62,
@@ -198,7 +198,7 @@ class RetryModelTurnOnlyTests(SettingsTestCase):
             "session-refresh",
         )
 
-        failed = database.latest_failed_turn(self.db, "chat")
+        failed = _owner_failed_turns.latest_failed_turn(self.db, "chat")
         self.assertIsNotNone(failed)
         self.assertEqual(
             failed[2],

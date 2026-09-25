@@ -13,8 +13,8 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
-import bridge.database as _owner_database
 import bridge.message_commands as _owner_message_commands
+import bridge.operations as _owner_operations
 import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
 
@@ -134,7 +134,7 @@ class AuditRegressionTests(SettingsTestCase):
         self.assertEqual(captured[1]["reasoning"], {"max_tokens": 1024})
 
     def test_begin_operation_commits_prepared_marker(self):
-        self.assertTrue(_owner_database.begin_operation(self.db, 101, "test"))
+        self.assertTrue(_owner_operations.begin_operation(self.db, 101, "test"))
 
         second = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
         try:

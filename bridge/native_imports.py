@@ -11,10 +11,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from bridge.card_content import card_fields, card_fields_from_file, parse_png_chara_bytes
-from bridge.database import get_meta, set_meta
 from bridge.group_director_service import GroupDirectorService
 from bridge.limits import CATALOG_MAX_ITEMS, RAG_MAX_FILE_BYTES, RAG_SUPPORTED_SUFFIXES
 from bridge.memory_service import MemoryService
+from bridge.metadata import get_meta, set_meta
 from bridge.persona_service import PersonaService
 from bridge.rag_core import add_data_bank_document, data_bank_document_versions, rag_mode
 from bridge.session_core import ensure_session

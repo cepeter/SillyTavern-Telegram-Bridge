@@ -191,13 +191,6 @@ class _SerializedSQLiteConnection(sqlite3.Connection):
             return result
 
 
-def run_write_txn(db: sqlite3.Connection, operation):
-    """Serialize a short SQLite write transaction within this bridge process."""
-    del db
-    with _DB_WRITE_LOCK:
-        return operation()
-
-
 @_contextmanager
 def write_transaction(db: sqlite3.Connection):
     """Own one short SQLite write transaction unless the caller already does."""

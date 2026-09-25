@@ -8,6 +8,13 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.director_goal_repository as _owner_director_goal_repository
+import bridge.group_repository as _owner_group_repository
+import bridge.meta_repository as _owner_meta_repository
+import bridge.operation_repository as _owner_operation_repository
+import bridge.reference_repository as _owner_reference_repository
+import bridge.scene_repository as _owner_scene_repository
+
 ensure_application_extensions()
 
 import inspect
@@ -27,7 +34,6 @@ import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
 import bridge.sync_api as _m_sync_api
 import bridge.sync_core as _m_sync_core
-from bridge import repositories
 
 
 class WriteTransactionTests(SettingsTestCase):
@@ -106,15 +112,12 @@ class WriteTransactionTests(SettingsTestCase):
 
 class RepositorySourceInvariantTests(SettingsTestCase):
     def test_repository_module_contains_no_transaction_ownership_calls(self):
-        source = (Path(__file__).parents[1] / "bridge" / "repositories.py").read_text(encoding="utf-8")
-        for forbidden in (
-            ".commit(",
-            ".rollback(",
-            "run_write_txn(",
-            "write_transaction(",
-        ):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, source)
+        repositories = (Path(__file__).parents[1] / "bridge").glob("*_repository.py")
+        for path in repositories:
+            source = path.read_text(encoding="utf-8")
+            for forbidden in (".commit(", ".rollback(", "write_transaction("):
+                with self.subTest(owner=path.name, forbidden=forbidden):
+                    self.assertNotIn(forbidden, source)
 
 
 class RepositoryPrimitiveTests(SettingsTestCase):
@@ -184,15 +187,15 @@ class RepositoryPrimitiveTests(SettingsTestCase):
         self.db.set_trace_callback(traced.append)
         try:
             self.assertEqual(
-                repositories.load_director_goal(self.db, "chat", "session"),
+                _owner_director_goal_repository.load_director_goal(self.db, "chat", "session"),
                 "",
             )
-            self.assertIsNone(repositories.load_scene_state_row(self.db, "chat", "session"))
+            self.assertIsNone(_owner_scene_repository.load_scene_state_row(self.db, "chat", "session"))
             self.assertEqual(
-                repositories.load_meta_value(self.db, "missing", "fallback"),
+                _owner_meta_repository.load_meta_value(self.db, "missing", "fallback"),
                 "fallback",
             )
-            self.assertIsNone(repositories.load_group_state_row(self.db, "chat", "session"))
+            self.assertIsNone(_owner_group_repository.load_group_state_row(self.db, "chat", "session"))
         finally:
             self.db.set_trace_callback(None)
 
@@ -213,23 +216,23 @@ class RepositoryPrimitiveTests(SettingsTestCase):
 
     def test_repository_write_does_not_commit(self):
         self.db.execute("BEGIN")
-        repositories.store_director_goal(self.db, "chat", "session", "goal", 1.0)
+        _owner_director_goal_repository.store_director_goal(self.db, "chat", "session", "goal", 1.0)
         self.assertTrue(self.db.in_transaction)
         self.db.rollback()
         self.assertEqual(
-            repositories.load_director_goal(self.db, "chat", "session"),
+            _owner_director_goal_repository.load_director_goal(self.db, "chat", "session"),
             "",
         )
 
     def test_scene_state_upsert_rejects_stale_candidate(self):
         self.db.execute("BEGIN")
-        repositories.upsert_scene_state_if_fresh(self.db, "chat", "session", '{"v":10}', 10, 1.0)
+        _owner_scene_repository.upsert_scene_state_if_fresh(self.db, "chat", "session", '{"v":10}', 10, 1.0)
         self.db.commit()
 
         self.db.execute("BEGIN")
-        accepted = repositories.upsert_scene_state_if_fresh(self.db, "chat", "session", '{"v":9}', 9, 2.0)
+        accepted = _owner_scene_repository.upsert_scene_state_if_fresh(self.db, "chat", "session", '{"v":9}', 9, 2.0)
         self.assertFalse(accepted)
-        row = repositories.load_scene_state_row(self.db, "chat", "session")
+        row = _owner_scene_repository.load_scene_state_row(self.db, "chat", "session")
         self.assertEqual(row, ('{"v":10}', 10))
 
     def test_count_persona_references_is_read_only(self):
@@ -242,7 +245,7 @@ class RepositoryPrimitiveTests(SettingsTestCase):
         self.db.set_trace_callback(traced.append)
         try:
             self.assertEqual(
-                repositories.count_persona_references(
+                _owner_reference_repository.count_persona_references(
                     self.db,
                     "native.png",
                 ),
@@ -286,7 +289,7 @@ class RepositoryPrimitiveTests(SettingsTestCase):
         self.db.set_trace_callback(traced.append)
         try:
             self.assertEqual(
-                repositories.count_session_messages(
+                _owner_reference_repository.count_session_messages(
                     self.db,
                     "chat",
                     "session",
@@ -319,10 +322,10 @@ class RepositoryPrimitiveTests(SettingsTestCase):
 
     def test_group_operation_claim_allows_retry_but_rejects_applied(self):
         self.db.execute("BEGIN")
-        self.assertTrue(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 1.0))
-        self.assertTrue(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 2.0))
-        repositories.mark_group_operation_applied(self.db, "op-1", "group_state", 3.0)
-        self.assertFalse(repositories.try_claim_group_operation(self.db, "op-1", "group_state", 4.0))
+        self.assertTrue(_owner_operation_repository.claim_operation(self.db, "op-1", "group_state", 1.0))
+        self.assertTrue(_owner_operation_repository.claim_operation(self.db, "op-1", "group_state", 2.0))
+        _owner_operation_repository.mark_operation_applied(self.db, "op-1", "group_state", 3.0)
+        self.assertFalse(_owner_operation_repository.claim_operation(self.db, "op-1", "group_state", 4.0))
 
 
 class GenerationSettingsTransactionTests(SettingsTestCase):
@@ -451,7 +454,7 @@ class GroupTransactionTests(SettingsTestCase):
 
         with patch.object(
             group_core,
-            "_repo_mark_group_operation_applied",
+            "_repo_mark_operation_applied",
             side_effect=RuntimeError("marker failed"),
         ):
             with self.assertRaisesRegex(RuntimeError, "marker failed"):

@@ -11,15 +11,15 @@ import re
 import sqlite3
 import time
 
-from bridge.database import task_model_for_session
 from bridge.delivery_port import DeliveryPort
 from bridge.director_goal_panel import director_goal_panel
+from bridge.director_goal_repository import delete_director_goal as _repo_delete_director_goal
+from bridge.director_goal_repository import load_director_goal as _repo_load_director_goal
+from bridge.director_goal_repository import store_director_goal as _repo_store_director_goal
 from bridge.extension_registry import extension_registry_snapshot as _extension_registry_snapshot
 from bridge.extension_registry import register_command_route as _register_command_route
 from bridge.group_director_service import DirectorCustomization
-from bridge.repositories import delete_director_goal as _repo_delete_director_goal
-from bridge.repositories import load_director_goal as _repo_load_director_goal
-from bridge.repositories import store_director_goal as _repo_store_director_goal
+from bridge.model_selection import task_model_for_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import write_transaction
 from bridge.topic_scope import parse_topic_scope

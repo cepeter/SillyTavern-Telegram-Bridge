@@ -7,10 +7,10 @@ from collections.abc import Callable
 from functools import partial as _partial
 
 from bridge.background import submit_background
-from bridge.database import get_generation_settings, set_meta, task_model_for_session
 from bridge.extension_registry import apply_summary_context_hooks as _apply_summary_context_hooks
 from bridge.extension_registry import run_post_retain_hooks as _run_post_retain_hooks
 from bridge.extension_registry import run_summary_clear_hooks as _run_summary_clear_hooks
+from bridge.generation_settings import get_generation_settings
 from bridge.hindsight_integrity import HindsightStaleGuard as _HindsightStaleGuard
 from bridge.limits import (
     SUMMARY_MAX_CHARS,
@@ -42,6 +42,8 @@ from bridge.memory_backend import hindsight_tags as hindsight_tags
 from bridge.memory_backend import memory_recall_filter as memory_recall_filter
 from bridge.memory_backend import recall_memory_context as recall_memory_context
 from bridge.memory_backend import remember_fact as remember_fact
+from bridge.metadata import set_meta
+from bridge.model_selection import task_model_for_session
 from bridge.provider_port import ProviderPort
 from bridge.settings import AppSettings
 from bridge.sqlite_store import db_connect

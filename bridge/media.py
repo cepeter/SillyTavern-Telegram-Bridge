@@ -23,21 +23,17 @@ from typing import TYPE_CHECKING
 from bridge.background import chat_job_lock, submit_background
 from bridge.callbacks import close_panel_message
 from bridge.config import STT_DEFAULT_MODEL
-from bridge.database import (
-    begin_operation,
-    clear_failed_turn,
-    committed_assistant_for_message,
-    get_meta,
-    operation_was_applied,
-    record_operation,
-)
 from bridge.expressions import deliver_expression
+from bridge.failed_turns import clear_failed_turn
 from bridge.limits import STT_MAX_BYTES, TTS_MAX_CHARS
+from bridge.metadata import get_meta
+from bridge.operations import begin_operation, operation_was_applied, record_operation
 from bridge.session_core import ensure_session
 from bridge.settings import AppSettings
-from bridge.sqlite_store import db_connect, run_write_txn
+from bridge.sqlite_store import db_connect, write_transaction
 from bridge.telegram import download_telegram_file, send_text, telegram_request
 from bridge.topic_scope import parse_topic_scope
+from bridge.transcript_repository import committed_assistant_for_message
 
 if TYPE_CHECKING:
     from bridge.composition import BridgeServices as _BridgeServices
@@ -242,23 +238,22 @@ def queue_user_quote_tts(
 
 def persist_assistant_delivery_ids(db: sqlite3.Connection, assistant_rowid: int, message_ids: list[int]) -> bool:
     """Persist Telegram delivery metadata without misreporting a sent reply as generation failure."""
+    nested = db.in_transaction
     try:
 
         def write():
             db.execute(
                 "UPDATE messages SET telegram_message_ids=? WHERE rowid=?", (json.dumps(message_ids), assistant_rowid)
             )
-            db.commit()
+
             return True
 
-        return run_write_txn(db, write)
+        with write_transaction(db):
+            return write()
     except sqlite3.OperationalError as exc:
-        if "locked" not in str(exc).casefold() and "busy" not in str(exc).casefold():
+        if nested or ("locked" not in str(exc).casefold() and "busy" not in str(exc).casefold()):
             raise
-        try:
-            db.rollback()
-        except sqlite3.Error:
-            logging.debug("Could not rollback locked delivery metadata transaction", exc_info=True)
+
         logging.warning("Reply delivered but Telegram message IDs could not be recorded: %s", exc)
         return False
 

@@ -10,14 +10,8 @@ from bridge.card_content import active_world_files
 from bridge.cards import send_character_menu, send_persona_menu, send_session_menu
 from bridge.catalog import send_model_target_menu, send_world_menu
 from bridge.commands import prompt_diagnostics
-from bridge.database import (
-    clear_failed_turn,
-    committed_assistant_for_message,
-    latest_failed_turn,
-    record_failed_turn,
-    task_model_for_session,
-)
 from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
+from bridge.failed_turns import clear_failed_turn, latest_failed_turn, record_failed_turn
 from bridge.generation import continue_last, regenerate_last, send_swipe_menu
 from bridge.greetings import send_greeting_menu
 from bridge.help import (
@@ -26,10 +20,12 @@ from bridge.help import (
 from bridge.help_details import send_help_command, send_help_menu
 from bridge.input_flows import handle_inline_text_action, start_text_action_input
 from bridge.media import send_reply
+from bridge.model_selection import task_model_for_session
 from bridge.session_core import list_sessions
 from bridge.session_naming import start_session_name_input
 from bridge.status_panels import send_prompt_menu, status_text
 from bridge.telegram import send_text
+from bridge.transcript_repository import committed_assistant_for_message
 
 if TYPE_CHECKING:
     pass

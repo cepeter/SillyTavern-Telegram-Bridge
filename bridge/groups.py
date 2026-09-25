@@ -13,13 +13,13 @@ from bridge.card_content import character_card_paths
 from bridge.card_content import safe_character_path as safe_character_path
 from bridge.cards import send_panel_message
 from bridge.catalog import send_world_menu
-from bridge.database import get_generation_settings as get_generation_settings
-from bridge.database import set_meta
+from bridge.generation_settings import get_generation_settings as get_generation_settings
 from bridge.group_service import GroupService
 from bridge.input_flow_service import InputFlowService
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.media import remove_inline_keyboard, send_typing
 from bridge.memory import generate_session_summary
+from bridge.metadata import set_meta
 from bridge.panel_utils import panel_label, panel_page
 from bridge.provider_port import ProviderPort
 from bridge.session_core import create_session, load_session, update_session

@@ -210,12 +210,13 @@ def test_sqlite_mechanics_have_one_owner():
         "db_connect",
         "_lightweight_db_connect",
         "_open_initialized_database",
-        "run_write_txn",
         "write_transaction",
         "run_database_maintenance",
     }
     assert expected <= owner_definitions("sqlite_store.py")
-    assert not expected & owner_definitions("database.py")
+    assert not (BRIDGE / "database.py").exists()
+    for path in BRIDGE.glob("*_repository.py"):
+        assert not expected & owner_definitions(path.name)
 
 
 def test_grouped_panel_commands_are_not_owned_by_root_dispatch():
@@ -298,3 +299,14 @@ def test_telegram_transport_cannot_reabsorb_session_or_import_owners(tmp_path):
     report = policy.check_dependency_direction(bridge, static_targets=())
     assert any("session_core" in error for error in report.errors)
     assert any("native_imports" in error for error in report.errors)
+
+
+def test_any_domain_repository_cannot_import_use_cases_or_commit(tmp_path):
+    policy = load_policy()
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    write_module(bridge, "new_repository", "import bridge.metadata\ndef write(db):\n    db.commit()\n")
+    write_module(bridge, "metadata", "")
+    report = policy.check_dependency_direction(bridge, static_targets=())
+    assert any("new_repository" in error and "metadata" in error for error in report.errors)
+    assert any("new_repository" in error and "commit" in error for error in report.errors)

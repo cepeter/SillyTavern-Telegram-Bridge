@@ -11,11 +11,11 @@ from bridge.callbacks import discard_panel_binding
 from bridge.card_content import active_world_files, encode_world_files, safe_world_path
 from bridge.cards import send_panel_message
 from bridge.catalog import delete_world_info_file, send_world_menu
-from bridge.database import set_meta
 from bridge.group_service import GroupService
 from bridge.groups import send_group_menu
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.media import remove_inline_keyboard
+from bridge.metadata import set_meta
 from bridge.session_core import update_session
 from bridge.telegram import send_text
 

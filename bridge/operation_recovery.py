@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 
 
@@ -12,7 +14,7 @@ class OperationRecovery:
     operation_phase: Callable[..., str]
     begin_operation: Callable[..., bool]
     record_operation: Callable[..., None]
-    run_write_txn: Callable[..., object]
+    write_transaction: Callable[[sqlite3.Connection], AbstractContextManager[sqlite3.Connection]]
     get_meta: Callable[..., str]
     telegram_request: Callable[..., object]
     delete_outgoing_message_row: Callable[..., None]
@@ -34,9 +36,9 @@ class OperationRecovery:
                     json.dumps(payload, separators=(",", ":")),
                 ),
             )
-            db.commit()
 
-        self.run_write_txn(db, write)
+        with self.write_transaction(db):
+            write()
 
     def get_payload(self, db, operation_id) -> dict:
         if operation_id is None:
@@ -64,9 +66,9 @@ class OperationRecovery:
                 "DELETE FROM meta WHERE key=?",
                 (self._payload_key(operation_id),),
             )
-            db.commit()
 
-        self.run_write_txn(db, write)
+        with self.write_transaction(db):
+            write()
 
     def begin_or_recover(
         self,

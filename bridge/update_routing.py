@@ -6,8 +6,9 @@ import sqlite3
 import time
 
 from bridge.composition import BridgeServices
-from bridge.database import set_meta
-from bridge.sqlite_store import run_write_txn
+from bridge.job_repository import store_processed_update
+from bridge.meta_repository import store_meta_value
+from bridge.sqlite_store import write_transaction
 from bridge.update_callback_routing import route_callback_update
 from bridge.update_message_routing import route_edited_message_update, route_message_update
 
@@ -18,13 +19,11 @@ def complete_update(
     offset: int,
 ) -> None:
     def write():
-        db.execute(
-            "INSERT OR IGNORE INTO processed_updates(update_id,processed_at) VALUES(?,?)",
-            (update_id, time.time()),
-        )
-        set_meta(db, "telegram_offset", str(offset))
+        store_processed_update(db, update_id, time.time())
+        store_meta_value(db, "telegram_offset", str(offset))
 
-    run_write_txn(db, write)
+    with write_transaction(db):
+        write()
 
 
 def route_update(

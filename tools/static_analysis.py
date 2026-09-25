@@ -23,10 +23,26 @@ STATIC_TARGETS: tuple[str, ...] = (
 )
 
 
+REPOSITORY_TARGETS: tuple[str, ...] = (
+    "bridge/director_goal_repository.py",
+    "bridge/failure_repository.py",
+    "bridge/generation_settings_repository.py",
+    "bridge/group_repository.py",
+    "bridge/job_repository.py",
+    "bridge/meta_repository.py",
+    "bridge/operation_repository.py",
+    "bridge/panel_repository.py",
+    "bridge/reference_repository.py",
+    "bridge/scene_repository.py",
+    "bridge/session_repository.py",
+    "bridge/sync_repository.py",
+    "bridge/transcript_repository.py",
+)
+
 # Type coverage grows independently of the deliberately isolated service layer.
 TYPE_TARGETS: tuple[str, ...] = (
     *STATIC_TARGETS,
-    "bridge/session_repository.py",
+    *REPOSITORY_TARGETS,
     "bridge/repository_contracts.py",
     "bridge/network_security.py",
     "bridge/callback_tokens.py",
@@ -276,6 +292,18 @@ def check_dependency_direction(
     for module, allowed in LOW_LEVEL_IMPORTS.items():
         for imported in sorted(graph.get(module, set()) - allowed):
             errors.append(f"Low-level owner {module} imports {imported}")
+    for module, path in _discover_modules(bridge_root).items():
+        if not module.endswith("_repository"):
+            continue
+        for imported in sorted(graph.get(module, set()) - {"bridge.repository_contracts"}):
+            errors.append(f"SQL repository {module} imports non-contract owner {imported}")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"commit", "rollback"}
+            ):
+                errors.append(f"SQL repository {module} owns forbidden transaction call {node.func.attr}")
     for module in CALLBACK_DOMAIN_MODULES:
         forbidden = CALLBACK_DOMAIN_MODULES - {module}
         for imported in sorted(graph.get(module, set()) & forbidden):

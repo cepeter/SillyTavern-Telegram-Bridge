@@ -1,7 +1,7 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
-import bridge.database as _owner_database
+import bridge.model_selection as _owner_model_selection
 
 ensure_application_extensions()
 
@@ -44,7 +44,7 @@ class TaskModelRoutingTests(SettingsTestCase):
         )
 
     def test_summary_uses_session_utility_model(self):
-        _owner_database.set_task_model(
+        _owner_model_selection.set_task_model(
             self.db,
             "chat",
             self.session["session_id"],
@@ -80,8 +80,8 @@ class TaskModelRoutingTests(SettingsTestCase):
         self.assertEqual(seen_models, ["cheap::summary-model"])
 
     def test_main_clears_utility_override(self):
-        _owner_database.set_task_model(self.db, "chat", self.session["session_id"], "cheap::summary-model")
-        _owner_database.set_task_model(self.db, "chat", self.session["session_id"], "main")
+        _owner_model_selection.set_task_model(self.db, "chat", self.session["session_id"], "cheap::summary-model")
+        _owner_model_selection.set_task_model(self.db, "chat", self.session["session_id"], "main")
         self.assertEqual(
             _m_memory_curator.task_model_for_session(
                 self.db, "chat", self.session, "summary", app_settings=self.app_settings_builder.build()

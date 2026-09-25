@@ -10,7 +10,7 @@ import urllib.error
 
 from bridge.background import shutdown_background_executors
 from bridge.composition import BridgeServices
-from bridge.database import get_meta
+from bridge.metadata import get_meta
 from bridge.sqlite_store import run_database_maintenance
 from bridge.sync_api import start_live_sync_worker, stop_live_sync_worker
 from bridge.update_routing import route_update

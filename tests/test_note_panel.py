@@ -8,6 +8,7 @@ from settings_test_support import SettingsTestCase
 
 import bridge.command_panels as _command_panels
 import bridge.commands as _owner_commands
+import bridge.panel_bindings as _owner_panel_bindings
 import bridge.session_core as _owner_session_core
 import bridge.settings_callbacks as _owner_settings_callbacks
 
@@ -23,7 +24,6 @@ import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.callbacks as _m_callbacks
 import bridge.command_routes as _m_command_routes
 import bridge.commands as _m_commands
-import bridge.database as _m_database
 import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
@@ -235,7 +235,7 @@ class NotePanelTests(SettingsTestCase):
         self.assertEqual(calls[1][0], "sendText")
         pending = json.loads(_m_session_naming.get_meta(self.db, "note_input:chat", "{}"))
         self.assertEqual(pending["prompt_message_ids"], [90])
-        self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 78))
+        self.assertIsNone(_owner_panel_bindings.panel_session_for_message(self.db, "chat", 78))
 
     def test_note_cancel_closes_previous_panel(self):
         session = _owner_session_core.ensure_session(
@@ -265,7 +265,7 @@ class NotePanelTests(SettingsTestCase):
             _m_callbacks.telegram_request = original_request
         self.assertEqual([method for method, _payload in calls], ["deleteMessage"])
         self.assertEqual(calls[0][1]["message_id"], 77)
-        self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 77))
+        self.assertIsNone(_owner_panel_bindings.panel_session_for_message(self.db, "chat", 77))
 
     def test_note_close_uses_valid_marker_when_delete_is_rejected(self):
         session = _owner_session_core.ensure_session(
@@ -290,7 +290,7 @@ class NotePanelTests(SettingsTestCase):
         self.assertEqual(calls[0][1]["message_id"], 79)
         self.assertEqual(calls[1][1]["message_id"], 79)
         self.assertEqual(calls[1][1]["text"], "Panel closed.")
-        self.assertIsNone(_m_database.panel_session_for_message(self.db, "chat", 79))
+        self.assertIsNone(_owner_panel_bindings.panel_session_for_message(self.db, "chat", 79))
 
     def test_removed_authornote_alias_does_not_generate(self):
         session = _owner_session_core.ensure_session(

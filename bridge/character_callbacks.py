@@ -17,11 +17,12 @@ from bridge.cards import (
     send_character_menu,
     send_session_menu,
 )
-from bridge.database import begin_operation, get_meta, record_operation, set_meta
 from bridge.group_service import GroupService
 from bridge.groups import apply_group_setup_character
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
+from bridge.metadata import get_meta, set_meta
 from bridge.native_imports import character_delete_references, verify_character_card_backup
+from bridge.operations import begin_operation, record_operation
 from bridge.session_core import list_sessions
 from bridge.telegram import send_panel_photo, send_panel_request
 

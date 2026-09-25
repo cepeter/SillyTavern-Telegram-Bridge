@@ -14,11 +14,12 @@ from bridge.cards import send_panel_message
 from bridge.commands import apply_preset_action, process_image_message
 from bridge.composition import BridgeServices as _BridgeServices
 from bridge.config import GENERATION_DEFAULTS, REASONING_LEVELS, STT_DEFAULT_MODEL
-from bridge.database import get_generation_settings, get_meta, preset_names, set_meta, update_generation_settings
+from bridge.generation_settings import get_generation_settings, preset_names, update_generation_settings
 from bridge.input_flow_service import InputFlowService
 from bridge.language import RESPONSE_LANGUAGES, normalize_stt_language, stt_language_label
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.memory_backend import memory_mode
+from bridge.metadata import get_meta, set_meta
 from bridge.native_imports import import_telegram_document
 from bridge.panel_utils import panel_label, panel_navigation, panel_page
 from bridge.rag import handle_data_bank_command

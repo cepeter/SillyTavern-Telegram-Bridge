@@ -204,3 +204,26 @@ application use cases, pure values or rendering helpers instead. Preserve the
 callback identifiers and common session/actor checks in `callback_dispatch.py`.
 Tests patch dependencies at their actual defining/calling owner rather than
 through a historical aggregate module.
+
+
+### Persistence ownership map
+
+`*_repository.py` modules own SQL and accept values/timestamps from callers. They
+may import only the shared transaction precondition from bridge internals; they
+never commit, roll back or call an application adapter. The architecture gate
+checks every repository by suffix, including newly added domains.
+
+Use `metadata`, `job_store`, `failed_turns`, `operations`, `panel_bindings`,
+`generation_settings`, `model_selection`, `sync_state` and `session_core` for
+application-level persistence operations. Their short write scopes use
+`write_transaction(db)`, joining an already active caller transaction without
+committing it. The former aggregate `database.py` and `repositories.py` are gone.
+The old lock-only callback wrapper is retired: write scopes now have actual
+BEGIN/commit/rollback semantics. Keep network calls outside those scopes.
+
+A standalone durable operation phase commits before external I/O; a phase update
+inside a larger write unit participates in that unit. Job enqueue and Telegram
+update deduplication remain atomic. Expected lock failures on standalone delivery
+or job status writes can report failure, but a failure inside a caller-owned
+transaction must propagate rather than silently roll back or commit the caller.
+Settings parsing/formatting lives separately in `generation_settings_values.py`.

@@ -295,8 +295,8 @@ class CanonicalRecoveryTests(SettingsTestCase):
         self.tmp.cleanup()
 
     def test_database_recover_jobs_is_bounded_in_canonical_source(self):
-        source = (Path(__file__).parents[1] / "bridge" / "database.py").read_text(encoding="utf-8")
-        start = source.index("def recover_jobs(")
+        source = (Path(__file__).parents[1] / "bridge" / "job_repository.py").read_text(encoding="utf-8")
+        start = source.index("def queued_job_rows(")
         end = source.find("\ndef ", start + 4)
         chunk = source[start : end if end >= 0 else None]
         self.assertIn("LIMIT 128", chunk)

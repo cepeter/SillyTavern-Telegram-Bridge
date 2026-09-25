@@ -2,7 +2,7 @@ from application_test_setup import ensure_application_extensions, make_test_requ
 from settings_test_support import SettingsTestCase
 
 import bridge.callback_tokens as _owner_callback_tokens
-import bridge.database as _owner_database
+import bridge.operations as _owner_operations
 import bridge.sqlite_store as _sqlite_store
 import bridge.telegram as _owner_telegram
 
@@ -70,15 +70,25 @@ class SqliteContentionTests(SettingsTestCase):
             with guard:
                 active -= 1
 
+        errors = []
+
         def invoke():
-            barrier.wait()
-            _m_sync_api.run_write_txn(self.db, transaction)
+            connection = _m_memory_curator.db_connect(app_settings=self.app_settings_builder.build())
+            try:
+                barrier.wait()
+                with _m_sync_api.write_transaction(connection):
+                    transaction()
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                connection.close()
 
         threads = [threading.Thread(target=invoke) for _ in range(2)]
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join()
+        self.assertEqual(errors, [])
         self.assertEqual(maximum, 1)
 
         original_connect = _m_memory_curator.db_connect
@@ -123,7 +133,7 @@ class SqliteContentionTests(SettingsTestCase):
 
     def test_begin_operation_commits_before_external_work(self):
         operation_id = "lock-release-test"
-        self.assertTrue(_owner_database.begin_operation(self.db, operation_id, "generation"))
+        self.assertTrue(_owner_operations.begin_operation(self.db, operation_id, "generation"))
         self.assertFalse(self.db.in_transaction)
 
     def test_job_writers_from_separate_connections_do_not_lock_each_other(self):
@@ -224,6 +234,8 @@ class SqliteContentionTests(SettingsTestCase):
 
     def test_delivery_metadata_lock_does_not_turn_sent_reply_into_backend_failure(self):
         class LockedDb:
+            in_transaction = False
+
             def __init__(self):
                 self.rolled_back = False
 
@@ -236,11 +248,11 @@ class SqliteContentionTests(SettingsTestCase):
         db = LockedDb()
         persisted = _m_media.persist_assistant_delivery_ids(db, 42, [900])
         self.assertFalse(persisted)
-        self.assertTrue(db.rolled_back)
+        self.assertFalse(db.rolled_back)
 
     def test_native_edit_post_commit_failure_is_not_treated_as_uncommitted(self):
         operation_id = "edit-test"
-        self.assertTrue(_owner_database.begin_operation(self.db, operation_id, "edit"))
+        self.assertTrue(_owner_operations.begin_operation(self.db, operation_id, "edit"))
         _m_message_commands.set_operation_phase(self.db, operation_id, "edit", "local_committed")
         self.assertTrue(
             _m_workers.native_edit_committed_after_failure(self.db, operation_id, RuntimeError("database is locked"))
@@ -252,6 +264,8 @@ class SqliteContentionTests(SettingsTestCase):
         )
 
         class LockedDb:
+            in_transaction = False
+
             def __init__(self):
                 self.rolled_back = False
 
@@ -264,7 +278,7 @@ class SqliteContentionTests(SettingsTestCase):
         db = LockedDb()
         finished = _m_main.finish_job(db, 7, "done")
         self.assertFalse(finished)
-        self.assertTrue(db.rolled_back)
+        self.assertFalse(db.rolled_back)
 
     def test_enqueue_job_does_not_retry_after_full_timeout(self):
         """Regression: enqueue_job should not catch every OperationalError and retry after 30s busy timeout."""

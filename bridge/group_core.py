@@ -14,11 +14,11 @@ from bridge.card_content import (
     read_png_chara,
     safe_character_path,
 )
-from bridge.database import get_meta, set_meta
-from bridge.repositories import load_group_state_row as _repo_load_group_state_row
-from bridge.repositories import mark_group_operation_applied as _repo_mark_group_operation_applied
-from bridge.repositories import store_group_state_row as _repo_store_group_state_row
-from bridge.repositories import try_claim_group_operation as _repo_try_claim_group_operation
+from bridge.group_repository import load_group_state_row as _repo_load_group_state_row
+from bridge.group_repository import store_group_state_row as _repo_store_group_state_row
+from bridge.metadata import get_meta, set_meta
+from bridge.operation_repository import claim_operation as _repo_claim_operation
+from bridge.operation_repository import mark_operation_applied as _repo_mark_operation_applied
 from bridge.settings import AppSettings
 from bridge.sqlite_store import write_transaction
 
@@ -141,7 +141,7 @@ def save_group_state(
 ) -> bool:
     now = time.time()
     with write_transaction(db):
-        if not _repo_try_claim_group_operation(
+        if not _repo_claim_operation(
             db,
             operation_id,
             "group_state",
@@ -162,7 +162,7 @@ def save_group_state(
             json.dumps(state.get("turn_users") or [], ensure_ascii=False),
             now,
         )
-        _repo_mark_group_operation_applied(
+        _repo_mark_operation_applied(
             db,
             operation_id,
             "group_state",

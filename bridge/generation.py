@@ -9,25 +9,19 @@ from pathlib import Path
 from bridge.card_content import active_world_files, build_system_prompt, build_world_info, replace_macros
 from bridge.config import GENERATION_DEFAULTS
 from bridge.context_compaction import compact_chat_messages
-from bridge.database import (
-    begin_operation,
-    get_generation_settings,
-    get_meta,
-    operation_phase,
-    record_operation,
-    set_meta,
-    set_operation_phase,
-)
 from bridge.delivery_port import DeliveryPort
+from bridge.generation_settings import get_generation_settings
 from bridge.language import normalize_response_language, response_language_instruction, response_language_label
 from bridge.limits import HINDSIGHT_CONTEXT_MAX_CHARS, RAG_MAX_CONTEXT_CHARS, SUMMARY_MAX_CHARS
 from bridge.memory_service import MemoryService
+from bridge.metadata import get_meta, set_meta
 from bridge.operation_recovery import OperationRecovery as _OperationRecovery
+from bridge.operations import begin_operation, operation_phase, record_operation, set_operation_phase
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
 from bridge.settings import AppSettings
-from bridge.sqlite_store import run_write_txn
+from bridge.sqlite_store import write_transaction
 
 
 def _generation_operation_recovery(
@@ -48,10 +42,7 @@ def _generation_operation_recovery(
             operation_id,
             kind,
         ),
-        run_write_txn=lambda db, operation: run_write_txn(
-            db,
-            operation,
-        ),
+        write_transaction=write_transaction,
         get_meta=lambda db, key, default="": get_meta(
             db,
             key,
@@ -515,13 +506,11 @@ def regenerate_last(
                 "regen",
                 "local_committed",
             )
-        db.commit()
+
         return assistant_rowid, variant
 
-    assistant_rowid, variant = run_write_txn(
-        db,
-        persist_regeneration,
-    )
+    with write_transaction(db):
+        assistant_rowid, variant = persist_regeneration()
     recovery.delete_stored_telegram_ids(
         token,
         chat_id,
@@ -810,9 +799,9 @@ def continue_last(
                 "continue",
                 "local_committed",
             )
-        db.commit()
 
-    run_write_txn(db, persist_continuation)
+    with write_transaction(db):
+        persist_continuation()
     recovery.prepare_delivery(
         db,
         token,

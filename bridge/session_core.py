@@ -8,13 +8,15 @@ import sqlite3
 import time
 
 from bridge.card_content import active_world_files, encode_world_files, safe_world_path
-from bridge.database import get_generation_settings, get_meta
 from bridge.expressions import expression_last_key, expression_mode_key
 from bridge.generation import swipe_state_key
+from bridge.generation_settings import get_generation_settings
 from bridge.memory_backend import hindsight_session_lock
 from bridge.memory_service import MemoryService
+from bridge.meta_repository import store_meta_value
+from bridge.metadata import get_meta
+from bridge.operation_repository import claim_operation, mark_operation_applied
 from bridge.persona_sync import default_persona_id, get_persona
-from bridge.repositories import mark_group_operation_applied, store_meta_value, try_claim_group_operation
 from bridge.session_repository import (
     SESSION_COLUMNS,
     delete_session_rows,
@@ -141,10 +143,10 @@ def update_session(
     if not values:
         return
     with write_transaction(db):
-        if not try_claim_group_operation(db, operation_id, operation_kind, time.time()):
+        if not claim_operation(db, operation_id, operation_kind, time.time()):
             return
         update_session_row(db, chat_id, session_id, values, time.time())
-        mark_group_operation_applied(db, operation_id, operation_kind, time.time())
+        mark_operation_applied(db, operation_id, operation_kind, time.time())
 
 
 def create_session(
@@ -195,7 +197,7 @@ def delete_session_data(
         except RuntimeError:
             return False, "Hindsight cleanup failed; session was preserved"
         with write_transaction(db):
-            if not try_claim_group_operation(db, operation_id, "session_delete", time.time()):
+            if not claim_operation(db, operation_id, "session_delete", time.time()):
                 return False, "already processed"
             delete_session_rows(
                 db,
@@ -208,6 +210,6 @@ def delete_session_data(
                     expression_last_key(chat_id, target_session_id),
                 ),
             )
-            mark_group_operation_applied(db, operation_id, "session_delete", time.time())
+            mark_operation_applied(db, operation_id, "session_delete", time.time())
         optimize_database(db)
     return True, "deleted"
