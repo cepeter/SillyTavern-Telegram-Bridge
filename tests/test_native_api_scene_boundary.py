@@ -192,7 +192,8 @@ def test_scene_extension_route_forwards_delivery_and_provider(monkeypatch):
         "",
         "User",
         request_context="ctx",
-        services=SimpleNamespace(delivery=delivery, provider=provider),
+        delivery_port=SimpleNamespace(delivery=delivery, provider=provider).delivery,
+        provider_port=SimpleNamespace(delivery=delivery, provider=provider).provider,
     )
 
     assert handled is True

@@ -8,7 +8,7 @@ from bridge.callback_tokens import resolve_dynamic_callback_token
 from bridge.callbacks import close_panel_message, discard_panel_binding, is_session_scoped_panel_callback
 from bridge.catalog import answer_callback
 from bridge.common import parse_topic_scope
-from bridge.composition import BridgeServices, RequestContext
+from bridge.composition import BridgeServices
 from bridge.database import panel_owner_for_message, panel_session_for_message
 from bridge.groups import handle_group_panel_callback
 from bridge.help import handle_enum_callback
@@ -18,6 +18,7 @@ from bridge.panel_callback_routes import (
     handle_primary_panel_callback,
     handle_provider_model_callback,
 )
+from bridge.request_types import RequestContext
 from bridge.telegram import ensure_session, load_session, send_text
 
 

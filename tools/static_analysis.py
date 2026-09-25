@@ -31,7 +31,19 @@ TYPE_TARGETS: tuple[str, ...] = (
     "bridge/environment.py",
     "bridge/self_update.py",
     "bridge/settings.py",
+    "bridge/port_contracts.py",
+    "bridge/request_types.py",
+    "bridge/composition.py",
 )
+
+
+PURE_CONTRACT_IMPORTS = {
+    "bridge.port_contracts": frozenset({"bridge.request_types"}),
+    "bridge.request_types": frozenset({"bridge.settings"}),
+    "bridge.settings": frozenset({"bridge.config_values"}),
+    "bridge.config_values": frozenset(),
+}
+SERVICE_CONTRACT_IMPORTS = frozenset({"bridge.port_contracts", "bridge.request_types"})
 
 
 class DependencyReport(NamedTuple):
@@ -218,8 +230,12 @@ def check_dependency_direction(
             errors.append(f"Missing static target module: {target}")
             continue
 
-        for imported in sorted(graph[module]):
+        for imported in sorted(graph[module] - SERVICE_CONTRACT_IMPORTS):
             errors.append(f"Isolated static target {module} imports {imported}")
+
+    for module, allowed in PURE_CONTRACT_IMPORTS.items():
+        for imported in sorted(graph.get(module, set()) - allowed):
+            errors.append(f"Pure contract layer {module} imports {imported}")
 
     return DependencyReport(
         modules=len(graph),

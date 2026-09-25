@@ -55,12 +55,12 @@ def test_input_flow_service_is_pure_and_delegates():
 
 
 def test_input_flow_service_is_required_by_composition():
-    from bridge.composition import BridgeServices, build_bridge_services
+    from bridge.composition import BridgeServices
 
     field = BridgeServices.__dataclass_fields__["input_flow"]
     assert field.default is MISSING
     assert "None" not in str(field.type)
-    parameter = inspect.signature(build_bridge_services).parameters["input_flow"]
+    parameter = inspect.signature(BridgeServices).parameters["input_flow"]
     assert parameter.default is inspect.Parameter.empty
 
 
@@ -99,6 +99,8 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
         handle_session_name_backend=lambda *_args, **_kwargs: False,
     )
     services = SimpleNamespace(
+        delivery=object(),
+        group_director=object(),
         config=make_test_settings(),
         input_flow=input_flow,
         group=group,
@@ -121,7 +123,14 @@ def test_prepare_message_forwards_pending_context_through_service(monkeypatch):
         fields,
         "chat",
         "pending text",
-        services=services,
+        app_settings=services.config,
+        delivery_port=services.delivery,
+        group_service=services.group,
+        group_director_service=services.group_director,
+        input_flow_service=services.input_flow,
+        memory_service=services.memory,
+        persona_service=services.persona,
+        provider_port=services.provider,
     )
 
     assert result is None

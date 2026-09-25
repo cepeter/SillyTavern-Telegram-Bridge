@@ -369,7 +369,6 @@ def process_voice_message(
         message_id,
         queued_session_id=queued_session_id,
         actor_id=actor_id,
-        services=services,
     )
 
 

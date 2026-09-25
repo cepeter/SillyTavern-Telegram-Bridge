@@ -13,6 +13,7 @@ from bridge.card_content import card_fields_from_file
 from bridge.common import chat_job_lock
 from bridge.database import db_connect, run_write_txn, sync_transcript_hash
 from bridge.group_core import group_state
+from bridge.port_contracts import RetainSessionMemory
 from bridge.settings import AppSettings
 from bridge.sync_core import (
     apply_sync_snapshot,
@@ -115,7 +116,14 @@ def _live_sync_disable(db: sqlite3.Connection, chat_id: str, session_id: str, er
     run_write_txn(db, write)
 
 
-def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str, *, app_settings: AppSettings) -> str:
+def live_sync_now(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+    *,
+    app_settings: AppSettings,
+    retain_memory: RetainSessionMemory,
+) -> str:
     """Synchronize one binding through SillyTavern's supported chat API."""
     client = _st_api.live_sync_client(app_settings=app_settings)
     session = load_session(db, chat_id, session_id, app_settings.default_model, app_settings=app_settings)
@@ -160,7 +168,14 @@ def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str, *, app_
         return "initial divergence; realtime stopped"
     if local_hash == baseline and remote_hash != baseline:
         imported_hash = apply_sync_snapshot(
-            db, chat_id, session, metadata, remote_messages, remote_variants, app_settings=app_settings
+            db,
+            chat_id,
+            session,
+            metadata,
+            remote_messages,
+            remote_variants,
+            app_settings=app_settings,
+            retain_memory=retain_memory,
         )
         set_sync_state(db, chat_id, session_id, imported_hash, "sillytavern_api_to_bridge")
         _live_sync_reset_failures(db, chat_id, session_id)
@@ -182,7 +197,12 @@ def live_sync_now(db: sqlite3.Connection, chat_id: str, session_id: str, *, app_
 
 
 def live_sync_toggle_realtime(
-    db: sqlite3.Connection, chat_id: str, session_id: str, *, app_settings: AppSettings
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+    *,
+    app_settings: AppSettings,
+    retain_memory: RetainSessionMemory,
 ) -> str:
     binding = sync_binding(db, chat_id, session_id)
     if binding.get("realtime_enabled"):
@@ -191,7 +211,7 @@ def live_sync_toggle_realtime(
     if not _st_api.live_sync_api_configured(app_settings=app_settings):
         return "realtime API sync is not configured"
     try:
-        result = live_sync_now(db, chat_id, session_id, app_settings=app_settings)
+        result = live_sync_now(db, chat_id, session_id, app_settings=app_settings, retain_memory=retain_memory)
     except (_st_api.SillyTavernApiError, ValueError) as exc:
         _live_sync_disable(db, chat_id, session_id, str(exc))
         return f"realtime API unavailable: {exc}"
@@ -220,9 +240,13 @@ def live_sync_status_line(db: sqlite3.Connection, chat_id: str, session_id: str,
     return f"Live API sync: {enabled} ({configured})"
 
 
-def _make_sync_poll_safety(*, app_settings: AppSettings):
+def _make_sync_poll_safety(*, app_settings: AppSettings, retain_memory: RetainSessionMemory):
     return _SyncPollSafetyAdapter(
-        sync_now=(lambda db, chat_id, session_id: live_sync_now(db, chat_id, session_id, app_settings=app_settings)),
+        sync_now=(
+            lambda db, chat_id, session_id: live_sync_now(
+                db, chat_id, session_id, app_settings=app_settings, retain_memory=retain_memory
+            )
+        ),
         chat_lock=(lambda chat_id: chat_job_lock(chat_id)),
         disable_realtime=(
             lambda db, chat_id, session_id, error: _live_sync_disable(
@@ -248,8 +272,8 @@ def _make_sync_poll_safety(*, app_settings: AppSettings):
     )
 
 
-def live_sync_poll(db: sqlite3.Connection, *, app_settings: AppSettings) -> None:
-    _make_sync_poll_safety(app_settings=app_settings).poll(db)
+def live_sync_poll(db: sqlite3.Connection, *, app_settings: AppSettings, retain_memory: RetainSessionMemory) -> None:
+    _make_sync_poll_safety(app_settings=app_settings, retain_memory=retain_memory).poll(db)
 
 
 def _live_sync_worker_loop(sync_service: _SyncService, *, app_settings: AppSettings) -> None:

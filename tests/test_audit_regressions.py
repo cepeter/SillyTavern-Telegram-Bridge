@@ -6,7 +6,6 @@ from application_test_setup import (
     make_test_input_flow_service,
     make_test_memory_service,
     make_test_persona_service,
-    make_test_provider_port,
     make_test_request_context,
 )
 from settings_test_support import SettingsTestCase
@@ -230,9 +229,6 @@ class AuditRegressionTests(SettingsTestCase):
                     fields,
                     "chat",
                     command,
-                    services=make_test_application_services(
-                        memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
-                    ),
                 )
         finally:
             _m_message_commands.card_fields_from_file = originals["card"]
@@ -267,15 +263,6 @@ class AuditRegressionTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/providers unknown",
-                services=make_test_application_services(
-                    memory=make_test_memory_service(),
-                    provider=make_test_provider_port(
-                        generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                            AssertionError("unknown provider action must not generate")
-                        )
-                    ),
-                    app_settings=self.app_settings_builder.build(),
-                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -315,9 +302,6 @@ class AuditRegressionTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/stscript",
-                services=make_test_application_services(
-                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
-                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -457,15 +441,6 @@ class AuditRegressionTests(SettingsTestCase):
                 fields,
                 "chat",
                 "id",
-                services=make_test_application_services(
-                    memory=make_test_memory_service(),
-                    provider=make_test_provider_port(
-                        generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                            AssertionError("removed command must not generate")
-                        )
-                    ),
-                    app_settings=self.app_settings_builder.build(),
-                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -501,9 +476,6 @@ class AuditRegressionTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/model provider/model",
-                services=make_test_application_services(
-                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
-                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -572,9 +544,6 @@ class AuditRegressionTests(SettingsTestCase):
                 fields,
                 "chat",
                 "creative",
-                services=make_test_application_services(
-                    memory=make_test_memory_service(), app_settings=self.app_settings_builder.build()
-                ),
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
@@ -622,15 +591,6 @@ class AuditRegressionTests(SettingsTestCase):
                 fields,
                 "chat",
                 "/reset",
-                services=make_test_application_services(
-                    memory=make_test_memory_service(),
-                    provider=make_test_provider_port(
-                        generate_backend=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                            AssertionError("reset must not generate")
-                        )
-                    ),
-                    app_settings=self.app_settings_builder.build(),
-                ),
             )
             self.assertEqual(panel[0][0], "sendMessage")
             self.assertEqual(panel[0][1]["reply_markup"]["inline_keyboard"][0][0]["callback_data"], "reset:confirm")

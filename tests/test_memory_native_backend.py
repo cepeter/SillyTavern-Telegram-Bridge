@@ -16,7 +16,6 @@ import bridge.memory as _m_memory
 import bridge.memory_backend as memory_backend
 import bridge.memory_curator as _m_memory_curator
 import bridge.session_naming as _m_session_naming
-import bridge.sync_core as _m_sync_core
 
 
 class _FakeDocuments:
@@ -291,7 +290,7 @@ class MemoryNativeBackendTests(SettingsTestCase):
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: queued.append((name, fn, args, kwargs)),
         ):
-            _m_sync_core.retain_session_memory(
+            _m_memory.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,
@@ -325,7 +324,7 @@ class MemoryNativeBackendTests(SettingsTestCase):
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: queued.append((name, fn, args, kwargs)),
         ):
-            _m_sync_core.retain_session_memory(
+            _m_memory.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,
@@ -357,7 +356,7 @@ class MemoryNativeBackendTests(SettingsTestCase):
             "submit_background",
             side_effect=lambda name, fn, *args, **kwargs: queued.append((name, fn, args, kwargs)),
         ):
-            _m_sync_core.retain_session_memory(
+            _m_memory.retain_session_memory(
                 self.db,
                 "chat",
                 self.session,

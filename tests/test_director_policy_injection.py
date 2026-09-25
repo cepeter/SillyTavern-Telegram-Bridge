@@ -126,4 +126,4 @@ def test_group_director_service_stays_bridge_independent():
             for alias in node.names:
                 assert not alias.name.startswith("bridge")
         elif isinstance(node, ast.ImportFrom) and node.module:
-            assert not node.module.startswith("bridge")
+            assert not node.module.startswith("bridge") or node.module == "bridge.port_contracts"

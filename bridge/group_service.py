@@ -7,20 +7,29 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from bridge.port_contracts import (
+    GroupAdvance,
+    GroupSetupRead,
+    GroupSpeakerRead,
+    GroupStateRead,
+    GroupStateWrite,
+    GroupUserTurn,
+)
+
 
 @dataclass(frozen=True)
 class GroupService:
-    load_state: Callable[..., dict[str, object]]
-    save_state: Callable[..., bool]
-    user_turn_allowed_backend: Callable[..., bool]
-    claim_user_turn_backend: Callable[..., bool]
-    pass_user_turn_backend: Callable[..., bool]
-    setup_state_backend: Callable[..., dict | None]
+    load_state: GroupStateRead
+    save_state: GroupStateWrite
+    user_turn_allowed_backend: GroupUserTurn
+    claim_user_turn_backend: GroupUserTurn
+    pass_user_turn_backend: GroupUserTurn
+    setup_state_backend: GroupSetupRead
     character_option_label_backend: Callable[[Path], str]
     resolve_character_backend: Callable[[str], str | None]
     member_labels_backend: Callable[[list[str]], list[str]]
-    current_speaker_backend: Callable[..., tuple[str, dict[str, object]] | None]
-    advance_turn_backend: Callable[..., None]
+    current_speaker_backend: GroupSpeakerRead
+    advance_turn_backend: GroupAdvance
 
     def state(self, db: sqlite3.Connection, chat_id: str, session_id: str) -> dict[str, object]:
         return self.load_state(db, chat_id, session_id)

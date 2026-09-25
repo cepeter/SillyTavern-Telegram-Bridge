@@ -6,6 +6,8 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from bridge.port_contracts import ChatSubmit
+
 
 @dataclass(frozen=True)
 class DurableJob:
@@ -33,7 +35,7 @@ class JobService:
     start_backend: Callable[..., bool]
     finish_backend: Callable[..., bool]
     recover_backend: Callable[..., list[tuple]]
-    submit_chat: Callable[..., bool]
+    submit_chat: ChatSubmit
     prepare_worker: Callable[..., Callable[..., None]] | None = None
 
     def enqueue(

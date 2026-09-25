@@ -93,7 +93,6 @@ def process_message_job(
                 queued_session_id=queued_session_id,
                 operation_id=job_id,
                 actor_id=actor_id,
-                services=services,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)

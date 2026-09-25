@@ -9,6 +9,11 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 - Replace environment-derived module globals with explicit immutable application settings. Both entry points perform the same runtime bootstrap, provider callbacks capture their own settings, native API clients are operation-owned, and Persona reads no longer share a process-global configuration cache.
 - Migrate tests to explicit per-test settings snapshots and fail the suite on unhandled worker-thread exceptions.
 
+### Architecture
+
+- Define exact core port call contracts and canonical request values, remove the redundant composition factory, and bind conversation and leaf-command dependencies explicitly.
+- Route Live Sync snapshot retention through the configured memory service rather than an unbound memory backend; add regression coverage for the retention/provider binding.
+
 ### Quality
 
 - Measure full-package statement and branch coverage including subprocesses, enforce a measured 68% combined baseline, publish JSON/XML reports, and retain explicit security-regression contracts.

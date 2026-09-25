@@ -1,3 +1,5 @@
+from bridge.request_types import PreparedMessage
+
 """Command-versus-generation orchestration has one injected owner."""
 
 import ast
@@ -47,16 +49,19 @@ def test_entrypoints_do_not_import_old_message_dispatch(owner):
 def test_service_is_required_by_composition():
     import inspect
 
-    from bridge.composition import BridgeServices, build_bridge_services
+    from bridge.composition import BridgeServices
 
     assert "conversation" in BridgeServices.__dataclass_fields__
     assert BridgeServices.__dataclass_fields__["conversation"].default is MISSING
-    assert inspect.signature(build_bridge_services).parameters["conversation"].default is inspect.Parameter.empty
+    assert inspect.signature(BridgeServices).parameters["conversation"].default is inspect.Parameter.empty
 
 
 def test_service_has_no_concrete_bridge_imports():
     service_module()
-    assert not any(name == "bridge" or name.startswith("bridge.") for name in imports("conversation_service"))
+    assert {name for name in imports("conversation_service") if name.startswith("bridge.")} <= {
+        "bridge.port_contracts",
+        "bridge.request_types",
+    }
     result = subprocess.run(
         [
             sys.executable,
@@ -77,7 +82,7 @@ def make_service(*, handled=False, prepare_handled=False, route_error=False):
     events = []
     services = SimpleNamespace(memory=object(), persona=object(), group=object(), provider=object())
     context = SimpleNamespace(db=object(), session_id="queued-session", actor_id="actor")
-    prepared = module.PreparedMessage(
+    prepared = PreparedMessage(
         stripped="hello",
         command="hello",
         fields={"name": "character"},
@@ -125,7 +130,6 @@ def run_message(service, services):
         queued_session_id="queued-session",
         operation_id=456,
         actor_id="actor",
-        services=services,
     )
 
 
@@ -134,7 +138,7 @@ def test_handled_command_never_generates():
     run_message(service, services)
     assert [event[0] for event in events] == ["prepare", "command"]
     assert events[1][2]["request_context"] is prepared.request_context
-    assert events[1][2]["services"] is services
+    assert "services" not in events[1][2]
 
 
 def test_pending_input_or_recovery_short_circuits_both_ports():
@@ -151,7 +155,6 @@ def test_unhandled_message_generates_with_resolved_model_and_original_identity()
         queued_session_id="queued-session",
         operation_id=456,
         actor_id="actor",
-        services=services,
     )
     args, kwargs = events[2][1:]
     assert args == (
@@ -169,12 +172,7 @@ def test_unhandled_message_generates_with_resolved_model_and_original_identity()
         123,
         456,
     )
-    assert kwargs == dict(
-        group_service=services.group,
-        provider_port=services.provider,
-        memory_service=services.memory,
-        persona_service=services.persona,
-    )
+    assert kwargs == {}
 
 
 def test_command_exception_propagates_without_generation():

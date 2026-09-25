@@ -88,13 +88,55 @@ class PanelificationTests(SettingsTestCase):
             request_context=make_test_request_context(
                 self.db, session["session_id"], app_settings=self.app_settings_builder.build()
             ),
-            services=make_test_application_services(
+            conversation_service=make_test_application_services(
                 memory=make_test_memory_service(),
                 delivery=make_test_delivery_port(
                     send_panel_request=lambda *args, **kwargs: self.calls.append((args, kwargs)) or {},
                 ),
                 app_settings=self.app_settings_builder.build(),
-            ),
+            ).conversation,
+            delivery_port=make_test_application_services(
+                memory=make_test_memory_service(),
+                delivery=make_test_delivery_port(
+                    send_panel_request=lambda *args, **kwargs: self.calls.append((args, kwargs)) or {},
+                ),
+                app_settings=self.app_settings_builder.build(),
+            ).delivery,
+            group_service=make_test_application_services(
+                memory=make_test_memory_service(),
+                delivery=make_test_delivery_port(
+                    send_panel_request=lambda *args, **kwargs: self.calls.append((args, kwargs)) or {},
+                ),
+                app_settings=self.app_settings_builder.build(),
+            ).group,
+            memory_service=make_test_application_services(
+                memory=make_test_memory_service(),
+                delivery=make_test_delivery_port(
+                    send_panel_request=lambda *args, **kwargs: self.calls.append((args, kwargs)) or {},
+                ),
+                app_settings=self.app_settings_builder.build(),
+            ).memory,
+            persona_service=make_test_application_services(
+                memory=make_test_memory_service(),
+                delivery=make_test_delivery_port(
+                    send_panel_request=lambda *args, **kwargs: self.calls.append((args, kwargs)) or {},
+                ),
+                app_settings=self.app_settings_builder.build(),
+            ).persona,
+            provider_port=make_test_application_services(
+                memory=make_test_memory_service(),
+                delivery=make_test_delivery_port(
+                    send_panel_request=lambda *args, **kwargs: self.calls.append((args, kwargs)) or {},
+                ),
+                app_settings=self.app_settings_builder.build(),
+            ).provider,
+            sync_service=make_test_application_services(
+                memory=make_test_memory_service(),
+                delivery=make_test_delivery_port(
+                    send_panel_request=lambda *args, **kwargs: self.calls.append((args, kwargs)) or {},
+                ),
+                app_settings=self.app_settings_builder.build(),
+            ).sync,
         )
 
     def test_character_panel_has_inline_delete_actions(self):

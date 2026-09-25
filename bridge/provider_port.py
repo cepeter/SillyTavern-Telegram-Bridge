@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
 
-
-class CancellationEvent(Protocol):
-    def is_set(self) -> bool: ...
+from bridge.port_contracts import CancellationEvent, ProviderGenerate
 
 
 @dataclass(frozen=True)
 class ProviderPort:
-    generate_backend: Callable[..., str]
+    generate_backend: ProviderGenerate
 
     def generate(
         self,

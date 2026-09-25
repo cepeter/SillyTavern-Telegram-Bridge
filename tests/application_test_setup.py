@@ -13,13 +13,13 @@ from types import SimpleNamespace
 from settings_test_support import make_test_settings
 
 from bridge.application_composition import initialize_extensions
-from bridge.composition import RequestContext
 from bridge.delivery_port import DeliveryPort
 from bridge.input_flow_service import InputFlowService
 from bridge.memory_service import MemoryService
 from bridge.model_router import ModelRouter
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
+from bridge.request_types import RequestContext
 from bridge.sync_service import SyncService
 
 _INITIALIZED = False
@@ -231,19 +231,106 @@ class _TestGroupDirector:
         return ""
 
 
-def make_test_conversation_service(*, app_settings=None):
-    """Compose the canonical conversation collaborators explicitly for tests."""
-    if app_settings is None:
-        app_settings = make_test_settings()
+def make_test_conversation_service(
+    *,
+    app_settings=None,
+    prepare=None,
+    dispatch=None,
+    generate=None,
+    delivery=None,
+    provider=None,
+    memory=None,
+    persona=None,
+    group=None,
+    input_flow=None,
+    group_director=None,
+    sync=None,
+):
+    from functools import partial
+
     from bridge.command_routes import handle_command_route
     from bridge.conversation_service import ConversationService
     from bridge.message_commands import generate_and_store_reply, prepare_message
 
-    return ConversationService(
-        prepare_message=prepare_message,
-        dispatch_command=handle_command_route,
-        generate_reply=_partial(generate_and_store_reply, app_settings=app_settings),
+    if app_settings is None:
+        app_settings = make_test_settings()
+    delivery = delivery or make_test_delivery_port()
+    provider = provider or make_test_provider_port()
+    memory = memory or make_test_memory_service()
+    persona = persona or make_test_persona_service()
+    group = group or make_test_group_service(app_settings=app_settings)
+    input_flow = input_flow or make_test_input_flow_service(app_settings=app_settings)
+    group_director = group_director or _TestGroupDirector()
+    sync = sync or make_test_sync_service()
+
+    def dispatch_default(
+        db,
+        token,
+        api_key,
+        model,
+        fields,
+        chat_id,
+        stripped,
+        command,
+        session,
+        session_id,
+        current_model,
+        current_persona,
+        user_name,
+        operation_id=None,
+        *,
+        request_context,
+    ):
+        return handle_command_route(
+            db,
+            token,
+            api_key,
+            model,
+            fields,
+            chat_id,
+            stripped,
+            command,
+            session,
+            session_id,
+            current_model,
+            current_persona,
+            user_name,
+            operation_id,
+            request_context=request_context,
+            delivery_port=delivery,
+            provider_port=provider,
+            memory_service=memory,
+            persona_service=persona,
+            group_service=group,
+            sync_service=sync,
+            conversation_service=conversation,
+        )
+
+    conversation = ConversationService(
+        prepare_message=prepare
+        or partial(
+            prepare_message,
+            app_settings=app_settings,
+            delivery_port=delivery,
+            provider_port=provider,
+            memory_service=memory,
+            persona_service=persona,
+            group_service=group,
+            input_flow_service=input_flow,
+            group_director_service=group_director,
+        ),
+        dispatch_command=dispatch or dispatch_default,
+        generate_reply=generate
+        or partial(
+            generate_and_store_reply,
+            app_settings=app_settings,
+            group_service=group,
+            provider_port=provider,
+            memory_service=memory,
+            persona_service=persona,
+        ),
     )
+    return conversation
 
 
 def make_test_application_services(
@@ -263,25 +350,46 @@ def make_test_application_services(
     """Return an explicit test-only application service graph for routers."""
     if app_settings is None:
         app_settings = make_test_settings()
+    delivery = delivery or make_test_delivery_port()
+    provider = provider or make_test_provider_port()
+    memory = memory or make_test_memory_service()
+    persona = persona or make_test_persona_service()
+    sync = sync or make_test_sync_service()
+    group = group or make_test_group_service(app_settings=app_settings)
+    group_director = group_director or _TestGroupDirector()
+    input_flow = input_flow or make_test_input_flow_service(app_settings=app_settings)
+    conversation = conversation or make_test_conversation_service(
+        app_settings=app_settings,
+        delivery=delivery,
+        provider=provider,
+        memory=memory,
+        persona=persona,
+        sync=sync,
+        group=group,
+        group_director=group_director,
+        input_flow=input_flow,
+    )
     return SimpleNamespace(
         config=app_settings,
-        memory=memory or make_test_memory_service(),
-        persona=persona or make_test_persona_service(),
-        sync=sync or make_test_sync_service(),
-        group=group or make_test_group_service(app_settings=app_settings),
-        group_director=group_director or _TestGroupDirector(),
-        input_flow=input_flow or make_test_input_flow_service(app_settings=app_settings),
+        memory=memory,
+        persona=persona,
+        sync=sync,
+        group=group,
+        group_director=group_director,
+        input_flow=input_flow,
         model_router=model_router or make_test_model_router(),
-        provider=provider or make_test_provider_port(),
-        conversation=conversation or make_test_conversation_service(app_settings=app_settings),
-        delivery=delivery or make_test_delivery_port(),
+        provider=provider,
+        conversation=conversation,
+        delivery=delivery,
     )
 
 
-def make_native_test_sync_service(*, app_settings=None) -> SyncService:
+def make_native_test_sync_service(*, app_settings=None, retain_memory=None) -> SyncService:
     """Compose SyncService from the canonical collaborators used by startup."""
     if app_settings is None:
         app_settings = make_test_settings()
+    if retain_memory is None:
+        retain_memory = make_test_memory_service().retain
     import bridge.sillytavern_api as _st_api
     from bridge.repositories import count_session_messages
     from bridge.sync_api import _live_sync_disable, live_sync_now, live_sync_poll, live_sync_toggle_realtime
@@ -290,9 +398,11 @@ def make_native_test_sync_service(*, app_settings=None) -> SyncService:
     return SyncService(
         load_binding=sync_binding,
         count_messages=count_session_messages,
-        sync_now_backend=_partial(live_sync_now, app_settings=app_settings),
-        toggle_realtime_backend=_partial(live_sync_toggle_realtime, app_settings=app_settings),
-        poll_backend=_partial(live_sync_poll, app_settings=app_settings),
+        sync_now_backend=_partial(live_sync_now, app_settings=app_settings, retain_memory=retain_memory),
+        toggle_realtime_backend=_partial(
+            live_sync_toggle_realtime, app_settings=app_settings, retain_memory=retain_memory
+        ),
+        poll_backend=_partial(live_sync_poll, app_settings=app_settings, retain_memory=retain_memory),
         disable_realtime=_live_sync_disable,
         api_configured=_partial(_st_api.live_sync_api_configured, app_settings=app_settings),
         expected_errors=(_st_api.SillyTavernApiError, ValueError),

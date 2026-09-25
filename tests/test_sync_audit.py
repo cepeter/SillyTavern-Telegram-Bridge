@@ -79,11 +79,13 @@ class SyncAuditHardeningTests(SettingsTestCase):
         calls = []
 
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
-            (chat_id, session_id)
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None, retain_memory=None: (
+            calls.append((chat_id, session_id))
         )
         try:
-            _m_sync_api._make_sync_poll_safety(app_settings=self.app_settings_builder.build()).poll(
+            _m_sync_api._make_sync_poll_safety(
+                app_settings=self.app_settings_builder.build(), retain_memory=lambda _db, _chat, _session, _fields: None
+            ).poll(
                 self.db,
             )
         finally:
@@ -98,13 +100,17 @@ class SyncAuditHardeningTests(SettingsTestCase):
         self._binding()
         calls = []
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
-            (chat_id, session_id)
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None, retain_memory=None: (
+            calls.append((chat_id, session_id))
         )
         lock = _m_sync_api.chat_job_lock("chat")
         lock.acquire()
         try:
-            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
+            _m_sync_api.live_sync_poll(
+                self.db,
+                app_settings=self.app_settings_builder.build(),
+                retain_memory=lambda _db, _chat, _session, _fields: None,
+            )
             self.assertEqual(calls, [])
         finally:
             lock.release()
@@ -114,14 +120,18 @@ class SyncAuditHardeningTests(SettingsTestCase):
         self._many_bindings()
         calls = []
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
-            (chat_id, session_id)
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None, retain_memory=None: (
+            calls.append((chat_id, session_id))
         )
         locks = [_m_sync_api.chat_job_lock(f"a{index:02d}") for index in range(32)]
         for lock in locks:
             lock.acquire()
         try:
-            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
+            _m_sync_api.live_sync_poll(
+                self.db,
+                app_settings=self.app_settings_builder.build(),
+                retain_memory=lambda _db, _chat, _session, _fields: None,
+            )
         finally:
             for lock in locks:
                 lock.release()
@@ -149,7 +159,7 @@ class SyncAuditHardeningTests(SettingsTestCase):
         seen = []
         original = _m_sync_api.live_sync_now
 
-        def fake_sync(db, chat_id, session_id, *, app_settings=None):
+        def fake_sync(db, chat_id, session_id, *, app_settings=None, retain_memory=None):
             seen.append(session_id)
             db.execute(
                 "UPDATE sync_bindings SET last_checked_at=? WHERE chat_id=? AND session_id=?",
@@ -160,7 +170,11 @@ class SyncAuditHardeningTests(SettingsTestCase):
 
         _m_sync_api.live_sync_now = fake_sync
         try:
-            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
+            _m_sync_api.live_sync_poll(
+                self.db,
+                app_settings=self.app_settings_builder.build(),
+                retain_memory=lambda _db, _chat, _session, _fields: None,
+            )
         finally:
             _m_sync_api.live_sync_now = original
         self.assertEqual(len(seen), 32)
@@ -171,9 +185,15 @@ class SyncAuditHardeningTests(SettingsTestCase):
         self.db.execute("UPDATE sync_bindings SET realtime_failures=4 WHERE chat_id='chat' AND session_id='session'")
         self.db.commit()
         original = _m_sync_api.live_sync_now
-        _m_sync_api.live_sync_now = lambda *_args, app_settings=None: (_ for _ in ()).throw(RuntimeError("boom"))
+        _m_sync_api.live_sync_now = lambda *_args, app_settings=None, retain_memory=None: (_ for _ in ()).throw(
+            RuntimeError("boom")
+        )
         try:
-            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
+            _m_sync_api.live_sync_poll(
+                self.db,
+                app_settings=self.app_settings_builder.build(),
+                retain_memory=lambda _db, _chat, _session, _fields: None,
+            )
         finally:
             _m_sync_api.live_sync_now = original
         row = self.db.execute(
@@ -189,14 +209,18 @@ class SyncAuditHardeningTests(SettingsTestCase):
         calls = []
         original = _m_sync_api.live_sync_now
 
-        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None: calls.append(
-            (chat_id, session_id)
+        _m_sync_api.live_sync_now = lambda _db, chat_id, session_id, *, app_settings=None, retain_memory=None: (
+            calls.append((chat_id, session_id))
         )
         locks = [_m_sync_api.chat_job_lock(f"a{index:02d}") for index in range(32)]
         for lock in locks:
             lock.acquire()
         try:
-            _m_sync_api.live_sync_poll(self.db, app_settings=self.app_settings_builder.build())
+            _m_sync_api.live_sync_poll(
+                self.db,
+                app_settings=self.app_settings_builder.build(),
+                retain_memory=lambda _db, _chat, _session, _fields: None,
+            )
         finally:
             for lock in locks:
                 lock.release()

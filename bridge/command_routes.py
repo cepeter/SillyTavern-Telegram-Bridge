@@ -46,7 +46,7 @@ from bridge.telegram import list_sessions, send_text, update_session
 from bridge.update import send_update_menu
 
 if TYPE_CHECKING:
-    from bridge.composition import BridgeServices
+    pass
 
 
 _START_MODEL_PLACEHOLDERS = frozenset(
@@ -92,21 +92,25 @@ def _handle_basic(
     current_persona,
     user_name,
     operation_id,
-    services,
     *,
     request_context,
+    conversation_service,
+    delivery_port,
+    group_service,
+    memory_service,
+    provider_port,
 ):
     if command.startswith("/help "):
         send_help_command(
             token,
             chat_id,
             stripped,
-            delivery_port=services.delivery,
+            delivery_port=delivery_port,
             request_context=request_context,
         )
         return True
     if command in {"/start", "start"}:
-        readiness_error = _start_model_readiness_error(services.provider, api_key, current_model, session_id)
+        readiness_error = _start_model_readiness_error(provider_port, api_key, current_model, session_id)
         if readiness_error:
             send_text(token, chat_id, readiness_error)
             return True
@@ -147,13 +151,13 @@ def _handle_basic(
         send_help_menu(
             token,
             chat_id,
-            delivery_port=services.delivery,
+            delivery_port=delivery_port,
             request_context=request_context,
         )
         return True
     if command == "/new":
         start_session_name_input(
-            db, token, chat_id, session, group_service=services.group, app_settings=request_context.app_settings
+            db, token, chat_id, session, group_service=group_service, app_settings=request_context.app_settings
         )
         return True
     if command == "/status":
@@ -167,7 +171,7 @@ def _handle_basic(
                 fields,
                 current_model,
                 current_persona,
-                group_service=services.group,
+                group_service=group_service,
                 app_settings=request_context.app_settings,
             ),
         )
@@ -197,7 +201,7 @@ def _handle_basic(
             return True
         failed_session_id = str(failed[5] or "") or session_id
         try:
-            services.conversation.process_message(
+            conversation_service.process_message(
                 db,
                 token,
                 api_key,
@@ -208,7 +212,6 @@ def _handle_basic(
                 failed_message_id,
                 queued_session_id=failed_session_id,
                 actor_id=request_context.actor_id,
-                services=services,
             )
             clear_failed_turn(db, chat_id, failed_message_id)
         except Exception as exc:
@@ -217,7 +220,6 @@ def _handle_basic(
             )
             send_text(token, chat_id, "Retry failed again; the turn remains queued for /retry.")
         return True
-    memory_service = services.memory
     if command == "/prompt":
         send_prompt_menu(
             token,
@@ -225,7 +227,7 @@ def _handle_basic(
             db,
             session,
             fields,
-            group_service=services.group,
+            group_service=group_service,
             memory_service=memory_service,
             request_context=request_context,
         )
@@ -239,7 +241,7 @@ def _handle_basic(
                 chat_id,
                 session,
                 fields,
-                group_service=services.group,
+                group_service=group_service,
                 memory_service=memory_service,
                 app_settings=request_context.app_settings,
             ),
@@ -344,11 +346,25 @@ def _handle_generation_panels(
 
 
 def _handle_memory_media(
-    db, token, api_key, chat_id, stripped, command, session, fields, operation_id, services, *, request_context
+    db,
+    token,
+    api_key,
+    chat_id,
+    stripped,
+    command,
+    session,
+    fields,
+    operation_id,
+    *,
+    request_context,
+    delivery_port,
+    group_service,
+    memory_service,
+    persona_service,
+    provider_port,
+    sync_service,
 ):
     """Handle memory, RAG, group, and synchronization commands."""
-    memory_service = services.memory
-    persona_service = services.persona
     if command == "/memory" or command in {"/memory on", "/memory off", "/memory status", "/memory scope"}:
         send_memory_menu(token, chat_id, db, request_context=request_context)
         return True
@@ -363,7 +379,7 @@ def _handle_memory_media(
             session,
             fields,
             stripped,
-            send_text_fn=services.delivery.send_text,
+            send_text_fn=delivery_port.send_text,
             app_settings=request_context.app_settings,
         )
         return True
@@ -391,7 +407,7 @@ def _handle_memory_media(
             "remember",
             stripped.split(None, 1)[1],
             operation_id,
-            provider_port=services.provider,
+            provider_port=provider_port,
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
@@ -424,19 +440,19 @@ def _handle_memory_media(
         send_databank_menu(token, chat_id, db, request_context=request_context)
         return True
     if command == "/sync":
-        send_sync_menu(token, chat_id, db, session, sync_service=services.sync, request_context=request_context)
+        send_sync_menu(token, chat_id, db, session, sync_service=sync_service, request_context=request_context)
         return True
     if command == "/group":
         if parse_topic_scope(chat_id)[1] is None:
             send_text(token, chat_id, "Group sessions are available only inside a Telegram Forum Topic.")
         else:
-            send_group_menu(db, token, chat_id, session, group_service=services.group, request_context=request_context)
+            send_group_menu(db, token, chat_id, session, group_service=group_service, request_context=request_context)
         return True
     if command.startswith("/group "):
         if parse_topic_scope(chat_id)[1] is None:
             send_text(token, chat_id, "Group sessions are available only inside a Telegram Forum Topic.")
         else:
-            handle_group_command(db, token, chat_id, session, stripped, operation_id, group_service=services.group)
+            handle_group_command(db, token, chat_id, session, stripped, operation_id, group_service=group_service)
         return True
 
     return False
@@ -486,13 +502,16 @@ def _handle_panels(
     current_model,
     current_persona,
     operation_id,
-    services,
     *,
     request_context,
+    delivery_port,
+    group_service,
+    memory_service,
+    persona_service,
+    provider_port,
+    sync_service,
 ):
     """Dispatch generation, memory, voice, and panel-first commands."""
-    memory_service = services.memory
-    persona_service = services.persona
     if _handle_generation_panels(
         db,
         token,
@@ -503,8 +522,8 @@ def _handle_panels(
         session,
         session_id,
         operation_id,
-        delivery_port=services.delivery,
-        provider_port=services.provider,
+        delivery_port=delivery_port,
+        provider_port=provider_port,
         memory_service=memory_service,
         request_context=request_context,
         persona_service=persona_service,
@@ -520,8 +539,13 @@ def _handle_panels(
         session,
         fields,
         operation_id,
-        services,
         request_context=request_context,
+        delivery_port=delivery_port,
+        group_service=group_service,
+        memory_service=memory_service,
+        persona_service=persona_service,
+        provider_port=provider_port,
+        sync_service=sync_service,
     ):
         return True
     return _handle_voice_panels(db, token, chat_id, command, session, request_context=request_context)
@@ -538,9 +562,9 @@ def _handle_entities(
     session_id,
     current_model,
     current_persona,
-    services,
     *,
     request_context,
+    persona_service,
 ):
     """Handle character, session, persona, world, prompt, and provider panels."""
     if command == "/systemprompt":
@@ -564,7 +588,7 @@ def _handle_entities(
         return True
     if command == "/persona" or command.startswith("/persona "):
         send_persona_menu(
-            token, chat_id, current_persona, persona_service=services.persona, request_context=request_context
+            token, chat_id, current_persona, persona_service=persona_service, request_context=request_context
         )
         return True
     if command == "/world" or command.startswith("/world "):
@@ -588,7 +612,22 @@ def _handle_entities(
 
 
 def _handle_chat(
-    db, token, api_key, model, fields, chat_id, stripped, command, session, operation_id, services, *, request_context
+    db,
+    token,
+    api_key,
+    model,
+    fields,
+    chat_id,
+    stripped,
+    command,
+    session,
+    operation_id,
+    *,
+    request_context,
+    delivery_port,
+    memory_service,
+    persona_service,
+    provider_port,
 ):
     """Handle edit, continuation, swipe, branch, and regeneration commands."""
     if command == "/edit":
@@ -596,8 +635,6 @@ def _handle_chat(
             db, token, chat_id, session["session_id"], "edit", "Send the replacement text for the latest user message."
         )
         return True
-    memory_service = services.memory
-    persona_service = services.persona
     if command.startswith("/edit "):
         return handle_inline_text_action(
             db,
@@ -609,7 +646,7 @@ def _handle_chat(
             "edit",
             stripped.split(None, 1)[1],
             operation_id,
-            provider_port=services.provider,
+            provider_port=provider_port,
             memory_service=memory_service,
             persona_service=persona_service,
             request_context=request_context,
@@ -623,8 +660,8 @@ def _handle_chat(
             fields,
             chat_id,
             operation_id=operation_id,
-            provider_port=services.provider,
-            delivery_port=services.delivery,
+            provider_port=provider_port,
+            delivery_port=delivery_port,
             memory_service=memory_service,
             persona_service=persona_service,
             app_settings=request_context.app_settings,
@@ -632,7 +669,7 @@ def _handle_chat(
         return True
     if command == "/swipe" or command == "/branch" or command.startswith("/branch "):
         send_swipe_menu(
-            token, db, chat_id, session["session_id"], delivery_port=services.delivery, request_context=request_context
+            token, db, chat_id, session["session_id"], delivery_port=delivery_port, request_context=request_context
         )
         return True
     if command == "/regen":
@@ -644,8 +681,8 @@ def _handle_chat(
             fields,
             chat_id,
             operation_id=operation_id,
-            provider_port=services.provider,
-            delivery_port=services.delivery,
+            provider_port=provider_port,
+            delivery_port=delivery_port,
             memory_service=memory_service,
             persona_service=persona_service,
             app_settings=request_context.app_settings,
@@ -671,7 +708,13 @@ def handle_command_route(
     operation_id=None,
     *,
     request_context,
-    services: BridgeServices,
+    conversation_service,
+    delivery_port,
+    group_service,
+    memory_service,
+    persona_service,
+    provider_port,
+    sync_service,
 ):
     """Dispatch a normalized slash command without entering normal generation."""
     if _dispatch_extension_command_routes(
@@ -690,7 +733,8 @@ def handle_command_route(
         user_name,
         operation_id=operation_id,
         request_context=request_context,
-        services=services,
+        delivery_port=delivery_port,
+        provider_port=provider_port,
     ):
         return True
     if _handle_basic(
@@ -708,8 +752,12 @@ def handle_command_route(
         current_persona,
         user_name,
         operation_id,
-        services,
         request_context=request_context,
+        conversation_service=conversation_service,
+        delivery_port=delivery_port,
+        group_service=group_service,
+        memory_service=memory_service,
+        provider_port=provider_port,
     ):
         return True
     if _handle_panels(
@@ -726,8 +774,13 @@ def handle_command_route(
         current_model,
         current_persona,
         operation_id,
-        services,
         request_context=request_context,
+        delivery_port=delivery_port,
+        group_service=group_service,
+        memory_service=memory_service,
+        persona_service=persona_service,
+        provider_port=provider_port,
+        sync_service=sync_service,
     ):
         return True
     if _handle_entities(
@@ -741,8 +794,8 @@ def handle_command_route(
         session_id,
         current_model,
         current_persona,
-        services,
         request_context=request_context,
+        persona_service=persona_service,
     ):
         return True
     if _handle_chat(
@@ -756,8 +809,11 @@ def handle_command_route(
         command,
         session,
         operation_id,
-        services,
         request_context=request_context,
+        delivery_port=delivery_port,
+        memory_service=memory_service,
+        persona_service=persona_service,
+        provider_port=provider_port,
     ):
         return True
     if command.startswith("/"):

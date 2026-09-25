@@ -522,7 +522,27 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 request_context=make_test_request_context(
                     self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
                 ),
-                services=make_test_application_services(memory=memory, app_settings=self.app_settings_builder.build()),
+                conversation_service=make_test_application_services(
+                    memory=memory, app_settings=self.app_settings_builder.build()
+                ).conversation,
+                delivery_port=make_test_application_services(
+                    memory=memory, app_settings=self.app_settings_builder.build()
+                ).delivery,
+                group_service=make_test_application_services(
+                    memory=memory, app_settings=self.app_settings_builder.build()
+                ).group,
+                memory_service=make_test_application_services(
+                    memory=memory, app_settings=self.app_settings_builder.build()
+                ).memory,
+                persona_service=make_test_application_services(
+                    memory=memory, app_settings=self.app_settings_builder.build()
+                ).persona,
+                provider_port=make_test_application_services(
+                    memory=memory, app_settings=self.app_settings_builder.build()
+                ).provider,
+                sync_service=make_test_application_services(
+                    memory=memory, app_settings=self.app_settings_builder.build()
+                ).sync,
             )
 
         self.assertTrue(handled)
@@ -536,7 +556,13 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
             captured.update(kwargs)
             return True
 
-        make_test_conversation_service(app_settings=self.app_settings_builder.build()).process_message(
+        make_test_conversation_service(
+            app_settings=self.app_settings_builder.build(),
+            memory=memory,
+            input_flow=make_test_input_flow_service(
+                handle_pending_backend=fake_pending, app_settings=self.app_settings_builder.build()
+            ),
+        ).process_message(
             self.db,
             "token",
             "key",
@@ -544,13 +570,6 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
             self.fields,
             "chat",
             "replacement text",
-            services=make_test_application_services(
-                memory=memory,
-                input_flow=make_test_input_flow_service(
-                    handle_pending_backend=fake_pending, app_settings=self.app_settings_builder.build()
-                ),
-                app_settings=self.app_settings_builder.build(),
-            ),
         )
 
         self.assertIs(captured["memory_service"], memory)
