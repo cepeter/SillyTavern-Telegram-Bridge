@@ -73,8 +73,9 @@ CI uploads JSON/XML coverage reports for 14 days.
 
 Before merging, require `test`, `dependency-audit`, `static-analysis`,
 `Analyze (actions)`, `Analyze (python)`, and the CodeQL result for the exact reviewed
-head commit. The repository uses GitHub's existing CodeQL setup; do not add a
-second local CodeQL workflow. A passing analysis job alone does not prove that
+head commit. The repository uses GitHub CodeQL Default Setup for Python and GitHub
+Actions; no checked-in CodeQL workflow is required. Do not add a second local
+CodeQL workflow. A passing analysis job alone does not prove that
 its security-result check passed. Do not force a merge if a head changes during
 review or checks.
 

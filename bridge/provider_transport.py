@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from bridge.config import DEFAULT_PROVIDER_URL, GENERATION_DEFAULTS
+from bridge.config import GENERATION_DEFAULTS
 from bridge.limits import DEFAULT_MAX_TOKENS
 from bridge.model_router import ModelRouter
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
@@ -429,9 +429,9 @@ def generate_provider_text(
         )
     if transport not in {"chat_completions", "openai", "openai_compatible"}:
         raise RuntimeError(f"Provider transport '{transport}' is not supported")
-    endpoint_base = str(
-        spec.get("api_endpoint") or spec.get("api") or DEFAULT_PROVIDER_URL.rsplit("/chat/completions", 1)[0]
-    ).rstrip("/")
+    endpoint_base = str(spec.get("api_endpoint") or spec.get("api") or "").strip().rstrip("/")
+    if not endpoint_base:
+        raise RuntimeError("Provider endpoint is missing; configure api_endpoint in the private provider catalog")
     validate_provider_endpoint(endpoint_base, environ=app_settings.environ)
     endpoint = endpoint_base + "/chat/completions"
     request_key = _resolve_provider_credential(spec, api_key, "LLM_API_KEY", "provider", app_settings=app_settings)

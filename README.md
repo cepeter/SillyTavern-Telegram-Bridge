@@ -499,6 +499,12 @@ PROVIDER_ONE_API_KEY=replace-me
 SILLYTAVERN_PROVIDER_ALLOWED_HOSTS=provider.example
 ```
 
+If the catalog contains no available model IDs, the panel shows setup guidance
+rather than inventing fallback providers or models. The Health and Refresh
+buttons remain available. For a Chat Completions provider, set `api_endpoint`
+(or its accepted `api` alias) explicitly; a missing endpoint produces a
+configuration error before any network request or credential attachment.
+
 ### Provider catalog field reference
 
 | Field | Default / values | Purpose |

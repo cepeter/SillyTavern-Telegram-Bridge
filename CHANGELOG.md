@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Configuration cleanup
+
+- Remove empty built-in provider URL/model fallback stubs, give empty catalogs actionable panel guidance, and report missing Chat Completions endpoints before network access. Clarify GitHub-managed CodeQL Default Setup and the privacy of stored diagnostics.
+
 ### Persistence
 
 - Require caller-owned transactions for repository writes; conservatively serialize commented/CTE/PRAGMA statements and raw cursor calls, retain writer ownership after statement failures and through RETURNING results, and release it correctly on transaction/context completion.
