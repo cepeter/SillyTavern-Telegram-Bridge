@@ -10,11 +10,11 @@ from bridge import session_titles as _session_titles
 from bridge.callbacks import close_panel_message, discard_panel_binding
 from bridge.cards import send_character_menu
 from bridge.group_service import GroupService
-from bridge.groups import start_group_session
-from bridge.input_flows import _cancel_pending, pending_character_for_session
+from bridge.group_setup import start_group_session
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.message_commands import send_pending_input_message
 from bridge.metadata import get_meta, set_meta
+from bridge.pending_input import _cancel_pending, pending_character_for_session
 from bridge.request_types import RequestContext
 from bridge.session_core import create_session, update_session
 from bridge.settings import AppSettings

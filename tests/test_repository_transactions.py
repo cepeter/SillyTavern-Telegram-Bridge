@@ -10,6 +10,7 @@ from settings_test_support import SettingsTestCase
 
 import bridge.director_goal_repository as _owner_director_goal_repository
 import bridge.group_repository as _owner_group_repository
+import bridge.image_messages as _owner_image_messages
 import bridge.meta_repository as _owner_meta_repository
 import bridge.operation_repository as _owner_operation_repository
 import bridge.reference_repository as _owner_reference_repository
@@ -24,7 +25,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import bridge.commands as _m_commands
 import bridge.group_core as _m_group_core
 import bridge.group_core as group_core
 import bridge.memory as _m_memory
@@ -573,16 +573,16 @@ class GroupTransactionTests(SettingsTestCase):
 
         with (
             patch.object(_m_group_core, "group_current_speaker", return_value=group_turn),
-            patch.object(_m_commands, "card_fields_from_file", return_value={"name": "One"}),
-            patch.object(_m_commands, "rag_retrieval_bundle", return_value={}),
-            patch.object(_m_commands, "build_chat_messages", return_value=[]),
-            patch.object(_m_commands, "rag_context_for_prompt", return_value=""),
-            patch.object(_m_commands, "send_typing", return_value=None),
-            patch.object(_m_commands, "rag_citation_footer", return_value=""),
-            patch.object(_m_commands, "render_session_response", return_value="Reply"),
-            patch.object(_m_commands, "send_reply", return_value=None),
+            patch.object(_owner_image_messages, "card_fields_from_file", return_value={"name": "One"}),
+            patch.object(_owner_image_messages, "rag_retrieval_bundle", return_value={}),
+            patch.object(_owner_image_messages, "build_chat_messages", return_value=[]),
+            patch.object(_owner_image_messages, "rag_context_for_prompt", return_value=""),
+            patch.object(_owner_image_messages, "send_typing", return_value=None),
+            patch.object(_owner_image_messages, "rag_citation_footer", return_value=""),
+            patch.object(_owner_image_messages, "render_session_response", return_value="Reply"),
+            patch.object(_owner_image_messages, "send_reply", return_value=None),
         ):
-            _m_commands.process_image_message(
+            _owner_image_messages.process_image_message(
                 self.db,
                 "token",
                 "key",

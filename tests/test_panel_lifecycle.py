@@ -10,6 +10,7 @@ import bridge.character_callbacks as _owner_character_callbacks
 import bridge.command_panels as _command_panels
 import bridge.panel_bindings as _owner_panel_bindings
 import bridge.session_core as _owner_session_core
+from bridge import enum_callbacks, settings_input
 
 ensure_application_extensions()
 
@@ -22,8 +23,6 @@ from pathlib import Path
 import bridge.callback_dispatch as _m_callback_dispatch
 import bridge.callbacks as _m_callbacks
 import bridge.cards as _m_cards
-import bridge.help as _m_help
-import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
@@ -88,7 +87,7 @@ class PanelLifecycleTests(SettingsTestCase):
         }
         opened = []
         original_card = _m_message_commands.card_fields_from_file
-        original_menu = _m_input_flows.send_settings_menu
+        original_menu = _command_panels.send_settings_menu
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
         _command_panels.send_settings_menu = lambda *_args, **_kwargs: opened.append(True)
         try:
@@ -103,7 +102,7 @@ class PanelLifecycleTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _m_input_flows.send_settings_menu = original_menu
+            _command_panels.send_settings_menu = original_menu
         self.assertEqual(opened, [True])
         settings = _m_memory_curator.get_generation_settings(self.db, "chat", session["session_id"])
         self.assertEqual(settings["temperature"], 0.85)
@@ -113,7 +112,7 @@ class PanelLifecycleTests(SettingsTestCase):
         )
         original_answer = _m_callback_dispatch.answer_callback
         original_request = _m_callbacks.telegram_request
-        original_send = _m_input_flows.send_text
+        original_send = enum_callbacks.send_text
         _m_callback_dispatch.answer_callback = lambda *_args, **_kwargs: None
         try:
             for message_id, data in (
@@ -127,7 +126,7 @@ class PanelLifecycleTests(SettingsTestCase):
                 _m_callbacks.telegram_request = lambda _token, method, payload, calls=calls: (
                     calls.append((method, payload)) or {}
                 )
-                _m_help.send_text = lambda _token, _chat_id, text, calls=calls: (
+                enum_callbacks.send_text = lambda _token, _chat_id, text, calls=calls: (
                     calls.append(("sendText", {"text": text})) or []
                 )
                 callback = {
@@ -148,7 +147,7 @@ class PanelLifecycleTests(SettingsTestCase):
         finally:
             _m_callback_dispatch.answer_callback = original_answer
             _m_callbacks.telegram_request = original_request
-            _m_help.send_text = original_send
+            enum_callbacks.send_text = original_send
 
     def test_settings_panel_displays_current_field_values(self):
         session = _owner_session_core.ensure_session(
@@ -218,12 +217,12 @@ class PanelLifecycleTests(SettingsTestCase):
             "post_history_instructions": "",
         }
         original_card = _m_message_commands.card_fields_from_file
-        original_menu = _command_panels.send_settings_menu
+        original_menu = settings_input.send_settings_menu
         original_send = _m_message_commands.send_text
         original_request = _m_telegram.telegram_request
         deleted = []
         _m_message_commands.card_fields_from_file = lambda _filename, *, app_settings=None: fields
-        _m_input_flows.send_settings_menu = lambda *_args, **_kwargs: None
+        settings_input.send_settings_menu = lambda *_args, **_kwargs: None
         _m_message_commands.send_text = lambda *_args, **_kwargs: [91]
         _m_telegram.telegram_request = lambda _token, method, payload: deleted.append((method, payload)) or {}
         try:
@@ -249,7 +248,7 @@ class PanelLifecycleTests(SettingsTestCase):
             )
         finally:
             _m_message_commands.card_fields_from_file = original_card
-            _command_panels.send_settings_menu = original_menu
+            settings_input.send_settings_menu = original_menu
             _m_message_commands.send_text = original_send
             _m_telegram.telegram_request = original_request
         self.assertEqual(

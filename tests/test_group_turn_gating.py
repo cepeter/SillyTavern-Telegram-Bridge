@@ -15,8 +15,10 @@ from settings_test_support import SettingsTestCase
 import bridge.callbacks as _callbacks
 import bridge.character_callbacks as _owner_character_callbacks
 import bridge.command_panels as _command_panels
-import bridge.groups as _owner_groups
+import bridge.group_callbacks as _owner_group_callbacks
+import bridge.group_panels as _owner_group_panels
 import bridge.world_callbacks as _owner_world_callbacks
+from bridge import group_setup
 
 ensure_application_extensions()
 
@@ -30,7 +32,6 @@ import bridge.card_content as card_content
 import bridge.cards as _m_cards
 import bridge.command_routes as _m_command_routes
 import bridge.group_core as _m_group_core
-import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
 import bridge.session_core as _m_telegram
 import bridge.session_naming as _m_session_naming
@@ -113,7 +114,7 @@ class GroupTurnGatingTests(SettingsTestCase):
             state = _m_sync_api.group_state(self.db, "chat", "session")
             state["mode"] = "manual"
             self.group.save(self.db, "chat", "session", state)
-            _owner_groups.send_group_menu(
+            _owner_group_panels.send_group_menu(
                 self.db,
                 "token",
                 "chat",
@@ -129,7 +130,7 @@ class GroupTurnGatingTests(SettingsTestCase):
             self.assertEqual(manual_callbacks & {"group:claim", "group:pass"}, {"group:claim", "group:pass"})
             state["mode"] = "round_robin"
             self.group.save(self.db, "chat", "session", state)
-            _owner_groups.send_group_menu(
+            _owner_group_panels.send_group_menu(
                 self.db,
                 "token",
                 "chat",
@@ -152,7 +153,7 @@ class GroupTurnGatingTests(SettingsTestCase):
             RuntimeError("Telegram editMessageText failed: Bad Request: message is not modified")
         )
         try:
-            _owner_groups.send_group_menu(
+            _owner_group_panels.send_group_menu(
                 self.db,
                 "token",
                 "chat",
@@ -171,7 +172,7 @@ class GroupTurnGatingTests(SettingsTestCase):
         calls = []
         _m_cards.send_panel_request = lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
         try:
-            _owner_groups.send_group_menu(
+            _owner_group_panels.send_group_menu(
                 self.db,
                 "token",
                 "chat|topic:7",
@@ -185,7 +186,7 @@ class GroupTurnGatingTests(SettingsTestCase):
                 button["callback_data"] for row in calls[-1]["reply_markup"]["inline_keyboard"] for button in row
             }
             self.assertIn("group:new_session", topic_callbacks)
-            _owner_groups.send_group_menu(
+            _owner_group_panels.send_group_menu(
                 self.db,
                 "token",
                 "chat",
@@ -269,7 +270,7 @@ class GroupTurnGatingTests(SettingsTestCase):
             "message": {"message_id": 10, "chat": {"id": chat_id}},
         }
         try:
-            _m_groups.handle_group_panel_callback(
+            _owner_group_callbacks.handle_group_panel_callback(
                 self.db,
                 "token",
                 chat_id,
@@ -330,7 +331,7 @@ class GroupTurnGatingTests(SettingsTestCase):
         original_fields = _owner_character_callbacks.card_fields_from_file
         original_close = _owner_character_callbacks.close_panel_message
         original_world_menu = _owner_world_callbacks.send_world_menu
-        original_groups_world_menu = _m_groups.send_world_menu
+        original_groups_world_menu = group_setup.send_world_menu
         original_remove = _owner_world_callbacks.remove_inline_keyboard
         original_group_menu = _owner_world_callbacks.send_group_menu
         opened_world = []
@@ -345,7 +346,7 @@ class GroupTurnGatingTests(SettingsTestCase):
         _owner_character_callbacks.card_fields_from_file = lambda _name, *, app_settings=None: {"name": "Chosen"}
         _owner_character_callbacks.close_panel_message = lambda *_args, **_kwargs: None
         _owner_world_callbacks.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
-        _m_groups.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
+        group_setup.send_world_menu = lambda *_args, **_kwargs: opened_world.append(True)
         _owner_world_callbacks.remove_inline_keyboard = lambda *_args, **_kwargs: None
         _owner_world_callbacks.send_group_menu = lambda *_args, **_kwargs: opened_group.append(True)
         try:
@@ -435,7 +436,7 @@ class GroupTurnGatingTests(SettingsTestCase):
             _owner_character_callbacks.card_fields_from_file = original_fields
             _owner_character_callbacks.close_panel_message = original_close
             _owner_world_callbacks.send_world_menu = original_world_menu
-            _m_groups.send_world_menu = original_groups_world_menu
+            group_setup.send_world_menu = original_groups_world_menu
             _owner_world_callbacks.remove_inline_keyboard = original_remove
             _owner_world_callbacks.send_group_menu = original_group_menu
         self.assertTrue(opened_world)

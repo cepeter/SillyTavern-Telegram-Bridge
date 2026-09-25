@@ -1,6 +1,8 @@
 from application_test_setup import ensure_application_extensions
 from settings_test_support import SettingsTestCase
 
+import bridge.rag_core as _owner_rag_core
+
 ensure_application_extensions()
 
 import json
@@ -10,7 +12,6 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.help as _m_help
 import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
 import bridge.rag_core as _m_telegram
@@ -232,7 +233,7 @@ class RagScalingTests(SettingsTestCase):
 
         rag_core.embed_rag_batch = fake_embed
         try:
-            total, indexed = _m_help.reindex_data_bank_documents(
+            total, indexed = _owner_rag_core.reindex_data_bank_documents(
                 self.db, "chat", "reindex.txt", app_settings=self.app_settings_builder.build()
             )
         finally:

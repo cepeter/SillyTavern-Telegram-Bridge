@@ -24,6 +24,7 @@ STATIC_TARGETS: tuple[str, ...] = (
 
 
 REPOSITORY_TARGETS: tuple[str, ...] = (
+    "bridge/variant_repository.py",
     "bridge/director_goal_repository.py",
     "bridge/failure_repository.py",
     "bridge/generation_settings_repository.py",

@@ -440,8 +440,8 @@ class CardFoundationBoundaryTests(SettingsTestCase):
         import bridge.callback_tokens as callback_tokens
         import bridge.card_content as card_content
         import bridge.cards as cards
-        import bridge.media as media
         import bridge.panel_utils as panel_utils
+        import bridge.response_delivery as media
         import bridge.session_naming as session_naming
         import bridge.telegram as telegram
 

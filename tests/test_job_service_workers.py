@@ -10,7 +10,9 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase, make_test_settings
 
+import bridge.document_jobs as _owner_document_jobs
 import bridge.transcript_repository as _owner_transcript_repository
+import bridge.voice_jobs as _owner_voice_jobs
 from bridge.session_service import SessionService
 
 ensure_application_extensions()
@@ -20,8 +22,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import bridge.help as _m_help
-import bridge.media as _m_media
 import bridge.memory_curator as _m_memory_curator
 import bridge.worker_orchestration as _m_workers
 from bridge.composition import BackgroundRuntime, BridgeServices, TelegramRuntime
@@ -421,11 +421,11 @@ class JobWorkerServiceTests(SettingsTestCase):
                 return_value=None,
             ),
             patch.object(
-                _m_media,
+                _owner_voice_jobs,
                 "process_voice_message",
             ) as voice_message,
         ):
-            _m_media.process_voice_job(
+            _owner_voice_jobs.process_voice_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -450,12 +450,12 @@ class JobWorkerServiceTests(SettingsTestCase):
                 return_value=None,
             ),
             patch.object(
-                _m_media,
+                _owner_voice_jobs,
                 "process_voice_message",
                 side_effect=RuntimeError("voice boom"),
             ),
         ):
-            _m_media.process_voice_job(
+            _owner_voice_jobs.process_voice_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",
@@ -474,10 +474,10 @@ class JobWorkerServiceTests(SettingsTestCase):
 
     def test_document_worker_success_and_failure_use_job_service(self):
         with patch.object(
-            _m_help,
+            _owner_document_jobs,
             "import_telegram_document",
         ):
-            _m_help.process_document_job(
+            _owner_document_jobs.process_document_job(
                 self.services,
                 "chat",
                 {"file_name": "notes.txt"},
@@ -491,11 +491,11 @@ class JobWorkerServiceTests(SettingsTestCase):
 
         self.jobs.calls.clear()
         with patch.object(
-            _m_help,
+            _owner_document_jobs,
             "import_telegram_document",
             side_effect=RuntimeError("document boom"),
         ):
-            _m_help.process_document_job(
+            _owner_document_jobs.process_document_job(
                 self.services,
                 "chat",
                 {"file_name": "notes.txt"},
@@ -569,16 +569,16 @@ class JobWorkerServiceTests(SettingsTestCase):
         self.jobs.calls.clear()
         with (
             patch.object(
-                _m_media,
+                _owner_voice_jobs,
                 "committed_assistant_for_message",
                 return_value=None,
             ),
             patch.object(
-                _m_media,
+                _owner_voice_jobs,
                 "process_voice_message",
             ) as process_voice_message,
         ):
-            _m_media.process_voice_job(
+            _owner_voice_jobs.process_voice_job(
                 self.services,
                 {"name": "Mira"},
                 "chat",

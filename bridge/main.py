@@ -11,6 +11,7 @@ import bridge.sillytavern_api as _st_api
 import bridge.sqlite_store as _sqlite_store
 from bridge.application_composition import initialize_extensions as _initialize_extensions
 from bridge.background import begin_background_shutdown, register_durable_backlog_dispatcher, submit_chat_background
+from bridge.bot_commands import set_bot_commands
 from bridge.card_content import card_fields, card_fields_from_file, read_png_chara, safe_character_path
 from bridge.command_routes import handle_command_route
 from bridge.composition import BackgroundRuntime as _BackgroundRuntime
@@ -37,12 +38,10 @@ from bridge.group_core import (
 )
 from bridge.group_director_service import GroupDirectorService as _GroupDirectorService
 from bridge.group_service import GroupService as _GroupService
-from bridge.help import set_bot_commands
 from bridge.input_flow_service import InputFlowService as _InputFlowService
-from bridge.input_flows import handle_pending_input, start_text_action_input
+from bridge.input_flows import handle_pending_input
 from bridge.job_service import JobService as _JobService
 from bridge.job_store import enqueue_job, finish_job, job_actor_id, mark_job_running, mark_job_scheduled, recover_jobs
-from bridge.media import delete_outgoing_message_row, send_reply, send_typing
 from bridge.memory import (
     get_session_summary,
     purge_hindsight_session,
@@ -67,6 +66,7 @@ from bridge.provider_port import ProviderPort as _ProviderPort
 from bridge.provider_transport import generate_provider_text
 from bridge.reference_repository import count_persona_references as _count_persona_references
 from bridge.reference_repository import count_session_messages as _count_session_messages
+from bridge.response_delivery import delete_outgoing_message_row, send_reply
 from bridge.runtime_lifecycle import run_bridge_runtime
 from bridge.runtime_logging import configure_logging, enforce_runtime_permissions
 from bridge.scheduler_safety import DurableWorkerGuard as _DurableWorkerGuard
@@ -85,7 +85,8 @@ from bridge.sqlite_store import db_connect
 from bridge.sync_api import _live_sync_disable, live_sync_now, live_sync_poll, live_sync_toggle_realtime
 from bridge.sync_core import sync_binding
 from bridge.sync_service import SyncService as _SyncService
-from bridge.telegram import download_telegram_file, send_panel_request, send_text, telegram_request
+from bridge.telegram import download_telegram_file, send_panel_request, send_text, send_typing, telegram_request
+from bridge.text_action_input import start_text_action_input
 
 
 def validate_startup_credential(model: str, model_router: _ModelRouter, *, app_settings: AppSettings) -> None:

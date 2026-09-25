@@ -1,6 +1,7 @@
 from application_test_setup import ensure_application_extensions, make_test_provider_port
 from settings_test_support import SettingsTestCase
 
+import bridge.memory as _owner_memory
 import bridge.model_selection as _owner_model_selection
 
 ensure_application_extensions()
@@ -10,7 +11,6 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.groups as _m_groups
 import bridge.memory_curator as _m_memory_curator
 import bridge.session_naming as _m_session_naming
 
@@ -67,7 +67,7 @@ class TaskModelRoutingTests(SettingsTestCase):
                 seen_models.append(model) or "Blue key in drawer."
             )
         )
-        summary = _m_groups.generate_session_summary(
+        summary = _owner_memory.generate_session_summary(
             self.db,
             "chat",
             self.session,

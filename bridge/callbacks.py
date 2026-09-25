@@ -96,3 +96,11 @@ def is_session_scoped_panel_callback(data: str) -> bool:
             "enum:stt",
         )
     )
+
+
+def remove_inline_keyboard(db: sqlite3.Connection, token: str, callback: dict) -> None:
+    message = callback.get("message") or callback
+    chat_id = str((message.get("chat") or {}).get("id", ""))
+    message_id = message.get("message_id")
+    if chat_id and message_id:
+        close_panel_message(db, token, chat_id, callback)

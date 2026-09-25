@@ -14,14 +14,12 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.edit_messages as _owner_edit_messages
 import bridge.metadata as _owner_metadata
 import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
 
 ensure_application_extensions()
-
-
-import bridge.commands as commands
 
 
 class NativeEditedMessageSessionTests(SettingsTestCase):
@@ -115,22 +113,22 @@ class NativeEditedMessageSessionTests(SettingsTestCase):
         persona = make_test_persona_service()
         with (
             patch.object(
-                commands,
+                _owner_edit_messages,
                 "card_fields_from_file",
                 side_effect=fake_card_fields,
             ),
             patch.object(
-                commands,
+                _owner_edit_messages,
                 "regenerate_edited_turn",
                 side_effect=fake_regenerate,
             ),
             patch.object(
-                commands,
+                _owner_edit_messages,
                 "send_text",
                 side_effect=lambda _token, _chat_id, text: sent.append(text),
             ),
         ):
-            commands.edit_telegram_user_message(
+            _owner_edit_messages.edit_telegram_user_message(
                 self.db,
                 "token",
                 "key",

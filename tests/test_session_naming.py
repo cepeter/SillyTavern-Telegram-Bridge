@@ -11,6 +11,7 @@ from application_test_setup import (
 from settings_test_support import SettingsTestCase
 
 import bridge.session_core as _owner_session_core
+from bridge import pending_input
 
 ensure_application_extensions()
 
@@ -21,7 +22,6 @@ import unittest
 from pathlib import Path
 
 import bridge.command_routes as _m_command_routes
-import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
@@ -231,8 +231,8 @@ class SessionNamingTests(SettingsTestCase):
             group_service=self.group,
             app_settings=self.app_settings_builder.build(),
         )
-        original_safe = _m_input_flows.safe_character_path
-        _m_input_flows.safe_character_path = lambda name, *, app_settings=None: (
+        original_safe = pending_input.safe_character_path
+        pending_input.safe_character_path = lambda name, *, app_settings=None: (
             Path("/tmp/Chosen.png") if name == "Chosen.png" else None
         )
         try:
@@ -252,7 +252,7 @@ class SessionNamingTests(SettingsTestCase):
                 ),
             )
         finally:
-            _m_input_flows.safe_character_path = original_safe
+            pending_input.safe_character_path = original_safe
         created = _m_memory_curator.load_session(
             self.db,
             "chat",

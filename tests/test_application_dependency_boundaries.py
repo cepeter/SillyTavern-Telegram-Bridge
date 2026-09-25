@@ -6,6 +6,7 @@ from pathlib import Path
 from application_test_setup import make_native_test_persona_service, make_test_provider_port, make_test_session_service
 from settings_test_support import SettingsBuilder, make_test_settings
 
+import bridge.document_jobs as _owner_document_jobs
 import bridge.native_imports as _owner_native_imports
 from bridge.limits import IMAGE_MAX_BYTES
 from bridge.session_service import SessionService
@@ -376,8 +377,6 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
     import sqlite3
     from types import SimpleNamespace
 
-    import bridge.help as help_module
-
     captured = {}
     services = SimpleNamespace(
         config=SimpleNamespace(
@@ -401,12 +400,12 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
         ),
     )
     monkeypatch.setattr(
-        help_module,
+        _owner_document_jobs,
         "import_telegram_document",
         lambda *args, app_settings=None, **kwargs: captured.update(kwargs),
     )
 
-    help_module.process_document_job(
+    _owner_document_jobs.process_document_job(
         services,
         "chat",
         {"file_name": "photo.png"},
@@ -415,7 +414,7 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
 
     assert captured["api_key"] == "configured-key"
     process_image = captured["process_image"]
-    assert process_image.func is help_module.process_image_message
+    assert process_image.func is _owner_document_jobs.process_image_message
     assert process_image.keywords["provider_port"] is services.provider
 
 

@@ -9,6 +9,7 @@ from settings_test_support import SettingsTestCase
 import bridge.character_callbacks as _owner_character_callbacks
 import bridge.session_callbacks as _owner_session_callbacks
 import bridge.session_core as _owner_session_core
+from bridge import pending_input
 
 ensure_application_extensions()
 
@@ -18,7 +19,6 @@ import time
 import unittest
 from pathlib import Path
 
-import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.session_naming as _m_session_naming
 
@@ -114,10 +114,10 @@ class CharacterSessionChainTests(SettingsTestCase):
             "character_session_input:chat",
             json.dumps({"character_file": "chosen.png", "character_name": "Chosen", "expires_at": time.time() + 600}),
         )
-        original_safe = _m_input_flows.safe_character_path
+        original_safe = pending_input.safe_character_path
         original_remove = _owner_session_callbacks.remove_inline_keyboard
         original_send = _owner_session_callbacks.send_text
-        _m_input_flows.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
+        pending_input.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
         _owner_session_callbacks.remove_inline_keyboard = lambda *_args, **_kwargs: None
         sent = []
         _owner_session_callbacks.send_text = lambda _token, _chat, text: sent.append(text) or []
@@ -141,7 +141,7 @@ class CharacterSessionChainTests(SettingsTestCase):
                 ),
             )
         finally:
-            _m_input_flows.safe_character_path = original_safe
+            pending_input.safe_character_path = original_safe
             _owner_session_callbacks.remove_inline_keyboard = original_remove
             _owner_session_callbacks.send_text = original_send
         self.assertTrue(handled)

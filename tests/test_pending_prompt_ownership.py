@@ -12,7 +12,7 @@ from application_test_setup import make_test_group_service
 from settings_test_support import SettingsTestCase
 
 import bridge.background as _background
-import bridge.input_flows as input_flows
+import bridge.pending_input as _owner_pending_input
 import bridge.session_naming as session_naming
 import bridge.sqlite_store as _sqlite_store
 import bridge.telegram as telegram
@@ -54,7 +54,7 @@ class PendingPromptOwnershipTests(SettingsTestCase):
         self.assertFalse(hasattr(_background, "delete_pending_input_prompts"))
 
     def test_consumers_import_canonical_owner(self):
-        for filename in ("input_flows.py", "session_naming.py"):
+        for filename in ("pending_input.py", "session_naming.py"):
             path = BRIDGE_DIR / filename
             self.assertIn(
                 "delete_pending_input_prompts",
@@ -161,14 +161,14 @@ class PendingPromptOwnershipTests(SettingsTestCase):
 
     def test_pending_state_rejects_retired_raw_setting_key_format(self):
         self.assertEqual(
-            input_flows._decode_pending_state(
+            _owner_pending_input._decode_pending_state(
                 "temperature",
                 "settings_input:chat",
             ),
             {},
         )
         self.assertEqual(
-            input_flows._decode_pending_state(
+            _owner_pending_input._decode_pending_state(
                 '{"key":"temperature"}',
                 "settings_input:chat",
             ),

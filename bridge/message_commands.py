@@ -10,21 +10,14 @@ from typing import TYPE_CHECKING
 from bridge.card_content import card_fields_from_file
 from bridge.cards import send_session_menu
 from bridge.character_identity import reconcile_session_character
-from bridge.commands import edit_last_user
 from bridge.context_compaction import context_history_candidate_limit
+from bridge.continuation import continue_last
+from bridge.edit_messages import edit_last_user
 from bridge.failed_turns import clear_failed_turn
-from bridge.generation import (
-    build_chat_messages,
-    continue_last,
-    regenerate_last,
-    render_response_language,
-    save_response_variant,
-    swipe_state_key,
-)
+from bridge.generation import build_chat_messages, render_response_language
 from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
 from bridge.language import normalize_response_language
-from bridge.media import queue_user_quote_tts, send_reply, send_typing
 from bridge.memory import clear_session_summary
 from bridge.memory_service import MemoryService
 from bridge.metadata import get_meta, set_meta
@@ -39,12 +32,15 @@ from bridge.performance import timed_call
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.rag_core import rag_citation_footer, rag_context_for_prompt, rag_retrieval_bundle
+from bridge.regeneration import regenerate_last
 from bridge.request_types import PreparedMessage, RequestContext
 from bridge.reset_panel import reset_confirmation_request
+from bridge.response_delivery import queue_user_quote_tts, send_reply
+from bridge.response_variants import save_response_variant, swipe_state_key
 from bridge.session_core import ensure_session, list_sessions, load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import optimize_database, write_transaction
-from bridge.telegram import send_panel_request, send_text, telegram_request
+from bridge.telegram import send_panel_request, send_text, send_typing, telegram_request
 
 if TYPE_CHECKING:
     pass
@@ -231,14 +227,7 @@ def generate_and_store_reply(
                 (chat_id, session_id, "assistant", stored_reply, now + 0.001),
             )
             assistant_rowid = assistant_cursor.lastrowid
-            save_response_variant(
-                db,
-                chat_id,
-                session_id,
-                text,
-                stored_reply,
-                commit=False,
-            )
+            save_response_variant(db, chat_id, session_id, text, stored_reply)
             if group_turn:
                 group_service.advance_turn(
                     db,

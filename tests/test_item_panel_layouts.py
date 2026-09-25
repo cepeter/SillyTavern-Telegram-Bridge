@@ -6,9 +6,12 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.card_content as _owner_card_content
 import bridge.command_panels as _command_panels
-import bridge.groups as _owner_groups
+import bridge.generation_settings as _owner_generation_settings
+import bridge.group_panels as _owner_group_panels
 import bridge.session_core as _owner_session_core
+from bridge import databank_panels
 
 ensure_application_extensions()
 
@@ -19,9 +22,6 @@ from pathlib import Path
 import bridge.cards as _m_cards
 import bridge.command_routes as _m_command_routes
 import bridge.group_core as _m_group_core
-import bridge.groups as _m_groups
-import bridge.help as _m_help
-import bridge.input_flows as _m_input_flows
 import bridge.memory_curator as _m_memory_curator
 import bridge.native_imports as _m_telegram
 
@@ -62,7 +62,7 @@ class ItemPanelLayoutTests(SettingsTestCase):
         self.assertNotIn("persona:delete", callbacks)
 
     def test_preset_rows_have_delete_callbacks(self):
-        _m_input_flows.save_generation_preset(self.db, "chat", "fast", {"temperature": 0.7})
+        _owner_generation_settings.save_generation_preset(self.db, "chat", "fast", {"temperature": 0.7})
         _command_panels.send_preset_menu(
             "bot",
             "chat",
@@ -75,10 +75,10 @@ class ItemPanelLayoutTests(SettingsTestCase):
         self.assertNotIn("enum:presetdelete", callbacks)
 
     def test_databank_rows_have_versions_and_remove_callbacks(self):
-        old_docs = _m_help.data_bank_documents
-        old_coverage = _m_help.rag_embedding_coverage
-        _m_help.data_bank_documents = lambda _db, _chat: [("doc-1", "lore.json", 1, 2)]
-        _m_help.rag_embedding_coverage = lambda _db, _chat, *, app_settings=None: (2, 2)
+        old_docs = databank_panels.data_bank_documents
+        old_coverage = databank_panels.rag_embedding_coverage
+        databank_panels.data_bank_documents = lambda _db, _chat: [("doc-1", "lore.json", 1, 2)]
+        databank_panels.rag_embedding_coverage = lambda _db, _chat, *, app_settings=None: (2, 2)
         try:
             _command_panels.send_databank_menu(
                 "bot",
@@ -87,8 +87,8 @@ class ItemPanelLayoutTests(SettingsTestCase):
                 request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
             )
         finally:
-            _m_help.data_bank_documents = old_docs
-            _m_help.rag_embedding_coverage = old_coverage
+            databank_panels.data_bank_documents = old_docs
+            databank_panels.rag_embedding_coverage = old_coverage
         callbacks = self._callbacks(self.calls[-1][1])
         self.assertTrue(any(value.startswith("enum:ragversions:") for value in callbacks))
         self.assertTrue(any(value.startswith("enum:ragremove:") for value in callbacks))
@@ -130,8 +130,8 @@ class ItemPanelLayoutTests(SettingsTestCase):
         session = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
         )
-        old_fields = _m_groups.card_fields_from_file
-        _m_groups.card_fields_from_file = lambda _filename, *, app_settings=None: {"name": "Member"}
+        old_fields = _owner_card_content.card_fields_from_file
+        _owner_card_content.card_fields_from_file = lambda _filename, *, app_settings=None: {"name": "Member"}
         _m_group_core.save_group_state(
             self.db,
             "chat",
@@ -148,7 +148,7 @@ class ItemPanelLayoutTests(SettingsTestCase):
             },
         )
         try:
-            _owner_groups.send_group_menu(
+            _owner_group_panels.send_group_menu(
                 self.db,
                 "bot",
                 "chat",
@@ -159,7 +159,7 @@ class ItemPanelLayoutTests(SettingsTestCase):
                 ),
             )
         finally:
-            _m_groups.card_fields_from_file = old_fields
+            _owner_card_content.card_fields_from_file = old_fields
         callbacks = self._callbacks(self.calls[-1][1])
         self.assertTrue(any(value.startswith("groupremove:") for value in callbacks))
         self.assertFalse(any(value.startswith("characterdelete") for value in callbacks))

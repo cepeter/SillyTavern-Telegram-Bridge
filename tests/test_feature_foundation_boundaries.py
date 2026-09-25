@@ -151,7 +151,16 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
 
     def test_network_security_is_canonical_owner(self):
         transport = (REPO_ROOT / "bridge" / "provider_transport.py").read_text(encoding="utf-8")
-        generation = (REPO_ROOT / "bridge" / "generation.py").read_text(encoding="utf-8")
+        generation = "\n".join(
+            (
+                (REPO_ROOT / "bridge" / "continuation.py").read_text(encoding="utf-8"),
+                (REPO_ROOT / "bridge" / "generation.py").read_text(encoding="utf-8"),
+                (REPO_ROOT / "bridge" / "generation_recovery.py").read_text(encoding="utf-8"),
+                (REPO_ROOT / "bridge" / "regeneration.py").read_text(encoding="utf-8"),
+                (REPO_ROOT / "bridge" / "response_variants.py").read_text(encoding="utf-8"),
+                (REPO_ROOT / "bridge" / "swipe_panels.py").read_text(encoding="utf-8"),
+            )
+        )
         self.assertNotIn("def validate_provider_endpoint(", transport)
         self.assertNotIn("def strict_urlopen(", transport)
         self.assertIn("from bridge.network_security import", transport)
@@ -218,7 +227,14 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
                 self.assertNotIn(forbidden, source)
 
     def test_group_shell_does_not_redefine_core_api(self):
-        source = (REPO_ROOT / "bridge" / "groups.py").read_text(encoding="utf-8")
+        source = "\n".join(
+            (
+                (REPO_ROOT / "bridge" / "group_callbacks.py").read_text(encoding="utf-8"),
+                (REPO_ROOT / "bridge" / "group_commands.py").read_text(encoding="utf-8"),
+                (REPO_ROOT / "bridge" / "group_panels.py").read_text(encoding="utf-8"),
+                (REPO_ROOT / "bridge" / "group_setup.py").read_text(encoding="utf-8"),
+            )
+        )
         for name in GROUP_CORE_EXPORTS:
             with self.subTest(name=name):
                 self.assertNotIn(f"def {name}(", source)
@@ -240,7 +256,7 @@ class FeatureFoundationBoundaryTests(SettingsTestCase):
                     self.assertTrue(hasattr(module, name))
 
     def test_feature_shells_use_ordinary_imports(self):
-        for module_name in ("bridge.memory", "bridge.rag", "bridge.groups"):
+        for module_name in ("bridge.memory", "bridge.rag", "bridge.group_commands"):
             with self.subTest(module=module_name):
                 __import__(module_name)
 

@@ -474,7 +474,7 @@ def _memory_curator_command_route(
 
 
 def register_memory_curator_extensions() -> None:
-    """Register Memory Curator hooks once in the compatibility registry."""
+    """Register Memory Curator hooks once in the extension registry."""
     snapshot = _extension_registry_snapshot()
     if "memory_curator" not in snapshot["post_retain"]:
         _register_post_retain_hook(

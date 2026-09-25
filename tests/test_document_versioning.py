@@ -1,18 +1,18 @@
 from application_test_setup import ensure_application_extensions
 from settings_test_support import SettingsTestCase
 
+import bridge.rag_core as _owner_rag_core
+
 ensure_application_extensions()
 
 import tempfile
 import unittest
 from pathlib import Path
 
-import bridge.help as _m_help
 import bridge.memory_curator as _m_memory_curator
 import bridge.rag as _m_rag
 import bridge.rag_core as _m_telegram
 import bridge.rag_core as rag_core
-import bridge.status_panels as _m_status_panels
 
 
 class DocumentVersioningTests(SettingsTestCase):
@@ -46,11 +46,11 @@ class DocumentVersioningTests(SettingsTestCase):
         self.assertGreater(chunks1, 0)
         self.assertGreater(chunks2, 0)
 
-        versions = _m_help.data_bank_document_versions(self.db, "chat", "notes.txt")
+        versions = _owner_rag_core.data_bank_document_versions(self.db, "chat", "notes.txt")
         self.assertEqual([row[1] for row in versions], [2, 1])
         self.assertEqual([row[2] for row in versions], [1, 0])
 
-        active = _m_status_panels.data_bank_documents(self.db, "chat")
+        active = _owner_rag_core.data_bank_documents(self.db, "chat")
         self.assertEqual(len(active), 1)
         self.assertEqual(active[0][1], "notes.txt")
 
@@ -96,7 +96,7 @@ class DocumentVersioningTests(SettingsTestCase):
         self.assertTrue(current)
         self.assertEqual(old_hidden, [])
 
-        self.assertTrue(_m_help.activate_data_bank_version(self.db, "chat", "story.txt", 1))
+        self.assertTrue(_owner_rag_core.activate_data_bank_version(self.db, "chat", "story.txt", 1))
         old_visible = _m_rag.retrieve_data_bank(
             self.db, "chat", "dragon", app_settings=self.app_settings_builder.build()
         )
@@ -118,8 +118,8 @@ class DocumentVersioningTests(SettingsTestCase):
         _m_telegram.add_data_bank_document(
             self.db, "chat", "notes.txt", b"version two", app_settings=self.app_settings_builder.build()
         )
-        self.assertFalse(_m_help.activate_data_bank_version(self.db, "chat", "notes.txt", 99))
-        versions = _m_help.data_bank_document_versions(self.db, "chat", "notes.txt")
+        self.assertFalse(_owner_rag_core.activate_data_bank_version(self.db, "chat", "notes.txt", 99))
+        versions = _owner_rag_core.data_bank_document_versions(self.db, "chat", "notes.txt")
         active = [row[1] for row in versions if row[2]]
         self.assertEqual(active, [2])
 

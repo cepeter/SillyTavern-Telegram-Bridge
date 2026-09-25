@@ -10,8 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import bridge.catalog as catalog
 import bridge.config as config
+import bridge.provider_discovery as _owner_provider_discovery
+import bridge.provider_panels as _owner_provider_panels
 import bridge.provider_transport as transport
 from bridge.model_router import ModelRouter
 from bridge.settings import load_app_settings
@@ -50,14 +51,14 @@ def test_explicit_canonical_or_alias_endpoint_is_used(tmp_path, monkeypatch, fie
 
 def test_empty_catalog_panel_explains_how_to_add_models(tmp_path, monkeypatch):
     settings = load_app_settings({}, home=tmp_path)
-    monkeypatch.setattr(catalog, "refresh_model_catalog", lambda **_k: ({"providers": {}}, 0, 0))
+    monkeypatch.setattr(_owner_provider_discovery, "refresh_model_catalog", lambda **_k: ({"providers": {}}, 0, 0))
     calls = []
-    monkeypatch.setattr(catalog, "send_panel_message", lambda *args, **_k: calls.append(args))
+    monkeypatch.setattr(_owner_provider_panels, "send_panel_message", lambda *args, **_k: calls.append(args))
     db = sqlite3.connect(":memory:")
     try:
         context = SimpleNamespace(db=db, session_id="session", app_settings=settings)
-        assert catalog.get_model_groups(app_settings=settings) == {}
-        catalog.send_model_menu("token", "chat", "", request_context=context)
+        assert _owner_provider_discovery.get_model_groups(app_settings=settings) == {}
+        _owner_provider_panels.send_model_menu("token", "chat", "", request_context=context)
     finally:
         db.close()
     text, markup = calls[-1][2:4]
@@ -75,7 +76,7 @@ def test_empty_provider_fallback_symbols_are_retired_not_real_defaults():
     assert config.STT_DEFAULT_MODEL == "base"
     root = Path(__file__).parents[1]
     assert "DEFAULT_PROVIDER_URL" not in (root / "bridge/provider_transport.py").read_text()
-    assert "MODEL_CHOICES" not in (root / "bridge/catalog.py").read_text()
+    assert "MODEL_CHOICES" not in (root / "bridge/provider_discovery.py").read_text()
 
 
 def test_security_policy_names_existing_codeql_default_setup():

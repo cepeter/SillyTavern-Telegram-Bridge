@@ -2,6 +2,7 @@ from application_test_setup import ensure_application_extensions, make_test_requ
 from settings_test_support import SettingsTestCase
 
 import bridge.sync_callbacks as _owner_sync_callbacks
+import bridge.sync_panels as _owner_sync_panels
 
 ensure_application_extensions()
 
@@ -10,8 +11,6 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
-
-import bridge.status_panels as _m_status_panels
 
 
 class SyncUiBehaviorTests(SettingsTestCase):
@@ -33,7 +32,7 @@ class SyncUiBehaviorTests(SettingsTestCase):
         )
 
     def test_status_renders_never_synced_disabled_unconfigured(self):
-        text = _m_status_panels.sync_status_text(
+        text = _owner_sync_panels.sync_status_text(
             self.db,
             "chat",
             self.session,
@@ -79,7 +78,7 @@ class SyncUiBehaviorTests(SettingsTestCase):
                 return_value="2026-09-21 09:00:00 WIB",
             ) as strftime,
         ):
-            text = _m_status_panels.sync_status_text(
+            text = _owner_sync_panels.sync_status_text(
                 self.db,
                 "chat",
                 self.session,
@@ -102,7 +101,7 @@ class SyncUiBehaviorTests(SettingsTestCase):
 
     def test_status_requires_explicit_sync_service(self):
         with self.assertRaises(TypeError):
-            _m_status_panels.sync_status_text(
+            _owner_sync_panels.sync_status_text(
                 self.db,
                 "chat",
                 self.session,
@@ -115,7 +114,7 @@ class SyncUiBehaviorTests(SettingsTestCase):
             RuntimeError,
             "status failed",
         ):
-            _m_status_panels.sync_status_text(
+            _owner_sync_panels.sync_status_text(
                 self.db,
                 "chat",
                 self.session,
@@ -124,7 +123,7 @@ class SyncUiBehaviorTests(SettingsTestCase):
 
     def test_send_sync_menu_preserves_keyboard_and_message_id(self):
         with patch.object(
-            _m_status_panels,
+            _owner_sync_panels,
             "send_panel_message",
         ) as send_panel:
             _owner_sync_callbacks.send_sync_menu(
@@ -396,7 +395,15 @@ class SyncUiBehaviorTests(SettingsTestCase):
 
 class SyncUiOwnershipTests(SettingsTestCase):
     def test_status_panels_owns_sync_status_and_menu(self):
-        source = (Path(__file__).parents[1] / "bridge" / "status_panels.py").read_text(encoding="utf-8")
+        source = "\n".join(
+            (
+                (Path(__file__).parents[1] / "bridge" / "feature_callbacks.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "feature_panels.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "prompt_panels.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "status_panels.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "sync_panels.py").read_text(encoding="utf-8"),
+            )
+        )
         self.assertIn(
             "\ndef sync_status_text(",
             source,

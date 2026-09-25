@@ -5,17 +5,20 @@ from __future__ import annotations
 import sqlite3
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
-from bridge.callbacks import close_panel_message, discard_panel_binding, is_session_scoped_panel_callback
-from bridge.catalog import answer_callback
+from bridge.callbacks import (
+    close_panel_message,
+    discard_panel_binding,
+    is_session_scoped_panel_callback,
+    remove_inline_keyboard,
+)
 from bridge.composition import BridgeServices
-from bridge.groups import handle_group_panel_callback
-from bridge.help import handle_enum_callback
-from bridge.media import remove_inline_keyboard
+from bridge.enum_callbacks import handle_enum_callback
+from bridge.group_callbacks import handle_group_panel_callback
 from bridge.panel_bindings import panel_owner_for_message, panel_session_for_message
 from bridge.panel_callback_routes import handle_entity_panel_callback, handle_primary_panel_callback
 from bridge.provider_callbacks import handle_provider_model_callback
 from bridge.request_types import RequestContext
-from bridge.telegram import send_text
+from bridge.telegram import answer_callback, send_text
 from bridge.topic_scope import parse_topic_scope
 
 

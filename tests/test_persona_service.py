@@ -367,7 +367,17 @@ class PersonaSourceBoundaryTests(SettingsTestCase):
 
     def test_migrated_persona_application_paths_do_not_call_raw_lifecycle(self):
         root = Path(__file__).parents[1] / "bridge"
-        input_source = (root / "input_flows.py").read_text(encoding="utf-8")
+        input_source = "\n".join(
+            (
+                (root / "input_flows.py").read_text(encoding="utf-8"),
+                (root / "pending_input.py").read_text(encoding="utf-8"),
+                (root / "persona_callbacks.py").read_text(encoding="utf-8"),
+                (root / "persona_input.py").read_text(encoding="utf-8"),
+                (root / "persona_panels.py").read_text(encoding="utf-8"),
+                (root / "settings_input.py").read_text(encoding="utf-8"),
+                (root / "text_action_input.py").read_text(encoding="utf-8"),
+            )
+        )
         for forbidden in (
             "upsert_native_persona(",
             "delete_native_persona(",
@@ -389,7 +399,16 @@ class PersonaSourceBoundaryTests(SettingsTestCase):
         self.assertNotIn("persona_name(", chunk)
 
     def test_generation_prompt_reads_only_through_service_boundary(self):
-        source = (Path(__file__).parents[1] / "bridge" / "generation.py").read_text(encoding="utf-8")
+        source = "\n".join(
+            (
+                (Path(__file__).parents[1] / "bridge" / "continuation.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "generation.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "generation_recovery.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "regeneration.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "response_variants.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "swipe_panels.py").read_text(encoding="utf-8"),
+            )
+        )
         chunk = self._function_chunk(source, "def build_chat_messages")
         self.assertNotIn("persona_name(", chunk)
         self.assertNotIn("get_persona(", chunk)
@@ -398,9 +417,20 @@ class PersonaSourceBoundaryTests(SettingsTestCase):
         root = Path(__file__).parents[1] / "bridge"
         for filename in (
             "input_flows.py",
+            "pending_input.py",
+            "persona_callbacks.py",
+            "persona_input.py",
+            "persona_panels.py",
+            "settings_input.py",
+            "text_action_input.py",
             "callbacks.py",
             "message_commands.py",
+            "continuation.py",
             "generation.py",
+            "generation_recovery.py",
+            "regeneration.py",
+            "response_variants.py",
+            "swipe_panels.py",
         ):
             source = (root / filename).read_text(encoding="utf-8")
             self.assertNotIn("resolve_persona_service", source, filename)

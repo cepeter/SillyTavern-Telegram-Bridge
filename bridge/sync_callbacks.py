@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bridge.callbacks import close_panel_message
-from bridge.status_panels import send_sync_menu
+from bridge.sync_panels import send_sync_menu
 from bridge.sync_service import SyncService
 
 

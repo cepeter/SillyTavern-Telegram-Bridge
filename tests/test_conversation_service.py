@@ -35,7 +35,7 @@ def test_message_commands_does_not_import_command_routes():
     assert "bridge.command_routes" not in imports("message_commands")
 
 
-@pytest.mark.parametrize("owner", ["command_routes", "media", "worker_orchestration"])
+@pytest.mark.parametrize("owner", ["command_routes", "voice_jobs", "worker_orchestration"])
 def test_entrypoints_do_not_import_old_message_dispatch(owner):
     tree = ast.parse((ROOT / "bridge" / f"{owner}.py").read_text())
     assert not any(

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
-from bridge.catalog import refresh_model_catalog, send_model_menu, send_model_target_menu, send_provider_health_menu
-from bridge.media import remove_inline_keyboard
+from bridge.callbacks import remove_inline_keyboard
 from bridge.model_selection import (
     clear_model_target_selection,
     get_model_target_selection,
@@ -12,6 +11,8 @@ from bridge.model_selection import (
     set_task_model,
     task_model_for_session,
 )
+from bridge.provider_discovery import refresh_model_catalog
+from bridge.provider_panels import send_model_menu, send_model_target_menu, send_provider_health_menu
 from bridge.session_core import update_session
 from bridge.telegram import send_text
 

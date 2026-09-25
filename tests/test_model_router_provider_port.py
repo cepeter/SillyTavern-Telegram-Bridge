@@ -133,7 +133,18 @@ def test_provider_transport_is_infrastructure_only():
 
 
 def test_generation_no_longer_owns_provider_transport_or_router_helpers():
-    tree = ast.parse((BRIDGE / "generation.py").read_text(encoding="utf-8"))
+    tree = ast.parse(
+        "\n".join(
+            (
+                (BRIDGE / "continuation.py").read_text(encoding="utf-8"),
+                (BRIDGE / "generation.py").read_text(encoding="utf-8"),
+                (BRIDGE / "generation_recovery.py").read_text(encoding="utf-8"),
+                (BRIDGE / "regeneration.py").read_text(encoding="utf-8"),
+                (BRIDGE / "response_variants.py").read_text(encoding="utf-8"),
+                (BRIDGE / "swipe_panels.py").read_text(encoding="utf-8"),
+            )
+        )
+    )
     owned = {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     assert not (
         {
@@ -148,6 +159,16 @@ def test_generation_no_longer_owns_provider_transport_or_router_helpers():
 
 
 def test_media_no_longer_owns_provider_spec_lookup():
-    tree = ast.parse((BRIDGE / "media.py").read_text(encoding="utf-8"))
+    tree = ast.parse(
+        "\n".join(
+            (
+                (BRIDGE / "callbacks.py").read_text(encoding="utf-8"),
+                (BRIDGE / "response_delivery.py").read_text(encoding="utf-8"),
+                (BRIDGE / "speech.py").read_text(encoding="utf-8"),
+                (BRIDGE / "telegram.py").read_text(encoding="utf-8"),
+                (BRIDGE / "voice_jobs.py").read_text(encoding="utf-8"),
+            )
+        )
+    )
     owned = {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     assert "get_provider_spec" not in owned

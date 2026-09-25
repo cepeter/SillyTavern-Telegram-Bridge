@@ -5,9 +5,10 @@ from __future__ import annotations
 from bridge.character_callbacks import handle_character_callback
 from bridge.conversation_callbacks import handle_greeting_callback, handle_reset_callback, handle_swipe_callback
 from bridge.delivery_port import DeliveryPort
+from bridge.feature_callbacks import handle_prompt_and_feature_callback
 from bridge.group_service import GroupService
 from bridge.help_details import handle_help_callback
-from bridge.input_flows import handle_persona_callback
+from bridge.persona_callbacks import handle_persona_callback
 from bridge.provider_port import ProviderPort
 from bridge.session_callbacks import handle_session_callback
 from bridge.settings_callbacks import (
@@ -16,7 +17,6 @@ from bridge.settings_callbacks import (
     handle_note_callback,
     handle_system_prompt_callback,
 )
-from bridge.status_panels import handle_prompt_and_feature_callback
 from bridge.sync_callbacks import handle_sync_callback
 from bridge.sync_service import SyncService
 from bridge.update import handle_update_callback

@@ -3,6 +3,7 @@ from functools import partial
 from application_test_setup import ensure_application_extensions, make_test_memory_service
 from settings_test_support import SettingsTestCase
 
+import bridge.memory_backend as _owner_memory_backend
 import bridge.session_core as _owner_session_core
 
 ensure_application_extensions()
@@ -13,7 +14,6 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-import bridge.input_flows as _m_input_flows
 import bridge.main as _m_main
 import bridge.memory as _m_memory
 import bridge.memory_backend as memory_backend
@@ -109,7 +109,7 @@ class HindsightSessionCleanupTests(SettingsTestCase):
         memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
         self.assertTrue(
-            _m_input_flows.remember_fact(
+            _owner_memory_backend.remember_fact(
                 self.db,
                 "chat",
                 session,

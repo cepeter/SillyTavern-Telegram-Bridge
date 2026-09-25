@@ -11,7 +11,6 @@ import unittest
 from pathlib import Path
 
 import bridge.expressions as _m_expressions
-import bridge.media as _m_media
 import bridge.session_naming as _m_session_naming
 
 
@@ -84,10 +83,10 @@ class ExpressionTests(SettingsTestCase):
         _m_expressions._send_expression_photo = lambda token, chat, path: sent.append(path.name) or True
         try:
             _m_session_naming.set_meta(db, _owner_expressions.expression_mode_key("1", "s1"), "auto")
-            _m_media.deliver_expression(
+            _owner_expressions.deliver_expression(
                 "token", "1", "I am happy", db, "s1", app_settings=self.app_settings_builder.build()
             )
-            _m_media.deliver_expression(
+            _owner_expressions.deliver_expression(
                 "token", "1", "I am happy", db, "s1", app_settings=self.app_settings_builder.build()
             )
         finally:

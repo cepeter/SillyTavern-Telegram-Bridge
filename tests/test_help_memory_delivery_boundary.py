@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from application_test_setup import make_test_delivery_port, make_test_request_context, make_test_session_service
 
 import bridge.command_panels as _command_panels
+import bridge.text_action_input as _owner_text_action_input
 from bridge.session_service import SessionService
 
 ROOT = Path(__file__).parents[1]
@@ -41,13 +42,33 @@ def top_level_names(filename: str) -> set[str]:
 
 
 def test_help_and_help_details_do_not_import_each_other():
-    assert "bridge.help_details" not in imported_modules("help.py")
+    assert "bridge.help_details" not in set().union(
+        imported_modules("bot_commands.py"),
+        imported_modules("databank_panels.py"),
+        imported_modules("document_jobs.py"),
+        imported_modules("enum_callbacks.py"),
+        imported_modules("memory_panels.py"),
+        imported_modules("preset_panels.py"),
+        imported_modules("settings_panels.py"),
+        imported_modules("system_prompt_panels.py"),
+        imported_modules("voice_panels.py"),
+    )
     assert "bridge.help" not in imported_modules("help_details.py")
 
 
 def test_help_details_is_canonical_catalog_and_menu_owner():
     details = top_level_names("help_details.py")
-    help_names = top_level_names("help.py")
+    help_names = set().union(
+        top_level_names("bot_commands.py"),
+        top_level_names("databank_panels.py"),
+        top_level_names("document_jobs.py"),
+        top_level_names("enum_callbacks.py"),
+        top_level_names("memory_panels.py"),
+        top_level_names("preset_panels.py"),
+        top_level_names("settings_panels.py"),
+        top_level_names("system_prompt_panels.py"),
+        top_level_names("voice_panels.py"),
+    )
     assert "HELP_CATEGORIES" in details
     assert "send_help_menu" in details
     assert "HELP_CATEGORIES" not in help_names
@@ -378,18 +399,17 @@ def test_command_routes_memory_search_forwards_delivery_send_text(monkeypatch):
 
 
 def test_pending_memory_search_forwards_existing_send_text(monkeypatch):
-    import bridge.input_flows as flows
 
     calls = []
     monkeypatch.setattr(
-        flows,
+        _owner_text_action_input,
         "handle_memory_command",
         lambda *args, app_settings=None, **kwargs: calls.append((args, kwargs)),
     )
-    monkeypatch.setattr(flows, "send_memory_menu", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(flows, "_cancel_pending", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(_owner_text_action_input, "send_memory_menu", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(_owner_text_action_input, "_cancel_pending", lambda *_args, **_kwargs: None)
 
-    result = flows._handle_text_action_input(
+    result = _owner_text_action_input._handle_text_action_input(
         object(),
         "token",
         "key",
@@ -408,4 +428,4 @@ def test_pending_memory_search_forwards_existing_send_text(monkeypatch):
     assert result is True
     assert len(calls) == 1
     _args, kwargs = calls[0]
-    assert kwargs["send_text_fn"] is flows.send_text
+    assert kwargs["send_text_fn"] is _owner_text_action_input.send_text

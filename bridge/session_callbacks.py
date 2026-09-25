@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
+from bridge.callbacks import remove_inline_keyboard
 from bridge.cards import send_session_menu
 from bridge.group_service import GroupService
-from bridge.input_flows import pending_character_for_session
-from bridge.media import remove_inline_keyboard
 from bridge.metadata import set_meta
+from bridge.pending_input import pending_character_for_session
 from bridge.session_core import delete_session_data, list_sessions, update_session
 from bridge.session_naming import start_session_name_input
 from bridge.session_panels import send_session_delete_confirm, send_session_delete_menu

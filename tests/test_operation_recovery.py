@@ -8,6 +8,7 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.edit_messages as _owner_edit_messages
 import bridge.message_commands as _owner_message_commands
 import bridge.operations as _owner_operations
 import bridge.session_core as _owner_session_core
@@ -21,7 +22,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import bridge.commands as _m_commands
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
 import bridge.session_naming as _m_session_naming
@@ -296,20 +296,20 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
 
         with (
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "delete_outgoing_message_row",
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "telegram_request",
                 return_value={},
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "send_reply",
             ) as send_reply,
         ):
-            _m_commands.regenerate_edited_turn(
+            _owner_edit_messages.regenerate_edited_turn(
                 self.db,
                 "token",
                 "key",
@@ -378,7 +378,7 @@ class DurableRecoveryCharacterizationTests(SettingsTestCase):
             RuntimeError,
             "edit recovery state is incomplete",
         ):
-            _m_commands.regenerate_edited_turn(
+            _owner_edit_messages.regenerate_edited_turn(
                 self.db,
                 "token",
                 "key",
@@ -592,7 +592,16 @@ class DurableRecoveryOwnershipTests(SettingsTestCase):
         self.assertIn("with write_transaction(db):", chunk)
 
     def test_generation_owns_regen_and_continue_recovery_adapter(self):
-        source = (Path(__file__).parents[1] / "bridge" / "generation.py").read_text(encoding="utf-8")
+        source = "\n".join(
+            (
+                (Path(__file__).parents[1] / "bridge" / "continuation.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "generation.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "generation_recovery.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "regeneration.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "response_variants.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "swipe_panels.py").read_text(encoding="utf-8"),
+            )
+        )
         self.assertIn(
             "from bridge.operation_recovery import",
             source,
@@ -623,7 +632,16 @@ class DurableRecoveryOwnershipTests(SettingsTestCase):
         )
 
     def test_commands_owns_edited_turn_recovery_adapter(self):
-        source = (Path(__file__).parents[1] / "bridge" / "commands.py").read_text(encoding="utf-8")
+        source = "\n".join(
+            (
+                (Path(__file__).parents[1] / "bridge" / "edit_messages.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "image_messages.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "macro_commands.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "note_panels.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "preset_actions.py").read_text(encoding="utf-8"),
+                (Path(__file__).parents[1] / "bridge" / "prompt_diagnostics.py").read_text(encoding="utf-8"),
+            )
+        )
         self.assertIn(
             "from bridge.operation_recovery import",
             source,

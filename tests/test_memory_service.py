@@ -10,7 +10,10 @@ from application_test_setup import (
 )
 from settings_test_support import SettingsTestCase
 
+import bridge.edit_messages as _owner_edit_messages
+import bridge.image_messages as _owner_image_messages
 import bridge.message_commands as _owner_message_commands
+import bridge.native_imports as _owner_native_imports
 import bridge.sqlite_store as _sqlite_store
 
 ensure_application_extensions()
@@ -24,8 +27,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import bridge.command_routes as _m_command_routes
-import bridge.commands as _m_commands
-import bridge.help as _m_help
 import bridge.memory as _m_memory
 import bridge.memory_backend as _m_memory_backend
 import bridge.memory_curator as _m_memory_curator
@@ -424,44 +425,44 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 side_effect=legacy_called,
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "rag_retrieval_bundle",
                 return_value={},
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "rag_context_for_prompt",
                 return_value="",
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "build_chat_messages",
                 side_effect=build_messages,
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "send_typing",
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "rag_citation_footer",
                 return_value="",
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "render_session_response",
                 side_effect=lambda _api_key, _session, reply, _chat_id, _settings, **_kwargs: reply,
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "save_response_variant",
             ),
             patch.object(
-                _m_commands,
+                _owner_edit_messages,
                 "send_reply",
             ),
         ):
-            _m_commands.regenerate_edited_turn(
+            _owner_edit_messages.regenerate_edited_turn(
                 self.db,
                 "token",
                 "key",
@@ -635,50 +636,50 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 side_effect=legacy_called,
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "rag_retrieval_bundle",
                 return_value={},
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "rag_context_for_prompt",
                 return_value="",
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "build_chat_messages",
                 side_effect=build_messages,
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "send_typing",
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "get_generation_settings",
                 return_value={},
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "rag_citation_footer",
                 return_value="",
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "render_session_response",
                 side_effect=lambda _key, _session, reply, *_args, **_kwargs: reply,
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "save_response_variant",
                 return_value=1,
             ),
             patch.object(
-                _m_commands,
+                _owner_image_messages,
                 "send_reply",
             ),
         ):
-            _m_commands.process_image_message(
+            _owner_image_messages.process_image_message(
                 self.db,
                 "token",
                 "key",
@@ -744,7 +745,7 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 return_value=self.fields,
             ),
         ):
-            _m_help.import_telegram_document(
+            _owner_native_imports.import_telegram_document(
                 self.db,
                 "token",
                 "chat",
@@ -769,11 +770,38 @@ class MemoryServiceExplicitInjectionBoundaryTests(SettingsTestCase):
         for filename in (
             "message_commands.py",
             "telegram.py",
-            "media.py",
-            "help.py",
+            "callbacks.py",
+            "response_delivery.py",
+            "speech.py",
+            "voice_jobs.py",
+            "bot_commands.py",
+            "databank_panels.py",
+            "document_jobs.py",
+            "enum_callbacks.py",
+            "memory_panels.py",
+            "preset_panels.py",
+            "settings_panels.py",
+            "system_prompt_panels.py",
+            "voice_panels.py",
             "input_flows.py",
+            "pending_input.py",
+            "persona_callbacks.py",
+            "persona_input.py",
+            "persona_panels.py",
+            "settings_input.py",
+            "text_action_input.py",
+            "continuation.py",
             "generation.py",
-            "commands.py",
+            "generation_recovery.py",
+            "regeneration.py",
+            "response_variants.py",
+            "swipe_panels.py",
+            "edit_messages.py",
+            "image_messages.py",
+            "macro_commands.py",
+            "note_panels.py",
+            "preset_actions.py",
+            "prompt_diagnostics.py",
         ):
             source = (root / filename).read_text(encoding="utf-8")
             self.assertNotIn("resolve_memory_service", source, filename)
@@ -784,8 +812,18 @@ class MemoryServiceBoundaryTests(SettingsTestCase):
     def test_reviewed_application_paths_do_not_call_memory_backend_functions_directly(self):
         root = Path(__file__).parents[1] / "bridge"
         reviewed = (
-            "commands.py",
+            "edit_messages.py",
+            "image_messages.py",
+            "macro_commands.py",
+            "note_panels.py",
+            "preset_actions.py",
+            "prompt_diagnostics.py",
+            "continuation.py",
             "generation.py",
+            "generation_recovery.py",
+            "regeneration.py",
+            "response_variants.py",
+            "swipe_panels.py",
             "message_commands.py",
         )
         forbidden_calls = (

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from settings_test_support import SettingsTestCase
 
+import bridge.config as _owner_config
 import bridge.model_selection as _owner_model_selection
 import bridge.sqlite_store as _sqlite_store
 
@@ -209,7 +210,6 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
         import inspect
 
         import bridge.config as config
-        import bridge.help as help_module
         import bridge.sync_core as sync_core
 
         self.assertFalse((REPO_ROOT / "bridge/database.py").exists())
@@ -221,7 +221,7 @@ class PersistenceImportBoundaryTests(SettingsTestCase):
         )
         self.assertIs(_sqlite_store.db_connect.__globals__["_DB_CONNECTION_GATE"], _sqlite_store._DB_CONNECTION_GATE)
         self.assertIs(sync_core.GENERATION_DEFAULTS, config.GENERATION_DEFAULTS)
-        self.assertIs(help_module.REASONING_LEVELS, config.REASONING_LEVELS)
+        self.assertIs(_owner_config.REASONING_LEVELS, config.REASONING_LEVELS)
 
 
 if __name__ == "__main__":
