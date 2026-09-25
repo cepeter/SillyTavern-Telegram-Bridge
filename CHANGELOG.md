@@ -4,6 +4,8 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.028] - 2026-09-25
+
 ### Added
 
 - Show the selected native character-card PNG in Telegram Character Info, with Back/Close controls and a text-only fallback when Telegram cannot render the image.
@@ -18,6 +20,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Fixed
 
+- Accept wrapped OpenAI-compatible streaming SSE events with `data.choices`, matching the already-supported non-streaming response envelope.
 - Enforce manual group-turn ownership on native Telegram edits at ingress and execution, including recovered jobs and edits to a message in another session.
 
 ### Security
