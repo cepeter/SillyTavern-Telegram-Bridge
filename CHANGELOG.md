@@ -20,6 +20,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Changed
 
+- Rotate the SSH release-signing key used by signed update tags and refresh the documented trusted-maintainer public key/fingerprint.
 - Standard sessions now require `/start` after `/new` or `/reset`; `/start` only selects the opening greeting once, and plain `start` is no longer an alias. Management commands/input remain usable before starting. Existing non-empty sessions are backfilled as started once.
 - Reset keeps conversation configuration while invalidating choices and queued narrative work from the prior reset epoch. Character/group management, Normal generation, RAG, memory and Humanizer keep their canonical execution paths.
 

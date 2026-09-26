@@ -441,13 +441,13 @@ not chat-file polling or JSONL transfer.
 The current maintainer release-signing key has fingerprint:
 
 ```text
-SHA256:kFUr31xAkxOVpg9D6G5oKP3l+WY2anmAXWWgLFZ8Ecw
+SHA256:nCiZP+h1YWYCFjh37W8tXjR7oWGpZPF6bP4lbTOlAiI
 ```
 
 Its public allowed-signers record is:
 
 ```text
-cepeter namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAPEP4Ucw+6lvdP0VQD3Z71+8eKj2ePXlLXRW9gA/8d
+cepeter namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGRaxgobK+D+zdXdUzLb1xTQ2EPs9iYkeQGOOlepl+35 cepeter-release-signing
 ```
 
 Verify the fingerprint against a GitHub **Verified** release tag or another
@@ -1212,7 +1212,7 @@ Create the trust directory/file on Linux:
 mkdir -p ~/.config/sillytavern-telegram
 chmod 700 ~/.config/sillytavern-telegram
 cat > ~/.config/sillytavern-telegram/trusted-maintainers <<'EOF'
-cepeter namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAPEP4Ucw+6lvdP0VQD3Z71+8eKj2ePXlLXRW9gA/8d
+cepeter namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGRaxgobK+D+zdXdUzLb1xTQ2EPs9iYkeQGOOlepl+35 cepeter-release-signing
 EOF
 chmod 600 ~/.config/sillytavern-telegram/trusted-maintainers
 ```
@@ -1220,7 +1220,7 @@ chmod 600 ~/.config/sillytavern-telegram/trusted-maintainers
 Verify that key's fingerprint independently before trusting it:
 
 ```text
-SHA256:kFUr31xAkxOVpg9D6G5oKP3l+WY2anmAXWWgLFZ8Ecw
+SHA256:nCiZP+h1YWYCFjh37W8tXjR7oWGpZPF6bP4lbTOlAiI
 ```
 
 Then configure:
