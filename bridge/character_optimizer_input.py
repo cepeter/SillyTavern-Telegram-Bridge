@@ -12,7 +12,7 @@ from bridge.card_content import safe_character_path
 from bridge.character_optimizer import prepare_character_optimization
 from bridge.character_optimizer_panels import send_character_optimize_result
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
-from bridge.metadata import set_meta
+from bridge.metadata import get_meta, set_meta
 from bridge.provider_port import ProviderPort
 from bridge.request_types import RequestContext
 from bridge.telegram import delete_pending_input_prompts, send_text
@@ -21,8 +21,8 @@ _META_PREFIX = "character_optimizer_input:"
 _MAX_SUGGESTION_CHARS = 2000
 
 
-def _meta_key(chat_id: str) -> str:
-    return _META_PREFIX + chat_id
+def optimizer_suggestion_key(chat_id: str, actor_id: str) -> str:
+    return f"{_META_PREFIX}{chat_id}:{actor_id}"
 
 
 def _clear_pending(db: sqlite3.Connection, token: str, chat_id: str, meta_key: str, state: dict) -> None:
@@ -46,6 +46,15 @@ def start_character_optimizer_suggestion_input(
     path = safe_character_path(filename, app_settings=request_context.app_settings)
     if path is None or hashlib.sha256(path.read_bytes()).hexdigest() != expected_digest:
         raise ValueError("Character changed; reopen the optimizer")
+    meta_key = optimizer_suggestion_key(chat_id, request_context.actor_id)
+    previous_raw = get_meta(db, meta_key, "")
+    if previous_raw:
+        try:
+            previous = json.loads(previous_raw)
+        except (TypeError, json.JSONDecodeError):
+            previous = {}
+        if isinstance(previous, dict) and previous:
+            _clear_pending(db, token, chat_id, meta_key, previous)
     state = {
         "session_id": request_context.session_id,
         "actor_id": request_context.actor_id,
@@ -64,7 +73,7 @@ def start_character_optimizer_suggestion_input(
             "preserve the backstory, and shorten the first message.\n\nSend /cancel to cancel."
         ),
     )
-    set_meta(db, _meta_key(chat_id), json.dumps(state, ensure_ascii=False))
+    set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
 def handle_character_optimizer_suggestion_input(
@@ -79,7 +88,7 @@ def handle_character_optimizer_suggestion_input(
     request_context: RequestContext,
 ) -> bool:
     """Consume a pending optimizer suggestion before ordinary message generation."""
-    meta_key = _meta_key(chat_id)
+    meta_key = optimizer_suggestion_key(chat_id, request_context.actor_id)
     if str(state.get("actor_id") or "") != request_context.actor_id:
         return False
     if (

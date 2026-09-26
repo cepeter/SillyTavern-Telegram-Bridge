@@ -145,7 +145,7 @@ def test_optimizer_callback_preview_apply_and_replay_use_exact_proposal(card_con
 
 
 def test_manual_optimizer_suggestion_pending_input_reaches_utility_prompt(card_context, monkeypatch):
-    from bridge import character_optimizer_panels, input_flows
+    from bridge import character_optimizer_input, character_optimizer_panels, input_flows
     from bridge.metadata import set_meta
 
     db, ctx, _ = card_context
@@ -170,7 +170,7 @@ def test_manual_optimizer_suggestion_pending_input_reaches_utility_prompt(card_c
         "expires_at": __import__("time").time() + 600,
         "prompt_message_ids": [],
     }
-    set_meta(db, "character_optimizer_input:chat", json.dumps(state))
+    set_meta(db, character_optimizer_input.optimizer_suggestion_key("chat", "actor"), json.dumps(state))
     previews = []
     monkeypatch.setattr(
         character_optimizer_panels,
@@ -246,7 +246,7 @@ def test_manual_optimizer_option_starts_actor_session_digest_bound_pending_state
     )
     callback["data"] = manual_data
     callback_dispatch.process_callback(db, "token", callback, services=services)
-    state = json.loads(get_meta(db, "character_optimizer_input:chat"))
+    state = json.loads(get_meta(db, character_optimizer_input.optimizer_suggestion_key("chat", "actor")))
     assert state["actor_id"] == "actor"
     assert state["session_id"] == session["session_id"]
     assert state["character_file"] == "Alice.png"

@@ -6,6 +6,7 @@ import re
 from html.parser import HTMLParser
 
 _CODE = re.compile(r"```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`")
+_AUTOLINK = re.compile(r"<(?:https?://[^>\s]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})>")
 _BLOCK_TAGS = {
     "address",
     "article",
@@ -51,6 +52,7 @@ class _PlainTelegramHTML(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
         self.skip_depth = 0
+        self.links: list[tuple[str, int]] = []
 
     def _newline(self) -> None:
         if not self.parts or self.parts[-1].endswith(("\n", " ", "\t")):
@@ -64,6 +66,9 @@ class _PlainTelegramHTML(HTMLParser):
             return
         if self.skip_depth:
             return
+        if name == "a":
+            href = next((str(value or "") for key, value in attrs if key.casefold() == "href"), "").strip()
+            self.links.append((href if href.startswith(("https://", "http://")) else "", len(self.parts)))
         if name == "br":
             self._newline()
         elif name == "li":
@@ -83,6 +88,11 @@ class _PlainTelegramHTML(HTMLParser):
             return
         if self.skip_depth:
             return
+        if name == "a":
+            href, start = self.links.pop() if self.links else ("", len(self.parts))
+            visible = "".join(self.parts[start:]).strip()
+            if href and href not in visible:
+                self.parts.append(f" ({href})")
         if name in _BLOCK_TAGS or name == "li":
             self._newline()
 
@@ -104,6 +114,7 @@ def telegram_safe_output(text: str) -> str:
         return token
 
     masked = _CODE.sub(protect, source)
+    masked = _AUTOLINK.sub(protect, masked)
     parser = _PlainTelegramHTML()
     try:
         parser.feed(masked)
