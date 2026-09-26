@@ -43,6 +43,7 @@ def render_choices(db: sqlite3.Connection, token: str, record: ChoiceSet, *, app
             [{"text": choice, "callback_data": f"lnchoice:{current.nonce}:{index}"}]
             for index, choice in enumerate(current.choices)
         ]
+        rows.append([{"text": "⏭ Next Scene", "callback_data": f"lnnext:{current.nonce}"}])
     else:
         text = "Choices are not available yet. Your story is saved. Retry choices or type your own reply."
         rows = [[{"text": "Retry Choices", "callback_data": f"lnretry:{current.nonce}"}]]

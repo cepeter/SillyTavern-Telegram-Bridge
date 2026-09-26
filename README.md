@@ -773,10 +773,13 @@ recent story context; choices are not passed through Humanizer.
 
 Each new story turn requests a uniformly random **2, 3 or 4** distinct actions.
 The count is reserved before generation; retries/restarts do not reroll it, and
-ready choices are reused unchanged. One action appears on each button. Tapping
-it submits the exact stored action as the next user turn through the normal
-history, memory, RAG, provider and durable-worker pipeline. Telegram displays a
-bot-owned `Selected: ...` confirmation, not a forged user-authored message.
+ready choices are reused unchanged. One generated action appears on each button,
+followed by a permanent **⏭ Next Scene** row. Tapping a generated choice submits
+the exact stored action as the next user turn. Next Scene instead submits a fixed
+narrative instruction to advance without speaking, deciding, or acting for the
+user character until that character can meaningfully participate again. Both use
+the normal history, memory, RAG, provider and durable-worker pipeline. Telegram
+displays a bot-owned `Selected: ...` confirmation, not a forged user-authored message.
 
 You may type your own reply after `/start`. That reply or conversational media
 invalidates old choices before admission; stale panels cannot create another

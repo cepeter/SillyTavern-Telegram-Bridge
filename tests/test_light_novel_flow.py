@@ -82,8 +82,48 @@ def test_choice_panels_use_durable_nonce_and_store_message_id(novel_db, monkeypa
     )
     panels.render_choices(db, "token", record, app_settings=settings)
     callbacks = [button["callback_data"] for row in sent[-1]["reply_markup"]["inline_keyboard"] for button in row]
-    assert callbacks == [f"lnchoice:{record.nonce}:0", f"lnchoice:{record.nonce}:1"]
+    assert callbacks == [
+        f"lnchoice:{record.nonce}:0",
+        f"lnchoice:{record.nonce}:1",
+        f"lnnext:{record.nonce}",
+    ]
+    assert sent[-1]["reply_markup"]["inline_keyboard"][-1][0]["text"] == "⏭ Next Scene"
     assert load_choice_set(db, record.nonce).panel_message_id == 81
+
+
+def test_next_scene_consumes_panel_and_queues_fixed_narrative_instruction_once(novel_db):
+    from bridge.light_novel_callbacks import route_light_novel_callback
+    from bridge.light_novel_repository import bind_choice_panel
+
+    record = attached_choice(novel_db)
+    db, _session, settings = novel_db
+    sent = []
+    services = bridge_services(settings, sent)
+    with write_transaction(db):
+        bind_choice_panel(db, record.nonce, 81)
+    callback = {
+        "id": "cb-next",
+        "from": {"id": "owner"},
+        "message": {"chat": {"id": "chat"}, "message_id": 81},
+        "data": f"lnnext:{record.nonce}",
+    }
+    assert route_light_novel_callback(services, db, callback, 102, "chat", "owner", message_worker=lambda *a: None)
+    consumed = load_choice_set(db, record.nonce)
+    assert consumed.state == "consumed"
+    assert consumed.selected_index is None
+    job = db.execute("SELECT kind,session_id,payload_json FROM jobs WHERE update_id=102").fetchone()
+    assert job[:2] == ("generation", "story")
+    payload = json.loads(job[2])
+    assert payload["text"] == (
+        "Advance to the next scene without speaking, deciding, or acting for the user character. "
+        "Continue the narrative until the user character can meaningfully participate again."
+    )
+    assert payload["actor_id"] == "owner"
+    assert payload["choice_nonce"] == record.nonce
+    assert route_light_novel_callback(services, db, callback, 103, "chat", "owner", message_worker=lambda *a: None)
+    assert db.execute("SELECT count(*) FROM jobs WHERE kind='generation'").fetchone()[0] == 1
+    edits = [payload for method, payload in sent if method == "editMessageText"]
+    assert edits[-1]["text"] == "Selected: ⏭ Next Scene"
 
 
 def test_choice_click_consumes_and_queues_stored_user_text_once(novel_db):

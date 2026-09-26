@@ -202,7 +202,7 @@ def fail_choice_generation(db: sqlite3.Connection, nonce: str) -> None:
 def consume_choice_set(
     db: sqlite3.Connection,
     nonce: str,
-    index: int,
+    index: int | None,
     chat_id: str,
     session_id: str,
     actor_id: str,
@@ -221,7 +221,9 @@ def consume_choice_set(
         raise ValueError("Choice expired")
     if record.state == "consumed":
         raise ValueError("Choice already used")
-    if record.state != "open" or record.generation_status != "ready" or not 0 <= index < len(record.choices):
+    if record.state != "open" or record.generation_status != "ready":
+        raise ValueError("Choice expired")
+    if index is not None and not 0 <= index < len(record.choices):
         raise ValueError("Choice expired")
     if (
         db.execute(

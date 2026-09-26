@@ -16,6 +16,12 @@ from bridge.light_novel_service import current_choice_story
 from bridge.metadata import get_meta
 from bridge.sqlite_store import write_transaction
 
+NEXT_SCENE_INSTRUCTION = (
+    "Advance to the next scene without speaking, deciding, or acting for the user character. "
+    "Continue the narrative until the user character can meaningfully participate again."
+)
+NEXT_SCENE_LABEL = "⏭ Next Scene"
+
 
 def route_light_novel_callback(
     services: LightNovelRuntime,
@@ -28,18 +34,20 @@ def route_light_novel_callback(
     message_worker: Callable,
 ) -> bool:
     data = str(callback.get("data") or "")
-    if not data.startswith(("lnchoice:", "lnretry:")):
+    if not data.startswith(("lnchoice:", "lnretry:", "lnnext:")):
         return False
     message_id = int((callback.get("message") or {}).get("message_id") or 0)
     token = services.config.bot_token
     feedback = "Choice expired"
     selection = None
+    selection_label = None
     submission = None
     job_id = None
     try:
         parts = data.split(":")
         action = parts[0]
-        if len(parts) != (3 if action == "lnchoice" else 2) or len(data.encode()) > 64:
+        expected_parts = 3 if action == "lnchoice" else 2
+        if action not in {"lnchoice", "lnretry", "lnnext"} or len(parts) != expected_parts or len(data.encode()) > 64:
             raise ValueError("Choice expired")
         with write_transaction(db):
             record = load_choice_set(db, parts[1])
@@ -56,13 +64,21 @@ def route_light_novel_callback(
                 raise ValueError("Choice already used")
             if current_choice_story(db, record) is None or state.epoch != record.epoch:
                 raise ValueError("Choice expired")
-            if action == "lnchoice":
-                choices = validate_choices(list(record.choices), record.requested_count)
-                index = int(parts[2])
-                consume_choice_set(
-                    db, record.nonce, index, chat_id, record.session_id, actor_id, state.epoch, message_id
-                )
-                selection = choices[index]
+            if action in {"lnchoice", "lnnext"}:
+                if action == "lnchoice":
+                    choices = validate_choices(list(record.choices), record.requested_count)
+                    index = int(parts[2])
+                    consume_choice_set(
+                        db, record.nonce, index, chat_id, record.session_id, actor_id, state.epoch, message_id
+                    )
+                    selection = choices[index]
+                    selection_label = selection
+                else:
+                    consume_choice_set(
+                        db, record.nonce, None, chat_id, record.session_id, actor_id, state.epoch, message_id
+                    )
+                    selection = NEXT_SCENE_INSTRUCTION
+                    selection_label = NEXT_SCENE_LABEL
                 payload = {
                     "text": selection,
                     "model": record.model_id,
@@ -118,7 +134,7 @@ def route_light_novel_callback(
                     {
                         "chat_id": chat_id,
                         "message_id": message_id,
-                        "text": "Selected: " + selection,
+                        "text": "Selected: " + str(selection_label or selection),
                         "reply_markup": {"inline_keyboard": []},
                     },
                 )
