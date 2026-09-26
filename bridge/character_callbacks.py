@@ -186,7 +186,14 @@ def handle_character_callback(
                 "chat_id": chat_id,
                 "message_id": message.get("message_id"),
                 "text": message_text,
-                "reply_markup": {"inline_keyboard": [[{"text": "Character menu", "callback_data": "character:menu"}]]},
+                "reply_markup": {
+                    "inline_keyboard": [
+                        [
+                            {"text": "Character menu", "callback_data": "character:menu"},
+                            {"text": "Close", "callback_data": "character:cancel"},
+                        ]
+                    ]
+                },
             },
             request_context=request_context,
         )

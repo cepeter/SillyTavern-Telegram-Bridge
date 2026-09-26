@@ -119,6 +119,10 @@ def test_optimizer_callback_preview_apply_and_replay_use_exact_proposal(card_con
         monkeypatch.setattr(character_callbacks, "rank_character", fail_ranking)
     callback_dispatch.process_callback(db, "token", callback(apply_data), services=services)
     assert "optimized" in outputs[-1]["text"]
+    result_callbacks = [
+        button["callback_data"] for row in outputs[-1]["reply_markup"]["inline_keyboard"] for button in row
+    ]
+    assert result_callbacks == ["character:menu", "character:cancel"]
     updated = target.read_bytes()
     card = parse_png_chara_bytes(updated)
     assert card["name"] == "Alice"
