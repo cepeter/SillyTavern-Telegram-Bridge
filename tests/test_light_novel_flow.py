@@ -22,7 +22,7 @@ def make_started(novel_db, strategy="a"):
     return db, session, settings
 
 
-def attached_choice(novel_db, strategy="b", ready=True):
+def attached_choice(novel_db, strategy="b", ready=True, choices=None):
     db, session, _settings = make_started(novel_db, strategy)
     record = prepare_turn(db, "chat", session, "turn:1", "owner", rng=lambda _: 2)
     with write_transaction(db):
@@ -30,7 +30,7 @@ def attached_choice(novel_db, strategy="b", ready=True):
             "INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,crea"
             "ted_at) VALUES('chat','story','assistant','The door opens.','[71]',1)"
         ).lastrowid
-        attach_turn(db, record, rowid, "The door opens.", ["Go inside", "Stay outside"] if ready else None)
+        attach_turn(db, record, rowid, "The door opens.", (choices or ["Go inside", "Stay outside"]) if ready else None)
     return load_choice_set(db, record.nonce)
 
 
@@ -123,14 +123,16 @@ def test_next_scene_consumes_panel_and_queues_fixed_narrative_instruction_once(n
     assert route_light_novel_callback(services, db, callback, 103, "chat", "owner", message_worker=lambda *a: None)
     assert db.execute("SELECT count(*) FROM jobs WHERE kind='generation'").fetchone()[0] == 1
     edits = [payload for method, payload in sent if method == "editMessageText"]
-    assert edits[-1]["text"] == "Selected: ⏭ Next Scene"
+    assert edits[-1]["text"] == "<blockquote>⏭ Next Scene</blockquote>"
+    assert edits[-1]["parse_mode"] == "HTML"
+    assert "Selected:" not in edits[-1]["text"]
 
 
 def test_choice_click_consumes_and_queues_stored_user_text_once(novel_db):
     from bridge.light_novel_callbacks import route_light_novel_callback
     from bridge.light_novel_repository import bind_choice_panel
 
-    record = attached_choice(novel_db)
+    record = attached_choice(novel_db, choices=["Go inside", "Stay & wait"])
     db, _session, settings = novel_db
     sent = []
     services = bridge_services(settings, sent)
@@ -148,10 +150,14 @@ def test_choice_click_consumes_and_queues_stored_user_text_once(novel_db):
     job = db.execute("SELECT kind,telegram_message_id,session_id,payload_json FROM jobs WHERE update_id=100").fetchone()
     assert job[:3] == ("generation", str(-record.id), "story")
     payload = json.loads(job[3])
-    assert payload["text"] == "Stay outside"
+    assert payload["text"] == "Stay & wait"
     assert payload["actor_id"] == "owner"
     assert payload["epoch"] == record.epoch
     assert payload["resolve_active"] is False
+    edits = [payload for method, payload in sent if method == "editMessageText"]
+    assert edits[-1]["text"] == "<blockquote>Stay &amp; wait</blockquote>"
+    assert edits[-1]["parse_mode"] == "HTML"
+    assert "Selected:" not in edits[-1]["text"]
     assert route_light_novel_callback(services, db, callback, 101, "chat", "owner", message_worker=lambda *a: None)
     assert db.execute("SELECT count(*) FROM jobs WHERE kind='generation'").fetchone()[0] == 1
 
