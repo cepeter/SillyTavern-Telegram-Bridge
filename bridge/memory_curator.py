@@ -24,6 +24,7 @@ from bridge.extension_registry import register_command_route as _register_comman
 from bridge.extension_registry import register_post_retain_hook as _register_post_retain_hook
 from bridge.generation_settings import get_generation_settings
 from bridge.memory_backend import _retain_with_client, hindsight_session_prefix, memory_mode
+from bridge.meta_repository import delete_meta_value as _repo_delete_meta_value
 from bridge.meta_repository import load_meta_value as _repo_load_meta_value
 from bridge.meta_repository import store_meta_value as _repo_store_meta_value
 from bridge.model_selection import task_model_for_session
@@ -43,6 +44,15 @@ def memory_curator_key(chat_id: str, session_id: str) -> str:
 
 def curated_memory_document_id(session_id: str) -> str:
     return hindsight_session_prefix(session_id) + "-curated"
+
+
+def clear_curated_memory_state(
+    db: sqlite3.Connection,
+    chat_id: str,
+    session_id: str,
+) -> None:
+    with write_transaction(db):
+        _repo_delete_meta_value(db, memory_curator_key(chat_id, session_id))
 
 
 def _clean_curated_text(value: object, maximum: int) -> str:

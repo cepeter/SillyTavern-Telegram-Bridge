@@ -106,6 +106,31 @@ class ResetBehaviorTests(SettingsTestCase):
         self.assertEqual(sent, ["Reset complete. The active session was cleared."])
         self.assertEqual(removed, [callback])
 
+    def test_reset_clears_curated_memory_and_deletes_outgoing_telegram_messages(self):
+        curator_key = _m_memory_curator.memory_curator_key("chat", self.session["session_id"])
+        _m_session_naming.set_meta(
+            self.db,
+            curator_key,
+            json.dumps({"items": [{"key": "stable", "text": "durable fact"}], "through_rowid": 2}),
+        )
+        deleted = []
+        original_delete = _m_message_commands.delete_outgoing_messages
+        _m_message_commands.delete_outgoing_messages = lambda *args, **kwargs: deleted.append((args, kwargs))
+        try:
+            _m_message_commands.reset_session(
+                self.db,
+                "token",
+                "chat",
+                self.session,
+                memory_service=make_test_memory_service(),
+            )
+        finally:
+            _m_message_commands.delete_outgoing_messages = original_delete
+
+        self.assertEqual(_m_session_naming.get_meta(self.db, curator_key, ""), "")
+        self.assertEqual(len(deleted), 1)
+        self.assertEqual(deleted[0][0][2:4], ("chat", self.session["session_id"]))
+
 
 if __name__ == "__main__":
     unittest.main()
