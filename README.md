@@ -810,8 +810,10 @@ promotion is installed. Prompt attribution is retained in
 
 Completed model replies are normalized for Telegram before they are stored and
 delivered. Presentation HTML such as `<div>`, `<span>`, headings, lists and
-`<br>` is converted to readable plain text; HTML entities are decoded. Fenced
-and inline code are protected so literal HTML examples remain copyable. This is
+`<br>` is converted to readable plain text; HTML entities are decoded. HTTP(S)
+HTML links retain their destination, and Markdown URL/email autolinks remain
+unchanged. Fenced and inline code are protected so literal HTML examples remain
+copyable. This is
 a final-output compatibility step rather than Telegram `parse_mode=HTML`, whose
 limited tag set cannot safely render arbitrary model-generated web markup.
 
@@ -861,7 +863,8 @@ as “make her more sarcastic, preserve the backstory, and shorten the first
 message”, and sends that guidance to the same utility model without letting it
 override the optimizer field whitelist or character-identity rules. Suggestions
 are bound to the initiating user, session, character file and original file
-digest, expire after 10 minutes, and are not written into the card itself. The
+digest, expire after 10 minutes, and are not written into the card itself. Users
+in the same Telegram chat keep independent pending Manual Suggestions. The
 preview also offers Manual Suggestion again for another draft; each refinement
 starts from the currently installed/original card rather than chaining edits on
 top of the previous model draft.

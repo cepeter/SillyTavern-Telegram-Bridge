@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 
 from bridge.card_content import card_fields_from_file
-from bridge.character_optimizer_input import handle_character_optimizer_suggestion_input
+from bridge.character_optimizer_input import handle_character_optimizer_suggestion_input, optimizer_suggestion_key
 from bridge.group_service import GroupService
 from bridge.memory_service import MemoryService
 from bridge.metadata import set_meta
@@ -39,7 +39,9 @@ def handle_pending_input(
 ) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
-    optimizer = _pending_state(db, f"character_optimizer_input:{chat_id}", session_id, token, chat_id)
+    optimizer = _pending_state(
+        db, optimizer_suggestion_key(chat_id, request_context.actor_id), session_id, token, chat_id
+    )
     if optimizer and handle_character_optimizer_suggestion_input(
         db,
         token,
