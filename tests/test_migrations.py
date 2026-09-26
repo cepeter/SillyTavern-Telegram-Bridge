@@ -193,8 +193,8 @@ class ApplicationSchemaMigrationTests(SettingsTestCase):
     def tearDown(self):
         self.db.close()
 
-    def test_initial_schema_is_single_current_baseline(self):
-        self.assertEqual(len(schema.SCHEMA_MIGRATIONS), 1)
+    def test_initial_schema_preserved_with_conversation_migration(self):
+        self.assertEqual(len(schema.SCHEMA_MIGRATIONS), 2)
         migration = schema.SCHEMA_MIGRATIONS[0]
         self.assertEqual((migration.version, migration.name), (1, "initial_schema"))
 
@@ -203,7 +203,7 @@ class ApplicationSchemaMigrationTests(SettingsTestCase):
 
         self.assertEqual(
             self.db.execute("SELECT version,name FROM schema_migrations ORDER BY version").fetchall(),
-            [(1, "initial_schema")],
+            [(1, "initial_schema"), (2, "conversation_modes")],
         )
 
         for table in (
@@ -321,7 +321,7 @@ class ApplicationSchemaMigrationTests(SettingsTestCase):
         self.assertIsNone(self.db.execute("SELECT 1 FROM callback_tokens WHERE token='expired'").fetchone())
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
-            1,
+            2,
         )
 
 

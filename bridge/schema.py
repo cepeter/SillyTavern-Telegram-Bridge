@@ -1,6 +1,7 @@
 import sqlite3
 import time
 
+from bridge.conversation_schema import migrate_conversation_modes
 from bridge.migrations import Migration as _Migration
 from bridge.migrations import run_migrations as _run_migrations
 
@@ -376,7 +377,10 @@ def _create_initial_schema(db: sqlite3.Connection) -> None:
     )
 
 
-SCHEMA_MIGRATIONS = (_Migration(1, "initial_schema", _create_initial_schema),)
+SCHEMA_MIGRATIONS = (
+    _Migration(1, "initial_schema", _create_initial_schema),
+    _Migration(2, "conversation_modes", migrate_conversation_modes),
+)
 
 
 def initialize_database_schema(db: sqlite3.Connection) -> None:

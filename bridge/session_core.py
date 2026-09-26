@@ -8,6 +8,7 @@ import sqlite3
 import time
 
 from bridge.card_content import active_world_files, encode_world_files, safe_world_path
+from bridge.conversation_lifecycle import initialize_conversation
 from bridge.expressions import expression_last_key, expression_mode_key
 from bridge.generation_settings import get_generation_settings
 from bridge.humanizer_settings import humanizer_key, normalize_humanizer, session_humanizer
@@ -127,6 +128,7 @@ def ensure_session(
         )
         with write_transaction(db):
             insert_session_row(db, values, time.time())
+            initialize_conversation(db, chat_id, active_id)
         session = load_session_row(db, chat_id, active_id) or values
     get_generation_settings(db, chat_id, active_id)
     return _normalize_session_defaults(db, session, app_settings=app_settings)
@@ -172,6 +174,7 @@ def create_session(
     )
     with write_transaction(db):
         insert_session_row(db, values, time.time())
+        initialize_conversation(db, chat_id, session_id)
         store_meta_value(db, f"active_session:{chat_id}", session_id)
     return _normalize_session_defaults(
         db, load_session_row(db, chat_id, session_id) or values, app_settings=app_settings
