@@ -46,6 +46,7 @@ class JobServiceTests(SettingsTestCase):
 
         self.service = JobService(
             enqueue_backend=enqueue_backend,
+            payload_backend=lambda db, job_id, payload: self.calls.append(("payload", db, job_id, payload)) or True,
             actor_backend=lambda db, job_id: self.calls.append(("actor", db, job_id)) or "100",
             schedule_backend=lambda db, job_id: self.calls.append(("scheduled", db, job_id)) or True,
             start_backend=lambda db, job_id: self.calls.append(("running", db, job_id)) or self.start_result,
@@ -82,6 +83,11 @@ class JobServiceTests(SettingsTestCase):
                 {"text": "hello"},
             ),
         )
+
+    def test_replace_payload_delegates(self):
+        payload = {"text": "/status", "queue_notice_message_ids": [88]}
+        self.assertTrue(self.service.replace_payload(self.db, 41, payload))
+        self.assertEqual(self.calls, [("payload", self.db, 41, payload)])
 
     def test_accepted_submit_appends_job_id_and_schedules_once(self):
         def worker(*_args):

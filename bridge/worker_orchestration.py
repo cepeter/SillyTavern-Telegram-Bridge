@@ -29,6 +29,7 @@ def process_message_job(
     chat_id: str,
     text: str,
     message_id: int,
+    queue_notice_message_ids: list[int] | None = None,
     queued_session_id: str | None = None,
     model_override: str | None = None,
     job_id: int | None = None,
@@ -108,6 +109,15 @@ def process_message_job(
                 failure_message = "The character backend failed for this message. Use /retry or /status."
             services.telegram.send_text(token, chat_id, failure_message)
         finally:
+            for queue_message_id in queue_notice_message_ids or []:
+                try:
+                    services.telegram.request(
+                        token,
+                        "deleteMessage",
+                        {"chat_id": chat_id, "message_id": int(queue_message_id)},
+                    )
+                except Exception:
+                    logging.info("Could not delete completed command queue notice", exc_info=True)
             db.close()
 
 
@@ -322,6 +332,12 @@ def resolve_recovered_job_submission(
     payload = job.payload
     model_override = str(payload.get("model") or services.config.default_model)
     session_for_job = None if payload.get("resolve_active") else job.session_id
+    raw_queue_notice_ids = payload.get("queue_notice_message_ids")
+    queue_notice_message_ids = (
+        [int(value) for value in raw_queue_notice_ids if str(value).isdigit()]
+        if isinstance(raw_queue_notice_ids, list)
+        else []
+    )
 
     if job.kind in {"generation", "command"}:
         return JobSubmission(
@@ -334,6 +350,7 @@ def resolve_recovered_job_submission(
                 job.chat_id,
                 str(payload["text"]),
                 job.telegram_message_id,
+                queue_notice_message_ids,
                 session_for_job,
                 model_override,
             ),

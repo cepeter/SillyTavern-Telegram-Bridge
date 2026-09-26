@@ -377,6 +377,7 @@ class WorkerInjectionTests(SettingsTestCase):
                 "chat_id",
                 "text",
                 "message_id",
+                "queue_notice_message_ids",
                 "queued_session_id",
                 "model_override",
                 "job_id",
@@ -696,6 +697,7 @@ class WorkerInjectionTests(SettingsTestCase):
                 "hello",
                 11,
                 None,
+                None,
                 "stored::model",
             )
 
@@ -892,6 +894,26 @@ class RecoveryCompositionTests(SettingsTestCase):
         self.assertEqual(submission.args[-2], "stored-session")
         self.assertEqual(submission.args[-1], "stored::model")
         self.assertNotIn(51, submission.args)
+
+        command = DurableJob(
+            job_id=53,
+            chat_id="chat",
+            session_id="stored-session",
+            telegram_message_id=12,
+            kind="command",
+            payload={
+                "text": "/status",
+                "model": "stored::model",
+                "queue_notice_message_ids": [88],
+            },
+        )
+        command_submission = _m_workers.resolve_recovered_job_submission(
+            self.services,
+            {"name": "Mira"},
+            command,
+        )
+        self.assertIsNotNone(command_submission)
+        self.assertEqual(command_submission.args[5], [88])
 
         active = DurableJob(
             job_id=52,
@@ -1102,6 +1124,10 @@ class RecordingJobs:
     def submit(self, db, job_id, submission):
         self.calls.append(("submit", job_id, submission))
         return self.submit_result
+
+    def replace_payload(self, db, job_id, payload):
+        self.calls.append(("payload", job_id, payload))
+        return True
 
     def recover(self, db, resolver, *, recover_running=True):
         self.calls.append(
@@ -1434,7 +1460,7 @@ class StartupCompositionTests(SettingsTestCase):
             ),
             telegram=TelegramRuntime(
                 request=request,
-                send_text=lambda *args, **_kwargs: sent.append(args),
+                send_text=lambda *args, **_kwargs: sent.append(args) or [900 + len(sent)],
                 download_file=lambda *_args, **_kwargs: b"",
             ),
             background=BackgroundRuntime(
@@ -1593,6 +1619,26 @@ class StartupCompositionTests(SettingsTestCase):
                     submit_calls[0][2].label,
                     expected_kind,
                 )
+
+    def test_command_queue_notice_is_persisted_before_worker_submission(self):
+        jobs, sent = self._run_one_update(
+            {
+                "update_id": 8,
+                "message": {
+                    "message_id": 17,
+                    "from": {"id": 100},
+                    "chat": {"id": "chat"},
+                    "text": "/status",
+                },
+            }
+        )
+
+        self.assertEqual(sent[-1][2], "⏳ Command queued.")
+        payload_call = next(call for call in jobs.calls if call[0] == "payload")
+        submit_call = next(call for call in jobs.calls if call[0] == "submit")
+        self.assertEqual(payload_call[2]["queue_notice_message_ids"], [901])
+        self.assertEqual(submit_call[2].args[5], [901])
+        self.assertLess(jobs.calls.index(payload_call), jobs.calls.index(submit_call))
 
     def test_rejected_durable_admission_preserves_restart_feedback(self):
         cases = [

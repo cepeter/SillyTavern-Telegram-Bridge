@@ -186,9 +186,14 @@ def generate_and_store_reply(
     def stream_update(partial: str) -> None:
         if stream_message_id is None or not partial:
             return
+        preview = telegram_safe_output(partial)
+        if not preview:
+            return
         try:
             telegram_request(
-                token, "editMessageText", {"chat_id": chat_id, "message_id": stream_message_id, "text": partial[-3900:]}
+                token,
+                "editMessageText",
+                {"chat_id": chat_id, "message_id": stream_message_id, "text": preview[-3900:]},
             )
         except Exception:
             logging.debug("Streaming Telegram edit failed", exc_info=True)
@@ -263,25 +268,17 @@ def generate_and_store_reply(
     memory_service.retain(db, chat_id, session, fields)
     if telegram_message_id is not None:
         clear_failed_turn(db, chat_id, telegram_message_id)
-    if stream_message_id:
-        try:
-            telegram_request(token, "deleteMessage", {"chat_id": chat_id, "message_id": stream_message_id})
-        except Exception:
-            try:
-                telegram_request(
-                    token,
-                    "editMessageText",
-                    {
-                        "chat_id": chat_id,
-                        "message_id": stream_message_id,
-                        "text": "\u2063",
-                        "reply_markup": {"inline_keyboard": []},
-                    },
-                )
-            except Exception:
-                logging.info("Could not hide completed streaming preview", exc_info=True)
     queue_user_quote_tts(token, chat_id, text, db, session_id, telegram_message_id, app_settings=app_settings)
-    send_reply(token, chat_id, stored_reply, db, session_id, assistant_rowid, app_settings=app_settings)
+    send_reply(
+        token,
+        chat_id,
+        stored_reply,
+        db,
+        session_id,
+        assistant_rowid,
+        replace_message_id=stream_message_id,
+        app_settings=app_settings,
+    )
 
 
 def _operation_command(text):

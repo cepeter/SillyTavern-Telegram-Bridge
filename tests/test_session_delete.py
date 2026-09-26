@@ -217,6 +217,38 @@ class SessionDeletionTests(SettingsTestCase):
         self.assertEqual(len(menu_calls), 1)
         self.assertIsNone(menu_calls[0][0][4])
 
+    def test_session_cancel_discards_binding_and_closes_panel_with_routed_chat(self):
+        session = _owner_session_core.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
+        closed = []
+        original_close = _owner_session_callbacks.close_panel_message
+        _owner_session_callbacks.close_panel_message = lambda *args: closed.append(args)
+        callback = {"id": "callback", "message": {"message_id": 55}}
+        try:
+            handled = _owner_session_callbacks.handle_session_callback(
+                self.db,
+                "token",
+                callback,
+                lambda *_args, **_kwargs: None,
+                "session:cancel",
+                "chat",
+                {"message_id": 55},
+                session,
+                session["session_id"],
+                None,
+                group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
+                memory_service=make_test_memory_service(),
+                request_context=make_test_request_context(
+                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
+            )
+        finally:
+            _owner_session_callbacks.close_panel_message = original_close
+
+        self.assertTrue(handled)
+        self.assertEqual(closed, [(self.db, "token", "chat", {"message": {"message_id": 55}})])
+
     def test_session_panel_has_inline_delete_actions_and_protects_active_selection(self):
         active = _owner_session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()

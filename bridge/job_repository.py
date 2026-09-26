@@ -41,6 +41,17 @@ def load_job_payload(db: sqlite3.Connection, job_id: int) -> str:
     return str(row[0] or "{}") if row else "{}"
 
 
+def replace_job_payload(db: sqlite3.Connection, job_id: int, payload_json: str, now: float) -> bool:
+    require_active_transaction(db)
+    return (
+        db.execute(
+            "UPDATE jobs SET payload_json=?, updated_at=? WHERE job_id=? AND state='queued'",
+            (payload_json, now, job_id),
+        ).rowcount
+        == 1
+    )
+
+
 def schedule_job(db: sqlite3.Connection, job_id: int, now: float) -> bool:
     require_active_transaction(db)
     return (

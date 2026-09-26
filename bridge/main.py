@@ -43,7 +43,15 @@ from bridge.group_service import GroupService as _GroupService
 from bridge.input_flow_service import InputFlowService as _InputFlowService
 from bridge.input_flows import handle_pending_input
 from bridge.job_service import JobService as _JobService
-from bridge.job_store import enqueue_job, finish_job, job_actor_id, mark_job_running, mark_job_scheduled, recover_jobs
+from bridge.job_store import (
+    enqueue_job,
+    finish_job,
+    job_actor_id,
+    mark_job_running,
+    mark_job_scheduled,
+    recover_jobs,
+    store_job_payload,
+)
 from bridge.memory import (
     get_session_summary,
     purge_hindsight_session,
@@ -221,6 +229,7 @@ def _build_startup_services(
     )
     jobs = _JobService(
         enqueue_backend=enqueue_job,
+        payload_backend=store_job_payload,
         actor_backend=job_actor_id,
         schedule_backend=mark_job_scheduled,
         start_backend=mark_job_running,

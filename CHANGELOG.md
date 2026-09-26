@@ -4,6 +4,11 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Close the Session panel reliably when Cancel is pressed, and remove temporary `⏳ Command queued.` notices after command execution, including jobs recovered after restart.
+- Strip presentation HTML from streaming previews as well as completed bot replies, and finalize replies in the existing preview message so raw tags and temporary duplicate responses do not appear during generation.
+
 ## [0.2.030] - 2026-09-26
 
 ### Added

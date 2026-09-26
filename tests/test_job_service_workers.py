@@ -20,6 +20,7 @@ ensure_application_extensions()
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -147,6 +148,34 @@ class JobWorkerServiceTests(SettingsTestCase):
             ["start", "complete"],
         )
 
+    def test_command_worker_deletes_queue_notice_after_success(self):
+        requests = []
+        services = replace(
+            self.services,
+            telegram=replace(
+                self.services.telegram,
+                request=lambda token, method, payload: requests.append((token, method, payload)) or {},
+            ),
+        )
+        with (
+            patch.object(_m_workers, "committed_assistant_for_message", return_value=None),
+            patch.object(services.conversation, "process_message"),
+        ):
+            _m_workers.process_message_job(
+                services,
+                {"name": "Mira"},
+                "chat",
+                "/status",
+                10,
+                queue_notice_message_ids=[88],
+                job_id=41,
+            )
+
+        self.assertEqual(
+            requests,
+            [("token", "deleteMessage", {"chat_id": "chat", "message_id": 88})],
+        )
+
     def test_message_worker_failure_uses_job_service(self):
         with (
             patch.object(
@@ -176,6 +205,34 @@ class JobWorkerServiceTests(SettingsTestCase):
         self.assertEqual(
             self.sent[-1][2],
             "The character backend failed for this message. Use /retry or /status.",
+        )
+
+    def test_command_worker_deletes_queue_notice_after_failure(self):
+        requests = []
+        services = replace(
+            self.services,
+            telegram=replace(
+                self.services.telegram,
+                request=lambda token, method, payload: requests.append((token, method, payload)) or {},
+            ),
+        )
+        with (
+            patch.object(_m_workers, "committed_assistant_for_message", return_value=None),
+            patch.object(services.conversation, "process_message", side_effect=RuntimeError("boom")),
+        ):
+            _m_workers.process_message_job(
+                services,
+                {"name": "Mira"},
+                "chat",
+                "/status",
+                10,
+                queue_notice_message_ids=[89],
+                job_id=41,
+            )
+
+        self.assertEqual(
+            requests,
+            [("token", "deleteMessage", {"chat_id": "chat", "message_id": 89})],
         )
 
     def test_image_worker_success_and_failure_use_job_service(self):

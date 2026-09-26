@@ -275,3 +275,65 @@ def test_normal_generation_stores_and_delivers_telegram_safe_html(context, monke
     assert "Scene Title" in deliveries[-1]
     stored = db.execute("SELECT content FROM messages WHERE role='assistant' ORDER BY rowid DESC LIMIT 1").fetchone()[0]
     assert stored == deliveries[-1]
+
+
+def test_streaming_preview_hides_presentation_html_tags(context, monkeypatch):
+    from application_test_setup import make_test_application_services
+
+    from bridge import message_commands
+
+    db, session, ctx = context
+    raw = 'Intro<div style="color:red"><div>Scene Title</div><div>Line A<br>Line B</div></div>Outro'
+    edits = []
+    methods = []
+    deliveries = []
+
+    def generate(*_args, **kwargs):
+        stream_callback = kwargs.get("stream_callback")
+        assert stream_callback is not None
+        stream_callback(raw)
+        return raw
+
+    def telegram_request(_token, method, payload):
+        methods.append(method)
+        if method == "sendMessage":
+            return {"message_id": 71}
+        if method == "editMessageText":
+            edits.append(payload["text"])
+        return {}
+
+    port = ProviderPort(generate)
+    services = make_test_application_services(app_settings=ctx.app_settings, provider=port)
+    monkeypatch.setattr(message_commands, "build_chat_messages", lambda *a, **k: [])
+    monkeypatch.setattr(message_commands, "send_typing", lambda *a, **k: None)
+    monkeypatch.setattr(message_commands, "telegram_request", telegram_request)
+    monkeypatch.setattr(message_commands, "queue_user_quote_tts", lambda *a, **k: None)
+    monkeypatch.setattr(message_commands, "send_reply", lambda *a, **k: deliveries.append((a, k)))
+
+    message_commands.generate_and_store_reply(
+        db,
+        "token",
+        "key",
+        {"name": "Alice"},
+        "chat",
+        "Hello",
+        session,
+        session["session_id"],
+        "fixture::model",
+        None,
+        "",
+        None,
+        None,
+        group_service=services.group,
+        provider_port=port,
+        memory_service=services.memory,
+        persona_service=services.persona,
+        app_settings=ctx.app_settings,
+        rag_service=services.rag,
+    )
+
+    assert edits
+    assert all("<div" not in text and "</div>" not in text for text in edits)
+    assert "Scene Title" in edits[-1]
+    assert deliveries[-1][1]["replace_message_id"] == 71
+    assert "deleteMessage" not in methods
