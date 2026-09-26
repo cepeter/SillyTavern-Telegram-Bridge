@@ -28,6 +28,8 @@ from bridge.character_optimizer_panels import (
 )
 from bridge.character_proposals import load_character_proposal
 from bridge.character_quality import rank_character
+from bridge.conversation_setup import begin_setup
+from bridge.conversation_setup_panels import send_setup_panel
 from bridge.group_service import GroupService
 from bridge.group_setup import apply_group_setup_character
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
@@ -448,21 +450,12 @@ def handle_character_callback(
                     group_service=group_service,
                     request_context=request_context,
                 )
-            set_meta(
-                db,
-                f"character_session_input:{chat_id}",
-                json.dumps(
-                    {
-                        "character_file": Path(value).name,
-                        "character_name": character_name,
-                        "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS,
-                    }
-                ),
+            state = begin_setup(
+                db, chat_id, session, request_context.actor_id, value, app_settings=request_context.app_settings
             )
-            answer_callback(token, str(callback.get("id", "")), "Choose session")
-            discard_panel_binding(db, chat_id, message.get("message_id"))
-            close_panel_message(db, token, chat_id, callback)
-            send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, request_context=request_context)
+            answer_callback(token, str(callback.get("id", "")), "Choose conversation mode")
+            send_setup_panel(token, chat_id, state, message.get("message_id"), request_context=request_context)
+
         else:
             answer_callback(token, str(callback.get("id", "")), "Character not found")
         return True
