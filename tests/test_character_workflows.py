@@ -102,6 +102,14 @@ def test_optimizer_callback_preview_apply_and_replay_use_exact_proposal(card_con
 
     callback_dispatch.process_callback(db, "token", callback("characteroptimize:" + token), services=services)
     assert target.read_bytes() == original
+    assert model_calls == []
+    option_callbacks = [
+        button["callback_data"] for row in outputs[-1]["reply_markup"]["inline_keyboard"] for button in row
+    ]
+    auto_data = next(value for value in option_callbacks if value.startswith("characteroptimizeauto:"))
+    manual_data = next(value for value in option_callbacks if value.startswith("characteroptimizemanual:"))
+    assert manual_data
+    callback_dispatch.process_callback(db, "token", callback(auto_data), services=services)
     assert "post_history_instructions" in outputs[-1]["text"]
     apply_data = next(
         button["callback_data"]
@@ -134,3 +142,136 @@ def test_optimizer_callback_preview_apply_and_replay_use_exact_proposal(card_con
     assert target.read_bytes() == updated
     assert "expired or already used" in outputs[-1]["text"]
     assert len(model_calls) == (1 if rank_fails else 2)
+
+
+def test_manual_optimizer_suggestion_pending_input_reaches_utility_prompt(card_context, monkeypatch):
+    from bridge import character_optimizer_panels, input_flows
+    from bridge.metadata import set_meta
+
+    db, ctx, _ = card_context
+    original = _card_png("Alice", "original")
+    target = ctx.app_settings.character_dir / "Alice.png"
+    target.write_bytes(original)
+    suggestion = "Make her more sarcastic, preserve the backstory, and shorten the greeting."
+    optimized = {"description": "sarcastic but consistent", "first_mes": "Short greeting."}
+    calls = []
+
+    def generate(*args, **kwargs):
+        calls.append((args, kwargs))
+        return json.dumps(optimized)
+
+    services = make_test_application_services(app_settings=ctx.app_settings, provider=ProviderPort(generate))
+    session = services.session.create(db, "chat", ctx.app_settings.default_model, session_id="session")
+    state = {
+        "session_id": session["session_id"],
+        "actor_id": "actor",
+        "character_file": "Alice.png",
+        "expected_digest": __import__("hashlib").sha256(original).hexdigest(),
+        "expires_at": __import__("time").time() + 600,
+        "prompt_message_ids": [],
+    }
+    set_meta(db, "character_optimizer_input:chat", json.dumps(state))
+    previews = []
+    monkeypatch.setattr(
+        character_optimizer_panels,
+        "send_panel_message",
+        lambda _token, _chat, text, markup, *a, **k: previews.append((text, markup)),
+    )
+    monkeypatch.setattr(character_quality, "task_model_for_session", lambda *a, **k: "utility::fixture")
+    handled = input_flows.handle_pending_input(
+        db,
+        "token",
+        "chat",
+        session,
+        suggestion,
+        fields={"name": "Alice"},
+        handle_session_name=lambda *a, **k: False,
+        group_service=services.group,
+        provider_port=services.provider,
+        memory_service=services.memory,
+        persona_service=services.persona,
+        request_context=RequestContext(db, session["session_id"], "actor", app_settings=ctx.app_settings),
+        rag_service=services.rag,
+    )
+    assert handled
+    assert previews
+    assert calls
+    prompt_text = "\n".join(str(message["content"]) for message in calls[0][0][2])
+    assert suggestion in prompt_text
+    assert "<user_suggestion>" in prompt_text
+    assert target.read_bytes() == original
+
+
+def test_manual_optimizer_option_starts_actor_session_digest_bound_pending_state(card_context, monkeypatch):
+    from bridge import character_optimizer_input
+    from bridge.metadata import get_meta
+
+    db, ctx, _ = card_context
+    original = _card_png("Alice", "original")
+    target = ctx.app_settings.character_dir / "Alice.png"
+    target.write_bytes(original)
+    services = make_test_application_services(
+        app_settings=ctx.app_settings,
+        provider=ProviderPort(lambda *a, **k: pytest.fail("manual option must not call the model yet")),
+    )
+    session = services.session.create(db, "chat", ctx.app_settings.default_model, session_id="session")
+    outputs = []
+    prompts = []
+    monkeypatch.setattr(callback_dispatch, "answer_callback", lambda *a, **k: None)
+    monkeypatch.setattr(character_callbacks, "close_panel_message", lambda *a, **k: None)
+    monkeypatch.setattr(character_optimizer_input, "close_panel_message", lambda *a, **k: None)
+    monkeypatch.setattr(character_optimizer_input, "discard_panel_binding", lambda *a, **k: None)
+    monkeypatch.setattr(character_optimizer_input, "send_text", lambda *a, **k: prompts.append(a[2]) or [77])
+
+    def send_panel(_token, _method, payload, *, request_context):
+        outputs.append(payload)
+        bind_panel_session(db, "chat", 55, request_context.session_id, request_context.actor_id)
+
+    monkeypatch.setattr(cards, "send_panel_request", send_panel)
+    monkeypatch.setattr(character_callbacks, "send_panel_request", send_panel)
+    bind_panel_session(db, "chat", 55, session["session_id"], "actor")
+    token = dynamic_callback_token("character", "Alice.png", "chat", db=db)
+    callback = {
+        "id": "callback",
+        "from": {"id": "actor"},
+        "data": "characteroptimize:" + token,
+        "message": {"message_id": 55, "chat": {"id": "chat"}},
+    }
+    callback_dispatch.process_callback(db, "token", callback, services=services)
+    manual_data = next(
+        button["callback_data"]
+        for row in outputs[-1]["reply_markup"]["inline_keyboard"]
+        for button in row
+        if button["text"] == "Manual Suggestion"
+    )
+    callback["data"] = manual_data
+    callback_dispatch.process_callback(db, "token", callback, services=services)
+    state = json.loads(get_meta(db, "character_optimizer_input:chat"))
+    assert state["actor_id"] == "actor"
+    assert state["session_id"] == session["session_id"]
+    assert state["character_file"] == "Alice.png"
+    assert state["expected_digest"] == __import__("hashlib").sha256(original).hexdigest()
+    assert state["prompt_message_ids"] == [77]
+    assert prompts and "2,000" in prompts[-1]
+
+
+def test_optimizer_preview_exposes_manual_refinement_callback(card_context, monkeypatch):
+    from bridge import character_optimizer_panels
+
+    _, ctx, _ = card_context
+    delivered = []
+    monkeypatch.setattr(
+        character_optimizer_panels,
+        "send_panel_message",
+        lambda _token, _chat, text, markup, *a, **k: delivered.append((text, markup)),
+    )
+    character_optimizer_panels.send_character_optimize_result(
+        "token",
+        "chat",
+        "Alice.png",
+        {"description": "better"},
+        "a" * 24,
+        request_context=ctx,
+    )
+    callbacks = [button["callback_data"] for row in delivered[-1][1]["inline_keyboard"] for button in row]
+    assert "characteroptimizerefine:" + "a" * 24 in callbacks

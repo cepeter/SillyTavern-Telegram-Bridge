@@ -368,6 +368,9 @@ def test_optional_feature_owners_cannot_import_a_root_or_concrete_transport(tmp_
         "character_quality",
         "character_proposals",
         "character_optimizer_panels",
+        "character_optimizer",
+        "character_optimizer_input",
+        "telegram_output",
     ):
         bridge = tmp_path / name / "bridge"
         bridge.mkdir(parents=True)
@@ -387,4 +390,7 @@ def test_optional_feature_owners_are_type_checked():
         "bridge/character_quality.py",
         "bridge/character_proposals.py",
         "bridge/character_optimizer_panels.py",
+        "bridge/character_optimizer.py",
+        "bridge/character_optimizer_input.py",
+        "bridge/telegram_output.py",
     } <= set(policy.TYPE_TARGETS)

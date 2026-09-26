@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 
 from bridge.card_content import card_fields_from_file
+from bridge.character_optimizer_input import handle_character_optimizer_suggestion_input
 from bridge.group_service import GroupService
 from bridge.memory_service import MemoryService
 from bridge.metadata import set_meta
@@ -38,6 +39,18 @@ def handle_pending_input(
 ) -> bool:
     """Consume one scoped pending-input message, including cancel and validation."""
     session_id = session["session_id"]
+    optimizer = _pending_state(db, f"character_optimizer_input:{chat_id}", session_id, token, chat_id)
+    if optimizer and handle_character_optimizer_suggestion_input(
+        db,
+        token,
+        chat_id,
+        session,
+        stripped,
+        optimizer,
+        provider_port=provider_port,
+        request_context=request_context,
+    ):
+        return True
     world_upload = _pending_state(db, f"world_upload:{chat_id}", session_id, token, chat_id)
     if world_upload:
         if stripped.casefold() in {"/cancel", "cancel"}:

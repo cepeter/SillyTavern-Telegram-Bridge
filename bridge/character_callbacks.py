@@ -11,7 +11,7 @@ from pathlib import Path
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
 from bridge.callbacks import close_panel_message, discard_panel_binding
-from bridge.card_content import card_fields, card_fields_from_file, parse_png_chara_bytes, safe_character_path
+from bridge.card_content import card_fields_from_file, safe_character_path
 from bridge.cards import (
     send_character_delete_confirm,
     send_character_delete_menu,
@@ -19,16 +19,15 @@ from bridge.cards import (
     send_character_menu,
     send_session_menu,
 )
-from bridge.character_optimizer_panels import send_character_optimize_menu, send_character_optimize_result
-from bridge.character_proposals import load_character_proposal, stage_character_proposal
-from bridge.character_quality import (
-    character_rank,
-    merge_optimized_fields,
-    optimize_character,
-    rank_badge,
-    rank_character,
-    write_png_chara_bytes,
+from bridge.character_optimizer import prepare_character_optimization
+from bridge.character_optimizer_input import start_character_optimizer_suggestion_input
+from bridge.character_optimizer_panels import (
+    send_character_optimize_menu,
+    send_character_optimize_options,
+    send_character_optimize_result,
 )
+from bridge.character_proposals import load_character_proposal
+from bridge.character_quality import character_rank, rank_badge, rank_character
 from bridge.group_service import GroupService
 from bridge.group_setup import apply_group_setup_character
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
@@ -198,57 +197,63 @@ def handle_character_callback(
             request_context=request_context,
         )
         return True
-    if data.startswith("characteroptimize:"):
-        value = data.split(":", 1)[1]
-        if value.startswith("page:"):
-            try:
-                page = int(value.split(":", 1)[1])
-            except ValueError:
-                page = 0
-            send_character_optimize_menu(
-                token, chat_id, message.get("message_id"), page, request_context=request_context
+    if data.startswith("characteroptimizerefine:"):
+        nonce = data.split(":", 1)[1]
+        try:
+            pending = load_character_proposal(db, chat_id, nonce, request_context=request_context)
+            if pending.kind != "optimize":
+                raise ValueError("invalid optimizer preview")
+            start_character_optimizer_suggestion_input(
+                db,
+                token,
+                chat_id,
+                pending.filename,
+                pending.expected_digest,
+                callback,
+                request_context=request_context,
             )
-            return True
+            answer_callback(token, str(callback.get("id", "")), "Send optimizer suggestion")
+        except (OSError, ValueError):
+            answer_callback(token, str(callback.get("id", "")), "Optimizer preview expired; reopen it")
+        return True
+    if data.startswith(("characteroptimizeauto:", "characteroptimizemanual:")):
+        action, value = data.split(":", 1)
         filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
         path = safe_character_path(filename, app_settings=request_context.app_settings)
-        if not path or (request_context.app_settings.character_dir / filename).is_symlink():
+        if not path or path.is_symlink():
             answer_callback(token, str(callback.get("id", "")), "Character choice expired")
             return True
+        if action == "characteroptimizemanual":
+            try:
+                start_character_optimizer_suggestion_input(
+                    db,
+                    token,
+                    chat_id,
+                    filename,
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    callback,
+                    request_context=request_context,
+                )
+                answer_callback(token, str(callback.get("id", "")), "Send optimizer suggestion")
+            except (OSError, ValueError):
+                answer_callback(token, str(callback.get("id", "")), "Character changed; reopen the optimizer")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Optimizing")
         try:
-            original = path.read_bytes()
-            card = parse_png_chara_bytes(original)
-            info = card_fields(card, app_settings=request_context.app_settings)
-            answer_callback(token, str(callback.get("id", "")), "Optimizing")
-            optimized = optimize_character(
+            draft = prepare_character_optimization(
                 db,
                 chat_id,
                 session,
-                info,
-                provider_port=provider_port,
-                app_settings=request_context.app_settings,
-            )
-            if not optimized:
-                raise ValueError("Optimization unavailable. Check the utility-model configuration and retry.")
-            digest = hashlib.sha256(original).hexdigest()
-            if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
-                raise ValueError("Character changed during optimization; reopen the preview.")
-            candidate = write_png_chara_bytes(original, merge_optimized_fields(card, optimized))
-            nonce = stage_character_proposal(
-                db,
-                chat_id,
-                "optimize",
                 filename,
-                candidate,
-                digest,
+                provider_port=provider_port,
                 request_context=request_context,
-                fields=optimized,
             )
             send_character_optimize_result(
                 token,
                 chat_id,
-                filename,
-                optimized,
-                nonce,
+                draft.filename,
+                draft.fields,
+                draft.nonce,
                 message.get("message_id"),
                 request_context=request_context,
             )
@@ -264,6 +269,27 @@ def handle_character_callback(
                 },
                 request_context=request_context,
             )
+        return True
+    if data.startswith("characteroptimize:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            try:
+                page = int(value.split(":", 1)[1])
+            except ValueError:
+                page = 0
+            send_character_optimize_menu(
+                token, chat_id, message.get("message_id"), page, request_context=request_context
+            )
+            return True
+        filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
+        path = safe_character_path(filename, app_settings=request_context.app_settings)
+        if not path or path.is_symlink():
+            answer_callback(token, str(callback.get("id", "")), "Character choice expired")
+            return True
+        answer_callback(token, str(callback.get("id", "")), "Optimizer options")
+        send_character_optimize_options(
+            token, chat_id, filename, message.get("message_id"), request_context=request_context
+        )
         return True
     if data.startswith("characterinfo:"):
         value = data.split(":", 1)[1]

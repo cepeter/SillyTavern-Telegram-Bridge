@@ -172,3 +172,46 @@ class HumanizerGenerationWiringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TelegramSafeOutputTests(unittest.TestCase):
+    def test_render_session_response_converts_presentation_html_to_plain_text(self):
+        from bridge.generation import render_session_response
+
+        session = {
+            "session_id": "s",
+            "model_id": "model",
+            "response_language": "auto",
+            "humanizer": "off",
+        }
+        source = (
+            'Before\n<div style="background:#111"><div>The Walk Home</div>'
+            "<div>11:48 PM &bull; Cool, clear night</div>"
+            "<div>Quiet street<br>Sidewalk empty.</div></div>\nAfter"
+        )
+        result = render_session_response("key", session, source, "chat", {}, provider_port=make_test_provider_port())
+        self.assertNotIn("<div", result)
+        self.assertNotIn("</div>", result)
+        self.assertIn("The Walk Home", result)
+        self.assertIn("11:48 PM • Cool, clear night", result)
+        self.assertIn("Quiet street\nSidewalk empty.", result)
+        self.assertTrue(result.startswith("Before"))
+        self.assertTrue(result.endswith("After"))
+
+    def test_render_session_response_preserves_html_inside_code(self):
+        from bridge.generation import render_session_response
+
+        session = {
+            "session_id": "s",
+            "model_id": "model",
+            "response_language": "auto",
+            "humanizer": "off",
+        }
+        source = (
+            'Example:\n```html\n<div style="color:red">literal</div>\n```\n'
+            "Inline `<span>literal</span>` and visible <div>Card</div>."
+        )
+        result = render_session_response("key", session, source, "chat", {}, provider_port=make_test_provider_port())
+        self.assertIn('```html\n<div style="color:red">literal</div>\n```', result)
+        self.assertIn("`<span>literal</span>`", result)
+        self.assertIn("visible Card.", result)

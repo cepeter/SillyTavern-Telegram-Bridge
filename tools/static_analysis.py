@@ -52,6 +52,9 @@ TYPE_TARGETS: tuple[str, ...] = (
     "bridge/character_quality.py",
     "bridge/character_proposals.py",
     "bridge/character_optimizer_panels.py",
+    "bridge/character_optimizer.py",
+    "bridge/character_optimizer_input.py",
+    "bridge/telegram_output.py",
     "bridge/rag_contracts.py",
     "bridge/rag_indexing.py",
     "bridge/rag_query.py",
@@ -115,6 +118,29 @@ LOW_LEVEL_IMPORTS = {
             "bridge.request_types",
         ]
     ),
+    "bridge.character_optimizer": frozenset(
+        [
+            "bridge.card_content",
+            "bridge.character_proposals",
+            "bridge.character_quality",
+            "bridge.provider_port",
+            "bridge.request_types",
+        ]
+    ),
+    "bridge.character_optimizer_input": frozenset(
+        [
+            "bridge.callbacks",
+            "bridge.card_content",
+            "bridge.character_optimizer",
+            "bridge.character_optimizer_panels",
+            "bridge.limits",
+            "bridge.metadata",
+            "bridge.provider_port",
+            "bridge.request_types",
+            "bridge.telegram",
+        ]
+    ),
+    "bridge.telegram_output": frozenset(),
     "bridge.rag_indexing": frozenset(
         (
             "bridge.rag_repository",

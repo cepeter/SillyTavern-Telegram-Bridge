@@ -19,6 +19,7 @@ from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.rag_service import RagService
 from bridge.settings import AppSettings
+from bridge.telegram_output import telegram_safe_output
 
 
 def render_response_language(
@@ -89,7 +90,7 @@ def render_session_response(
             settings,
             provider_port=provider_port,
         )
-    return rendered
+    return telegram_safe_output(rendered)
 
 
 def format_user_dialogue_action(text: str) -> str:
