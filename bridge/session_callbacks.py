@@ -63,7 +63,7 @@ def handle_session_callback(
             chat_id,
             list_sessions(db, chat_id),
             session_id,
-            message.get("message_id"),
+            None,
             request_context=request_context,
         )
         return True
