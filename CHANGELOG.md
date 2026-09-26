@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add a permanent **⏭ Next Scene** action below Light Novel’s random 2–4 choices. It consumes the current choice panel once and submits a fixed narrative instruction that advances without speaking, deciding, or acting for the user character until that character can meaningfully participate again.
+
 ## [0.2.030] - 2026-09-26
 
 ### Added

@@ -71,7 +71,7 @@ HELP_CATEGORIES = {
         ),
         (
             "/lightnovel",
-            "Open dedicated Light Novel mode controls or restore the current 2–4 action choices. "
+            "Open dedicated Light Novel mode controls or restore the current 2–4 action choices plus Next Scene. "
             "Mode changes require an unstarted standard session.",
         ),
         ("/persona", "Choose, create, edit, or disable a Persona. Delete only targets inactive, unreferenced ones."),
