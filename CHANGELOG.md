@@ -4,6 +4,8 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.030] - 2026-09-26
+
 ### Added
 
 - Prefer a Bot API 10.3 RichMessage Character Menu so the hardcoded rank custom emoji can animate inside disabled rank buttons; automatically fall back to the classic inline-keyboard panel when RichMessage delivery is unavailable.
