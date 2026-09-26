@@ -30,7 +30,6 @@ from bridge.character_quality import RANK_TIERS, character_rank, rank_badge
 from bridge.panel_utils import panel_label, panel_message_request, panel_navigation, panel_page
 from bridge.persona_service import PersonaService
 from bridge.request_types import RequestContext
-from bridge.settings import AppSettings
 from bridge.telegram import send_panel_request
 
 
@@ -58,16 +57,26 @@ def send_panel_message(
     )
 
 
-def character_rank_button(rank: str | None, *, app_settings: AppSettings) -> dict[str, str]:
-    """Build the no-op rank-column button with optional Telegram custom emoji icon."""
+# Bot-owned Telegram custom-emoji set: sttb_ranks_by_SillyTavernPunzmeBot
+_CHARACTER_RANK_CUSTOM_EMOJI_IDS: dict[str, str] = {
+    "S": "6176891226302718197",
+    "A": "6176955294329871952",
+    "B": "6178981105849344346",
+    "C": "6177219258724917819",
+    "D": "6176733025477337215",
+}
+
+
+def character_rank_button(rank: str | None) -> dict[str, str]:
+    """Build the silent rank-column button using the bot-owned animated rank set."""
     tier = str(rank or "").strip().upper()
     if tier not in RANK_TIERS:
         return {"text": "—", "callback_data": "character:rank:unranked"}
-    button = {"text": tier, "callback_data": f"character:rank:{tier}"}
-    custom_emoji_id = str(app_settings.environ.get(f"SILLYTAVERN_RANK_EMOJI_{tier}", "")).strip()
-    if custom_emoji_id.isdigit() and 1 <= len(custom_emoji_id) <= 32:
-        button["icon_custom_emoji_id"] = custom_emoji_id
-    return button
+    return {
+        "text": tier,
+        "callback_data": f"character:rank:{tier}",
+        "icon_custom_emoji_id": _CHARACTER_RANK_CUSTOM_EMOJI_IDS[tier],
+    }
 
 
 def send_persona_menu(
@@ -146,7 +155,7 @@ def send_character_menu(
         rank = character_rank(request_context.db, filename, app_settings=request_context.app_settings)
         rows.append(
             [
-                character_rank_button(rank, app_settings=request_context.app_settings),
+                character_rank_button(rank),
                 {
                     "text": mark + panel_label(label),
                     "callback_data": "character:" + callback_token,

@@ -6,7 +6,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Added
 
-- Add a three-column Character Menu layout (`rank | character | action`) with silent S/A/B/C/D rank buttons and optional Telegram custom-emoji IDs for animated rank icons.
+- Add a three-column Character Menu layout (`rank | character | action`) with silent S/A/B/C/D rank buttons using the bot-owned animated rank custom-emoji set registered from the project GIFs; IDs are hardcoded and require no `.env` configuration.
 - Add Auto Optimize / Manual Suggestion character-optimizer choices. Manual guidance is bounded and bound to the initiating actor, session, character revision and expiry; previews can request another guided draft before Apply.
 - Add an opt-in, per-session Humanizer pass after language rendering, with bounded provider requests, conservative text-preservation checks and default-off metadata persistence. Include upstream attribution and a pinned-reference refresh specification; no scheduler or automatic prompt promotion is installed.
 - Rank uploaded character cards S–D with the utility model and show the tier in character selection, info, and optimizer menus. A new ⚡ Optimizer menu rewrites a card's text fields with the utility model and shows a preview before applying (with a verified backup) or discarding.

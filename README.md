@@ -311,7 +311,6 @@ SillyTavern installation lives elsewhere.
 | `SILLYTAVERN_DEFAULT_CHARACTER` | required | PNG character filename used for new/default sessions. |
 | `SILLYTAVERN_MODEL` | required | Default Story route in `provider-id::model-id` form. |
 | `SILLYTAVERN_DEFAULT_USER_NAME` | empty | Fallback display value for `{{user}}`. |
-| `SILLYTAVERN_RANK_EMOJI_S` ... `SILLYTAVERN_RANK_EMOJI_D` | empty | Optional numeric Telegram custom-emoji IDs for animated S/A/B/C/D rank icons. Plain letters are used when absent/invalid. |
 | `LLM_API_KEY` | empty | Generic provider-key fallback. Prefer a provider-specific `api_key_env`. |
 | `SILLYTAVERN_PROVIDER_CONFIG` | `$SILLYTAVERN_BRIDGE_HOME/sillytavern_telegram_providers.yaml` | Private YAML provider catalog. |
 | `SILLYTAVERN_MODEL_CACHE` | `$SILLYTAVERN_BRIDGE_HOME/model_catalog_cache.json` | Cache for discovered provider model IDs. |
@@ -848,11 +847,12 @@ The active card and any cards referenced by sessions or groups are protected —
 you can't accidentally delete a card that's in use.
 
 Character rows use three columns: **rank | character | action**. The rank column
-shows S/A/B/C/D (or `—` when unranked) and is a silent no-op button. When one of
-the optional `SILLYTAVERN_RANK_EMOJI_*` IDs is configured, Telegram displays
-that custom emoji before the fallback letter. Custom button emoji require the
-bot to be eligible for Telegram custom emoji (for example, the bot owner has
-Telegram Premium).
+shows S/A/B/C/D (or `—` when unranked) and is a silent no-op button. Ranked
+buttons use the bridge's built-in animated custom emoji set
+`sttb_ranks_by_SillyTavernPunzmeBot`, created from the project rank GIFs. The
+registered custom-emoji IDs are intentionally hardcoded so no private `.env`
+configuration is needed; the visible S/A/B/C/D button text remains the fallback
+when a Telegram client cannot render the custom emoji.
 
 #### Re-uploading and optimizing a card
 

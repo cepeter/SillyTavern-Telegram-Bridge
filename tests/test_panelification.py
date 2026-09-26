@@ -143,9 +143,6 @@ class PanelificationTests(SettingsTestCase):
         _m_cards.dynamic_callback_token = lambda _kind, filename, _chat, **_kwargs: "cb-" + filename
         _m_cards.character_rank = lambda _db, filename, **_kwargs: "S" if filename == "active.png" else ""
         settings = self.app_settings_builder.build()
-        settings = __import__("dataclasses").replace(
-            settings, environ={**dict(settings.environ), "SILLYTAVERN_RANK_EMOJI_S": "5368324170671202286"}
-        )
         try:
             _m_session_naming.send_character_menu(
                 "bot-token",
@@ -163,7 +160,7 @@ class PanelificationTests(SettingsTestCase):
         self.assertTrue(all(len(row) == 3 for row in item_rows))
         self.assertEqual(item_rows[0][0]["text"], "S")
         self.assertEqual(item_rows[0][0]["callback_data"], "character:rank:S")
-        self.assertEqual(item_rows[0][0]["icon_custom_emoji_id"], "5368324170671202286")
+        self.assertEqual(item_rows[0][0]["icon_custom_emoji_id"], "6176891226302718197")
         self.assertEqual(item_rows[1][0], {"text": "—", "callback_data": "character:rank:unranked"})
         self.assertEqual(item_rows[0][1]["callback_data"], "character:cb-active.png")
         self.assertEqual(item_rows[1][1]["callback_data"], "character:cb-other.png")
@@ -176,17 +173,32 @@ class PanelificationTests(SettingsTestCase):
             self.assertTrue(self._route(command))
             self.assertIn(marker, str(self.calls[-1]))
 
-    def test_character_rank_column_falls_back_to_plain_letter_without_custom_emoji(self):
-        button = _m_cards.character_rank_button("A", app_settings=self.app_settings_builder.build())
-        self.assertEqual(button, {"text": "A", "callback_data": "character:rank:A"})
-        settings = self.app_settings_builder.build()
-        settings = __import__("dataclasses").replace(
-            settings, environ={**dict(settings.environ), "SILLYTAVERN_RANK_EMOJI_A": "not-a-custom-emoji-id"}
-        )
+    def test_character_rank_buttons_use_hardcoded_custom_emoji_ids(self):
+        expected = {
+            "S": "6176891226302718197",
+            "A": "6176955294329871952",
+            "B": "6178981105849344346",
+            "C": "6177219258724917819",
+            "D": "6176733025477337215",
+        }
+        for tier, custom_emoji_id in expected.items():
+            self.assertEqual(
+                _m_cards.character_rank_button(tier),
+                {
+                    "text": tier,
+                    "callback_data": f"character:rank:{tier}",
+                    "icon_custom_emoji_id": custom_emoji_id,
+                },
+            )
         self.assertEqual(
-            _m_cards.character_rank_button("A", app_settings=settings),
-            {"text": "A", "callback_data": "character:rank:A"},
+            _m_cards.character_rank_button(None),
+            {"text": "—", "callback_data": "character:rank:unranked"},
         )
+
+    def test_character_rank_button_has_no_configuration_parameter(self):
+        import inspect
+
+        self.assertEqual(list(inspect.signature(_m_cards.character_rank_button).parameters), ["rank"])
 
     def test_scene_and_director_goal_open_topic_panels(self):
         topic_id = "chat|topic:1"
