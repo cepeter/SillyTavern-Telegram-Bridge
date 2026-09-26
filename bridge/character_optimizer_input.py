@@ -8,9 +8,12 @@ import sqlite3
 import time
 
 from bridge.callbacks import close_panel_message, discard_panel_binding
-from bridge.card_content import safe_character_path
+from bridge.card_content import card_fields_from_file, safe_character_path
 from bridge.character_optimizer import prepare_character_optimization
-from bridge.character_optimizer_panels import send_character_optimize_result
+from bridge.character_optimizer_panels import (
+    format_character_optimizer_base,
+    send_character_optimize_result,
+)
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.metadata import get_meta, set_meta
 from bridge.provider_port import ProviderPort
@@ -38,6 +41,7 @@ def start_character_optimizer_suggestion_input(
     expected_digest: str,
     callback: dict,
     *,
+    base_fields: dict[str, str] | None = None,
     request_context: RequestContext,
 ) -> None:
     """Close the panel and request one actor/session/digest-bound editing suggestion."""
@@ -55,24 +59,30 @@ def start_character_optimizer_suggestion_input(
             previous = {}
         if isinstance(previous, dict) and previous:
             _clear_pending(db, token, chat_id, meta_key, previous)
+    revision_base = dict(base_fields or {})
+    if any(not isinstance(value, str) for value in revision_base.values()):
+        raise ValueError("invalid optimizer revision base")
+    installed = card_fields_from_file(filename, app_settings=request_context.app_settings)
+    display_fields = dict(installed)
+    display_fields.update(revision_base)
     state = {
         "session_id": request_context.session_id,
         "actor_id": request_context.actor_id,
         "character_file": filename,
         "expected_digest": expected_digest,
+        "base_fields": revision_base,
         "expires_at": time.time() + PENDING_SETTINGS_TTL_SECONDS,
     }
     message_id = (callback.get("message") or callback).get("message_id")
     discard_panel_binding(db, chat_id, message_id)
     close_panel_message(db, token, chat_id, callback)
-    state["prompt_message_ids"] = send_text(
-        token,
-        chat_id,
-        (
-            "Send your optimizer suggestion (up to 2,000 characters). Example: make her more sarcastic, "
-            "preserve the backstory, and shorten the first message.\n\nSend /cancel to cancel."
-        ),
+    prompt = (
+        format_character_optimizer_base(str(installed.get("name", "") or filename), display_fields)
+        + "\n\nSend your optimizer suggestion (up to 2,000 characters). "
+        "Example: make her more sarcastic, preserve the backstory, and shorten the first message."
+        "\n\nSend /cancel to cancel."
     )
+    state["prompt_message_ids"] = send_text(token, chat_id, prompt)
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))
 
 
@@ -125,6 +135,7 @@ def handle_character_optimizer_suggestion_input(
             request_context=request_context,
             suggestion=value,
             expected_digest=expected_digest,
+            base_fields=dict(state.get("base_fields") or {}),
         )
     except (OSError, ValueError) as exc:
         send_text(token, chat_id, f"{exc} Try again or send /cancel.")

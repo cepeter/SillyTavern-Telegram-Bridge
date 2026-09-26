@@ -248,3 +248,39 @@ def test_character_rank_column_callback_is_silent_noop(tmp_path):
         db.close()
     assert handled is True
     assert answers == [""]
+
+
+def test_character_info_caption_never_shows_rank_badge(tmp_path, monkeypatch):
+    card = tmp_path / "Alisha.png"
+    card.write_bytes(b"png-card-bytes")
+    db = sqlite3.connect(":memory:")
+    context = make_test_request_context(db, "session", "owner", app_settings=make_test_settings(home=tmp_path))
+    sent = []
+    monkeypatch.setattr(_owner_character_callbacks, "resolve_dynamic_callback_token", lambda *_a, **_k: card.name)
+    monkeypatch.setattr(_owner_character_callbacks, "safe_character_path", lambda *_a, **_k: card)
+    monkeypatch.setattr(_owner_character_callbacks, "card_fields_from_file", lambda *_a, **_k: _info())
+    monkeypatch.setattr(_owner_character_callbacks, "character_rank", lambda *_a, **_k: "S", raising=False)
+    monkeypatch.setattr(_owner_character_callbacks, "send_panel_photo", lambda *a, **k: sent.append((a, k)))
+    monkeypatch.setattr(_owner_character_callbacks, "close_panel_message", lambda *a, **k: None)
+    try:
+        _owner_character_callbacks.handle_character_callback(
+            db,
+            "bot-token",
+            _callback(),
+            lambda *_a: None,
+            "characterinfo:token",
+            "chat",
+            {"message_id": 41},
+            {"character_file": "Active.png"},
+            "session",
+            None,
+            group_service=make_test_group_service(app_settings=context.app_settings),
+            request_context=context,
+            provider_port=application_setup.make_test_provider_port(),
+        )
+    finally:
+        db.close()
+    caption = sent[0][0][3]
+    assert caption.startswith("Character: Alisha\n")
+    assert "🏆" not in caption
+    assert " S " not in caption

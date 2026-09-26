@@ -27,7 +27,7 @@ from bridge.character_optimizer_panels import (
     send_character_optimize_result,
 )
 from bridge.character_proposals import load_character_proposal
-from bridge.character_quality import character_rank, rank_badge, rank_character
+from bridge.character_quality import rank_character
 from bridge.group_service import GroupService
 from bridge.group_setup import apply_group_setup_character
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
@@ -43,10 +43,10 @@ from bridge.session_core import list_sessions
 from bridge.telegram import send_panel_photo, send_panel_request
 
 
-def _character_info_text(info: dict, filename: str, rank: str = "") -> str:
+def _character_info_text(info: dict, filename: str) -> str:
     return (
         "Character: "
-        f"{rank_badge(rank)}{info['name']}"
+        f"{info['name']}"
         "\nFile: "
         f"{filename}"
         "\nDescription: "
@@ -213,6 +213,7 @@ def handle_character_callback(
                 pending.filename,
                 pending.expected_digest,
                 callback,
+                base_fields=pending.fields,
                 request_context=request_context,
             )
             answer_callback(token, str(callback.get("id", "")), "Send optimizer suggestion")
@@ -313,9 +314,7 @@ def handle_character_callback(
             return True
         info = card_fields_from_file(filename, app_settings=request_context.app_settings)
         answer_callback(token, str(callback.get("id", "")), "Info")
-        text = _character_info_text(
-            info, filename, character_rank(db, filename, app_settings=request_context.app_settings)
-        )
+        text = _character_info_text(info, filename)
         reply_markup = {
             "inline_keyboard": [
                 [

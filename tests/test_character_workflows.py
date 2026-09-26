@@ -279,3 +279,144 @@ def test_optimizer_preview_exposes_manual_refinement_callback(card_context, monk
     )
     callbacks = [button["callback_data"] for row in delivered[-1][1]["inline_keyboard"] for button in row]
     assert "characteroptimizerefine:" + "a" * 24 in callbacks
+
+
+def test_optimizer_menus_show_character_names_without_rank_badges(card_context, monkeypatch):
+    from bridge import character_optimizer_panels
+
+    db, ctx, _ = card_context
+    (ctx.app_settings.character_dir / "Alice.png").write_bytes(_card_png("Alice", "original"))
+    character_quality.store_character_rank(db, "Alice.png", "S", app_settings=ctx.app_settings)
+    delivered = []
+    monkeypatch.setattr(
+        character_optimizer_panels,
+        "send_panel_message",
+        lambda _token, _chat, text, markup, *a, **k: delivered.append((text, markup)),
+    )
+    character_optimizer_panels.send_character_optimize_menu("token", "chat", request_context=ctx)
+    first = delivered[-1][1]["inline_keyboard"][0][0]
+    assert first["text"] == "Alice"
+
+
+def test_character_info_picker_shows_character_names_without_rank_badges(card_context, monkeypatch):
+    db, ctx, _ = card_context
+    (ctx.app_settings.character_dir / "Alice.png").write_bytes(_card_png("Alice", "original"))
+    character_quality.store_character_rank(db, "Alice.png", "S", app_settings=ctx.app_settings)
+    delivered = []
+    monkeypatch.setattr(
+        cards, "send_panel_request", lambda _token, _method, payload, **_k: delivered.append(payload) or {}
+    )
+    cards.send_character_info_menu("token", "chat", request_context=ctx)
+    assert delivered[-1]["reply_markup"]["inline_keyboard"][0][0]["text"] == "Alice"
+
+
+def test_manual_suggestion_prompt_shows_current_base_with_readable_sections(card_context, monkeypatch):
+    from bridge import character_optimizer_input
+
+    db, ctx, _ = card_context
+    original = _card_png("Alice", "Original description.\nSecond paragraph.")
+    (ctx.app_settings.character_dir / "Alice.png").write_bytes(original)
+    sent = []
+    monkeypatch.setattr(character_optimizer_input, "discard_panel_binding", lambda *a, **k: None)
+    monkeypatch.setattr(character_optimizer_input, "close_panel_message", lambda *a, **k: None)
+    monkeypatch.setattr(character_optimizer_input, "send_text", lambda _t, _c, text: sent.append(text) or [77])
+    character_optimizer_input.start_character_optimizer_suggestion_input(
+        db,
+        "token",
+        "chat",
+        "Alice.png",
+        __import__("hashlib").sha256(original).hexdigest(),
+        {"message": {"message_id": 55}},
+        request_context=ctx,
+    )
+    prompt = sent[-1]
+    assert prompt.startswith("Manual revision base — Alice")
+    assert "DESCRIPTION\n────────────\nOriginal description.\nSecond paragraph." in prompt
+    assert "Send your optimizer suggestion" in prompt
+
+
+def test_optimizer_revision_uses_previous_temporary_values_and_keeps_cumulative_diff(card_context, monkeypatch):
+    from bridge.character_optimizer import prepare_character_optimization
+
+    db, ctx, _ = card_context
+    original = _card_png("Alice", "original description")
+    target = ctx.app_settings.character_dir / "Alice.png"
+    target.write_bytes(original)
+    session = {"session_id": "session", "model_id": "story::model"}
+    prompts = []
+    outputs = [
+        {"description": "revision one", "personality": "dry wit"},
+        {"description": "revision two"},
+    ]
+
+    def generate(*args, **kwargs):
+        prompts.append(args[2])
+        return json.dumps(outputs[len(prompts) - 1])
+
+    monkeypatch.setattr(character_quality, "task_model_for_session", lambda *a, **k: "utility::fixture")
+    provider = ProviderPort(generate)
+    first = prepare_character_optimization(
+        db, "chat", session, "Alice.png", provider_port=provider, request_context=ctx, suggestion="First revision"
+    )
+    second = prepare_character_optimization(
+        db,
+        "chat",
+        session,
+        "Alice.png",
+        provider_port=provider,
+        request_context=ctx,
+        suggestion="Second revision",
+        base_fields=first.fields,
+    )
+    second_prompt = "\n".join(str(message["content"]) for message in prompts[1])
+    assert "revision one" in second_prompt
+    assert "dry wit" in second_prompt
+    assert second.fields["description"] == "revision two"
+    assert second.fields["personality"] == "dry wit"
+    pending = load_character_proposal(db, "chat", second.nonce, request_context=ctx)
+    assert pending.fields == second.fields
+    assert target.read_bytes() == original
+    message, applied = native_imports.apply_character_proposal(db, "chat", second.nonce, "apply", request_context=ctx)
+    assert applied == "Alice.png"
+    assert "optimized" in message
+    installed = parse_png_chara_bytes(target.read_bytes())
+    assert installed["description"] == "revision two"
+    assert installed["personality"] == "dry wit"
+
+
+def test_manual_refinement_callback_uses_current_temporary_fields_as_next_base(card_context, monkeypatch):
+    from bridge.character_optimizer import prepare_character_optimization
+
+    db, ctx, _ = card_context
+    original = _card_png("Alice", "original")
+    (ctx.app_settings.character_dir / "Alice.png").write_bytes(original)
+    session = {"session_id": ctx.session_id, "model_id": "story::model"}
+    monkeypatch.setattr(character_quality, "task_model_for_session", lambda *a, **k: "utility::fixture")
+    provider = ProviderPort(lambda *a, **k: json.dumps({"description": "temporary revision", "personality": "dry wit"}))
+    draft = prepare_character_optimization(
+        db, "chat", session, "Alice.png", provider_port=provider, request_context=ctx, suggestion="revise"
+    )
+    captured = []
+    monkeypatch.setattr(
+        character_callbacks,
+        "start_character_optimizer_suggestion_input",
+        lambda *a, **k: captured.append((a, k)),
+    )
+    handled = character_callbacks.handle_character_callback(
+        db,
+        "token",
+        {"id": "cb", "message": {"message_id": 55}},
+        lambda *a: None,
+        f"characteroptimizerefine:{draft.nonce}",
+        "chat",
+        {"message_id": 55},
+        session,
+        ctx.session_id,
+        None,
+        group_service=make_test_application_services(app_settings=ctx.app_settings).group,
+        provider_port=provider,
+        request_context=ctx,
+    )
+    assert handled is True
+    assert captured
+    assert captured[-1][1]["base_fields"] == draft.fields

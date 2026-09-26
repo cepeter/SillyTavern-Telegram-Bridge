@@ -5,9 +5,31 @@ from __future__ import annotations
 from bridge.callback_tokens import dynamic_callback_token
 from bridge.card_content import character_card_paths, character_display_name
 from bridge.cards import send_panel_message
-from bridge.character_quality import OPTIMIZABLE_FIELDS, character_rank, rank_badge
+from bridge.character_quality import OPTIMIZABLE_FIELDS
 from bridge.panel_utils import panel_navigation, panel_page
 from bridge.request_types import RequestContext
+
+_OPTIMIZER_FIELD_LABELS = {
+    "description": "DESCRIPTION",
+    "personality": "PERSONALITY",
+    "scenario": "SCENARIO",
+    "first_mes": "FIRST MESSAGE",
+    "mes_example": "MESSAGE EXAMPLES",
+    "system_prompt": "SYSTEM PROMPT",
+    "post_history_instructions": "POST-HISTORY INSTRUCTIONS",
+}
+
+
+def format_character_optimizer_base(name: str, fields: dict[str, str]) -> str:
+    """Format the current revision base for readable plain-text Telegram delivery."""
+    sections = [f"Manual revision base — {str(name or 'Character').strip() or 'Character'}"]
+    for key in OPTIMIZABLE_FIELDS:
+        value = str(fields.get(key, "") or "").strip()
+        if not value:
+            continue
+        label = _OPTIMIZER_FIELD_LABELS[key]
+        sections.append(f"{label}\n────────────\n{value}")
+    return "\n\n".join(sections)
 
 
 def send_character_optimize_menu(
@@ -21,10 +43,7 @@ def send_character_optimize_menu(
     rows = [
         [
             {
-                "text": rank_badge(
-                    character_rank(request_context.db, filename, app_settings=request_context.app_settings)
-                )
-                + label,
+                "text": label,
                 "callback_data": "characteroptimize:"
                 + dynamic_callback_token("character", filename, chat_id, db=request_context.db),
             }
