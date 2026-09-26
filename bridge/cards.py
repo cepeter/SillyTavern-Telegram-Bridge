@@ -73,7 +73,7 @@ def character_rank_button(rank: str | None) -> dict[str, str]:
     if tier not in RANK_TIERS:
         return {"text": "—", "callback_data": "character:rank:unranked"}
     return {
-        "text": tier,
+        "text": "⭐",
         "callback_data": f"character:rank:{tier}",
         "icon_custom_emoji_id": _CHARACTER_RANK_CUSTOM_EMOJI_IDS[tier],
     }
@@ -85,14 +85,11 @@ def character_rich_rank_button(rank: str | None) -> dict:
     if tier not in RANK_TIERS:
         return {"text": "—", "disabled": {}}
     return {
-        "text": [
-            {
-                "type": "custom_emoji",
-                "custom_emoji_id": _CHARACTER_RANK_CUSTOM_EMOJI_IDS[tier],
-                "alternative_text": "⭐",
-            },
-            f" {tier}",
-        ],
+        "text": {
+            "type": "custom_emoji",
+            "custom_emoji_id": _CHARACTER_RANK_CUSTOM_EMOJI_IDS[tier],
+            "alternative_text": "⭐",
+        },
         "disabled": {},
     }
 

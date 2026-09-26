@@ -15,6 +15,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Fixed
 
+- Rename optimizer preview follow-up from Manual Suggestion to **Revise**, add an explicit revision-prompt instruction after the displayed base values, and use `⭐` as the RichMessage/classic rank fallback instead of duplicated rank-letter text.
 - Remove legacy rank prefixes from Character Info and Optimizer pickers, and make Manual Suggestion revisions chain from the current temporary preview while preserving exact-byte Apply validation against the installed original.
 - Replace the two Humanizer On/Off buttons with one session-scoped ON/OFF toggle, and keep optimizer Apply reranking the new card revision while invalidating stale cached ranks on ranking failure.
 - Normalize model-generated presentation HTML into readable Telegram-safe plain text before persistence and delivery while preserving literal HTML inside inline/fenced code, HTTP(S) link destinations, and Markdown URL/email autolinks.

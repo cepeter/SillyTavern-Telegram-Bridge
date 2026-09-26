@@ -121,7 +121,7 @@ def send_character_optimize_result(
     rows.append(
         [
             {"text": "Apply", "callback_data": f"characteroptimizeapply:{nonce}"},
-            {"text": "Manual Suggestion", "callback_data": f"characteroptimizerefine:{nonce}"},
+            {"text": "Revise", "callback_data": f"characteroptimizerefine:{nonce}"},
         ]
     )
     rows.append([{"text": "Cancel", "callback_data": f"characteroptimizecancel:{nonce}"}])
