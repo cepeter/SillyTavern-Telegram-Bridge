@@ -7,6 +7,7 @@ import sqlite3
 import time
 
 from bridge.card_content import card_fields_from_file
+from bridge.conversation_lifecycle import START_REQUIRED, require_started
 from bridge.generation import build_chat_messages, render_session_response
 from bridge.generation_settings import get_generation_settings
 from bridge.group_director_service import GroupDirectorService
@@ -20,7 +21,7 @@ from bridge.response_delivery import send_reply
 from bridge.response_variants import save_response_variant
 from bridge.settings import AppSettings
 from bridge.sqlite_store import write_transaction
-from bridge.telegram import send_typing
+from bridge.telegram import send_text, send_typing
 
 
 def process_image_message(
@@ -43,6 +44,9 @@ def process_image_message(
     app_settings: AppSettings,
     rag_service: RagService,
 ) -> None:
+    if not require_started(db, chat_id, session["session_id"]):
+        send_text(token, chat_id, START_REQUIRED)
+        return
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_service.current_speaker(db, chat_id, session, caption)
     group_context = ""

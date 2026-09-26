@@ -13,6 +13,7 @@ import sqlite3
 from pathlib import Path
 
 from bridge.background import chat_job_lock
+from bridge.conversation_lifecycle import START_REQUIRED, require_started
 from bridge.config import STT_DEFAULT_MODEL
 from bridge.failed_turns import clear_failed_turn
 from bridge.limits import STT_MAX_BYTES
@@ -38,6 +39,10 @@ def process_voice_message(
     actor_id: str = "",
     services: _BridgeServices,
 ) -> None:
+    session_id = queued_session_id or ensure_session(db, chat_id, model, app_settings=services.config)["session_id"]
+    if not require_started(db, chat_id, session_id):
+        send_text(token, chat_id, START_REQUIRED)
+        return
     if get_meta(db, f"stt_mode:{chat_id}", "on") != "on":
         send_text(token, chat_id, "Voice input is disabled. Use /voice_input on to enable it.")
         return

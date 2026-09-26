@@ -11,6 +11,7 @@ from bridge.card_content import card_fields_from_file
 from bridge.cards import send_session_menu
 from bridge.character_identity import reconcile_session_character
 from bridge.context_compaction import context_history_candidate_limit
+from bridge.conversation_lifecycle import START_REQUIRED, is_command_text, require_started, reset_conversation
 from bridge.continuation import continue_last
 from bridge.edit_messages import edit_last_user
 from bridge.failed_turns import clear_failed_turn
@@ -86,9 +87,19 @@ def reset_session(
             f"swipe_message:{chat_id}:{session['session_id']}",
         ),
     )
+    old_choice_panels = reset_conversation(db, chat_id, session["session_id"])
     if operation_id is not None:
         set_operation_phase(db, operation_id, "reset", "local_committed")
     db.commit()
+    for panel_id in old_choice_panels:
+        try:
+            telegram_request(
+                token,
+                "editMessageReplyMarkup",
+                {"chat_id": chat_id, "message_id": panel_id, "reply_markup": {"inline_keyboard": []}},
+            )
+        except Exception:
+            logging.info("Could not remove reset choice panel")
     if operation_id is not None:
         record_operation(db, operation_id, "reset")
         db.commit()
@@ -129,6 +140,9 @@ def generate_and_store_reply(
     rag_service: RagService,
 ) -> None:
     """Assemble context, run generation, persist the reply, and deliver it."""
+    if not require_started(db, chat_id, session_id):
+        send_text(token, chat_id, START_REQUIRED)
+        return
     history_rows = timed_call(
         "history_load",
         db.execute,
@@ -439,7 +453,11 @@ def prepare_message(
     if command == "/session":
         send_session_menu(token, chat_id, list_sessions(db, chat_id), session_id, request_context=request_context)
         return
+    if not is_command_text(stripped) and not require_started(db, chat_id, session_id):
+        delivery_port.send_text(token, chat_id, START_REQUIRED)
+        return None
     session = reconcile_session_character(db, chat_id, session, app_settings=app_settings)
+    session["_actor_id"] = actor_id
     fields = card_fields_from_file(session["character_file"], app_settings=app_settings)
     director_plan = None
     group_director = group_director_service

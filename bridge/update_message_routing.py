@@ -6,6 +6,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
+from bridge.conversation_lifecycle import START_REQUIRED, has_pending_management_input, is_command_text, require_started
 from bridge.composition import BridgeServices
 from bridge.document_jobs import process_document_job
 from bridge.help_details import send_help_command
@@ -159,6 +160,25 @@ def route_message_update(
             "This bot is private.",
         )
         return True
+
+    conversational_media = bool(
+        voice
+        or photos
+        or (
+            document
+            and Path(str(document.get("file_name") or "")).suffix.casefold() != ".png"
+            and str(document.get("mime_type") or "").startswith("image/")
+        )
+    )
+    conversational_text = bool(text and not is_command_text(str(text)))
+    if conversational_media or conversational_text:
+        gate_session = services.session.ensure(db, chat_id, model)
+        pending_input = conversational_text and has_pending_management_input(
+            db, chat_id, gate_session["session_id"], sender
+        )
+        if not pending_input and not require_started(db, chat_id, gate_session["session_id"]):
+            services.telegram.send_text(token, chat_id, START_REQUIRED)
+            return True
 
     if voice:
         message_id = int(message.get("message_id"))
@@ -357,18 +377,11 @@ def route_message_update(
     ):
         return True
 
-    normalized_text = str(text).strip().casefold()
-    is_plain_start = normalized_text == "start"
-
-    if (
-        not str(text).lstrip().startswith("/")
-        and not is_plain_start
-        and not services.group.user_turn_allowed(
-            db,
-            chat_id,
-            queued_session_id,
-            sender,
-        )
+    if not str(text).lstrip().startswith("/") and not services.group.user_turn_allowed(
+        db,
+        chat_id,
+        queued_session_id,
+        sender,
     ):
         services.telegram.send_text(
             token,
@@ -377,7 +390,7 @@ def route_message_update(
         )
         return True
 
-    if is_plain_start or is_long_running_command(str(text)):
+    if is_long_running_command(str(text)):
         payload = {
             "text": str(text),
             "model": model,

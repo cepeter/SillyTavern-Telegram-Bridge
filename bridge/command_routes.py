@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import bridge.command_panels as _command_panels
 from bridge.card_content import active_world_files
 from bridge.cards import send_character_menu, send_persona_menu, send_session_menu
+from bridge.conversation_lifecycle import ALREADY_STARTED, conversation_state, is_group_conversation
 from bridge.continuation import continue_last
 from bridge.extension_registry import dispatch_command_routes as _dispatch_extension_command_routes
 from bridge.failed_turns import clear_failed_turn, latest_failed_turn, record_failed_turn
@@ -32,34 +33,6 @@ from bridge.world_panels import send_world_menu
 
 if TYPE_CHECKING:
     pass
-
-
-_START_MODEL_PLACEHOLDERS = frozenset(
-    {
-        "provider-one::provider-one/model-a",
-        "example-provider::example-model",
-    }
-)
-
-
-def _start_model_readiness_error(provider_port, api_key, current_model, session_id):
-    selected_model = str(current_model or "").strip()
-    if not selected_model or selected_model in _START_MODEL_PLACEHOLDERS:
-        return "please set your model first in /providers command"
-    try:
-        provider_port.generate(
-            api_key,
-            selected_model,
-            [{"role": "user", "content": "Reply OK."}],
-            session_id=f"start-check:{session_id}",
-            settings={"max_tokens": 8, "temperature": 0},
-            force_non_stream=True,
-            request_timeout=30,
-        )
-    except Exception as exc:
-        detail = " ".join(str(exc).split()).strip() or type(exc).__name__
-        return f"Model check failed: {detail[:800]}"
-    return ""
 
 
 def _handle_basic(
@@ -94,43 +67,11 @@ def _handle_basic(
             request_context=request_context,
         )
         return True
-    if command in {"/start", "start"}:
-        readiness_error = _start_model_readiness_error(provider_port, api_key, current_model, session_id)
-        if readiness_error:
-            send_text(token, chat_id, readiness_error)
-            return True
     if command == "/start":
-        persona_ready = bool(current_persona)
-        world_ready = bool(
-            active_world_files(session.get("world_file") or "", app_settings=request_context.app_settings)
-        )
-        system_prompt_ready = bool(session.get("system_prompt") or "")
-        if persona_ready and world_ready and system_prompt_ready:
-            send_greeting_menu(token, chat_id, fields, user_name, request_context=request_context)
+        if not is_group_conversation(db, chat_id, session_id) and conversation_state(db, chat_id, session_id).started:
+            send_text(token, chat_id, ALREADY_STARTED)
         else:
-            missing = []
-            if not persona_ready:
-                missing.append("Persona: off")
-            if not world_ready:
-                missing.append("World Info: off")
-            if not system_prompt_ready:
-                missing.append("System Prompt: off")
-            send_text(
-                token,
-                chat_id,
-                (
-                    "Setup recommendation — Persona, World Info, and System Prompt are "
-                    "optional. Current unavailable selections: "
-                )
-                + ", ".join(missing)
-                + (
-                    ". Use /persona, /world, or /systemprompt if you want to enable them. "
-                    "Type `start` to choose the character greeting message."
-                ),
-            )
-        return True
-    if command == "start":
-        send_greeting_menu(token, chat_id, fields, user_name, request_context=request_context)
+            send_greeting_menu(token, chat_id, fields, user_name, request_context=request_context)
         return True
     if command == "/help":
         send_help_menu(
