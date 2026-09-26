@@ -6,12 +6,14 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Added
 
+- Add a three-column Character Menu layout (`rank | character | action`) with silent S/A/B/C/D rank buttons and optional Telegram custom-emoji IDs for animated rank icons.
 - Add Auto Optimize / Manual Suggestion character-optimizer choices. Manual guidance is bounded and bound to the initiating actor, session, character revision and expiry; previews can request another guided draft before Apply.
 - Add an opt-in, per-session Humanizer pass after language rendering, with bounded provider requests, conservative text-preservation checks and default-off metadata persistence. Include upstream attribution and a pinned-reference refresh specification; no scheduler or automatic prompt promotion is installed.
-- Rank uploaded character cards S–D with the utility model and show the tier badge beside each character name in the selection, info, and optimizer menus. A new ⚡ Optimizer menu rewrites a card's text fields with the utility model and shows a preview before applying (with a verified backup) or discarding.
+- Rank uploaded character cards S–D with the utility model and show the tier in character selection, info, and optimizer menus. A new ⚡ Optimizer menu rewrites a card's text fields with the utility model and shows a preview before applying (with a verified backup) or discarding.
 
 ### Fixed
 
+- Replace the two Humanizer On/Off buttons with one session-scoped ON/OFF toggle, and keep optimizer Apply reranking the new card revision while invalidating stale cached ranks on ranking failure.
 - Normalize model-generated presentation HTML into readable Telegram-safe plain text before persistence and delivery while preserving literal HTML inside inline/fenced code, HTTP(S) link destinations, and Markdown URL/email autolinks.
 - Keep Manual Suggestion pending state actor-scoped in shared chats so one user's optimizer guidance cannot replace another user's pending prompt.
 - Preserve original character-card backups and use atomic, checksum-checked replacement for confirmed uploads and optimizer results. Bind approval to a unique user/session/content proposal; refuse stale/replayed previews and keep staged files outside the card catalog.
