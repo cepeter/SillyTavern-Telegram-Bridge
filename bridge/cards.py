@@ -26,7 +26,7 @@ from bridge.card_content import system_prompt_callback_token as system_prompt_ca
 from bridge.card_content import system_prompt_choices as system_prompt_choices
 from bridge.card_content import system_prompt_label as system_prompt_label
 from bridge.card_content import world_file_paths as world_file_paths
-from bridge.character_quality import RANK_TIERS, character_rank
+from bridge.character_quality import RANK_BADGES, RANK_TIERS, character_rank
 from bridge.panel_utils import panel_label, panel_message_request, panel_navigation, panel_page
 from bridge.persona_service import PersonaService
 from bridge.request_types import RequestContext
@@ -68,14 +68,13 @@ _CHARACTER_RANK_CUSTOM_EMOJI_IDS: dict[str, str] = {
 
 
 def character_rank_button(rank: str | None) -> dict[str, str]:
-    """Build the silent rank-column button using the bot-owned animated rank set."""
+    """Build a silent rank-column button with a clear static tier badge."""
     tier = str(rank or "").strip().upper()
     if tier not in RANK_TIERS:
         return {"text": "—", "callback_data": "character:rank:unranked"}
     return {
-        "text": "⭐",
+        "text": f"{RANK_BADGES[tier]} {tier}",
         "callback_data": f"character:rank:{tier}",
-        "icon_custom_emoji_id": _CHARACTER_RANK_CUSTOM_EMOJI_IDS[tier],
     }
 
 
@@ -88,7 +87,7 @@ def character_rich_rank_button(rank: str | None) -> dict:
         "text": {
             "type": "custom_emoji",
             "custom_emoji_id": _CHARACTER_RANK_CUSTOM_EMOJI_IDS[tier],
-            "alternative_text": "⭐",
+            "alternative_text": f"{RANK_BADGES[tier]} {tier}",
         },
         "disabled": {},
     }

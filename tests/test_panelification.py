@@ -163,9 +163,9 @@ class PanelificationTests(SettingsTestCase):
         rows = self.calls[0][0][3]["inline_keyboard"]
         item_rows = rows[:2]
         self.assertTrue(all(len(row) == 3 for row in item_rows))
-        self.assertEqual(item_rows[0][0]["text"], "⭐")
+        self.assertEqual(item_rows[0][0]["text"], "🏆 S")
         self.assertEqual(item_rows[0][0]["callback_data"], "character:rank:S")
-        self.assertEqual(item_rows[0][0]["icon_custom_emoji_id"], "6176891226302718197")
+        self.assertNotIn("icon_custom_emoji_id", item_rows[0][0])
         self.assertEqual(item_rows[1][0], {"text": "—", "callback_data": "character:rank:unranked"})
         self.assertEqual(item_rows[0][1]["callback_data"], "character:cb-active.png")
         self.assertEqual(item_rows[1][1]["callback_data"], "character:cb-other.png")
@@ -178,21 +178,20 @@ class PanelificationTests(SettingsTestCase):
             self.assertTrue(self._route(command))
             self.assertIn(marker, str(self.calls[-1]))
 
-    def test_character_rank_buttons_use_hardcoded_custom_emoji_ids(self):
+    def test_classic_character_rank_buttons_use_clear_static_badges(self):
         expected = {
-            "S": "6176891226302718197",
-            "A": "6176955294329871952",
-            "B": "6178981105849344346",
-            "C": "6177219258724917819",
-            "D": "6176733025477337215",
+            "S": "🏆",
+            "A": "🥇",
+            "B": "🥈",
+            "C": "🥉",
+            "D": "⚪",
         }
-        for tier, custom_emoji_id in expected.items():
+        for tier, badge in expected.items():
             self.assertEqual(
                 _m_cards.character_rank_button(tier),
                 {
-                    "text": "⭐",
+                    "text": f"{badge} {tier}",
                     "callback_data": f"character:rank:{tier}",
-                    "icon_custom_emoji_id": custom_emoji_id,
                 },
             )
         self.assertEqual(
@@ -335,7 +334,7 @@ def test_character_menu_prefers_rich_message_with_disabled_animated_rank(tmp_pat
         "text": {
             "type": "custom_emoji",
             "custom_emoji_id": "6176891226302718197",
-            "alternative_text": "⭐",
+            "alternative_text": "🏆 S",
         },
         "disabled": {},
     }
@@ -409,4 +408,7 @@ def test_character_menu_falls_back_to_classic_panel_when_rich_is_rejected(tmp_pa
     assert [method for method, _payload in calls] == ["sendRichMessage", "sendMessage"]
     fallback = calls[-1][1]
     assert fallback["text"].startswith("Current character: active")
-    assert fallback["reply_markup"]["inline_keyboard"][0][0]["icon_custom_emoji_id"] == "6176891226302718197"
+    assert fallback["reply_markup"]["inline_keyboard"][0][0] == {
+        "text": "🏆 S",
+        "callback_data": "character:rank:S",
+    }
