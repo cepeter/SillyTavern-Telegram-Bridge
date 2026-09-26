@@ -6,6 +6,7 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ### Added
 
+- Prefer a Bot API 10.3 RichMessage Character Menu so the hardcoded rank custom emoji can animate inside disabled rank buttons; automatically fall back to the classic inline-keyboard panel when RichMessage delivery is unavailable.
 - Check in public GIF/WEBM references for the hardcoded character-rank custom emoji, with SHA-256 provenance and rank-to-`custom_emoji_id` mapping.
 - Add a three-column Character Menu layout (`rank | character | action`) with silent S/A/B/C/D rank buttons using the bot-owned animated rank custom-emoji set registered from the project GIFs; IDs are hardcoded and require no `.env` configuration.
 - Add Auto Optimize / Manual Suggestion character-optimizer choices. Manual guidance is bounded and bound to the initiating actor, session, character revision and expiry; previews can request another guided draft before Apply.

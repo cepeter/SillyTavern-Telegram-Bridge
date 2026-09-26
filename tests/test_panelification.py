@@ -144,12 +144,17 @@ class PanelificationTests(SettingsTestCase):
         _m_cards.character_rank = lambda _db, filename, **_kwargs: "S" if filename == "active.png" else ""
         settings = self.app_settings_builder.build()
         try:
-            _m_session_naming.send_character_menu(
-                "bot-token",
-                "chat",
-                "active.png",
-                request_context=make_test_request_context(self.db, app_settings=settings),
-            )
+            with patch.object(
+                _m_cards,
+                "send_panel_request",
+                side_effect=RuntimeError("Telegram sendRichMessage failed: unsupported"),
+            ):
+                _m_session_naming.send_character_menu(
+                    "bot-token",
+                    "chat",
+                    "active.png",
+                    request_context=make_test_request_context(self.db, app_settings=settings),
+                )
         finally:
             _m_cards.character_card_paths = old_paths
             _m_cards.character_display_name = old_display
@@ -276,3 +281,135 @@ class PanelificationTests(SettingsTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _with_character_fixture(module, db):
+    return (
+        patch.object(module, "character_card_paths", return_value=[Path("active.png"), Path("other.png")]),
+        patch.object(module, "character_display_name", side_effect=lambda path, **_kwargs: path.stem),
+        patch.object(
+            module, "dynamic_callback_token", side_effect=lambda _kind, filename, _chat, **_kwargs: "cb-" + filename
+        ),
+        patch.object(
+            module,
+            "character_rank",
+            side_effect=lambda _db, filename, **_kwargs: "S" if filename == "active.png" else "",
+        ),
+    )
+
+
+def test_character_menu_prefers_rich_message_with_disabled_animated_rank(tmp_path):
+    settings = __import__("settings_test_support").make_test_settings(home=tmp_path)
+    db = _m_memory_curator.db_connect(app_settings=settings)
+    calls = []
+    try:
+        patches = _with_character_fixture(_m_cards, db)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patch.object(
+                _m_cards,
+                "send_panel_request",
+                side_effect=lambda _token, method, payload, **_kwargs: (
+                    calls.append((method, payload)) or {"message_id": 44}
+                ),
+            ),
+        ):
+            _m_cards.send_character_menu(
+                "token",
+                "chat",
+                "active.png",
+                request_context=make_test_request_context(db, "session", "actor", app_settings=settings),
+            )
+    finally:
+        db.close()
+    assert calls and calls[0][0] == "sendRichMessage"
+    payload = calls[0][1]
+    assert "reply_markup" not in payload
+    blocks = payload["rich_message"]["blocks"]
+    button_rows = [block["buttons"] for block in blocks if block.get("type") == "buttons"]
+    rank, character, action = button_rows[0]
+    assert rank == {
+        "text": [
+            {
+                "type": "custom_emoji",
+                "custom_emoji_id": "6176891226302718197",
+                "alternative_text": "⭐",
+            },
+            " S",
+        ],
+        "disabled": {},
+    }
+    assert character["callback_data"] == "character:cb-active.png"
+    assert action["callback_data"] == "character:protected"
+    assert button_rows[1][0] == {"text": "—", "disabled": {}}
+
+
+def test_character_menu_rich_edit_uses_edit_message_text(tmp_path):
+    settings = __import__("settings_test_support").make_test_settings(home=tmp_path)
+    db = _m_memory_curator.db_connect(app_settings=settings)
+    calls = []
+    try:
+        patches = _with_character_fixture(_m_cards, db)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patch.object(
+                _m_cards,
+                "send_panel_request",
+                side_effect=lambda _token, method, payload, **_kwargs: (
+                    calls.append((method, payload)) or {"message_id": 55}
+                ),
+            ),
+        ):
+            _m_cards.send_character_menu(
+                "token",
+                "chat",
+                "active.png",
+                message_id=55,
+                request_context=make_test_request_context(db, "session", "actor", app_settings=settings),
+            )
+    finally:
+        db.close()
+    assert calls[0][0] == "editMessageText"
+    assert calls[0][1]["message_id"] == 55
+    assert "rich_message" in calls[0][1]
+    assert "text" not in calls[0][1]
+
+
+def test_character_menu_falls_back_to_classic_panel_when_rich_is_rejected(tmp_path):
+    settings = __import__("settings_test_support").make_test_settings(home=tmp_path)
+    db = _m_memory_curator.db_connect(app_settings=settings)
+    calls = []
+
+    def request(_token, method, payload, **_kwargs):
+        calls.append((method, payload))
+        if method == "sendRichMessage":
+            raise RuntimeError("Telegram sendRichMessage failed: unsupported")
+        return {"message_id": 45}
+
+    try:
+        patches = _with_character_fixture(_m_cards, db)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patch.object(_m_cards, "send_panel_request", side_effect=request),
+        ):
+            _m_cards.send_character_menu(
+                "token",
+                "chat",
+                "active.png",
+                request_context=make_test_request_context(db, "session", "actor", app_settings=settings),
+            )
+    finally:
+        db.close()
+    assert [method for method, _payload in calls] == ["sendRichMessage", "sendMessage"]
+    fallback = calls[-1][1]
+    assert fallback["text"].startswith("Current character: active")
+    assert fallback["reply_markup"]["inline_keyboard"][0][0]["icon_custom_emoji_id"] == "6176891226302718197"

@@ -79,6 +79,64 @@ def character_rank_button(rank: str | None) -> dict[str, str]:
     }
 
 
+def character_rich_rank_button(rank: str | None) -> dict:
+    """Build a disabled RichMessage rank button whose custom emoji can animate."""
+    tier = str(rank or "").strip().upper()
+    if tier not in RANK_TIERS:
+        return {"text": "—", "disabled": {}}
+    return {
+        "text": [
+            {
+                "type": "custom_emoji",
+                "custom_emoji_id": _CHARACTER_RANK_CUSTOM_EMOJI_IDS[tier],
+                "alternative_text": "⭐",
+            },
+            f" {tier}",
+        ],
+        "disabled": {},
+    }
+
+
+def _rich_button_row(buttons: list[dict]) -> dict:
+    return {"type": "buttons", "buttons": buttons}
+
+
+def _send_character_menu_panel(
+    token: str,
+    chat_id: str,
+    text: str,
+    classic_rows: list[list[dict]],
+    rich_rows: list[list[dict]],
+    message_id: int | None,
+    *,
+    request_context: RequestContext,
+) -> None:
+    rich_message = {
+        "blocks": [
+            {"type": "paragraph", "text": text},
+            *[_rich_button_row(row) for row in rich_rows],
+        ]
+    }
+    method = "editMessageText" if message_id is not None else "sendRichMessage"
+    payload: dict = {"chat_id": chat_id, "rich_message": rich_message}
+    if message_id is not None:
+        payload["message_id"] = message_id
+    try:
+        send_panel_request(token, method, payload, request_context=request_context)
+        return
+    except RuntimeError as exc:
+        if message_id is not None and "not modified" in str(exc).casefold():
+            return
+    send_panel_message(
+        token,
+        chat_id,
+        text,
+        {"inline_keyboard": classic_rows},
+        message_id,
+        request_context=request_context,
+    )
+
+
 def send_persona_menu(
     token: str,
     chat_id: str,
@@ -137,7 +195,8 @@ def send_character_menu(
         for path in character_card_paths(app_settings=request_context.app_settings)
     ]
     page_options, current_page, total_pages = panel_page(options, page)
-    rows = []
+    classic_rows: list[list[dict]] = []
+    rich_rows: list[list[dict]] = []
     for filename, label in page_options:
         mark = "✅ " if filename == current_character else ""
         callback_token = dynamic_callback_token("character", filename, chat_id, db=request_context.db)
@@ -152,40 +211,44 @@ def send_character_menu(
             if protected
             else {"text": "🗑️", "callback_data": "characterdelete:" + callback_token}
         )
+        character_button = {
+            "text": mark + panel_label(label),
+            "callback_data": "character:" + callback_token,
+        }
         rank = character_rank(request_context.db, filename, app_settings=request_context.app_settings)
-        rows.append(
-            [
-                character_rank_button(rank),
-                {
-                    "text": mark + panel_label(label),
-                    "callback_data": "character:" + callback_token,
-                },
-                action,
-            ]
-        )
+        classic_rows.append([character_rank_button(rank), character_button, action])
+        rich_rows.append([character_rich_rank_button(rank), character_button, action])
     navigation = panel_navigation("character", current_page, total_pages)
     if navigation:
-        rows.append(navigation)
-    rows.append(
-        [
-            {"text": "ℹ️ Character info", "callback_data": "character:info"},
-            {"text": "🔄 Refresh", "callback_data": "character:menu"},
-        ]
-    )
-    rows.append([{"text": "⚡ Optimizer", "callback_data": "character:optimize"}])
-    rows.append([{"text": "📤 Upload character card", "callback_data": "character:upload"}])
-    rows.append([{"text": "❌ Cancel", "callback_data": "character:cancel"}])
+        classic_rows.append(navigation)
+        rich_rows.append(navigation)
+    utility_row = [
+        {"text": "ℹ️ Character info", "callback_data": "character:info"},
+        {"text": "🔄 Refresh", "callback_data": "character:menu"},
+    ]
+    classic_rows.append(utility_row)
+    rich_rows.append(utility_row)
+    for row in (
+        [{"text": "⚡ Optimizer", "callback_data": "character:optimize"}],
+        [{"text": "📤 Upload character card", "callback_data": "character:upload"}],
+        [{"text": "❌ Cancel", "callback_data": "character:cancel"}],
+    ):
+        classic_rows.append(row)
+        rich_rows.append(row)
     current_label = current_character
     if safe_character_path(current_character, app_settings=request_context.app_settings):
         current_label = card_fields_from_file(current_character, app_settings=request_context.app_settings)["name"]
     page_label = f" (page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
     text = f"Current character: {current_label}{page_label}\nChoose a character card:"
-    try:
-        send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id, request_context=request_context)
-    except RuntimeError as exc:
-        if message_id is not None and "not modified" in str(exc).casefold():
-            return
-        raise
+    _send_character_menu_panel(
+        token,
+        chat_id,
+        text,
+        classic_rows,
+        rich_rows,
+        message_id,
+        request_context=request_context,
+    )
 
 
 def send_character_info_menu(

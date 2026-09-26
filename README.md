@@ -846,15 +846,17 @@ before any replacement or deletion.
 The active card and any cards referenced by sessions or groups are protected —
 you can't accidentally delete a card that's in use.
 
-Character rows use three columns: **rank | character | action**. The rank column
-shows S/A/B/C/D (or `—` when unranked) and is a silent no-op button. Ranked
-buttons use the bridge's built-in animated custom emoji set
-`sttb_ranks_by_SillyTavernPunzmeBot`. The checked-in [rank asset manifest](assets/character-ranks/README.md)
-contains public GIF/WEBM references, SHA-256 provenance, and the exact hardcoded
-custom-emoji mapping. No private `.env` configuration is needed; the visible
-S/A/B/C/D button text remains the fallback when a Telegram client cannot render
-the custom emoji. Rank decoration is intentionally limited to this main Character
-Menu; Character Info and Optimizer pickers show names only.
+Character rows use three columns: **rank | character | action**. The main
+Character Menu prefers Telegram Bot API 10.3 RichMessage buttons: the rank column
+uses a disabled `RichTextCustomEmoji` from the built-in animated set
+`sttb_ranks_by_SillyTavernPunzmeBot`, followed by S/A/B/C/D fallback text (or `—`
+when unranked). If Telegram rejects RichMessage sending or editing, the bridge
+falls back to the classic inline-keyboard panel; that compatibility path uses the
+same hardcoded custom-emoji IDs but clients may render the button icon statically.
+The checked-in [rank asset manifest](assets/character-ranks/README.md) contains
+public GIF/WEBM references, SHA-256 provenance, and the exact hardcoded mapping.
+Rank decoration is intentionally limited to this main Character Menu; Character
+Info and Optimizer pickers show names only.
 
 #### Re-uploading and optimizing a card
 
