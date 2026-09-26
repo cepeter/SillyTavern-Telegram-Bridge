@@ -47,6 +47,19 @@ def _delete_queue_notice_messages(
             logging.info("Could not delete command queue notice", exc_info=True)
 
 
+def _send_queue_notice_message(
+    services: BridgeServices,
+    token: str,
+    chat_id: str,
+    text: str,
+) -> list[int]:
+    try:
+        return list(services.telegram.send_text(token, chat_id, text) or [])
+    except Exception:
+        logging.info("Could not send command queue notice", exc_info=True)
+        return []
+
+
 def route_edited_message_update(
     services: BridgeServices,
     db: sqlite3.Connection,
@@ -380,11 +393,17 @@ def route_message_update(
             "command",
             payload,
         )
-        queue_notice_message_ids = list(services.telegram.send_text(token, chat_id, "⏳ Command queued.") or [])
+        queue_notice_message_ids = _send_queue_notice_message(
+            services,
+            token,
+            chat_id,
+            "⏳ Command queued.",
+        )
         payload["queue_notice_message_ids"] = queue_notice_message_ids
         if not services.jobs.replace_payload(db, job_id, payload):
             _delete_queue_notice_messages(services, token, chat_id, queue_notice_message_ids)
-            raise RuntimeError("could not persist command queue notice")
+            queue_notice_message_ids = []
+            payload["queue_notice_message_ids"] = []
         queued = services.jobs.submit(
             db,
             job_id,
@@ -406,7 +425,15 @@ def route_message_update(
         )
         if not queued:
             _delete_queue_notice_messages(services, token, chat_id, queue_notice_message_ids)
-            services.telegram.send_text(token, chat_id, "⏳ Command saved for execution after restart.")
+            deferred_notice_message_ids = _send_queue_notice_message(
+                services,
+                token,
+                chat_id,
+                "⏳ Command saved for execution after restart.",
+            )
+            deferred_payload = {**payload, "queue_notice_message_ids": deferred_notice_message_ids}
+            if not services.jobs.replace_payload(db, job_id, deferred_payload):
+                _delete_queue_notice_messages(services, token, chat_id, deferred_notice_message_ids)
         return True
 
     if str(text).lstrip().startswith("/"):
@@ -425,11 +452,17 @@ def route_message_update(
             "command",
             payload,
         )
-        queue_notice_message_ids = list(services.telegram.send_text(token, chat_id, "⏳ Command queued.") or [])
+        queue_notice_message_ids = _send_queue_notice_message(
+            services,
+            token,
+            chat_id,
+            "⏳ Command queued.",
+        )
         payload["queue_notice_message_ids"] = queue_notice_message_ids
         if not services.jobs.replace_payload(db, job_id, payload):
             _delete_queue_notice_messages(services, token, chat_id, queue_notice_message_ids)
-            raise RuntimeError("could not persist command queue notice")
+            queue_notice_message_ids = []
+            payload["queue_notice_message_ids"] = []
         queued = services.jobs.submit(
             db,
             job_id,
@@ -451,7 +484,15 @@ def route_message_update(
         )
         if not queued:
             _delete_queue_notice_messages(services, token, chat_id, queue_notice_message_ids)
-            services.telegram.send_text(token, chat_id, "⏳ Command saved for execution after restart.")
+            deferred_notice_message_ids = _send_queue_notice_message(
+                services,
+                token,
+                chat_id,
+                "⏳ Command saved for execution after restart.",
+            )
+            deferred_payload = {**payload, "queue_notice_message_ids": deferred_notice_message_ids}
+            if not services.jobs.replace_payload(db, job_id, deferred_payload):
+                _delete_queue_notice_messages(services, token, chat_id, deferred_notice_message_ids)
         return True
 
     job_id = services.jobs.enqueue(

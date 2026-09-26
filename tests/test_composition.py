@@ -1438,7 +1438,7 @@ class StartupCompositionTests(SettingsTestCase):
         self.assertTrue(services.jobs.recover.call_args.kwargs["recover_running"])
         _m_runtime._SHUTDOWN_EVENT.clear()
 
-    def _run_one_update(self, update, *, submit_result=True):
+    def _run_one_update(self, update, *, submit_result=True, queue_notice_error=False):
         jobs = RecordingJobs(submit_result=submit_result)
         sent = []
         delivered = False
@@ -1453,6 +1453,12 @@ class StartupCompositionTests(SettingsTestCase):
                 return []
             return {}
 
+        def send_text(*args, **_kwargs):
+            sent.append(args)
+            if queue_notice_error and len(args) >= 3 and args[2] == "⏳ Command queued.":
+                raise RuntimeError("queue notice unavailable")
+            return [900 + len(sent)]
+
         services = BridgeServices(
             config=self.config,
             db_factory=lambda: _m_memory_curator.db_connect(
@@ -1460,7 +1466,7 @@ class StartupCompositionTests(SettingsTestCase):
             ),
             telegram=TelegramRuntime(
                 request=request,
-                send_text=lambda *args, **_kwargs: sent.append(args) or [900 + len(sent)],
+                send_text=send_text,
                 download_file=lambda *_args, **_kwargs: b"",
             ),
             background=BackgroundRuntime(
@@ -1639,6 +1645,45 @@ class StartupCompositionTests(SettingsTestCase):
         self.assertEqual(payload_call[2]["queue_notice_message_ids"], [901])
         self.assertEqual(submit_call[2].args[5], [901])
         self.assertLess(jobs.calls.index(payload_call), jobs.calls.index(submit_call))
+
+    def test_command_submission_continues_when_queue_notice_delivery_fails(self):
+        for update_id, text in ((9, "/status"), (11, "/summarize")):
+            with self.subTest(text=text):
+                jobs, _sent = self._run_one_update(
+                    {
+                        "update_id": update_id,
+                        "message": {
+                            "message_id": update_id + 9,
+                            "from": {"id": 100},
+                            "chat": {"id": "chat"},
+                            "text": text,
+                        },
+                    },
+                    queue_notice_error=True,
+                )
+
+                submit_call = next(call for call in jobs.calls if call[0] == "submit")
+                self.assertEqual(submit_call[2].args[5], [])
+
+    def test_deferred_command_persists_replacement_notice_for_recovery(self):
+        for update_id, text in ((10, "/status"), (12, "/summarize")):
+            with self.subTest(text=text):
+                jobs, sent = self._run_one_update(
+                    {
+                        "update_id": update_id,
+                        "message": {
+                            "message_id": update_id + 9,
+                            "from": {"id": 100},
+                            "chat": {"id": "chat"},
+                            "text": text,
+                        },
+                    },
+                    submit_result=False,
+                )
+
+                self.assertEqual(sent[-1][2], "⏳ Command saved for execution after restart.")
+                payload_calls = [call for call in jobs.calls if call[0] == "payload"]
+                self.assertEqual(payload_calls[-1][2]["queue_notice_message_ids"], [902])
 
     def test_rejected_durable_admission_preserves_restart_feedback(self):
         cases = [
