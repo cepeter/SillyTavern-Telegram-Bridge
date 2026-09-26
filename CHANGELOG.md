@@ -4,12 +4,19 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+## [0.2.030] - 2026-09-26
 
 ### Added
 
 - Add a staged standard-session conversation wizard: Character → Normal/Light Novel → optional A/B/C strategy → Persona → World → System Prompt → Session → Apply, with no partial session mutation.
 - Add dedicated `/lightnovel` controls and durable random 2–4-choice panels after the opening greeting and subsequent story turns. A embeds choices with the story; B uses the Utility model; C makes a second Story-model call.
 - Consume choices and enqueue the corresponding user turn atomically. Persist ready choices/counts across restart, reject stale/replayed/foreign callbacks, and retry choice generation without regenerating committed narrative.
+- Prefer a Bot API 10.3 RichMessage Character Menu so the hardcoded rank custom emoji can animate inside disabled rank buttons; automatically fall back to the classic inline-keyboard panel when RichMessage delivery is unavailable.
+- Check in public GIF/WEBM references for the hardcoded character-rank custom emoji, with SHA-256 provenance and rank-to-`custom_emoji_id` mapping.
+- Add a three-column Character Menu layout (`rank | character | action`) with silent S/A/B/C/D rank buttons using the bot-owned animated rank custom-emoji set registered from the project GIFs; IDs are hardcoded and require no `.env` configuration.
+- Add Auto Optimize / Manual Suggestion character-optimizer choices. Manual guidance is bounded and bound to the initiating actor, session, character revision and expiry; previews can request another guided draft before Apply.
+- Add an opt-in, per-session Humanizer pass after language rendering, with bounded provider requests, conservative text-preservation checks and default-off metadata persistence. Include upstream attribution and a pinned-reference refresh specification; no scheduler or automatic prompt promotion is installed.
+- Rank uploaded character cards S–D with the utility model and show the tier only in the dedicated rank column of the main Character Menu. A new ⚡ Optimizer menu rewrites a card's text fields with the utility model and shows a preview before applying (with a verified backup) or discarding.
 
 ### Changed
 
@@ -20,20 +27,6 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 - Close the Session panel reliably when Cancel is pressed, and remove temporary `⏳ Command queued.` notices after command execution, including jobs recovered after restart.
 - Strip presentation HTML from streaming previews as well as completed bot replies, and finalize replies in the existing preview message so raw tags and temporary duplicate responses do not appear during generation.
-
-## [0.2.030] - 2026-09-26
-
-### Added
-
-- Prefer a Bot API 10.3 RichMessage Character Menu so the hardcoded rank custom emoji can animate inside disabled rank buttons; automatically fall back to the classic inline-keyboard panel when RichMessage delivery is unavailable.
-- Check in public GIF/WEBM references for the hardcoded character-rank custom emoji, with SHA-256 provenance and rank-to-`custom_emoji_id` mapping.
-- Add a three-column Character Menu layout (`rank | character | action`) with silent S/A/B/C/D rank buttons using the bot-owned animated rank custom-emoji set registered from the project GIFs; IDs are hardcoded and require no `.env` configuration.
-- Add Auto Optimize / Manual Suggestion character-optimizer choices. Manual guidance is bounded and bound to the initiating actor, session, character revision and expiry; previews can request another guided draft before Apply.
-- Add an opt-in, per-session Humanizer pass after language rendering, with bounded provider requests, conservative text-preservation checks and default-off metadata persistence. Include upstream attribution and a pinned-reference refresh specification; no scheduler or automatic prompt promotion is installed.
-- Rank uploaded character cards S–D with the utility model and show the tier only in the dedicated rank column of the main Character Menu. A new ⚡ Optimizer menu rewrites a card's text fields with the utility model and shows a preview before applying (with a verified backup) or discarding.
-
-### Fixed
-
 - Rename optimizer preview follow-up from Manual Suggestion to **Revise**, add an explicit revision-prompt instruction after the displayed base values, and use clear tier-specific badge-and-letter labels as the RichMessage/classic rank fallback without duplicating animated and static icons.
 - Remove legacy rank prefixes from Character Info and Optimizer pickers, and make Manual Suggestion revisions chain from the current temporary preview while preserving exact-byte Apply validation against the installed original.
 - Replace the two Humanizer On/Off buttons with one session-scoped ON/OFF toggle, and keep optimizer Apply reranking the new card revision while invalidating stale cached ranks on ranking failure.
