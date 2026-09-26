@@ -213,6 +213,7 @@ class MemoryNativeBackendTests(SettingsTestCase):
     def test_successful_direct_guard_purge_advances_epoch_and_clears_mapping(self):
         self._add_message()
         mapped = _m_memory.hindsight_conversation_document_id(self.session["session_id"])
+        curated = _m_memory_curator.curated_memory_document_id(self.session["session_id"])
         self.db.execute(
             "INSERT INTO hindsight_documents(chat_id,session_id,document_id,kind,created_at) VALUES(?,?,?,?,?)",
             (
@@ -227,6 +228,7 @@ class MemoryNativeBackendTests(SettingsTestCase):
 
         fake = _FakeHindsight()
         fake.documents.documents[mapped] = [f"session:{self.session['session_id']}"]
+        fake.documents.documents[curated] = [f"session:{self.session['session_id']}"]
         memory_backend.hindsight_client = lambda *, app_settings=None: fake
 
         old_epoch = _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).read_epoch(
@@ -241,7 +243,8 @@ class MemoryNativeBackendTests(SettingsTestCase):
             self.session["session_id"],
         )
 
-        self.assertGreaterEqual(deleted, 1)
+        self.assertGreaterEqual(deleted, 2)
+        self.assertIn(curated, fake.documents.deleted)
         self.assertEqual(
             _m_memory._make_hindsight_stale_guard(app_settings=self.app_settings_builder.build()).read_epoch(
                 self.db,

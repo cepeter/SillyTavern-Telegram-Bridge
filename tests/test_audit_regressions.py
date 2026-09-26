@@ -629,10 +629,14 @@ class AuditRegressionTests(SettingsTestCase):
         method, payload = _m_reset_panel.reset_confirmation_request("chat")
         self.assertEqual(method, "sendMessage")
         expected = (
-            "Reset active session and purge its memory?\n\nThis will:\n• Reset only the "
-            "active session conversation.\n• Delete Hindsight memories for this active "
-            "session only.\n• Delete session SQLite data, and session documents.\n\nThis "
-            "cannot be undone."
+            "Reset active session and purge its memory?\n\nThis will:\n"
+            "• Delete this session's stored conversation, response variants, summary, and curated memory.\n"
+            "• Purge Hindsight documents for this active session.\n"
+            "• Attempt to delete bridge-generated Telegram replies from this session.\n"
+            "• Keep your own Telegram messages, chat-scoped RAG, and this session identity.\n"
+            "• Use /new when you need a completely new session.\n\n"
+            "If Hindsight cleanup fails, no local session data will be deleted.\n\n"
+            "This cannot be undone."
         )
         self.assertEqual(payload["text"], expected)
         markup = payload["reply_markup"]["inline_keyboard"]
