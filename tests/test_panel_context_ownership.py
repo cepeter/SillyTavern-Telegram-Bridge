@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from application_test_setup import ensure_application_extensions, make_test_application_services
-from settings_test_support import SettingsTestCase
+from settings_test_support import SettingsTestCase, make_test_settings
 
 import bridge.session_core as _owner_session_core
 import bridge.sqlite_store as _sqlite_store
@@ -162,3 +162,24 @@ class PanelContextOwnershipTests(SettingsTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_rich_panel_request_binds_explicit_session_and_actor(tmp_path):
+    settings = make_test_settings(home=tmp_path)
+    db = _sqlite_store.db_connect(tmp_path / "rich.sqlite3", app_settings=settings)
+    context = request_types.RequestContext(db, "session-rich", "user-rich", app_settings=settings)
+    try:
+        with patch.object(telegram, "telegram_request", return_value={"message_id": 81}):
+            telegram.send_panel_request(
+                "token",
+                "sendRichMessage",
+                {"chat_id": "chat", "rich_message": {"blocks": [{"type": "paragraph", "text": "Panel"}]}},
+                request_context=context,
+            )
+        row = db.execute(
+            "SELECT session_id,owner_user_id FROM panel_sessions WHERE chat_id=? AND message_id=?",
+            ("chat", "81"),
+        ).fetchone()
+        assert tuple(row) == ("session-rich", "user-rich")
+    finally:
+        db.close()

@@ -4,6 +4,8 @@ These files are the public, auditable media references for the S/A/B/C/D charact
 
 Telegram custom-emoji set: `sttb_ranks_by_SillyTavernPunzmeBot`
 
+Runtime note: the files below are provenance/reproduction assets; the bridge does not upload or read them when rendering a menu. `bridge/cards.py` hardcodes the registered IDs. The main Character Menu embeds those IDs as `RichTextCustomEmoji` inside Bot API 10.3 RichMessage buttons so video custom emoji can animate. The classic inline-keyboard fallback uses `icon_custom_emoji_id`, which may be rendered statically by Telegram clients.
+
 ## Rank mapping
 
 | Rank | `custom_emoji_id` | Telegram asset | Public GIF reference |

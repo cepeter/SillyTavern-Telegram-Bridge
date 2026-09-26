@@ -132,12 +132,15 @@ class CharacterRenameTests(SettingsTestCase):
             )
         finally:
             _m_cards.send_panel_request = original
-        payload = calls[-1][1]
-        labels = [button["text"] for row in payload["reply_markup"]["inline_keyboard"] for button in row]
-        callbacks = [button["callback_data"] for row in payload["reply_markup"]["inline_keyboard"] for button in row]
+        method, payload = calls[-1]
+        self.assertEqual(method, "sendRichMessage")
+        blocks = payload["rich_message"]["blocks"]
+        button_rows = [block["buttons"] for block in blocks if block.get("type") == "buttons"]
+        labels = [button["text"] for row in button_rows for button in row if isinstance(button.get("text"), str)]
+        callbacks = [button["callback_data"] for row in button_rows for button in row if "callback_data" in button]
         self.assertTrue(any("Fresh Name" in label for label in labels))
         self.assertIn("character:menu", callbacks)
-        self.assertIn("Current character: Fresh Name", payload["text"])
+        self.assertIn("Current character: Fresh Name", blocks[0]["text"])
 
     def test_character_refresh_treats_unchanged_edit_as_success(self):
         (self.app_settings_builder.character_dir / "Old.png").write_bytes(_card_png("Old"))
