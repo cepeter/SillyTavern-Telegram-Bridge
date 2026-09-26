@@ -773,8 +773,9 @@ recent story context; choices are not passed through Humanizer.
 
 Each new story turn requests a uniformly random **2, 3 or 4** distinct actions.
 The count is reserved before generation; retries/restarts do not reroll it, and
-ready choices are reused unchanged. One generated action appears on each button,
-followed by a permanent **⏭ Next Scene** row. Tapping a generated choice submits
+ready choices are reused unchanged. The panel message shows every generated
+action in full with a numbered label; compact `1`–`4` selector buttons sit below
+it, followed by a permanent **⏭ Next Scene** row. Tapping a numbered choice submits
 the exact stored action as the next user turn. Next Scene instead submits a fixed
 narrative instruction to advance without speaking, deciding, or acting for the
 user character until that character can meaningfully participate again. Both use

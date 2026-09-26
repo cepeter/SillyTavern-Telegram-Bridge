@@ -71,8 +71,8 @@ HELP_CATEGORIES = {
         ),
         (
             "/lightnovel",
-            "Open dedicated Light Novel mode controls or restore the current 2–4 action choices plus Next Scene. "
-            "Mode changes require an unstarted standard session.",
+            "Open dedicated Light Novel mode controls or restore the current 2–4 full-text action choices with "
+            "numbered selectors plus Next Scene. Mode changes require an unstarted standard session.",
         ),
         ("/persona", "Choose, create, edit, or disable a Persona. Delete only targets inactive, unreferenced ones."),
         ("/world", "Open World Info selection — activate or disable one or more lorebooks."),

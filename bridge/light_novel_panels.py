@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import sqlite3
 
@@ -38,17 +39,24 @@ def render_choices(db: sqlite3.Connection, token: str, record: ChoiceSet, *, app
     if get_meta(db, f"active_session:{current.chat_id}", "default") != current.session_id:
         return False
     if current.generation_status == "ready":
-        text = "What will you do? You may also type your own reply."
-        rows = [
-            [{"text": choice, "callback_data": f"lnchoice:{current.nonce}:{index}"}]
-            for index, choice in enumerate(current.choices)
+        choice_lines = [
+            f"<b>{index + 1}.</b> {html.escape(choice, quote=False)}" for index, choice in enumerate(current.choices)
         ]
-        rows.append([{"text": "⏭ Next Scene", "callback_data": f"lnnext:{current.nonce}"}])
+        text = "What will you do?\n\n" + "\n\n".join(choice_lines) + "\n\nYou may also type your own reply."
+        rows = [
+            [
+                {"text": str(index + 1), "callback_data": f"lnchoice:{current.nonce}:{index}"}
+                for index in range(len(current.choices))
+            ],
+            [{"text": "⏭ Next Scene", "callback_data": f"lnnext:{current.nonce}"}],
+        ]
     else:
         text = "Choices are not available yet. Your story is saved. Retry choices or type your own reply."
         rows = [[{"text": "Retry Choices", "callback_data": f"lnretry:{current.nonce}"}]]
     context = RequestContext(db, current.session_id, current.actor_id, app_settings=app_settings)
     payload: dict = {"chat_id": current.chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
+    if current.generation_status == "ready":
+        payload["parse_mode"] = "HTML"
     message_id = current.panel_message_id
     method = "sendMessage"
     if message_id is not None:
