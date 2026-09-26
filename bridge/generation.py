@@ -13,6 +13,7 @@ from bridge.delivery_port import DeliveryPort
 from bridge.generation_settings import get_generation_settings
 from bridge.humanize import render_humanized_response
 from bridge.humanizer_settings import humanizer_enabled
+from bridge.light_novel_turn import NovelTurn
 from bridge.language import normalize_response_language, response_language_instruction, response_language_label
 from bridge.limits import HINDSIGHT_CONTEXT_MAX_CHARS, RAG_MAX_CONTEXT_CHARS, SUMMARY_MAX_CHARS
 from bridge.persona_service import PersonaService
@@ -249,6 +250,7 @@ def _generation_generate_rendered_reply(
     delivery_port: DeliveryPort,
     app_settings: AppSettings,
     rag_service: RagService,
+    novel_turn: NovelTurn | None = None,
 ):
     session_id = session["session_id"]
     delivery_port.send_typing(token, chat_id)
@@ -257,6 +259,8 @@ def _generation_generate_rendered_reply(
         chat_id,
         session_id,
     )
+    if novel_turn:
+        messages = novel_turn.messages(messages, session.get("response_language") or "auto")
     reply = provider_port.generate(
         api_key,
         session["model_id"],
@@ -264,6 +268,8 @@ def _generation_generate_rendered_reply(
         session_id=f"telegram:{chat_id}:{session_id}",
         settings=settings,
     )
+    if novel_turn:
+        reply = novel_turn.extract(reply)
     reply += rag_service.citation_footer(db, chat_id, query, rag_bundle)
     return render_session_response(
         api_key,

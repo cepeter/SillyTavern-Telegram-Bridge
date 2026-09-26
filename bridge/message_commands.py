@@ -20,6 +20,9 @@ from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
 from bridge.humanize import render_humanized_response
 from bridge.humanizer_settings import humanizer_enabled
+from bridge.light_novel_service import prepare_turn
+from bridge.light_novel_turn import NovelTurn
+from bridge.job_store import job_actor_id
 from bridge.language import normalize_response_language
 from bridge.memory import clear_session_summary
 from bridge.memory_curator import clear_curated_memory_state
@@ -185,12 +188,27 @@ def generate_and_store_reply(
         persona_service=persona_service,
         app_settings=app_settings,
     )
+    identity = (
+        telegram_message_id
+        if telegram_message_id is not None
+        else (operation_id if operation_id is not None else time.time_ns())
+    )
+    actor_id = str(session.get("_actor_id") or job_actor_id(db, operation_id))
+    choice_record = prepare_turn(db, chat_id, session, f"message:{identity}", actor_id)
+    novel_turn = NovelTurn(choice_record) if choice_record is not None else None
+    if novel_turn:
+        messages = novel_turn.messages(messages, session.get("response_language") or "auto")
     send_typing(token, chat_id)
     language = session.get("response_language") or "auto"
     fixed_language = normalize_response_language(language) != "auto"
     humanizer_on = humanizer_enabled(session.get("humanizer"))
     stream_message_id = None
-    if not fixed_language and not humanizer_on and get_meta(db, f"stream_mode:{chat_id}", "on") == "on":
+    if (
+        not fixed_language
+        and not humanizer_on
+        and not (novel_turn and novel_turn.record.strategy == "a")
+        and get_meta(db, f"stream_mode:{chat_id}", "on") == "on"
+    ):
         try:
             placeholder = telegram_request(token, "sendMessage", {"chat_id": chat_id, "text": "⌛ Generating…"})
             stream_message_id = int(placeholder.get("message_id")) if placeholder.get("message_id") else None
@@ -225,6 +243,8 @@ def generate_and_store_reply(
         stream_callback=stream_update if stream_message_id else None,
         app_settings=app_settings,
     )
+    if novel_turn:
+        reply = novel_turn.extract(reply)
     reply += rag_service.citation_footer(db, chat_id, text, rag_bundle)
     reply = render_response_language(
         api_key, current_model, reply, language, generation_session_id, generation_settings, provider_port=provider_port
@@ -267,6 +287,8 @@ def generate_and_store_reply(
                 (chat_id, session_id, "assistant", stored_reply, now + 0.001),
             )
             assistant_rowid = assistant_cursor.lastrowid
+            if novel_turn:
+                novel_turn.commit(db, int(assistant_rowid), stored_reply)
             save_response_variant(db, chat_id, session_id, text, stored_reply)
             if group_turn:
                 group_service.advance_turn(

@@ -20,6 +20,8 @@ from bridge.metadata import get_meta, set_meta
 from bridge.response_delivery import persist_assistant_delivery_ids
 from bridge.sqlite_store import write_transaction
 from bridge.telegram_output import telegram_safe_output
+from bridge.light_novel_service import prepare_turn, attach_turn
+from bridge.session_repository import load_session_row
 from bridge.limits import CARD_FIELD_MAX_CHARS
 from bridge.operations import begin_operation, operation_was_applied, record_operation
 from bridge.panel_utils import PANEL_PAGE_SIZE, panel_page
@@ -171,6 +173,7 @@ def send_character_greeting(
     *,
     app_settings: AppSettings,
     expected_epoch: int | None = None,
+    actor_id: str = "",
 ) -> bool:
     """Commit opening plus started state together, then deliver the committed text."""
     if db.in_transaction:
@@ -222,6 +225,14 @@ def send_character_greeting(
                 set_meta(
                     db, opening_key, json.dumps({"rowid": rowid, "operation_id": operation_id, "epoch": state.epoch})
                 )
+        # A stored opening has no inline generated choices. Every strategy
+        # gets a durable choice-only first pass after this transaction commits.
+        if not group:
+            opening_session = load_session_row(db, chat_id, session_id)
+            if opening_session is None:
+                raise ValueError("Session no longer exists")
+            record = prepare_turn(db, chat_id, opening_session, f"opening:{state.epoch}", actor_id)
+            attach_turn(db, record, rowid, greeting)
     message_ids = send_text(token, chat_id, greeting)
     persist_assistant_delivery_ids(db, rowid, message_ids)
     record_operation(db, operation_id, operation_kind)

@@ -9,11 +9,13 @@ import sqlite3
 from bridge.background import chat_job_lock
 from bridge.callback_dispatch import process_callback
 from bridge.card_content import card_fields_from_file
+from bridge.conversation_jobs import narrative_job_is_current
 from bridge.composition import BridgeServices
 from bridge.document_jobs import process_document_job
 from bridge.edit_messages import edit_telegram_user_message
 from bridge.failed_turns import clear_failed_turn, record_failed_turn
 from bridge.image_messages import process_image_message
+from bridge.light_novel_jobs import process_light_novel_choices_job
 from bridge.job_service import DurableJob, JobSubmission
 from bridge.limits import IMAGE_MAX_BYTES
 from bridge.operations import operation_phase, operation_was_applied, record_operation
@@ -42,6 +44,10 @@ def process_message_job(
         db = services.db_factory()
         try:
             if job_id is not None and not jobs.start(db, job_id):
+                return
+            if not narrative_job_is_current(db, job_id):
+                if job_id is not None:
+                    jobs.complete(db, job_id)
                 return
             actor_id = jobs.actor_id(db, job_id)
             existing = committed_assistant_for_message(db, chat_id, message_id)
@@ -140,6 +146,10 @@ def process_image_job(
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
+            if not narrative_job_is_current(db, job_id):
+                if job_id is not None:
+                    jobs.complete(db, job_id)
+                return
             existing = committed_assistant_for_message(db, chat_id, message_id)
             if existing:
                 if json.loads(existing[2] or "[]"):
@@ -180,6 +190,7 @@ def process_image_job(
                 if queued_session_id
                 else services.session.ensure(db, chat_id, model)
             )
+            session["_actor_id"] = services.jobs.actor_id(db, job_id)
             image_fields = card_fields_from_file(session["character_file"], app_settings=services.config)
             process_image_message(
                 db,
@@ -338,6 +349,14 @@ def resolve_recovered_job_submission(
         if isinstance(raw_queue_notice_ids, list)
         else []
     )
+
+    if job.kind == "novel_choices":
+        return JobSubmission(
+            "utility",
+            job.chat_id,
+            process_light_novel_choices_job,
+            (services, job.chat_id, str(payload["nonce"]), bool(payload.get("retry"))),
+        )
 
     if job.kind in {"generation", "command"}:
         return JobSubmission(

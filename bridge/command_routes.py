@@ -14,6 +14,7 @@ from bridge.extension_registry import dispatch_command_routes as _dispatch_exten
 from bridge.failed_turns import clear_failed_turn, latest_failed_turn, record_failed_turn
 from bridge.greetings import send_greeting_menu
 from bridge.help_details import send_help_command, send_help_menu
+from bridge.light_novel_panels import send_light_novel_menu
 from bridge.model_selection import task_model_for_session
 from bridge.prompt_diagnostics import prompt_diagnostics
 from bridge.prompt_panels import send_prompt_menu
@@ -66,6 +67,12 @@ def _handle_basic(
             delivery_port=delivery_port,
             request_context=request_context,
         )
+        return True
+    if command == "/lightnovel":
+        if is_group_conversation(db, chat_id, session_id):
+            send_text(token, chat_id, "Light Novel mode is available for standard sessions only.")
+        else:
+            send_light_novel_menu(token, chat_id, session, request_context=request_context)
         return True
     if command == "/start":
         if not is_group_conversation(db, chat_id, session_id) and conversation_state(db, chat_id, session_id).started:

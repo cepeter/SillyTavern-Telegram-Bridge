@@ -6,11 +6,12 @@ import sqlite3
 
 from bridge.composition import BridgeServices
 from bridge.help_details import handle_help_callback, is_help_callback
+from bridge.light_novel_callbacks import route_light_novel_callback
 from bridge.job_service import JobSubmission
 from bridge.request_types import RequestContext
 from bridge.telegram import answer_callback
 from bridge.topic_scope import topic_scope_from_message
-from bridge.worker_orchestration import process_callback_job
+from bridge.worker_orchestration import process_callback_job, process_message_job
 
 
 def route_callback_update(
@@ -33,6 +34,11 @@ def route_callback_update(
         callback_message.setdefault("chat", {})["id"] = callback_chat_id
 
     if sender not in permitted or not callback_chat_id:
+        return
+
+    if route_light_novel_callback(
+        services, db, callback, update_id, callback_chat_id, sender, message_worker=process_message_job
+    ):
         return
 
     if is_help_callback(str(callback.get("data") or "")):

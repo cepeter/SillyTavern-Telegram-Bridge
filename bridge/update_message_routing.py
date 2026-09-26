@@ -7,6 +7,10 @@ import sqlite3
 from pathlib import Path
 
 from bridge.conversation_lifecycle import START_REQUIRED, has_pending_management_input, is_command_text, require_started
+from bridge.light_novel_repository import invalidate_choice_sets
+from bridge.light_novel_panels import hide_choice_panels
+from bridge.conversation_lifecycle import conversation_state
+from bridge.sqlite_store import write_transaction
 from bridge.composition import BridgeServices
 from bridge.document_jobs import process_document_job
 from bridge.help_details import send_help_command
@@ -193,7 +197,8 @@ def route_message_update(
             {
                 "voice": voice,
                 "model": model,
-                "resolve_active": True,
+                "resolve_active": False,
+                "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
                 "actor_id": sender,
             },
         )
@@ -210,7 +215,7 @@ def route_message_update(
                     chat_id,
                     voice,
                     message_id,
-                    None,
+                    queued_session_id,
                     None,
                 ),
             ),
@@ -238,7 +243,8 @@ def route_message_update(
                 "caption": caption,
                 "file_size": int(largest.get("file_size") or 0),
                 "model": model,
-                "resolve_active": True,
+                "resolve_active": False,
+                "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
                 "actor_id": sender,
             },
         )
@@ -256,7 +262,7 @@ def route_message_update(
                     caption,
                     int(largest.get("file_size") or 0),
                     message_id,
-                    None,
+                    queued_session_id,
                     None,
                 ),
             ),
@@ -287,7 +293,8 @@ def route_message_update(
                 "caption": caption,
                 "file_size": int(document.get("file_size") or 0),
                 "model": model,
-                "resolve_active": True,
+                "resolve_active": False,
+                "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
                 "actor_id": sender,
             },
         )
@@ -305,7 +312,7 @@ def route_message_update(
                     caption,
                     int(document.get("file_size") or 0),
                     message_id,
-                    None,
+                    queued_session_id,
                     None,
                 ),
             ),
@@ -508,20 +515,31 @@ def route_message_update(
                 _delete_queue_notice_messages(services, token, chat_id, deferred_notice_message_ids)
         return True
 
-    job_id = services.jobs.enqueue(
-        db,
-        update_id,
-        chat_id,
-        queued_session_id,
-        message_id,
-        "generation",
-        {
-            "text": str(text),
-            "model": model,
-            "resolve_active": True,
-            "actor_id": sender,
-        },
-    )
+    queued_session = services.session.load(db, chat_id, queued_session_id, model)
+    mode_state = conversation_state(db, chat_id, queued_session_id)
+    pending_input = has_pending_management_input(db, chat_id, queued_session_id, sender)
+    with write_transaction(db):
+        old_panels = (
+            invalidate_choice_sets(db, chat_id, queued_session_id)
+            if mode_state.mode == "lightnovel" and not pending_input
+            else []
+        )
+        job_id = services.jobs.enqueue(
+            db,
+            update_id,
+            chat_id,
+            queued_session_id,
+            message_id,
+            "generation",
+            {
+                "text": str(text),
+                "model": queued_session["model_id"] or model,
+                "resolve_active": False,
+                "actor_id": sender,
+                "epoch": mode_state.epoch,
+            },
+        )
+    hide_choice_panels(token, chat_id, old_panels)
     queued = services.jobs.submit(
         db,
         job_id,
@@ -536,7 +554,8 @@ def route_message_update(
                 str(text),
                 message_id,
                 None,
-                None,
+                queued_session_id,
+                queued_session["model_id"] or model,
             ),
         ),
     )

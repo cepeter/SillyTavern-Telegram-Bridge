@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable, Sequence
 
 from bridge.conversation_lifecycle import conversation_state
+from bridge.job_store import enqueue_job
 from bridge.light_novel_format import parse_choice_response, validate_choices
 from bridge.light_novel_repository import (
     ChoiceSet,
@@ -81,6 +82,26 @@ def attach_turn(
     normalized = validate_choices(choices, record.requested_count) if choices is not None else None
     with write_transaction(db):
         attach_choice_set(db, record.nonce, assistant_rowid, story_digest(story), normalized)
+        # The durable handoff shares the assistant-row transaction. A process exit
+        # between narrative delivery and panel generation cannot lose the choice work.
+        current = load_choice_set(db, record.nonce)
+        if current and current.state == "open":
+            enqueue_job(
+                db,
+                -record.id,
+                record.chat_id,
+                record.session_id,
+                0,
+                "novel_choices",
+                {
+                    "nonce": record.nonce,
+                    "actor_id": record.actor_id,
+                    "retry": False,
+                    "model": record.model_id,
+                    "resolve_active": False,
+                    "epoch": record.epoch,
+                },
+            )
 
 
 def current_choice_story(db: sqlite3.Connection, record: ChoiceSet) -> str | None:

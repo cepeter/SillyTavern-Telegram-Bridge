@@ -14,6 +14,7 @@ from bridge.metadata import get_meta
 from bridge.sqlite_store import run_database_maintenance
 from bridge.sync_api import start_live_sync_worker, stop_live_sync_worker
 from bridge.update_routing import route_update
+from bridge.sqlite_store import write_transaction
 from bridge.worker_orchestration import make_durable_backlog_dispatcher, resolve_recovered_job_submission
 
 _SHUTDOWN_EVENT = threading.Event()
@@ -60,6 +61,9 @@ def run_bridge_runtime(services: BridgeServices, fields: dict) -> int:
     db = services.db_factory()
     start_live_sync_worker(sync_service=services.sync, app_settings=services.config)
     services.background.register_backlog_dispatcher(make_durable_backlog_dispatcher(services, fields))
+    # Only startup may reset leases. Ordinary backlog dispatch must not race an active choice call.
+    with write_transaction(db):
+        db.execute("UPDATE light_novel_choice_sets SET lease_token='',lease_until=0 WHERE generation_status='pending'")
     services.jobs.recover(
         db,
         lambda job: resolve_recovered_job_submission(

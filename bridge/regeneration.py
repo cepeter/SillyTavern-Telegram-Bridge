@@ -8,6 +8,7 @@ import time
 from bridge.delivery_port import DeliveryPort
 from bridge.generation import _generation_generate_rendered_reply, build_chat_messages
 from bridge.generation_recovery import _generation_operation_recovery
+from bridge.light_novel_turn import begin_novel_turn
 from bridge.memory_service import MemoryService
 from bridge.operations import set_operation_phase
 from bridge.persona_service import PersonaService
@@ -122,6 +123,7 @@ def regenerate_last(
         rag_context=rag_service.context_for_prompt(db, chat_id, user_text, rag_bundle),
         app_settings=app_settings,
     )
+    novel_turn = begin_novel_turn(db, chat_id, session, "regen", operation_id)
     reply = _generation_generate_rendered_reply(
         db,
         token,
@@ -135,6 +137,7 @@ def regenerate_last(
         delivery_port=delivery_port,
         app_settings=app_settings,
         rag_service=rag_service,
+        novel_turn=novel_turn,
     )
     last_user_rowid = int(rows[last_user_index][0])
     old_message_ids = recovery.outgoing_ids_after(
@@ -168,6 +171,8 @@ def regenerate_last(
             ),
         )
         assistant_rowid = int(assistant_cursor.lastrowid)
+        if novel_turn:
+            novel_turn.commit(db, assistant_rowid, reply)
         variant = save_response_variant(db, chat_id, session_id, user_text, reply, user_rowid=last_user_rowid)
         if operation_id is not None:
             set_operation_phase(

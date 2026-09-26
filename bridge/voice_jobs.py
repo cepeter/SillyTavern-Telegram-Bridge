@@ -13,6 +13,7 @@ import sqlite3
 from pathlib import Path
 
 from bridge.background import chat_job_lock
+from bridge.conversation_jobs import narrative_job_is_current
 from bridge.conversation_lifecycle import START_REQUIRED, require_started
 from bridge.config import STT_DEFAULT_MODEL
 from bridge.failed_turns import clear_failed_turn
@@ -87,6 +88,10 @@ def process_voice_job(
         db = services.db_factory()
         try:
             if job_id is not None and not jobs.start(db, job_id):
+                return
+            if not narrative_job_is_current(db, job_id):
+                if job_id is not None:
+                    jobs.complete(db, job_id)
                 return
             actor_id = jobs.actor_id(db, job_id)
             existing = committed_assistant_for_message(db, chat_id, message_id)

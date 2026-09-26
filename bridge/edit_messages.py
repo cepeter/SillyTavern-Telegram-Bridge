@@ -9,6 +9,7 @@ import time
 from bridge.card_content import card_fields_from_file
 from bridge.generation import build_chat_messages, render_session_response
 from bridge.generation_settings import get_generation_settings
+from bridge.light_novel_turn import begin_novel_turn
 from bridge.memory_service import MemoryService
 from bridge.metadata import get_meta
 from bridge.operation_recovery import OperationRecovery as _OperationRecovery
@@ -166,6 +167,9 @@ def regenerate_edited_turn(
         chat_id,
         session_id,
     )
+    novel_turn = begin_novel_turn(db, chat_id, session, "edit", operation_id)
+    if novel_turn:
+        messages = novel_turn.messages(messages, session.get("response_language") or "auto")
     reply = provider_port.generate(
         api_key,
         session["model_id"],
@@ -173,6 +177,8 @@ def regenerate_edited_turn(
         session_id=f"telegram:{chat_id}:{session_id}",
         settings=generation_settings,
     )
+    if novel_turn:
+        reply = novel_turn.extract(reply)
     reply += rag_service.citation_footer(db, chat_id, new_text, rag_bundle)
     reply = render_session_response(
         api_key,
@@ -221,6 +227,8 @@ def regenerate_edited_turn(
             ),
         )
         assistant_rowid = int(assistant_cursor.lastrowid)
+        if novel_turn:
+            novel_turn.commit(db, assistant_rowid, reply)
         save_response_variant(db, chat_id, session_id, new_text, reply, user_rowid=int(user_rowid))
         if operation_id is not None:
             set_operation_phase(

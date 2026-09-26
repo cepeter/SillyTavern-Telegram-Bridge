@@ -13,6 +13,7 @@ from bridge.generation_settings import get_generation_settings
 from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
 from bridge.limits import MAX_HISTORY_MESSAGES
+from bridge.light_novel_turn import begin_novel_turn
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
@@ -87,6 +88,9 @@ def process_image_message(
         persona_service=persona_service,
         app_settings=app_settings,
     )
+    novel_turn = begin_novel_turn(db, chat_id, session, "image", telegram_message_id)
+    if novel_turn:
+        messages = novel_turn.messages(messages, session.get("response_language") or "auto")
     send_typing(token, chat_id)
     reply = provider_port.generate(
         api_key,
@@ -95,6 +99,8 @@ def process_image_message(
         session_id=f"telegram:{chat_id}:{session['session_id']}",
         settings=get_generation_settings(db, chat_id, session["session_id"]),
     )
+    if novel_turn:
+        reply = novel_turn.extract(reply)
     reply += rag_service.citation_footer(db, chat_id, caption, rag_bundle)
     reply = render_session_response(
         api_key,
@@ -127,6 +133,8 @@ def process_image_message(
             (chat_id, session["session_id"], "assistant", stored_reply, time.time()),
         )
         assistant_rowid = assistant_cursor.lastrowid
+        if novel_turn:
+            novel_turn.commit(db, int(assistant_rowid), stored_reply)
         save_response_variant(db, chat_id, session["session_id"], stored_text, stored_reply)
         if group_turn:
             group_service.advance_turn(db, chat_id, session["session_id"])

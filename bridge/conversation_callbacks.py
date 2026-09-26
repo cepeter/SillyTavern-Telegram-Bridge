@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 
 from bridge.callbacks import close_panel_message, discard_panel_binding, remove_inline_keyboard
 from bridge.card_content import card_fields_from_file
@@ -157,8 +158,14 @@ def handle_greeting_callback(
             send_text(token, chat_id, "Opening choice expired; use /start again.")
             return True
         if state.started:
-            send_text(token, chat_id, ALREADY_STARTED)
-            return True
+            from_opening = get_meta(db, f"conversation_opening:{chat_id}:{session_id}", "")
+            try:
+                opening_operation = json.loads(from_opening or "{}").get("operation_id")
+            except ValueError:
+                opening_operation = None
+            if action != "use" or operation_id is None or str(opening_operation) != str(operation_id):
+                send_text(token, chat_id, ALREADY_STARTED)
+                return True
 
     if not options:
         answer_callback(token, str(callback.get("id", "")), "Greeting unavailable")
@@ -224,6 +231,7 @@ def handle_greeting_callback(
             "start_greeting",
             app_settings=request_context.app_settings,
             expected_epoch=conversation_state(db, chat_id, session_id).epoch,
+            actor_id=request_context.actor_id,
         )
         answer_callback(
             token,
