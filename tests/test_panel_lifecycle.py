@@ -364,3 +364,14 @@ class PanelLifecycleTests(SettingsTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_answer_callback_omits_empty_text_for_silent_noop(monkeypatch):
+    import bridge.telegram as telegram
+
+    calls = []
+    monkeypatch.setattr(
+        telegram, "telegram_request", lambda token, method, payload: calls.append((token, method, payload)) or {}
+    )
+    telegram.answer_callback("token", "callback-id", "")
+    assert calls == [("token", "answerCallbackQuery", {"callback_query_id": "callback-id"})]

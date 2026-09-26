@@ -311,6 +311,7 @@ SillyTavern installation lives elsewhere.
 | `SILLYTAVERN_DEFAULT_CHARACTER` | required | PNG character filename used for new/default sessions. |
 | `SILLYTAVERN_MODEL` | required | Default Story route in `provider-id::model-id` form. |
 | `SILLYTAVERN_DEFAULT_USER_NAME` | empty | Fallback display value for `{{user}}`. |
+| `SILLYTAVERN_RANK_EMOJI_S` ... `SILLYTAVERN_RANK_EMOJI_D` | empty | Optional numeric Telegram custom-emoji IDs for animated S/A/B/C/D rank icons. Plain letters are used when absent/invalid. |
 | `LLM_API_KEY` | empty | Generic provider-key fallback. Prefer a provider-specific `api_key_env`. |
 | `SILLYTAVERN_PROVIDER_CONFIG` | `$SILLYTAVERN_BRIDGE_HOME/sillytavern_telegram_providers.yaml` | Private YAML provider catalog. |
 | `SILLYTAVERN_MODEL_CACHE` | `$SILLYTAVERN_BRIDGE_HOME/model_catalog_cache.json` | Cache for discovered provider model IDs. |
@@ -781,8 +782,8 @@ deliberate additional segment.
 
 ### Optional Humanizer response style
 
-Open `/settings` and choose **Humanizer: On** to request an additional prose
-rewrite after response-language rendering. It is **off by default**, scoped to
+Open `/settings` and tap the single **Humanizer: ON/OFF** button to toggle an
+additional prose rewrite after response-language rendering. It is **off by default**, scoped to
 the selected session, and reset by **Reset all** in the generation settings
 panel. It uses the response's selected provider/model, so enabling it can add
 latency and token charges. Native transcript sync preserves the setting.
@@ -846,6 +847,13 @@ before any replacement or deletion.
 The active card and any cards referenced by sessions or groups are protected —
 you can't accidentally delete a card that's in use.
 
+Character rows use three columns: **rank | character | action**. The rank column
+shows S/A/B/C/D (or `—` when unranked) and is a silent no-op button. When one of
+the optional `SILLYTAVERN_RANK_EMOJI_*` IDs is configured, Telegram displays
+that custom emoji before the fallback letter. Custom button emoji require the
+bot to be eligible for Telegram custom emoji (for example, the bot owner has
+Telegram Premium).
+
 #### Re-uploading and optimizing a card
 
 A first upload installs a validated card with a verified backup. Re-uploading
@@ -877,6 +885,9 @@ name/avatar/other metadata, backs up the original bytes, and atomically replaces
 the file. Unsupported dual `chara`/`ccv3` payloads are refused rather than
 partially rewritten. A failed or interrupted application may require generating
 a new preview; it never replays an already consumed confirmation automatically.
+After a successful optimizer Apply, the installed card is reranked immediately
+with the Utility model. If reranking is unavailable, the changed file revision
+invalidates the previous cached rank instead of showing a stale grade.
 
 New installations and applied card changes also request an optional S–D quality
 tier from the utility-model route. Badges are model-generated assessments, not

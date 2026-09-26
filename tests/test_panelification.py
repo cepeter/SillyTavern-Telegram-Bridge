@@ -133,37 +133,60 @@ class PanelificationTests(SettingsTestCase):
             rag_service=make_test_rag_service(),
         )
 
-    def test_character_panel_has_inline_delete_actions(self):
+    def test_character_panel_has_rank_name_and_action_columns(self):
         old_paths = _m_cards.character_card_paths
         old_display = _m_cards.character_display_name
         old_callback_token = _m_cards.dynamic_callback_token
+        old_rank = _m_cards.character_rank
         _m_cards.character_card_paths = lambda *, app_settings=None: [Path("active.png"), Path("other.png")]
         _m_cards.character_display_name = lambda path, *, app_settings=None: path.stem
         _m_cards.dynamic_callback_token = lambda _kind, filename, _chat, **_kwargs: "cb-" + filename
+        _m_cards.character_rank = lambda _db, filename, **_kwargs: "S" if filename == "active.png" else ""
+        settings = self.app_settings_builder.build()
+        settings = __import__("dataclasses").replace(
+            settings, environ={**dict(settings.environ), "SILLYTAVERN_RANK_EMOJI_S": "5368324170671202286"}
+        )
         try:
             _m_session_naming.send_character_menu(
                 "bot-token",
                 "chat",
                 "active.png",
-                request_context=make_test_request_context(self.db, app_settings=self.app_settings_builder.build()),
+                request_context=make_test_request_context(self.db, app_settings=settings),
             )
         finally:
             _m_cards.character_card_paths = old_paths
             _m_cards.character_display_name = old_display
             _m_cards.dynamic_callback_token = old_callback_token
+            _m_cards.character_rank = old_rank
         rows = self.calls[0][0][3]["inline_keyboard"]
         item_rows = rows[:2]
-        self.assertTrue(all(len(row) == 2 for row in item_rows))
+        self.assertTrue(all(len(row) == 3 for row in item_rows))
+        self.assertEqual(item_rows[0][0]["text"], "S")
+        self.assertEqual(item_rows[0][0]["callback_data"], "character:rank:S")
+        self.assertEqual(item_rows[0][0]["icon_custom_emoji_id"], "5368324170671202286")
+        self.assertEqual(item_rows[1][0], {"text": "—", "callback_data": "character:rank:unranked"})
+        self.assertEqual(item_rows[0][1]["callback_data"], "character:cb-active.png")
+        self.assertEqual(item_rows[1][1]["callback_data"], "character:cb-other.png")
         callbacks = [button["callback_data"] for row in item_rows for button in row]
         self.assertEqual(sum(value.startswith("characterdelete:") for value in callbacks), 1)
         self.assertIn("character:protected", callbacks)
-        self.assertIn("character:cb-active.png", callbacks)
-        self.assertIn("character:cb-other.png", callbacks)
 
         for command, marker in (("/prompt", "prompt:budget"), ("/summarize", "summary:confirm")):
             self.calls.clear()
             self.assertTrue(self._route(command))
             self.assertIn(marker, str(self.calls[-1]))
+
+    def test_character_rank_column_falls_back_to_plain_letter_without_custom_emoji(self):
+        button = _m_cards.character_rank_button("A", app_settings=self.app_settings_builder.build())
+        self.assertEqual(button, {"text": "A", "callback_data": "character:rank:A"})
+        settings = self.app_settings_builder.build()
+        settings = __import__("dataclasses").replace(
+            settings, environ={**dict(settings.environ), "SILLYTAVERN_RANK_EMOJI_A": "not-a-custom-emoji-id"}
+        )
+        self.assertEqual(
+            _m_cards.character_rank_button("A", app_settings=settings),
+            {"text": "A", "callback_data": "character:rank:A"},
+        )
 
     def test_scene_and_director_goal_open_topic_panels(self):
         topic_id = "chat|topic:1"

@@ -50,13 +50,9 @@ def send_settings_menu(
     rows.append(
         [
             {
-                "text": ("✅ " if humanizer_on else "") + "Humanizer: On",
-                "callback_data": "enum:humanizer:on",
-            },
-            {
-                "text": ("" if humanizer_on else "✅ ") + "Humanizer: Off",
-                "callback_data": "enum:humanizer:off",
-            },
+                "text": f"Humanizer: {'ON' if humanizer_on else 'OFF'}",
+                "callback_data": "enum:humanizer:toggle",
+            }
         ]
     )
     rows.append(

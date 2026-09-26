@@ -222,3 +222,29 @@ def test_send_panel_photo_uploads_reply_markup_and_binds_returned_message(tmp_pa
     assert b"characterinfo:back" in captured["body"]
     assert captured["content_type"].startswith("multipart/form-data; boundary=")
     assert binding == ("session-1", "owner-1")
+
+
+def test_character_rank_column_callback_is_silent_noop(tmp_path):
+    db = sqlite3.connect(":memory:")
+    context = make_test_request_context(db, "session", "owner", app_settings=make_test_settings(home=tmp_path))
+    answers = []
+    try:
+        handled = _owner_character_callbacks.handle_character_callback(
+            db,
+            "bot-token",
+            _callback(data="character:rank:S"),
+            lambda _token, _callback_id, text: answers.append(text),
+            "character:rank:S",
+            "chat",
+            {"message_id": 41},
+            {"character_file": "Active.png"},
+            "session",
+            None,
+            group_service=make_test_group_service(app_settings=context.app_settings),
+            request_context=context,
+            provider_port=application_setup.make_test_provider_port(),
+        )
+    finally:
+        db.close()
+    assert handled is True
+    assert answers == [""]

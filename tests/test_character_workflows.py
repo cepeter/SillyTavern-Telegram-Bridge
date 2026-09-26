@@ -80,6 +80,7 @@ def test_optimizer_callback_preview_apply_and_replay_use_exact_proposal(card_con
 
     services = make_test_application_services(app_settings=ctx.app_settings, provider=ProviderPort(generate))
     session = services.session.create(db, "chat", ctx.app_settings.default_model, session_id="session")
+    character_quality.store_character_rank(db, "Alice.png", "S", app_settings=ctx.app_settings)
     monkeypatch.setattr(character_quality, "task_model_for_session", lambda *a, **k: "utility::fixture")
     monkeypatch.setattr(callback_dispatch, "answer_callback", lambda *a, **k: None)
 
@@ -138,6 +139,9 @@ def test_optimizer_callback_preview_apply_and_replay_use_exact_proposal(card_con
     assert card["post_history_instructions"] == optimized["post_history_instructions"]
     assert (ctx.app_settings.character_backup_dir / "Alice.png").read_bytes() == original
     assert len(model_calls) == (1 if rank_fails else 2)
+    assert character_quality.character_rank(db, "Alice.png", app_settings=ctx.app_settings) == (
+        "" if rank_fails else "A"
+    )
     callback_dispatch.process_callback(db, "token", callback(apply_data), services=services)
     assert target.read_bytes() == updated
     assert "expired or already used" in outputs[-1]["text"]

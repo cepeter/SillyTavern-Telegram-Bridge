@@ -18,7 +18,7 @@ from bridge.databank_panels import (
     send_databank_versions_menu,
 )
 from bridge.generation_settings import update_generation_settings
-from bridge.humanizer_settings import normalize_humanizer
+from bridge.humanizer_settings import humanizer_enabled, normalize_humanizer, session_humanizer
 from bridge.input_flow_service import InputFlowService
 from bridge.language import normalize_stt_language
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
@@ -109,6 +109,9 @@ def handle_enum_callback(
         return
     if data.startswith("enum:humanizer:"):
         value = data.rsplit(":", 1)[1]
+        if value == "toggle":
+            current = humanizer_enabled(session_humanizer(db, chat_id, session["session_id"]))
+            value = "off" if current else "on"
         try:
             update_session(db, chat_id, session["session_id"], humanizer=normalize_humanizer(value))
         except ValueError:

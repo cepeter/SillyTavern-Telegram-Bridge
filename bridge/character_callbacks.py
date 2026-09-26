@@ -79,6 +79,9 @@ def handle_character_callback(
 ):
     """Handle character selection, info, upload, and deletion callbacks."""
     message_id = message.get("message_id")
+    if data.startswith("character:rank:"):
+        answer_callback(token, str(callback.get("id", "")), "")
+        return True
     if data == "character:protected":
         answer_callback(token, str(callback.get("id", "")), "Active/default character is protected")
         send_character_menu(token, chat_id, session["character_file"], message_id, request_context=request_context)

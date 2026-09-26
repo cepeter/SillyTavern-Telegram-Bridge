@@ -246,11 +246,7 @@ def send_typing(token: str, chat_id: str) -> None:
 
 
 def answer_callback(token: str, callback_id: str, text: str) -> None:
-    telegram_request(
-        token,
-        "answerCallbackQuery",
-        {
-            "callback_query_id": callback_id,
-            "text": text[:200],
-        },
-    )
+    payload = {"callback_query_id": callback_id}
+    if text:
+        payload["text"] = text[:200]
+    telegram_request(token, "answerCallbackQuery", payload)

@@ -76,8 +76,61 @@ def test_humanizer_logs_no_exception_payload(caplog):
 
 
 def test_humanizer_callbacks_require_session_binding():
-    assert is_session_scoped_panel_callback("enum:humanizer:on")
-    assert is_session_scoped_panel_callback("enum:humanizer:off")
+    assert is_session_scoped_panel_callback("enum:humanizer:toggle")
+
+
+def test_settings_panel_uses_single_humanizer_toggle(context, monkeypatch):
+    from bridge import cards, settings_panels
+
+    db, session, ctx = context
+    calls = []
+    monkeypatch.setattr(
+        cards, "send_panel_request", lambda _token, _method, payload, **_kwargs: calls.append(payload) or {}
+    )
+    settings_panels.send_settings_menu("token", "chat", db, session["session_id"], request_context=ctx)
+    buttons = [
+        button
+        for row in calls[-1]["reply_markup"]["inline_keyboard"]
+        for button in row
+        if str(button.get("callback_data", "")).startswith("enum:humanizer")
+    ]
+    assert buttons == [{"text": "Humanizer: OFF", "callback_data": "enum:humanizer:toggle"}]
+    update_session(db, "chat", session["session_id"], humanizer="on")
+    calls.clear()
+    settings_panels.send_settings_menu("token", "chat", db, session["session_id"], request_context=ctx)
+    buttons = [
+        button
+        for row in calls[-1]["reply_markup"]["inline_keyboard"]
+        for button in row
+        if str(button.get("callback_data", "")).startswith("enum:humanizer")
+    ]
+    assert buttons == [{"text": "Humanizer: ON", "callback_data": "enum:humanizer:toggle"}]
+
+
+def test_humanizer_toggle_flips_current_session_state(context, monkeypatch):
+    from bridge import enum_callbacks
+
+    db, session, ctx = context
+    monkeypatch.setattr(enum_callbacks, "send_settings_menu", lambda *a, **k: None)
+    service = make_test_input_flow_service(app_settings=ctx.app_settings)
+    for expected in ("on", "off"):
+        enum_callbacks.handle_enum_callback(
+            db,
+            "token",
+            "chat",
+            session,
+            "enum:humanizer:toggle",
+            {},
+            input_flow_service=service,
+            request_context=ctx,
+            rag_service=make_test_rag_service(),
+        )
+        assert (
+            load_session(db, "chat", session["session_id"], "fixture::model", app_settings=ctx.app_settings)[
+                "humanizer"
+            ]
+            == expected
+        )
 
 
 def test_flag_uses_existing_session_metadata_without_schema_change(context):
