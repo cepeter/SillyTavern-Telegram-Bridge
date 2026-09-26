@@ -13,8 +13,8 @@ from bridge.delivery_port import DeliveryPort
 from bridge.generation_settings import get_generation_settings
 from bridge.humanize import render_humanized_response
 from bridge.humanizer_settings import humanizer_enabled
-from bridge.light_novel_turn import NovelTurn
 from bridge.language import normalize_response_language, response_language_instruction, response_language_label
+from bridge.light_novel_turn import NovelTurn
 from bridge.limits import HINDSIGHT_CONTEXT_MAX_CHARS, RAG_MAX_CONTEXT_CHARS, SUMMARY_MAX_CHARS
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort

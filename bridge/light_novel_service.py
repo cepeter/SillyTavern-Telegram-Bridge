@@ -10,6 +10,7 @@ import sqlite3
 import time
 from collections.abc import Callable, Sequence
 
+from bridge.card_content import build_world_info
 from bridge.conversation_lifecycle import conversation_state
 from bridge.job_store import enqueue_job
 from bridge.light_novel_format import parse_choice_response, validate_choices
@@ -24,6 +25,7 @@ from bridge.light_novel_repository import (
     reserve_choice_set,
 )
 from bridge.model_selection import task_model_for_session
+from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.settings import AppSettings
 from bridge.sqlite_store import write_transaction
@@ -112,7 +114,8 @@ def current_choice_story(db: sqlite3.Connection, record: ChoiceSet) -> str | Non
     if last is None or last.id != record.id:
         return None
     row = db.execute(
-        "SELECT rowid,content FROM messages WHERE chat_id=? AND session_id=? AND role='assistant' ORDER BY rowid DESC LIMIT 1",
+        "SELECT rowid,content FROM messages WHERE chat_id=? AND session_id=? AND role='"
+        "assistant' ORDER BY rowid DESC LIMIT 1",
         (record.chat_id, record.session_id),
     ).fetchone()
     if row is None or int(row[0]) != record.assistant_rowid or story_digest(str(row[1])) != record.story_hash:
@@ -129,6 +132,7 @@ def ensure_choices(
     provider_port: ProviderPort,
     app_settings: AppSettings,
     retry: bool = False,
+    persona_service: PersonaService | None = None,
 ) -> ChoiceSet:
     if db.in_transaction:
         raise ValueError("Choice provider work cannot run inside a write transaction")
@@ -155,7 +159,16 @@ def ensure_choices(
             "SELECT role,content FROM messages WHERE chat_id=? AND session_id=? ORDER BY rowid DESC LIMIT 6",
             (record.chat_id, record.session_id),
         ).fetchall()
+        persona_id = str(session.get("persona_id") or "")
+        persona = persona_service.get(persona_id) if persona_service is not None and persona_id else None
+        user_name = str((persona or {}).get("name") or app_settings.default_user_name)
+        world = build_world_info(
+            session.get("world_file") or "", story[-10000:], fields, user_name, app_settings=app_settings
+        )
         context = {
+            "user_persona": {key: str((persona or {}).get(key) or "")[:4000] for key in ("name", "description")},
+            "world_info": world[:6000],
+            "system_prompt": str(session.get("system_prompt") or "")[:4000],
             "character": {
                 key: str(fields.get(key) or "")[:2000] for key in ("name", "description", "personality", "scenario")
             },
@@ -167,7 +180,8 @@ def ensure_choices(
             {
                 "role": "system",
                 "content": (
-                    f"Generate exactly {record.requested_count} distinct next actions the USER can choose in this scene. "
+                    f"Generate exactly {record.requested_count} distinct next actions "
+                    "the USER can choose in this scene. "
                     'Return only JSON: {"choices":["action", "action"]}. Each action must be 1–160 characters. '
                     "Use the user persona, not the assistant character. Do not continue or rewrite the story, "
                     "reveal future outcomes, repeat equivalent actions, or generate bot commands. "

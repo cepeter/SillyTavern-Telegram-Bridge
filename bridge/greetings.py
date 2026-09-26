@@ -16,17 +16,17 @@ from bridge.conversation_lifecycle import (
     lifecycle_key,
     mark_started,
 )
-from bridge.metadata import get_meta, set_meta
-from bridge.response_delivery import persist_assistant_delivery_ids
-from bridge.sqlite_store import write_transaction
-from bridge.telegram_output import telegram_safe_output
-from bridge.light_novel_service import prepare_turn, attach_turn
-from bridge.session_repository import load_session_row
+from bridge.light_novel_service import attach_turn, prepare_turn
 from bridge.limits import CARD_FIELD_MAX_CHARS
-from bridge.operations import begin_operation, operation_was_applied, record_operation
+from bridge.metadata import get_meta, set_meta
+from bridge.operations import operation_was_applied, record_operation
 from bridge.panel_utils import PANEL_PAGE_SIZE, panel_page
+from bridge.response_delivery import persist_assistant_delivery_ids
+from bridge.session_repository import load_session_row
 from bridge.settings import AppSettings
+from bridge.sqlite_store import write_transaction
 from bridge.telegram import send_panel_request, send_text
+from bridge.telegram_output import telegram_safe_output
 
 _GREETING_PREVIEW_MAX_CHARS = 3200
 
@@ -195,7 +195,8 @@ def send_character_greeting(
             if operation_id is None or str(opening.get("operation_id")) != str(operation_id):
                 return False
             row = db.execute(
-                "SELECT content,telegram_message_ids FROM messages WHERE rowid=? AND chat_id=? AND session_id=? AND role='assistant'",
+                "SELECT content,telegram_message_ids FROM messages WHERE rowid=? AND chat_id=? "
+                "AND session_id=? AND role='assistant'",
                 (opening.get("rowid"), chat_id, session_id),
             ).fetchone()
             if row is None:

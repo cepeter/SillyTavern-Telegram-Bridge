@@ -14,11 +14,12 @@ def set_bot_commands(token: str) -> None:
             "setMyCommands",
             {
                 "commands": [
-                    {"command": "start", "description": "Send greeting or show missing setup"},
+                    {"command": "start", "description": "Choose opening greeting after new/reset"},
                     {"command": "help", "description": "Browse the interactive command guide"},
                     {"command": "cancel", "description": "Cancel the current pending input"},
                     {"command": "providers", "description": "Choose Story or Utility provider/model"},
-                    {"command": "character", "description": "Open character management panel"},
+                    {"command": "character", "description": "Configure a Normal/Light Novel session"},
+                    {"command": "lightnovel", "description": "Light Novel mode and current action choices"},
                     {"command": "session", "description": "Manage sessions; delete inactive only"},
                     {"command": "sync", "description": "Open Live API Sync controls"},
                     {"command": "update", "description": "Check and confirm bridge update"},
@@ -38,7 +39,7 @@ def set_bot_commands(token: str) -> None:
                     {"command": "summarize", "description": "Confirm active-session summary regeneration"},
                     {"command": "databank", "description": "Open RAG/list/remove panel"},
                     {"command": "group", "description": "Open Forum Topic group controls"},
-                    {"command": "new", "description": "Name and start a new session"},
+                    {"command": "new", "description": "Name and create an unstarted session"},
                     {"command": "reset", "description": "Confirm active-session reset"},
                     {"command": "regen", "description": "Regenerate last response"},
                     {"command": "swipe", "description": "Browse response variants"},

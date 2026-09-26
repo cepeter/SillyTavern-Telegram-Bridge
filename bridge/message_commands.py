@@ -11,8 +11,8 @@ from bridge.card_content import card_fields_from_file
 from bridge.cards import send_session_menu
 from bridge.character_identity import reconcile_session_character
 from bridge.context_compaction import context_history_candidate_limit
-from bridge.conversation_lifecycle import START_REQUIRED, is_command_text, require_started, reset_conversation
 from bridge.continuation import continue_last
+from bridge.conversation_lifecycle import START_REQUIRED, is_command_text, require_started, reset_conversation
 from bridge.edit_messages import edit_last_user
 from bridge.failed_turns import clear_failed_turn
 from bridge.generation import build_chat_messages, render_response_language
@@ -20,10 +20,10 @@ from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
 from bridge.humanize import render_humanized_response
 from bridge.humanizer_settings import humanizer_enabled
-from bridge.light_novel_service import prepare_turn
-from bridge.light_novel_turn import NovelTurn
 from bridge.job_store import job_actor_id
 from bridge.language import normalize_response_language
+from bridge.light_novel_service import prepare_turn
+from bridge.light_novel_turn import NovelTurn
 from bridge.memory import clear_session_summary
 from bridge.memory_curator import clear_curated_memory_state
 from bridge.memory_service import MemoryService

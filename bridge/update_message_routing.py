@@ -6,16 +6,21 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from bridge.conversation_lifecycle import START_REQUIRED, has_pending_management_input, is_command_text, require_started
-from bridge.light_novel_repository import invalidate_choice_sets
-from bridge.light_novel_panels import hide_choice_panels
-from bridge.conversation_lifecycle import conversation_state
-from bridge.sqlite_store import write_transaction
 from bridge.composition import BridgeServices
+from bridge.conversation_lifecycle import (
+    START_REQUIRED,
+    conversation_state,
+    has_pending_management_input,
+    is_command_text,
+    require_started,
+)
 from bridge.document_jobs import process_document_job
 from bridge.help_details import send_help_command
 from bridge.job_service import JobSubmission
+from bridge.light_novel_panels import hide_choice_panels
+from bridge.light_novel_repository import invalidate_choice_sets
 from bridge.request_types import RequestContext
+from bridge.sqlite_store import write_transaction
 from bridge.topic_scope import topic_scope_from_message
 from bridge.transcript_repository import native_edit_target
 from bridge.voice_jobs import process_voice_job
@@ -187,21 +192,28 @@ def route_message_update(
     if voice:
         message_id = int(message.get("message_id"))
         queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
-        job_id = services.jobs.enqueue(
-            db,
-            update_id,
-            chat_id,
-            queued_session_id,
-            message_id,
-            "voice",
-            {
-                "voice": voice,
-                "model": model,
-                "resolve_active": False,
-                "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
-                "actor_id": sender,
-            },
-        )
+        with write_transaction(db):
+            old_panels = (
+                invalidate_choice_sets(db, chat_id, queued_session_id)
+                if conversation_state(db, chat_id, queued_session_id).mode == "lightnovel"
+                else []
+            )
+            job_id = services.jobs.enqueue(
+                db,
+                update_id,
+                chat_id,
+                queued_session_id,
+                message_id,
+                "voice",
+                {
+                    "voice": voice,
+                    "model": model,
+                    "resolve_active": False,
+                    "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
+                    "actor_id": sender,
+                },
+            )
+        hide_choice_panels(token, chat_id, old_panels)
         queued = services.jobs.submit(
             db,
             job_id,
@@ -231,23 +243,30 @@ def route_message_update(
         largest = photos[-1]
         message_id = int(message.get("message_id"))
         queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
-        job_id = services.jobs.enqueue(
-            db,
-            update_id,
-            chat_id,
-            queued_session_id,
-            message_id,
-            "image",
-            {
-                "file_id": str(largest.get("file_id", "")),
-                "caption": caption,
-                "file_size": int(largest.get("file_size") or 0),
-                "model": model,
-                "resolve_active": False,
-                "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
-                "actor_id": sender,
-            },
-        )
+        with write_transaction(db):
+            old_panels = (
+                invalidate_choice_sets(db, chat_id, queued_session_id)
+                if conversation_state(db, chat_id, queued_session_id).mode == "lightnovel"
+                else []
+            )
+            job_id = services.jobs.enqueue(
+                db,
+                update_id,
+                chat_id,
+                queued_session_id,
+                message_id,
+                "image",
+                {
+                    "file_id": str(largest.get("file_id", "")),
+                    "caption": caption,
+                    "file_size": int(largest.get("file_size") or 0),
+                    "model": model,
+                    "resolve_active": False,
+                    "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
+                    "actor_id": sender,
+                },
+            )
+        hide_choice_panels(token, chat_id, old_panels)
         queued = services.jobs.submit(
             db,
             job_id,
@@ -281,23 +300,30 @@ def route_message_update(
     ):
         message_id = int(message.get("message_id"))
         queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
-        job_id = services.jobs.enqueue(
-            db,
-            update_id,
-            chat_id,
-            queued_session_id,
-            message_id,
-            "image",
-            {
-                "file_id": str(document.get("file_id", "")),
-                "caption": caption,
-                "file_size": int(document.get("file_size") or 0),
-                "model": model,
-                "resolve_active": False,
-                "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
-                "actor_id": sender,
-            },
-        )
+        with write_transaction(db):
+            old_panels = (
+                invalidate_choice_sets(db, chat_id, queued_session_id)
+                if conversation_state(db, chat_id, queued_session_id).mode == "lightnovel"
+                else []
+            )
+            job_id = services.jobs.enqueue(
+                db,
+                update_id,
+                chat_id,
+                queued_session_id,
+                message_id,
+                "image",
+                {
+                    "file_id": str(document.get("file_id", "")),
+                    "caption": caption,
+                    "file_size": int(document.get("file_size") or 0),
+                    "model": model,
+                    "resolve_active": False,
+                    "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
+                    "actor_id": sender,
+                },
+            )
+        hide_choice_panels(token, chat_id, old_panels)
         queued = services.jobs.submit(
             db,
             job_id,

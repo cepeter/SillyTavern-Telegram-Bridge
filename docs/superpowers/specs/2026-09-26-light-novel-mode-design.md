@@ -556,3 +556,12 @@ The feature is complete when a user can:
 8. restart the bridge without reshuffling choices or duplicating consumed turns;
 9. reset and retain setup configuration while returning to the required `/start` state;
 10. use Normal mode without any Light Novel generation/UI overhead after start.
+
+## Implementation rulings
+
+- Wizard keys additionally include the actor ID so users in one chat cannot overwrite each other's drafts.
+- Session configuration/reset epochs bind opening callbacks, choices and durable narrative jobs; old work cannot resume into a newly reset story.
+- The earlier explicit `/lightnovel` requirement remains the dedicated mode/status/recovery command, with no entry in `/settings`. `/character` remains the full setup entrypoint.
+- A committed but undelivered opening may be re-delivered using its existing chooser; this never reopens `/start` or creates a second greeting row.
+- Accepted conversational media invalidates old choices with durable admission, like typed dialogue. Choice-only generation includes the selected persona and active world/system constraints as bounded context.
+- This PR changes repository code and migrations only. Live installation and its database remain unchanged until deployment is requested.

@@ -59,7 +59,8 @@ def test_initial_backfill_does_not_recompute_lifecycle(novel_db):
     with write_transaction(db):
         db.execute("DELETE FROM meta WHERE key='conversation_started:chat:story'")
         db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES('chat','story','assistant','hello',1)"
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES('chat'"
+            ",'story','assistant','hello',1)"
         )
         migrate_conversation_modes(db)
     assert conversation_state(db, "chat", "story").started

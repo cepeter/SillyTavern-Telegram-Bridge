@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 from collections.abc import Callable
-from typing import TYPE_CHECKING
 
 from bridge.conversation_lifecycle import conversation_state
 from bridge.job_service import JobSubmission
+from bridge.light_novel_contracts import LightNovelRuntime
 from bridge.light_novel_format import validate_choices
 from bridge.light_novel_jobs import process_light_novel_choices_job
 from bridge.light_novel_repository import consume_choice_set, load_choice_set, set_choice_job
@@ -17,12 +16,9 @@ from bridge.light_novel_service import current_choice_story
 from bridge.metadata import get_meta
 from bridge.sqlite_store import write_transaction
 
-if TYPE_CHECKING:
-    from bridge.composition import BridgeServices
-
 
 def route_light_novel_callback(
-    services: BridgeServices,
+    services: LightNovelRuntime,
     db: sqlite3.Connection,
     callback: dict,
     update_id: int,
@@ -63,10 +59,10 @@ def route_light_novel_callback(
             if action == "lnchoice":
                 choices = validate_choices(list(record.choices), record.requested_count)
                 index = int(parts[2])
-                picked = consume_choice_set(
+                consume_choice_set(
                     db, record.nonce, index, chat_id, record.session_id, actor_id, state.epoch, message_id
                 )
-                selection = choices[int(picked.selected_index)]
+                selection = choices[index]
                 payload = {
                     "text": selection,
                     "model": record.model_id,

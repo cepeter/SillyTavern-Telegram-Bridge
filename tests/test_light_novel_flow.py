@@ -3,8 +3,7 @@ from dataclasses import replace
 from unittest.mock import Mock
 
 import pytest
-from application_test_setup import make_test_application_services, make_test_rag_service
-from test_character_mutation_safety import _card_png
+from application_test_setup import make_test_application_services
 from test_light_novel_storage import novel_db as novel_db
 
 from bridge.conversation_lifecycle import configure_conversation, conversation_state, mark_started, reset_conversation
@@ -24,11 +23,12 @@ def make_started(novel_db, strategy="a"):
 
 
 def attached_choice(novel_db, strategy="b", ready=True):
-    db, session, settings = make_started(novel_db, strategy)
+    db, session, _settings = make_started(novel_db, strategy)
     record = prepare_turn(db, "chat", session, "turn:1", "owner", rng=lambda _: 2)
     with write_transaction(db):
         rowid = db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,created_at) VALUES('chat','story','assistant','The door opens.','[71]',1)"
+            "INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,crea"
+            "ted_at) VALUES('chat','story','assistant','The door opens.','[71]',1)"
         ).lastrowid
         attach_turn(db, record, rowid, "The door opens.", ["Go inside", "Stay outside"] if ready else None)
     return load_choice_set(db, record.nonce)
@@ -57,11 +57,12 @@ def test_story_commit_atomically_schedules_choice_recovery(novel_db):
 
 
 def test_story_and_choice_job_roll_back_together(novel_db):
-    db, session, settings = make_started(novel_db)
+    db, session, _settings = make_started(novel_db)
     record = prepare_turn(db, "chat", session, "new-turn", "owner", rng=lambda _: 2)
     with pytest.raises(RuntimeError), write_transaction(db):
         rowid = db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES('chat','story','assistant','Hello',1)"
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES('chat'"
+            ",'story','assistant','Hello',1)"
         ).lastrowid
         attach_turn(db, record, rowid, "Hello", ["Go", "Stay"])
         raise RuntimeError("crash")
@@ -90,7 +91,7 @@ def test_choice_click_consumes_and_queues_stored_user_text_once(novel_db):
     from bridge.light_novel_repository import bind_choice_panel
 
     record = attached_choice(novel_db)
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     sent = []
     services = bridge_services(settings, sent)
     with write_transaction(db):
@@ -122,7 +123,7 @@ def test_choice_scope_rejected_without_generation_job(novel_db, bad):
     from bridge.metadata import set_meta
 
     record = attached_choice(novel_db)
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     services = bridge_services(settings, [])
     with write_transaction(db):
         bind_choice_panel(db, record.nonce, 81)
@@ -146,7 +147,7 @@ def test_retry_choices_enqueues_only_choice_job_with_unchanged_count(novel_db):
     from bridge.light_novel_repository import bind_choice_panel, fail_choice_generation
 
     record = attached_choice(novel_db, ready=False)
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     services = bridge_services(settings, [])
     with write_transaction(db):
         bind_choice_panel(db, record.nonce, 81)
@@ -165,7 +166,7 @@ def test_retry_choices_enqueues_only_choice_job_with_unchanged_count(novel_db):
 def test_opening_light_novel_commit_creates_first_choice_job(novel_db, monkeypatch):
     from bridge import greetings
 
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     configure_conversation(db, "chat", "story", "lightnovel", "a")
     monkeypatch.setattr(greetings, "send_text", lambda *a: [71])
     assert greetings.send_character_greeting(
@@ -246,7 +247,7 @@ def test_generation_attaches_choices_without_leaking_protocol(novel_db, monkeypa
 def test_turn_wrapper_attaches_combined_continuation_and_fences_old_panel(novel_db):
     from bridge.light_novel_turn import begin_novel_turn
 
-    db, session, settings = make_started(novel_db, "a")
+    db, session, _settings = make_started(novel_db, "a")
     session["_actor_id"] = "owner"
     turn = begin_novel_turn(db, "chat", session, "continue", 55)
     count = turn.record.requested_count
@@ -254,7 +255,8 @@ def test_turn_wrapper_attaches_combined_continuation_and_fences_old_panel(novel_
     assert turn.extract(json.dumps({"story": "More narrative.", "choices": actions})) == "More narrative."
     with write_transaction(db):
         rowid = db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES('chat','story','assistant','First. More narrative.',1)"
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES('chat'"
+            ",'story','assistant','First. More narrative.',1)"
         ).lastrowid
         turn.commit(db, rowid, "First. More narrative.")
     from bridge.light_novel_service import current_choice_story
@@ -266,12 +268,13 @@ def test_turn_wrapper_attaches_combined_continuation_and_fences_old_panel(novel_
 def test_missing_inline_choices_marks_retry_without_automatic_extra_call(novel_db):
     from bridge.light_novel_turn import begin_novel_turn
 
-    db, session, settings = make_started(novel_db, "a")
+    db, session, _settings = make_started(novel_db, "a")
     turn = begin_novel_turn(db, "chat", session, "message", 22)
     assert turn.extract('{"story":"The rain falls.","choices":[]}') == "The rain falls."
     with write_transaction(db):
         rowid = db.execute(
-            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES('chat','story','assistant','The rain falls.',1)"
+            "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES('chat'"
+            ",'story','assistant','The rain falls.',1)"
         ).lastrowid
         turn.commit(db, rowid, "The rain falls.")
     assert load_choice_set(db, turn.record.nonce).generation_status == "failed"
@@ -281,7 +284,7 @@ def test_manual_reply_invalidates_choices_and_pins_generation_job(novel_db, monk
     from bridge import update_message_routing
 
     record = attached_choice(novel_db)
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     services = bridge_services(settings, [])
     monkeypatch.setattr(update_message_routing, "send_help_command", lambda *a, **k: False)
     monkeypatch.setattr(update_message_routing, "hide_choice_panels", lambda *a, **k: None)
@@ -299,12 +302,12 @@ def test_manual_reply_invalidates_choices_and_pins_generation_job(novel_db, monk
 
 
 def test_durable_recovery_resolves_choices_to_choice_only_worker(novel_db):
-    from bridge.worker_orchestration import resolve_recovered_job_submission
-    from bridge.light_novel_jobs import process_light_novel_choices_job
     from bridge.job_service import DurableJob
+    from bridge.light_novel_jobs import process_light_novel_choices_job
+    from bridge.worker_orchestration import resolve_recovered_job_submission
 
     record = attached_choice(novel_db)
-    db, session, settings = novel_db
+    _db, _session, settings = novel_db
     services = bridge_services(settings, [])
     job = DurableJob(-record.id, "chat", "story", 0, "novel_choices", {"nonce": record.nonce, "retry": True})
     submission = resolve_recovered_job_submission(services, {}, job)
@@ -317,7 +320,7 @@ def test_choice_worker_does_not_regenerate_ready_inline_story(novel_db, monkeypa
     from bridge.sqlite_store import db_connect
 
     record = attached_choice(novel_db, "a")
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     filename = db.execute("PRAGMA database_list").fetchone()[2]
     services = bridge_services(settings, [])
     services = replace(
@@ -352,11 +355,11 @@ def test_dedicated_mode_panel_is_not_in_settings(novel_db, monkeypatch):
 
 
 def test_queued_choice_from_before_reset_never_enters_new_story(novel_db):
-    from bridge.worker_orchestration import process_message_job
     from bridge.job_store import enqueue_job
     from bridge.sqlite_store import db_connect
+    from bridge.worker_orchestration import process_message_job
 
-    db, session, settings = make_started(novel_db)
+    db, _session, settings = make_started(novel_db)
     filename = db.execute("PRAGMA database_list").fetchone()[2]
     epoch = conversation_state(db, "chat", "story").epoch
     job_id = enqueue_job(

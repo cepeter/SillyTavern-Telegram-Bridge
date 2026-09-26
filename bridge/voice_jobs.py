@@ -13,9 +13,9 @@ import sqlite3
 from pathlib import Path
 
 from bridge.background import chat_job_lock
+from bridge.config import STT_DEFAULT_MODEL
 from bridge.conversation_jobs import narrative_job_is_current
 from bridge.conversation_lifecycle import START_REQUIRED, require_started
-from bridge.config import STT_DEFAULT_MODEL
 from bridge.failed_turns import clear_failed_turn
 from bridge.limits import STT_MAX_BYTES
 from bridge.metadata import get_meta

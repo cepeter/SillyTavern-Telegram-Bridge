@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import sqlite3
-import time
-from pathlib import Path
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
 from bridge.callbacks import close_panel_message, discard_panel_binding
@@ -17,7 +14,6 @@ from bridge.cards import (
     send_character_delete_menu,
     send_character_info_menu,
     send_character_menu,
-    send_session_menu,
 )
 from bridge.character_optimizer import prepare_character_optimization
 from bridge.character_optimizer_input import start_character_optimizer_suggestion_input
@@ -32,7 +28,6 @@ from bridge.conversation_setup import begin_setup
 from bridge.conversation_setup_panels import send_setup_panel
 from bridge.group_service import GroupService
 from bridge.group_setup import apply_group_setup_character
-from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.metadata import get_meta, set_meta
 from bridge.native_imports import (
     apply_character_proposal,
@@ -41,7 +36,6 @@ from bridge.native_imports import (
 )
 from bridge.operations import begin_operation, record_operation
 from bridge.provider_port import ProviderPort
-from bridge.session_core import list_sessions
 from bridge.telegram import send_panel_photo, send_panel_request
 
 

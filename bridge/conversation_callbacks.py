@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 
 from bridge.callbacks import close_panel_message, discard_panel_binding, remove_inline_keyboard
 from bridge.card_content import card_fields_from_file
@@ -160,12 +160,27 @@ def handle_greeting_callback(
         if state.started:
             from_opening = get_meta(db, f"conversation_opening:{chat_id}:{session_id}", "")
             try:
-                opening_operation = json.loads(from_opening or "{}").get("operation_id")
-            except ValueError:
-                opening_operation = None
-            if action != "use" or operation_id is None or str(opening_operation) != str(operation_id):
+                opening = json.loads(from_opening or "{}")
+                opening_operation = opening.get("operation_id")
+                pending = db.execute(
+                    "SELECT rowid,telegram_message_ids FROM messages WHERE chat_id=? "
+                    "AND session_id=? ORDER BY rowid DESC LIMIT 1",
+                    (chat_id, session_id),
+                ).fetchone()
+                undelivered = bool(
+                    pending and pending[0] == opening.get("rowid") and not json.loads(pending[1] or "[]")
+                )
+            except (ValueError, TypeError, AttributeError):
+                opening_operation, undelivered = None, False
+            if action != "use" or operation_id is None or opening_operation is None:
                 send_text(token, chat_id, ALREADY_STARTED)
                 return True
+            if str(opening_operation) != str(operation_id):
+                if not undelivered:
+                    send_text(token, chat_id, ALREADY_STARTED)
+                    return True
+                # Re-deliver the durable original, even if the card has since changed.
+                operation_id = opening_operation
 
     if not options:
         answer_callback(token, str(callback.get("id", "")), "Greeting unavailable")

@@ -12,8 +12,8 @@ from bridge.generation import build_chat_messages, render_session_response
 from bridge.generation_settings import get_generation_settings
 from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
-from bridge.limits import MAX_HISTORY_MESSAGES
 from bridge.light_novel_turn import begin_novel_turn
+from bridge.limits import MAX_HISTORY_MESSAGES
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort

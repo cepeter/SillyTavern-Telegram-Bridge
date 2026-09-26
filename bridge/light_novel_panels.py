@@ -47,7 +47,7 @@ def render_choices(db: sqlite3.Connection, token: str, record: ChoiceSet, *, app
         text = "Choices are not available yet. Your story is saved. Retry choices or type your own reply."
         rows = [[{"text": "Retry Choices", "callback_data": f"lnretry:{current.nonce}"}]]
     context = RequestContext(db, current.session_id, current.actor_id, app_settings=app_settings)
-    payload = {"chat_id": current.chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
+    payload: dict = {"chat_id": current.chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
     message_id = current.panel_message_id
     method = "sendMessage"
     if message_id is not None:
@@ -91,7 +91,8 @@ def send_light_novel_menu(token: str, chat_id: str, session: dict, *, request_co
     else:
         text += (
             "\n\nA: Story + choices in one request.\nB: Story then Utility choices.\nC: Story then Story-model choices."
-            "\nChoice count is random, 2–4 each turn. Configure Character, Persona, World and System Prompt with /character, then use /start."
+            "\nChoice count is random, 2–4 each turn. Configure Character, Persona, World an"
+            "d System Prompt with /character, then use /start."
         )
         for strategy, label in [
             ("a", "A — Story Inline"),

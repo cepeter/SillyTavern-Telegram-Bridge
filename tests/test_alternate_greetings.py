@@ -107,10 +107,10 @@ class AlternateGreetingTests(SettingsTestCase):
         self.assertIn("Selected: Default", payload["text"])
         self.assertIn("Primary User", payload["text"])
         callbacks = [button["callback_data"] for row in payload["reply_markup"]["inline_keyboard"] for button in row]
-        self.assertIn("greeting:preview:0", callbacks)
-        self.assertIn("greeting:preview:1", callbacks)
-        self.assertIn("greeting:preview:2", callbacks)
-        self.assertIn("greeting:use:0", callbacks)
+        self.assertIn("greeting:preview:0:0", callbacks)
+        self.assertIn("greeting:preview:1:0", callbacks)
+        self.assertIn("greeting:preview:2:0", callbacks)
+        self.assertIn("greeting:use:0:0", callbacks)
 
     def test_greeting_menu_ignores_unchanged_preview(self):
         original_request = getattr(_m_greetings, "send_panel_request", None)
@@ -158,7 +158,7 @@ class AlternateGreetingTests(SettingsTestCase):
         callback = {
             "id": "cb",
             "from": {"id": "user"},
-            "data": "greeting:use:2",
+            "data": "greeting:use:2:0",
             "message": {"message_id": 77, "chat": {"id": "chat"}},
         }
         try:
@@ -167,7 +167,7 @@ class AlternateGreetingTests(SettingsTestCase):
                 "token",
                 callback,
                 lambda _token, _callback_id, text: answers.append(text),
-                "greeting:use:2",
+                "greeting:use:2:0",
                 "chat",
                 callback["message"],
                 self.session,
@@ -187,7 +187,7 @@ class AlternateGreetingTests(SettingsTestCase):
         self.assertIn("Started with Alternate 2", answers)
         rows = self.db.execute("SELECT role, content FROM messages").fetchall()
         self.assertEqual([tuple(row) for row in rows], [("assistant", "Alt")])
-        self.assertTrue(_m_callbacks.is_session_scoped_panel_callback("greeting:preview:0"))
+        self.assertTrue(_m_callbacks.is_session_scoped_panel_callback("greeting:preview:0:0"))
 
 
 if __name__ == "__main__":

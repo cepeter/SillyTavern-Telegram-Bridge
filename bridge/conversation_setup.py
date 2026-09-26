@@ -10,12 +10,16 @@ import time
 from dataclasses import dataclass
 
 from bridge.card_content import encode_world_files, get_system_prompt_choice, safe_character_path, safe_world_path
-from bridge.conversation_lifecycle import configure_conversation, conversation_state, is_group_conversation
+from bridge.conversation_lifecycle import (
+    configure_conversation,
+    conversation_state,
+    initialize_conversation,
+    is_group_conversation,
+)
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.metadata import get_meta, set_meta
 from bridge.persona_service import PersonaService
-from bridge.session_core import create_session, update_session
-from bridge.session_repository import load_session_row
+from bridge.session_repository import insert_session_row, load_session_row, update_session_row
 from bridge.session_titles import normalize_session_title
 from bridge.settings import AppSettings
 from bridge.sqlite_store import write_transaction
@@ -207,27 +211,39 @@ class ConversationSetupService:
                 raise ValueError("System Prompt is unavailable")
             target_id = state["target_session_id"]
             if target_id == "$new":
-                target = create_session(
+                target_id = "setup-" + nonce
+                insert_session_row(
                     db,
-                    chat_id,
-                    session["model_id"],
-                    session_id="setup-" + nonce,
-                    title=state["new_title"],
-                    app_settings=self.app_settings,
+                    {
+                        "chat_id": chat_id,
+                        "session_id": target_id,
+                        "title": normalize_session_title(state["new_title"]),
+                        "character_file": path.name,
+                        "model_id": session["model_id"],
+                        "persona_id": persona,
+                        "world_file": encode_world_files(worlds),
+                        "author_note": "",
+                        "system_prompt": prompt,
+                        "response_language": "auto",
+                    },
+                    time.time(),
                 )
-                target_id = target["session_id"]
+                initialize_conversation(db, chat_id, target_id)
             target = load_session_row(db, chat_id, target_id)
             if target is None or is_group_conversation(db, chat_id, target_id):
                 raise ValueError("Choose a standard session")
             configure_conversation(db, chat_id, target_id, state["conversation_mode"], state["lightnovel_strategy"])
-            update_session(
+            update_session_row(
                 db,
                 chat_id,
                 target_id,
-                character_file=path.name,
-                persona_id=persona,
-                world_file=encode_world_files(worlds),
-                system_prompt=prompt,
+                {
+                    "character_file": path.name,
+                    "persona_id": persona,
+                    "world_file": encode_world_files(worlds),
+                    "system_prompt": prompt,
+                },
+                time.time(),
             )
             set_meta(db, f"active_session:{chat_id}", target_id)
             set_meta(db, setup_key(chat_id, actor_id), "")

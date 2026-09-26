@@ -39,49 +39,59 @@
 ### Task 1: Lifecycle and durable storage
 **Files:** create lifecycle/schema/repository modules; modify `schema.py`, `session_core.py`; tests `test_light_novel_storage.py`.
 **Interfaces:** ConversationState(mode,strategy,started,epoch); ChoiceSet nonce/count/actor/epoch/turn key; writes join caller transactions.
-- [ ] Write tests for fresh session unstarted, one-time transcript backfill, reset preservation, rollback, random-count reservation, stale/duplicate consumption, deletion cleanup.
-- [ ] Run `pytest -q tests/test_light_novel_storage.py`; observe missing-feature failures.
-- [ ] Implement migration, typed state, repository operations. Reserve by stable turn key before provider execution; synthetic message IDs use negative choice-set IDs.
-- [ ] Re-run storage and migration/session tests; expected pass.
-- [ ] Commit task and log evidence.
+- [x] Write tests for fresh session unstarted, one-time transcript backfill, reset preservation, rollback, random-count reservation, stale/duplicate consumption, deletion cleanup.
+- [x] Run `pytest -q tests/test_light_novel_storage.py`; observe missing-feature failures.
+- [x] Implement migration, typed state, repository operations. Reserve by stable turn key before provider execution; synthetic message IDs use negative choice-set IDs.
+- [x] Re-run storage and migration/session tests; expected pass.
+- [x] Commit task and log evidence.
 
 ### Task 2: Choice contracts and A/B/C provider strategies
 **Files:** create format/service modules; tests `test_light_novel_generation.py`.
 **Interfaces:** `prepare_turn(db,chat_id,session,turn_key,actor_id='')->ChoiceSet|None`; `attach_turn(db,record,assistant_rowid,choices=None)`; `ensure_choices(db,record,session,fields,provider_port,app_settings, retry=False)->ChoiceSet`.
-- [ ] Write tests forcing counts 2/3/4, valid envelope, malformed choice tail with usable story, slash-command rejection, bounded JSON, preserved count, A inline zero second calls, B utility, C story, provider failure/retry and transaction purity.
-- [ ] Run tests and observe missing-feature failures.
-- [ ] Implement structured story + choices extraction before prose transforms; choice-only calls receive bounded history, card and language context; use lease/CAS for concurrent retries.
-- [ ] Verify all generation/storage tests; commit.
+- [x] Write tests forcing counts 2/3/4, valid envelope, malformed choice tail with usable story, slash-command rejection, bounded JSON, preserved count, A inline zero second calls, B utility, C story, provider failure/retry and transaction purity.
+- [x] Run tests and observe missing-feature failures.
+- [x] Implement structured story + choices extraction before prose transforms; choice-only calls receive bounded history, card and language context; use lease/CAS for concurrent retries.
+- [x] Verify all generation/storage tests; commit.
 
 ### Task 3: Setup wizard and dedicated command
 **Files:** create setup/service/panel/callback modules; modify character callback, command routing, callback dispatch; tests `test_conversation_setup.py`.
 **Interfaces:** draft state bound to actor, source session/epoch, nonce and stage; validate resources at final apply; target session must be unstarted.
-- [ ] Test Normal skip, A/B/C required, world multiselect/Off, no intermediate mutation, apply atomicity, stale actor/stage/resource/session rejection, Back/Cancel and session creation.
-- [ ] Observe red tests, then implement native inventory selection without invoking existing mutating entity callbacks.
-- [ ] Expose `/lightnovel` as the dedicated current-session mode/status panel, not `/settings`, retaining the user's earlier command constraint; setup remains `/character`.
-- [ ] Verify setup tests and existing character/group management; commit.
+- [x] Test Normal skip, A/B/C required, world multiselect/Off, no intermediate mutation, apply atomicity, stale actor/stage/resource/session rejection, Back/Cancel and session creation.
+- [x] Observe red tests, then implement native inventory selection without invoking existing mutating entity callbacks.
+- [x] Expose `/lightnovel` as the dedicated current-session mode/status panel, not `/settings`, retaining the user's earlier command constraint; setup remains `/character`.
+- [x] Verify setup tests and existing character/group management; commit.
 
 ### Task 4: Strict opening and reset integration
 **Files:** modify command routes, greetings, conversation callbacks, message ingress/prepare, image/voice paths, reset; tests `test_conversation_opening.py` and updated onboarding fixtures.
 **Interfaces:** opening commit and started flag in one transaction; greeting callback epoch; management input exemption; no story calls before start.
-- [ ] Test pre-start dialogue and media blocked; slash management/name inputs usable; Default/Alternate once; stale chooser after reset rejected; delivered greeting failure recoverable without second insertion.
-- [ ] Observe red, implement strict guards both ingress and worker boundary; group behavior remains unchanged.
-- [ ] Reset invalidates sets and increments epoch in existing reset transaction; new session initializes false; aliases and old readiness calls retired.
-- [ ] Verify lifecycle/onboarding/management/reset tests; commit.
+- [x] Test pre-start dialogue and media blocked; slash management/name inputs usable; Default/Alternate once; stale chooser after reset rejected; delivered greeting failure recoverable without second insertion.
+- [x] Observe red, implement strict guards both ingress and worker boundary; group behavior remains unchanged.
+- [x] Reset invalidates sets and increments epoch in existing reset transaction; new session initializes false; aliases and old readiness calls retired.
+- [x] Verify lifecycle/onboarding/management/reset tests; commit.
 
 ### Task 5: Story integration, durable choice ingress and recovery
 **Files:** generation/message/media/recovery owners, new panel/callback/job adapters; tests `test_light_novel_flow.py`.
 **Interfaces:** story + choice metadata commit together; selection consumes set and enqueues one ordinary generation job atomically; queued job fixes selected session/model/epoch/actor.
-- [ ] Test opening immediate choices, all A/B/C turns, choice → one user row, manual input invalidation, double-click, nonce spoof/actor/session mismatch, restart before execution, immutable retry count, panel/network failures, regeneration and reset invalidation.
-- [ ] Observe red and integrate after existing language/Humanizer render boundaries, with A raw streaming suppressed.
-- [ ] Reuse existing generation worker and recovery; do not recurse from callback into model. Retry Choices gets a durable choice-only job and claim.
-- [ ] Verify integrated tests plus existing job/worker/media/session regressions; commit.
+- [x] Test opening immediate choices, all A/B/C turns, choice → one user row, manual input invalidation, double-click, nonce spoof/actor/session mismatch, restart before execution, immutable retry count, panel/network failures, regeneration and reset invalidation.
+- [x] Observe red and integrate after existing language/Humanizer render boundaries, with A raw streaming suppressed.
+- [x] Reuse existing generation worker and recovery; do not recurse from callback into model. Retry Choices gets a durable choice-only job and claim.
+- [x] Verify integrated tests plus existing job/worker/media/session regressions; commit.
 
 ### Task 6: Documentation, architecture policy and whole-branch review
 **Files:** README, help, CHANGELOG, static policy, relevant fixtures; no release/tag changes.
-- [ ] Update help and docs for strict start, dedicated `/lightnovel`, strategies, reset and retry limitations.
-- [ ] Add new focused owners to type/import policy; preserve zero cycles.
-- [ ] Run dependency-lock check, pip check, Ruff lint/format, static architecture, mypy and full pytest with coverage; expected all pass with unchanged 68% floor.
-- [ ] Audit full diff and acceptance matrix, including negative synthetic IDs and command bypass prevention. Record review evidence and all residual limitations.
+- [x] Update help and docs for strict start, dedicated `/lightnovel`, strategies, reset and retry limitations.
+- [x] Add new focused owners to type/import policy; preserve zero cycles.
+- [x] Run dependency-lock check, pip check, Ruff lint/format, static architecture, mypy and full pytest with coverage; expected all pass with unchanged 68% floor.
+- [x] Audit full diff and acceptance matrix, including negative synthetic IDs and command bypass prevention. Record review evidence and all residual limitations.
 - [ ] Commit, push, create PR, inspect exact-head CI/CodeQL and review feedback. Fix blockers with tests.
 - [ ] Merge only the verified head; verify merge tree, post-merge checks, clean up own temporary branch/workspace. Leave live deployment unchanged unless explicitly requested.
+
+## Local verification checkpoint
+
+Resumed from the existing task commits, without repeating Tasks 1–5. Final local
+verification passed: 1,515 tests and 748 subtests, 74.33% statement/branch coverage
+(unchanged 68% floor), Ruff, dependency lock/pip check, 76 mypy targets, and an
+acyclic 198-module/1,050-edge graph. Final review regressions cover committed
+opening re-delivery, media/choice invalidation, real persona/world choice context,
+and a selected choice executing through the real recovered conversation pipeline
+exactly once. Remote exact-head review/checks and merge are recorded in the PR.

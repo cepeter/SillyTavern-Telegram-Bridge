@@ -1488,6 +1488,19 @@ class StartupCompositionTests(SettingsTestCase):
             session=make_test_session_service(app_settings=self.config),
             rag=make_test_rag_service(),
         )
+        # These routing tests exercise an established conversation. Opening
+        # requirements are independently covered by test_conversation_opening.
+        from bridge.conversation_lifecycle import conversation_state, mark_started
+
+        fixture_db = services.db_factory()
+        fixture_session = services.session.ensure(fixture_db, "chat", self.config.default_model)
+        mark_started(
+            fixture_db,
+            "chat",
+            fixture_session["session_id"],
+            conversation_state(fixture_db, "chat", fixture_session["session_id"]).epoch,
+        )
+        fixture_db.close()
         try:
             with (
                 patch.object(_m_runtime, "install_bridge_signal_handlers"),

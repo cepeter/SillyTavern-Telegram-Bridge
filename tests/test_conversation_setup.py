@@ -4,7 +4,6 @@ from test_character_mutation_safety import _card_png
 from test_light_novel_storage import novel_db as novel_db
 
 from bridge.conversation_lifecycle import conversation_state, mark_started
-from bridge.session_core import create_session
 
 
 @pytest.fixture
@@ -117,12 +116,13 @@ def test_setup_off_choices_and_cancel_preserve_configuration(setup):
 
 
 def test_setup_panel_mode_buttons_are_opaque_and_scoped(setup, monkeypatch):
+    import json
+
     from bridge import conversation_setup_panels as panels
     from bridge.callback_tokens import resolve_dynamic_callback_token
     from bridge.request_types import RequestContext
-    import json
 
-    db, session, service, state = setup
+    db, _session, service, state = setup
     sent = []
     monkeypatch.setattr(
         panels, "send_panel_request", lambda token, method, payload, **kw: sent.append(payload) or {"message_id": 55}
@@ -144,10 +144,11 @@ def test_setup_panel_mode_buttons_are_opaque_and_scoped(setup, monkeypatch):
 
 
 def test_setup_callbacks_advance_without_changing_current_session(setup, monkeypatch):
+    import json
+
     from bridge import conversation_setup_callbacks as callbacks
     from bridge.callback_tokens import dynamic_callback_token
     from bridge.request_types import RequestContext
-    import json
 
     db, session, service, state = setup
     data = "setup:" + dynamic_callback_token(

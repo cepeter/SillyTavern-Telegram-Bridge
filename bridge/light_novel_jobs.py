@@ -3,20 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from bridge.background import chat_job_lock
 from bridge.card_content import card_fields_from_file
+from bridge.light_novel_contracts import LightNovelRuntime
 from bridge.light_novel_panels import render_choices
 from bridge.light_novel_repository import load_choice_set
 from bridge.light_novel_service import current_choice_story, ensure_choices
 
-if TYPE_CHECKING:
-    from bridge.composition import BridgeServices
-
 
 def process_light_novel_choices_job(
-    services: BridgeServices,
+    services: LightNovelRuntime,
     chat_id: str,
     nonce: str,
     retry: bool = False,
@@ -44,7 +41,14 @@ def process_light_novel_choices_job(
                 )
             fields = card_fields_from_file(session["character_file"], app_settings=services.config)
             record = ensure_choices(
-                db, nonce, session, fields, provider_port=services.provider, app_settings=services.config, retry=retry
+                db,
+                nonce,
+                session,
+                fields,
+                provider_port=services.provider,
+                app_settings=services.config,
+                retry=retry,
+                persona_service=services.persona,
             )
             render_choices(db, services.config.bot_token, record, app_settings=services.config)
             if job_id is not None:

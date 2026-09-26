@@ -195,6 +195,9 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
             session_id="memory-message",
             app_settings=self.app_settings_builder.build(),
         )
+        from bridge.conversation_lifecycle import mark_started
+
+        mark_started(self.db, "chat", self.session["session_id"], 0)
         self.fields = {"name": "Mira"}
 
     def tearDown(self):

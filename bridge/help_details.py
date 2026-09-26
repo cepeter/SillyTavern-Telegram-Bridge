@@ -18,8 +18,8 @@ HELP_CATEGORIES = {
         (
             "/start",
             (
-                "Show the character greeting when Persona, World Info, and System Prompt "
-                "are all enabled; otherwise show what's off and how to fix it."
+                "Choose the opening greeting once after /new or /reset. "
+                "Use /character for setup; ordinary dialogue requires /start first."
             ),
         ),
         ("/help", "Open this guide. Use /help <command> to jump straight to one command."),
@@ -64,7 +64,16 @@ HELP_CATEGORIES = {
                 "stay view-only. Open the provider list to use Provider health or Refresh models."
             ),
         ),
-        ("/character", "Open the character panel — pick a card, view info, delete safely, or get upload guidance."),
+        (
+            "/character",
+            "Choose Character → Normal/Light Novel → Persona → World → System Prompt → Session; "
+            "Light Novel adds the A/B/C strategy step. Info, Optimizer, Upload and Delete remain available.",
+        ),
+        (
+            "/lightnovel",
+            "Open dedicated Light Novel mode controls or restore the current 2–4 action choices. "
+            "Mode changes require an unstarted standard session.",
+        ),
         ("/persona", "Choose, create, edit, or disable a Persona. Delete only targets inactive, unreferenced ones."),
         ("/world", "Open World Info selection — activate or disable one or more lorebooks."),
         ("/note", "Open the Author's Note panel. Off clears it; User input waits for your next message."),

@@ -87,7 +87,10 @@ def send_setup_panel(
     name = card_fields_from_file(state["character_file"], app_settings=settings)["name"]
     text = f"Conversation setup — {name}\nStep: {stage.replace('_', ' ').title()}\n"
     if stage == "strategy":
-        text += "\nA: story + choices in one request.\nB: choices from the Utility model.\nC: a second Story-model pass.\nEach turn offers 2–4 choices."
+        text += (
+            "\nA: story + choices in one request.\nB: choices from the Utility model."
+            "\nC: a second Story-model pass.\nEach turn offers 2–4 choices."
+        )
     elif stage == "session":
         text += "\nChoose an unstarted standard session or create a new session. Existing stories require /reset first."
     elif stage == "session_name":
@@ -104,7 +107,7 @@ def send_setup_panel(
         )
     else:
         text += "\nNo changes are applied to the session until the final Apply."
-    payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
+    payload: dict = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": rows}}
     if message_id is not None:
         payload["message_id"] = message_id
     try:

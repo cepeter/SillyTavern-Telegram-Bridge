@@ -68,7 +68,8 @@ def latest_choice_set(db: sqlite3.Connection, chat_id: str, session_id: str) -> 
 def choice_set_for_assistant(db: sqlite3.Connection, chat_id: str, session_id: str, rowid: int) -> ChoiceSet | None:
     return _record(
         db.execute(
-            f"SELECT {_COLUMNS} FROM light_novel_choice_sets WHERE chat_id=? AND session_id=? AND assistant_rowid=? ORDER BY id DESC LIMIT 1",  # noqa: S608 -- fixed columns
+            f"SELECT {_COLUMNS} FROM light_novel_choice_sets "  # noqa: S608 -- fixed columns
+            "WHERE chat_id=? AND session_id=? AND assistant_rowid=? ORDER BY id DESC LIMIT 1",
             (chat_id, session_id, rowid),
         ).fetchone()
     )
@@ -108,7 +109,8 @@ def reserve_choice_set(
     )
     result = _record(
         db.execute(
-            f"SELECT {_COLUMNS} FROM light_novel_choice_sets WHERE chat_id=? AND session_id=? AND epoch=? AND turn_key=?",  # noqa: S608 -- fixed columns
+            f"SELECT {_COLUMNS} FROM light_novel_choice_sets "  # noqa: S608 -- fixed columns
+            "WHERE chat_id=? AND session_id=? AND epoch=? AND turn_key=?",
             (chat_id, session_id, epoch, turn_key),
         ).fetchone()
     )
@@ -127,7 +129,8 @@ def attach_choice_set(
     )
     if choices is not None:
         db.execute(
-            "UPDATE light_novel_choice_sets SET choices_json=?,generation_status='ready' WHERE nonce=? AND state='open' AND requested_count=?",
+            "UPDATE light_novel_choice_sets SET choices_json=?,generation_status='ready' WH"
+            "ERE nonce=? AND state='open' AND requested_count=?",
             (json.dumps(choices, ensure_ascii=False), nonce, len(choices)),
         )
 
@@ -137,12 +140,14 @@ def invalidate_choice_sets(db: sqlite3.Connection, chat_id: str, session_id: str
     panels = [
         int(row[0])
         for row in db.execute(
-            "SELECT panel_message_id FROM light_novel_choice_sets WHERE chat_id=? AND session_id=? AND state='open' AND nonce<>? AND panel_message_id IS NOT NULL",
+            "SELECT panel_message_id FROM light_novel_choice_sets WHERE chat_id=? AND sessi"
+            "on_id=? AND state='open' AND nonce<>? AND panel_message_id IS NOT NULL",
             (chat_id, session_id, except_nonce),
         )
     ]
     db.execute(
-        "UPDATE light_novel_choice_sets SET state='invalidated',lease_token='',lease_until=0 WHERE chat_id=? AND session_id=? AND state='open' AND nonce<>?",
+        "UPDATE light_novel_choice_sets SET state='invalidated',lease_token='',lease_un"
+        "til=0 WHERE chat_id=? AND session_id=? AND state='open' AND nonce<>?",
         (chat_id, session_id, except_nonce),
     )
     return panels
@@ -176,7 +181,8 @@ def complete_choice_generation(
     require_active_transaction(db)
     return (
         db.execute(
-            "UPDATE light_novel_choice_sets SET choices_json=?,generation_status=?,lease_token='',lease_until=0,updated_at=? "
+            "UPDATE light_novel_choice_sets SET choices_json=?,generation_status=?,lease_to"
+            "ken='',lease_until=0,updated_at=? "
             "WHERE nonce=? AND state='open' AND lease_token=?",
             (json.dumps(choices or [], ensure_ascii=False), "ready" if choices else "failed", now, nonce, token),
         ).rowcount
@@ -187,7 +193,8 @@ def complete_choice_generation(
 def fail_choice_generation(db: sqlite3.Connection, nonce: str) -> None:
     require_active_transaction(db)
     db.execute(
-        "UPDATE light_novel_choice_sets SET generation_status='failed',lease_token='',lease_until=0 WHERE nonce=? AND state='open' AND generation_status<>'ready'",
+        "UPDATE light_novel_choice_sets SET generation_status='failed',lease_token='',l"
+        "ease_until=0 WHERE nonce=? AND state='open' AND generation_status<>'ready'",
         (nonce,),
     )
 

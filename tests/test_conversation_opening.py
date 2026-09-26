@@ -1,4 +1,3 @@
-import json
 from dataclasses import replace
 from unittest.mock import Mock
 
@@ -6,7 +5,7 @@ import pytest
 from application_test_setup import make_test_application_services
 from test_light_novel_storage import novel_db as novel_db
 
-from bridge import greetings, command_routes, update_message_routing
+from bridge import command_routes, greetings, update_message_routing
 from bridge.conversation_lifecycle import conversation_state, reset_conversation
 from bridge.request_types import RequestContext
 
@@ -21,7 +20,7 @@ from bridge.request_types import RequestContext
     ],
 )
 def test_prestart_input_rejected_before_enqueue(novel_db, monkeypatch, message):
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     sent = []
     from bridge.main import _build_startup_services
     from bridge.model_router import ModelRouter
@@ -98,7 +97,7 @@ def test_greeting_commit_marks_started_and_blocks_second_start(novel_db, monkeyp
 
 
 def test_greeting_choice_carries_reset_epoch(novel_db, monkeypatch):
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     sent = []
     monkeypatch.setattr(
         greetings, "send_panel_request", lambda token, method, payload, **kw: sent.append(payload) or {"message_id": 72}
@@ -127,7 +126,7 @@ def test_greeting_choice_carries_reset_epoch(novel_db, monkeypatch):
 
 
 def test_failed_greeting_delivery_reuses_committed_row(novel_db, monkeypatch):
-    db, session, settings = novel_db
+    db, _session, settings = novel_db
     monkeypatch.setattr(greetings, "send_text", lambda *a: (_ for _ in ()).throw(RuntimeError("network")))
     with pytest.raises(RuntimeError):
         greetings.send_character_greeting(

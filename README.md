@@ -577,14 +577,15 @@ prevents accidental changes.
 
 | Command | What it does |
 |---|---|
-| `/start` | Show the greeting or setup guidance |
+| `/start` | Choose the opening greeting once after `/new` or `/reset` |
 | `/help` | Open the interactive command guide |
 | `/status` | Show formatted read-only session status |
 | `/new` | Create and activate a named isolated session |
 | `/reset` | Confirm an active-session reset and memory purge |
 | `/session` | Switch, create, or delete inactive sessions |
 | `/cancel` | Cancel the current scoped text-input step |
-| `/character` | Manage native character cards |
+| `/character` | Manage cards and configure a Normal/Light Novel session |
+| `/lightnovel` | Dedicated A/B/C mode controls and current-choice recovery |
 | `/persona` | Choose, create, edit, or disable a native Persona |
 | `/world` | Choose or disable World Info/lorebooks |
 | `/systemprompt` | Choose a native JSON/TXT SillyTavern System Prompt |
@@ -689,6 +690,18 @@ to it. `/session` lists all sessions and lets you switch, create, or delete
 inactive ones. Both the custom name and the internal session ID show up in
 `/status`.
 
+New standard sessions are **unstarted**. Use `/character` to configure the story,
+then `/start` to choose the character's Default or Alternate opening message.
+Before that opening is committed, dialogue and conversational media return
+`Please use /start command.` without a story-model call or transcript entry.
+Setup commands and scoped management input remain usable. After starting,
+`/start` returns `This session has already started.`; the plain word `start` is
+no longer a command alias. `/start` does not launch setup or probe the model.
+
+The conversation-state migration marks existing non-empty sessions as started
+once; empty sessions require `/start`. Runtime decisions use the explicit state,
+not the current number of messages. Group-session orchestration is unchanged.
+
 Each session carries its own:
 
 ```text
@@ -710,8 +723,9 @@ Forum Topic group state, when applicable
 2. On confirm, purges Hindsight documents for that session only.
 3. Clears the local conversation, variants, failed turns, summary, and data.
 4. The session stays available, now empty.
-5. Does **not** send the character greeting. It sends a short reset-complete
-   confirmation instead. Type `start` if you want the character's opening message.
+5. Preserves Character, Normal/Light Novel mode, A/B/C strategy, Persona, World
+   and System Prompt, but invalidates old choices and returns the standard session
+   to unstarted. Use `/start` to choose the opening greeting again.
 
 The confirmation text spells out exactly what gets deleted: the conversation,
 Hindsight memories, SQLite session data, and session documents.
@@ -720,6 +734,65 @@ Hindsight memories, SQLite session data, and session documents.
 sessions with running or queued jobs, and requires Hindsight cleanup to succeed
 before removing local data. If cleanup can't be verified, the session is kept.
 Other sessions and their memories are never touched.
+
+### Light Novel mode
+
+`/character` is the setup entrypoint for standard sessions:
+
+```text
+Character → Normal / Light Novel
+                       └─ A / B / C (Light Novel only)
+          → Persona → World → System Prompt → Session → Apply
+```
+
+Normal skips the A/B/C step. Persona, World and System Prompt offer Off/Skip;
+World permits multiple lorebooks. The final step selects an unstarted session
+or creates a named session. Selections remain an actor-scoped draft until Apply
+validates the references and commits all configuration together. An already
+started session must be reset first or replaced with a new session. Applying
+setup does not start the story: run `/start` afterward.
+
+`/lightnovel` is the dedicated mode/status command; there is no Light Novel entry
+in `/settings`. It offers A, B, C or Normal while the session is unstarted. During
+a story it restores the current choice/retry panel without regenerating the story.
+
+| Strategy | Story generation | Choices |
+|---|---|---|
+| A — Story Inline | Story and choices in one structured response | Extracted before visible prose is rendered |
+| B — Utility Model | Normal Story-model request | A separate Utility-model request |
+| C — Story Second Pass | Normal Story-model request | A second request to the Story model |
+
+After `/start` commits the card-authored greeting, every Light Novel strategy
+schedules its first choice-only request immediately: A/C use the Story model;
+B uses the configured Utility route. Subsequent successful A turns need no
+additional choice-generation request. A's raw structured response is not streamed
+to Telegram. B/C retain ordinary story streaming when other settings allow it.
+Response language and Humanizer still apply to visible narrative. Choice-only
+requests use bounded character, persona, active World Info, System Prompt and
+recent story context; choices are not passed through Humanizer.
+
+Each new story turn requests a uniformly random **2, 3 or 4** distinct actions.
+The count is reserved before generation; retries/restarts do not reroll it, and
+ready choices are reused unchanged. One action appears on each button. Tapping
+it submits the exact stored action as the next user turn through the normal
+history, memory, RAG, provider and durable-worker pipeline. Telegram displays a
+bot-owned `Selected: ...` confirmation, not a forged user-authored message.
+
+You may type your own reply after `/start`. That reply or conversational media
+invalidates old choices before admission; stale panels cannot create another
+branch. Choices are bound to the originating user, chat, session, reset epoch,
+assistant revision and panel. Consumption and durable enqueue share a transaction,
+so double taps or process recovery cannot create two committed user turns.
+
+When choice generation fails, the committed story remains available with
+**Retry Choices**. Retrying repairs choices only; A uses a Story-model repair
+pass, B the Utility route, and C the Story model. Missing panel delivery can be
+restored with `/lightnovel`. Telegram cleanup is best effort; invalidation in
+SQLite remains authoritative even if an old button is still visible.
+
+Normal mode generates no Light Novel choices or additional choice-model calls.
+`/swipe` remains a selector for alternate assistant responses, not user actions.
+Group-specific Light Novel behavior is not part of this version.
 
 ### Memory boundaries
 
