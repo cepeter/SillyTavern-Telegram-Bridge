@@ -778,8 +778,9 @@ followed by a permanent **⏭ Next Scene** row. Tapping a generated choice submi
 the exact stored action as the next user turn. Next Scene instead submits a fixed
 narrative instruction to advance without speaking, deciding, or acting for the
 user character until that character can meaningfully participate again. Both use
-the normal history, memory, RAG, provider and durable-worker pipeline. Telegram
-displays a bot-owned `Selected: ...` confirmation, not a forged user-authored message.
+the normal history, memory, RAG, provider and durable-worker pipeline. After a
+button is consumed, Telegram replaces the panel with a bot-owned block quote of
+the selected action; the internal Next Scene instruction is never shown.
 
 You may type your own reply after `/start`. That reply or conversational media
 invalidates old choices before admission; stale panels cannot create another

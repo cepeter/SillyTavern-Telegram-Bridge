@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import sqlite3
 from collections.abc import Callable
@@ -127,6 +128,7 @@ def route_light_novel_callback(
             # Admission failure leaves a committed recoverable job, never a reusable choice.
             services.jobs.submit(db, job_id, submission)
         if selection is not None:
+            quoted_selection = html.escape(str(selection_label or selection), quote=False)
             try:
                 services.telegram.request(
                     token,
@@ -134,7 +136,8 @@ def route_light_novel_callback(
                     {
                         "chat_id": chat_id,
                         "message_id": message_id,
-                        "text": "Selected: " + str(selection_label or selection),
+                        "text": f"<blockquote>{quoted_selection}</blockquote>",
+                        "parse_mode": "HTML",
                         "reply_markup": {"inline_keyboard": []},
                     },
                 )
