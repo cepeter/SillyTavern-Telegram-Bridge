@@ -18,7 +18,6 @@ SESSION_COLUMNS = (
     "author_note",
     "system_prompt",
     "response_language",
-    "humanizer",
 )
 _SESSION_COLUMN_SQL = ", ".join(SESSION_COLUMNS)
 _MUTABLE_COLUMNS = frozenset(SESSION_COLUMNS) - {"chat_id", "session_id"}
@@ -54,9 +53,8 @@ def list_session_rows(db: sqlite3.Connection, chat_id: str) -> list[dict[str, st
 
 def insert_session_row(db: sqlite3.Connection, session: Mapping[str, str], now: float) -> None:
     require_active_transaction(db)
-    placeholders = ", ".join("?" for _ in range(len(SESSION_COLUMNS) + 2))
     db.execute(
-        f"INSERT OR IGNORE INTO sessions({_SESSION_COLUMN_SQL},created_at,updated_at) VALUES({placeholders})",
+        f"INSERT OR IGNORE INTO sessions({_SESSION_COLUMN_SQL},created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
         (*(session[column] for column in SESSION_COLUMNS), now, now),
     )
 

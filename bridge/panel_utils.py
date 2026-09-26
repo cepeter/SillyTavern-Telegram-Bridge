@@ -59,7 +59,7 @@ def panel_message_request(
     message_id: int | None = None,
 ) -> tuple[str, dict]:
     method = "editMessageText" if message_id else "sendMessage"
-    payload = {
+    payload: dict = {
         "chat_id": chat_id,
         "text": text,
         "reply_markup": reply_markup,

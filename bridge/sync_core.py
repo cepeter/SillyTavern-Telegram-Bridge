@@ -18,7 +18,7 @@ from bridge.card_content import (
 from bridge.config import GENERATION_DEFAULTS
 from bridge.generation_settings import get_generation_settings, update_generation_settings
 from bridge.generation_settings_values import parse_generation_setting
-from bridge.humanize import normalize_humanizer
+from bridge.humanizer_settings import normalize_humanizer
 from bridge.language import normalize_response_language
 from bridge.limits import SYNC_MAX_BYTES
 from bridge.memory import get_session_summary

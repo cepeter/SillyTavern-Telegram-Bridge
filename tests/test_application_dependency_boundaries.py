@@ -98,7 +98,12 @@ def _image_services(download_file, sent):
     return SimpleNamespace(
         config=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="queue-model"),
         db_factory=lambda: __import__("sqlite3").connect(":memory:"),
-        jobs=SimpleNamespace(start=lambda *_args: True, complete=lambda *_args: True, fail=lambda *_args: True),
+        jobs=SimpleNamespace(
+            start=lambda *_args: True,
+            complete=lambda *_args: True,
+            fail=lambda *_args: True,
+            actor_id=lambda *_args: "actor",
+        ),
         telegram=SimpleNamespace(download_file=download_file, send_text=lambda *args, **_kwargs: sent.append(args)),
         group=object(),
         provider=make_test_provider_port(),
@@ -290,7 +295,7 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
         monkeypatch.setattr(native_imports, "parse_png_chara_bytes", lambda *_args: parse_card)
     monkeypatch.setattr(
         native_imports,
-        "ensure_session",
+        "load_session",
         lambda *_args, app_settings=None: {
             "session_id": "session",
             "character_file": "mira.png",
@@ -312,10 +317,13 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
     rag = make_test_rag_service()
     if add_document is not None:
         rag = replace(rag, add_backend=partial(add_document, app_settings=app_settings_builder.build()))
-        monkeypatch.setattr(native_imports, "rag_mode", lambda *_args: "on")
+        rag = replace(rag, mode_backend=lambda *_args: "on")
 
+    from bridge.request_types import RequestContext
+
+    db = object()
     _owner_native_imports.import_telegram_document(
-        object(),
+        db,
         "token",
         "chat",
         document,
@@ -328,6 +336,8 @@ def _run_document_import(monkeypatch, document, *, parse_card, add_document=None
         group_director_service="director",
         app_settings=app_settings_builder.build(),
         rag_service=rag,
+        provider_port=make_test_provider_port(),
+        request_context=RequestContext(db, "session", "actor", app_settings=app_settings_builder.build()),
     )
     return image_calls, sent
 
@@ -382,15 +392,19 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
     services = SimpleNamespace(
         config=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="model"),
         db_factory=lambda: sqlite3.connect(":memory:"),
-        jobs=SimpleNamespace(start=lambda *_args: True, complete=lambda *_args: True, fail=lambda *_args: True),
+        jobs=SimpleNamespace(
+            start=lambda *_args: True,
+            complete=lambda *_args: True,
+            fail=lambda *_args: True,
+            actor_id=lambda *_args: "actor",
+        ),
+        group="group",
         telegram=SimpleNamespace(send_text=lambda *_args, **_kwargs: None),
         provider=make_test_provider_port(),
         memory="memory",
         persona="persona",
         group_director="director",
-        session=make_test_session_service(
-            app_settings=SimpleNamespace(bot_token="token", api_key="configured-key", default_model="model")
-        ),
+        session=SimpleNamespace(ensure=lambda *_args: {"session_id": "session"}),
         rag=make_test_rag_service(),
     )
     monkeypatch.setattr(
@@ -410,6 +424,10 @@ def test_document_job_passes_configured_api_key_and_canonical_image_collaborator
     process_image = captured["process_image"]
     assert process_image.func is _owner_document_jobs.process_image_message
     assert process_image.keywords["provider_port"] is services.provider
+    assert process_image.keywords["group_service"] is services.group
+    assert captured["provider_port"] is services.provider
+    assert captured["request_context"].actor_id == "actor"
+    assert captured["request_context"].session_id == "session"
 
 
 def test_document_image_collaborator_has_explicit_callable_contract(*, app_settings_builder):

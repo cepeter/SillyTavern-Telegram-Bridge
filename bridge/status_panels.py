@@ -8,7 +8,7 @@ from bridge.card_content import active_world_files, system_prompt_label
 from bridge.expressions import expression_mode_key
 from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
-from bridge.humanize import humanizer_label
+from bridge.humanizer_settings import humanizer_label
 from bridge.language import response_language_label
 from bridge.memory import get_session_summary
 from bridge.memory_backend import memory_mode, memory_scope

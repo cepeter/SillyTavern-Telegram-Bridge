@@ -1,3 +1,4 @@
+import application_test_setup as application_setup
 from application_test_setup import (
     ensure_application_extensions,
     make_test_group_service,
@@ -74,6 +75,7 @@ class CharacterSessionChainTests(SettingsTestCase):
                 request_context=make_test_request_context(
                     self.db, session["session_id"], app_settings=self.app_settings_builder.build()
                 ),
+                provider_port=application_setup.make_test_provider_port(),
             )
         finally:
             _owner_character_callbacks.resolve_dynamic_callback_token = original_resolve

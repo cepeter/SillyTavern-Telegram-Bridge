@@ -30,7 +30,6 @@ def _create_core_tables(db: sqlite3.Connection) -> None:
         author_note TEXT NOT NULL DEFAULT '',
         system_prompt TEXT NOT NULL DEFAULT '',
         response_language TEXT NOT NULL DEFAULT 'auto',
-        humanizer TEXT NOT NULL DEFAULT 'off',
         created_at REAL NOT NULL,
         updated_at REAL NOT NULL,
         PRIMARY KEY(chat_id, session_id)

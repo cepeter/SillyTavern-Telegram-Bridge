@@ -1,3 +1,4 @@
+import application_test_setup as application_setup
 from application_test_setup import (
     ensure_application_extensions,
     make_native_test_persona_service,
@@ -223,7 +224,15 @@ class CatalogLimitTests(SettingsTestCase):
         _m_telegram.send_text = lambda _token, _chat, text: sent.append(text) or []
         try:
             _m_telegram.import_character_card(
-                self.db, "token", "chat", "new.png", b"new", app_settings=self.app_settings_builder.build()
+                self.db,
+                "token",
+                "chat",
+                "new.png",
+                b"new",
+                app_settings=self.app_settings_builder.build(),
+                request_context=application_setup.make_test_request_context(
+                    self.db, app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             _m_telegram.parse_png_chara_bytes, _m_telegram.card_fields, _m_telegram.send_text = (

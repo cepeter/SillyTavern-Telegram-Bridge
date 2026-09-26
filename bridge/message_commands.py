@@ -17,7 +17,8 @@ from bridge.failed_turns import clear_failed_turn
 from bridge.generation import build_chat_messages, render_response_language
 from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
-from bridge.humanize import humanizer_enabled, render_humanized_response
+from bridge.humanize import render_humanized_response
+from bridge.humanizer_settings import humanizer_enabled
 from bridge.language import normalize_response_language
 from bridge.memory import clear_session_summary
 from bridge.memory_curator import clear_curated_memory_state

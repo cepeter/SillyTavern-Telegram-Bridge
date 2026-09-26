@@ -77,14 +77,16 @@ class ParseOptimizedFieldsTests(unittest.TestCase):
 class MergeOptimizedFieldsTests(unittest.TestCase):
     def test_top_level_container(self):
         card = {"name": "Alice", "description": "old"}
-        quality.merge_optimized_fields(card, {"description": "new"})
-        self.assertEqual(card["description"], "new")
+        result = quality.merge_optimized_fields(card, {"description": "new"})
+        self.assertEqual(result["description"], "new")
+        self.assertEqual(card["description"], "old")
         self.assertEqual(card["name"], "Alice")
 
     def test_data_container(self):
         card = {"data": {"name": "Alice", "description": "old"}, "spec": "chara_card_v2"}
-        quality.merge_optimized_fields(card, {"description": "new"})
-        self.assertEqual(card["data"]["description"], "new")
+        result = quality.merge_optimized_fields(card, {"description": "new"})
+        self.assertEqual(result["data"]["description"], "new")
+        self.assertEqual(card["data"]["description"], "old")
         self.assertEqual(card["data"]["name"], "Alice")
 
 
@@ -111,7 +113,11 @@ class CharacterQualityPersistenceTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.app_settings_builder.character_dir = Path(self.tmp.name) / "characters"
         self.app_settings = self.app_settings_builder.build()
+        self.app_settings.character_dir.mkdir()
+        for name in ("alice", "bob", "carol"):
+            (self.app_settings.character_dir / f"{name}.png").write_bytes(_minimal_png({"name": name}))
         self.db = db_connect(app_settings=self.app_settings)
 
     def tearDown(self):
@@ -119,22 +125,26 @@ class CharacterQualityPersistenceTests(SettingsTestCase):
         self.tmp.cleanup()
 
     def test_store_and_load_rank(self):
-        quality.store_character_rank(self.db, "alice.png", "S")
-        self.assertEqual(quality.character_rank(self.db, "alice.png"), "S")
+        quality.store_character_rank(self.db, "alice.png", "S", app_settings=self.app_settings)
+        self.assertEqual(quality.character_rank(self.db, "alice.png", app_settings=self.app_settings), "S")
 
     def test_invalid_tier_not_stored(self):
-        quality.store_character_rank(self.db, "bob.png", "Z")
-        self.assertEqual(quality.character_rank(self.db, "bob.png"), "")
+        quality.store_character_rank(self.db, "bob.png", "Z", app_settings=self.app_settings)
+        self.assertEqual(quality.character_rank(self.db, "bob.png", app_settings=self.app_settings), "")
 
     def test_unranked_defaults_empty(self):
-        self.assertEqual(quality.character_rank(self.db, "carol.png"), "")
+        self.assertEqual(quality.character_rank(self.db, "carol.png", app_settings=self.app_settings), "")
 
 
 class CharacterQualityModelTests(SettingsTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.app_settings_builder.db_file = Path(self.tmp.name) / "bridge.sqlite3"
+        self.app_settings_builder.character_dir = Path(self.tmp.name) / "characters"
         self.app_settings = self.app_settings_builder.build()
+        self.app_settings.character_dir.mkdir()
+        for name in ("alice", "bob", "carol"):
+            (self.app_settings.character_dir / f"{name}.png").write_bytes(_minimal_png({"name": name}))
         self.db = db_connect(app_settings=self.app_settings)
         self.session = {"session_id": "s", "model_id": "m"}
 
@@ -155,7 +165,7 @@ class CharacterQualityModelTests(SettingsTestCase):
                 app_settings=self.app_settings,
             )
         self.assertEqual(rank, "S")
-        self.assertEqual(quality.character_rank(self.db, "alice.png"), "S")
+        self.assertEqual(quality.character_rank(self.db, "alice.png", app_settings=self.app_settings), "S")
 
     def test_rank_character_returns_none_on_provider_failure(self):
         def boom(*a, **k):
@@ -173,7 +183,7 @@ class CharacterQualityModelTests(SettingsTestCase):
                 app_settings=self.app_settings,
             )
         self.assertIsNone(rank)
-        self.assertEqual(quality.character_rank(self.db, "alice.png"), "")
+        self.assertEqual(quality.character_rank(self.db, "alice.png", app_settings=self.app_settings), "")
 
     def test_optimize_character_parses_json_reply(self):
         def backend(*a, **k):

@@ -358,3 +358,33 @@ def test_rag_service_and_port_are_governed_typed_boundaries():
         "bridge/rag_composition.py",
         "bridge/embedding_values.py",
     } <= set(policy.TYPE_TARGETS)
+
+
+def test_optional_feature_owners_cannot_import_a_root_or_concrete_transport(tmp_path):
+    policy = load_policy()
+    for name in (
+        "humanize",
+        "humanizer_settings",
+        "character_quality",
+        "character_proposals",
+        "character_optimizer_panels",
+    ):
+        bridge = tmp_path / name / "bridge"
+        bridge.mkdir(parents=True)
+        write_module(bridge, name, "import bridge.main\nimport bridge.provider_transport\n")
+        write_module(bridge, "main", "")
+        write_module(bridge, "provider_transport", "")
+        report = policy.check_dependency_direction(bridge, static_targets=())
+        assert any(name in error and "main" in error for error in report.errors), name
+        assert any(name in error and "provider_transport" in error for error in report.errors), name
+
+
+def test_optional_feature_owners_are_type_checked():
+    policy = load_policy()
+    assert {
+        "bridge/humanize.py",
+        "bridge/humanizer_settings.py",
+        "bridge/character_quality.py",
+        "bridge/character_proposals.py",
+        "bridge/character_optimizer_panels.py",
+    } <= set(policy.TYPE_TARGETS)

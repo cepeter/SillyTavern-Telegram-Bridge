@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import application_test_setup as application_setup
 from application_test_setup import (
     ensure_application_extensions,
     make_test_application_services,
@@ -368,6 +369,7 @@ class GroupTurnGatingTests(SettingsTestCase):
                 request_context=make_test_request_context(
                     self.db, session["session_id"], "user", app_settings=self.app_settings_builder.build()
                 ),
+                provider_port=application_setup.make_test_provider_port(),
             )
             setup = self.group.setup_state(self.db, chat_id, session["session_id"])
             self.assertEqual(setup["stage"], "world")
@@ -474,6 +476,7 @@ class GroupTurnGatingTests(SettingsTestCase):
                 request_context=make_test_request_context(
                     self.db, session["session_id"], "user", app_settings=self.app_settings_builder.build()
                 ),
+                provider_port=application_setup.make_test_provider_port(),
             )
         finally:
             _m_session_naming.close_panel_message = original_close

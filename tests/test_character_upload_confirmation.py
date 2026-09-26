@@ -50,6 +50,14 @@ class CharacterUploadConfirmationTests(SettingsTestCase):
         self.character_dir = self.app_settings.character_dir
         self.character_dir.mkdir(parents=True, exist_ok=True)
         self.app_settings.character_backup_dir.mkdir(parents=True, exist_ok=True)
+        self.context = RequestContext(self.db, "s", "u", app_settings=self.app_settings)
+        self.panels = []
+        self._panel_patcher = mock.patch.object(
+            native_imports,
+            "send_panel_request",
+            side_effect=lambda _t, method, payload, **kwargs: self.panels.append(payload),
+        )
+        self._panel_patcher.start()
         self.sent_text = []
         self._text_patcher = mock.patch.object(
             native_imports, "send_text", side_effect=lambda _t, _c, message: self.sent_text.append(message)
@@ -58,6 +66,7 @@ class CharacterUploadConfirmationTests(SettingsTestCase):
 
     def tearDown(self):
         self._text_patcher.stop()
+        self._panel_patcher.stop()
         self.db.close()
         self.tmp.cleanup()
 
@@ -70,7 +79,7 @@ class CharacterUploadConfirmationTests(SettingsTestCase):
             f"{name}.png",
             raw,
             app_settings=self.app_settings,
-            request_context=request_context,
+            request_context=request_context or self.context,
         )
         return raw
 
@@ -78,11 +87,12 @@ class CharacterUploadConfirmationTests(SettingsTestCase):
         original = self._install("Alice", "original")
         updated = _card_png("Alice", "updated")
         native_imports.import_character_card(
-            self.db, "token", "chat", "Alice.png", updated, app_settings=self.app_settings
+            self.db, "token", "chat", "Alice.png", updated, app_settings=self.app_settings, request_context=self.context
         )
         self.assertEqual((self.character_dir / "Alice.png").read_bytes(), original)
-        self.assertTrue((self.character_dir / ".pending_chat.png").exists())
-        self.assertTrue(any("already exists" in m for m in self.sent_text))
+        self.assertTrue(list((self.app_settings.character_backup_dir / ".pending").glob("*.bin")))
+        self.assertFalse((self.character_dir / ".pending_chat.png").exists())
+        self.assertTrue(any("already exists" in p["text"] for p in self.panels))
 
     def test_reupload_with_context_sends_confirmation_panel(self):
         self._install("Alice", "original")
@@ -105,9 +115,9 @@ class CharacterUploadConfirmationTests(SettingsTestCase):
         original = self._install("Alice", "original")
         updated = _card_png("Alice", "updated")
         native_imports.import_character_card(
-            self.db, "token", "chat", "Alice.png", updated, app_settings=self.app_settings
+            self.db, "token", "chat", "Alice.png", updated, app_settings=self.app_settings, request_context=self.context
         )
-        message = native_imports.apply_pending_upload(self.db, "chat", "overwrite", app_settings=self.app_settings)
+        message = self._apply("overwrite")
         self.assertIn("overwritten", message)
         self.assertNotEqual((self.character_dir / "Alice.png").read_bytes(), original)
 
@@ -115,9 +125,9 @@ class CharacterUploadConfirmationTests(SettingsTestCase):
         original = self._install("Alice", "original")
         updated = _card_png("Alice", "updated")
         native_imports.import_character_card(
-            self.db, "token", "chat", "Alice.png", updated, app_settings=self.app_settings
+            self.db, "token", "chat", "Alice.png", updated, app_settings=self.app_settings, request_context=self.context
         )
-        message = native_imports.apply_pending_upload(self.db, "chat", "newversion", app_settings=self.app_settings)
+        message = self._apply("newversion")
         self.assertIn("installed", message)
         self.assertEqual((self.character_dir / "Alice.png").read_bytes(), original)
         versions = [p.name for p in self.character_dir.glob("Alice-*.png")]
@@ -127,16 +137,25 @@ class CharacterUploadConfirmationTests(SettingsTestCase):
         original = self._install("Alice", "original")
         updated = _card_png("Alice", "updated")
         native_imports.import_character_card(
-            self.db, "token", "chat", "Alice.png", updated, app_settings=self.app_settings
+            self.db, "token", "chat", "Alice.png", updated, app_settings=self.app_settings, request_context=self.context
         )
-        message = native_imports.apply_pending_upload(self.db, "chat", "keep", app_settings=self.app_settings)
+        message = self._apply("keep")
         self.assertIn("Kept", message)
         self.assertEqual((self.character_dir / "Alice.png").read_bytes(), original)
         self.assertFalse((self.character_dir / ".pending_chat.png").exists())
 
-    def test_apply_without_pending_returns_message(self):
-        message = native_imports.apply_pending_upload(self.db, "chat", "overwrite", app_settings=self.app_settings)
-        self.assertIn("No pending", message)
+    def _apply(self, action):
+        nonce = self.panels[-1]["reply_markup"]["inline_keyboard"][0][0]["callback_data"].rsplit(":", 1)[1]
+        message, _filename = native_imports.apply_character_proposal(
+            self.db, "chat", nonce, action, request_context=self.context
+        )
+        return message
+
+    def test_apply_without_pending_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "expired or already used"):
+            native_imports.apply_character_proposal(
+                self.db, "chat", "a" * 24, "overwrite", request_context=self.context
+            )
 
 
 if __name__ == "__main__":

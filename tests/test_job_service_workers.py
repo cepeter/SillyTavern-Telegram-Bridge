@@ -475,6 +475,9 @@ class JobWorkerServiceTests(SettingsTestCase):
         )
 
     def test_document_worker_success_and_failure_use_job_service(self):
+        with self.services.db_factory() as db:
+            session = self.services.session.ensure(db, "chat", self.services.config.default_model)
+        db.close()
         with patch.object(
             _owner_document_jobs,
             "import_telegram_document",
@@ -484,6 +487,7 @@ class JobWorkerServiceTests(SettingsTestCase):
                 "chat",
                 {"file_name": "notes.txt"},
                 79,
+                queued_session_id=session["session_id"],
                 job_id=47,
             )
         self.assertEqual(
@@ -502,6 +506,7 @@ class JobWorkerServiceTests(SettingsTestCase):
                 "chat",
                 {"file_name": "notes.txt"},
                 79,
+                queued_session_id=session["session_id"],
                 job_id=47,
             )
         self.assertEqual(

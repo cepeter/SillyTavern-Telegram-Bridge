@@ -1,3 +1,4 @@
+import application_test_setup as application_setup
 from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_request_context
 from settings_test_support import make_test_settings
 
@@ -60,6 +61,7 @@ def test_character_info_selection_sends_selected_png_as_bound_photo(tmp_path, mo
             None,
             group_service=make_test_group_service(app_settings=context.app_settings),
             request_context=context,
+            provider_port=application_setup.make_test_provider_port(),
         )
     finally:
         db.close()
@@ -114,6 +116,7 @@ def test_character_info_photo_failure_falls_back_to_existing_text_panel(tmp_path
             None,
             group_service=make_test_group_service(app_settings=context.app_settings),
             request_context=context,
+            provider_port=application_setup.make_test_provider_port(),
         )
     finally:
         db.close()
@@ -150,6 +153,7 @@ def test_character_info_photo_back_closes_photo_and_opens_fresh_info_list(monkey
             None,
             group_service=make_test_group_service(app_settings=context.app_settings),
             request_context=context,
+            provider_port=application_setup.make_test_provider_port(),
         )
     finally:
         db.close()

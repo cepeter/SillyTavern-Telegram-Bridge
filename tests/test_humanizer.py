@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import bridge.humanize as humanize
+import bridge.humanizer_settings as humanizer_settings
 import bridge.session_core as session_core
 from bridge.memory_curator import db_connect
 from bridge.provider_port import ProviderPort
@@ -15,24 +16,24 @@ from bridge.provider_port import ProviderPort
 
 class HumanizerNormalizationTests(unittest.TestCase):
     def test_accepts_on_off_and_aliases(self):
-        self.assertEqual(humanize.normalize_humanizer("on"), "on")
-        self.assertEqual(humanize.normalize_humanizer("off"), "off")
-        self.assertEqual(humanize.normalize_humanizer("ON"), "on")
-        self.assertEqual(humanize.normalize_humanizer(" true "), "on")
-        self.assertEqual(humanize.normalize_humanizer("disabled"), "off")
-        self.assertEqual(humanize.normalize_humanizer("0"), "off")
+        self.assertEqual(humanizer_settings.normalize_humanizer("on"), "on")
+        self.assertEqual(humanizer_settings.normalize_humanizer("off"), "off")
+        self.assertEqual(humanizer_settings.normalize_humanizer("ON"), "on")
+        self.assertEqual(humanizer_settings.normalize_humanizer(" true "), "on")
+        self.assertEqual(humanizer_settings.normalize_humanizer("disabled"), "off")
+        self.assertEqual(humanizer_settings.normalize_humanizer("0"), "off")
 
     def test_rejects_unknown_values(self):
         for bad in ("", "maybe", "onwards", "yes please", "1.5"):
             with self.assertRaises(ValueError):
-                humanize.normalize_humanizer(bad)
+                humanizer_settings.normalize_humanizer(bad)
 
     def test_enabled_and_label(self):
-        self.assertFalse(humanize.humanizer_enabled(None))
-        self.assertFalse(humanize.humanizer_enabled("off"))
-        self.assertTrue(humanize.humanizer_enabled("on"))
-        self.assertEqual(humanize.humanizer_label("on"), "On")
-        self.assertEqual(humanize.humanizer_label(None), "Off")
+        self.assertFalse(humanizer_settings.humanizer_enabled(None))
+        self.assertFalse(humanizer_settings.humanizer_enabled("off"))
+        self.assertTrue(humanizer_settings.humanizer_enabled("on"))
+        self.assertEqual(humanizer_settings.humanizer_label("on"), "On")
+        self.assertEqual(humanizer_settings.humanizer_label(None), "Off")
 
 
 class HumanizerRenderTests(unittest.TestCase):
@@ -97,12 +98,11 @@ class HumanizerPersistenceTests(SettingsTestCase):
         session = session_core.ensure_session(
             self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings
         )
-        humanize.set_humanizer(
+        session_core.update_session(
             self.db,
             "chat",
             session["session_id"],
-            "on",
-            update_session=session_core.update_session,
+            humanizer="on",
         )
         reloaded = session_core.load_session(
             self.db,

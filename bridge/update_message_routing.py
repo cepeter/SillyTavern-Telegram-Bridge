@@ -280,7 +280,7 @@ def route_message_update(
             {
                 "document": document,
                 "model": model,
-                "resolve_active": True,
+                "resolve_active": False,
                 "actor_id": sender,
             },
         )
@@ -296,6 +296,7 @@ def route_message_update(
                     chat_id,
                     document,
                     message_id,
+                    queued_session_id,
                     None,
                 ),
             ),

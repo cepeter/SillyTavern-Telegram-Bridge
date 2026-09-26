@@ -7,9 +7,8 @@ import sqlite3
 from bridge.cards import send_panel_message
 from bridge.config import REASONING_LEVELS
 from bridge.generation_settings import get_generation_settings
-from bridge.humanize import humanizer_enabled
+from bridge.humanizer_settings import humanizer_enabled, session_humanizer
 from bridge.metadata import get_meta
-from bridge.session_repository import load_session_row
 
 
 def send_settings_menu(
@@ -19,7 +18,7 @@ def send_settings_menu(
     levels = list(REASONING_LEVELS.items())
     current = int(settings.get("reasoning_budget", 0))
     current_label = next((label.title() for label, budget in levels if budget == current), "Custom")
-    humanizer_on = humanizer_enabled((load_session_row(db, chat_id, session_id) or {}).get("humanizer"))
+    humanizer_on = humanizer_enabled(session_humanizer(db, chat_id, session_id))
     rows = [
         [
             {

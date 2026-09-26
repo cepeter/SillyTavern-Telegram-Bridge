@@ -9,6 +9,7 @@ from bridge.background import chat_job_lock
 from bridge.composition import BridgeServices as _BridgeServices
 from bridge.image_messages import process_image_message
 from bridge.native_imports import import_telegram_document
+from bridge.request_types import RequestContext
 
 
 def process_document_job(
@@ -16,6 +17,7 @@ def process_document_job(
     chat_id: str,
     document: dict,
     message_id: int | None = None,
+    queued_session_id: str | None = None,
     model_override: str | None = None,
     job_id: int | None = None,
 ) -> None:
@@ -27,7 +29,19 @@ def process_document_job(
         try:
             if job_id is not None and not jobs.start(db, job_id):
                 return
-            actor_id = jobs.actor_id(db, job_id) if job_id is not None else ""
+            if job_id is not None and not queued_session_id:
+                raise ValueError("durable document job requires its queued session")
+            session = (
+                services.session.load(db, chat_id, queued_session_id, model)
+                if queued_session_id
+                else services.session.ensure(db, chat_id, model)
+            )
+            request_context = RequestContext(
+                db,
+                session["session_id"],
+                jobs.actor_id(db, job_id),
+                app_settings=services.config,
+            )
             import_telegram_document(
                 db,
                 token,
@@ -39,6 +53,7 @@ def process_document_job(
                 process_image=partial(
                     process_image_message,
                     provider_port=services.provider,
+                    group_service=services.group,
                     app_settings=services.config,
                     rag_service=services.rag,
                 ),
@@ -48,7 +63,7 @@ def process_document_job(
                 app_settings=services.config,
                 rag_service=services.rag,
                 provider_port=services.provider,
-                actor_id=actor_id,
+                request_context=request_context,
             )
             if job_id is not None:
                 jobs.complete(db, job_id)

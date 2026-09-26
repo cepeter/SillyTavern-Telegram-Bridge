@@ -18,7 +18,7 @@ from bridge.databank_panels import (
     send_databank_versions_menu,
 )
 from bridge.generation_settings import update_generation_settings
-from bridge.humanize import set_humanizer
+from bridge.humanizer_settings import normalize_humanizer
 from bridge.input_flow_service import InputFlowService
 from bridge.language import normalize_stt_language
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
@@ -30,6 +30,7 @@ from bridge.rag_service import RagService
 from bridge.reset_panel import reset_confirmation_request
 from bridge.session_core import update_session
 from bridge.settings_panels import send_settings_menu, send_stream_menu
+from bridge.sqlite_store import write_transaction
 from bridge.telegram import send_text
 from bridge.voice_panels import send_stt_language_menu, send_stt_model_menu, send_voice_input_menu, send_voice_menu
 
@@ -94,7 +95,9 @@ def handle_enum_callback(
             set_meta(db, f"settings_input:{chat_id}", json.dumps(pending_setting))
         return
     if data == "enum:settings:reset":
-        update_generation_settings(db, chat_id, session["session_id"], **GENERATION_DEFAULTS)
+        with write_transaction(db):
+            update_generation_settings(db, chat_id, session["session_id"], **GENERATION_DEFAULTS)
+            update_session(db, chat_id, session["session_id"], humanizer="off")
         send_settings_menu(token, chat_id, db, session["session_id"], message_id, request_context=request_context)
         return
     if data.startswith("enum:settings:reasoning:"):
@@ -107,7 +110,7 @@ def handle_enum_callback(
     if data.startswith("enum:humanizer:"):
         value = data.rsplit(":", 1)[1]
         try:
-            set_humanizer(db, chat_id, session["session_id"], value, update_session=update_session)
+            update_session(db, chat_id, session["session_id"], humanizer=normalize_humanizer(value))
         except ValueError:
             send_text(token, chat_id, "Invalid Humanizer choice.")
             return
