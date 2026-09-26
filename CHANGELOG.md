@@ -30,17 +30,14 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 - Add an explicitly composed RAG service and embedding port; separate bounded document extraction, embedding transport, indexing/query use cases and SQL-only Data Bank repositories. Retire the old RAG aggregation/re-export modules and extend dependency/type guards across the new boundaries.
 - Preserve caller-owned rollback for Data Bank version activation, removal and query-embedding cache updates; those helpers no longer commit an enclosing transaction.
-
-### Maintenance
-
-- Separate settings, voice, Data Bank, group, persona, provider, media and generation workflows into canonical owners; retain panel routing and delivery behavior without compatibility re-export modules. Response-variant writes now preserve caller-owned transactions.
-
-### Architecture
-
 - Retire aggregate database/repository facades in favor of domain SQL owners and explicit transactional use cases. Metadata, jobs, operation phases, settings/presets, panel bindings and sync identities now preserve enclosing rollback; replace the lock-only write callback with real short transaction scopes.
 - Separate character, session, World Info, provider/model, settings, conversation and sync callback domains. Keep ordered routing and all callback identifiers, actor/session binding, photo/text fallbacks and Back/Close behavior unchanged.
 - Separate session lifecycle/repository, session deletion views and native imports from Telegram transport. Compose a required SessionService for ingress, workers and Persona selection; session creation and updates participate in caller-owned transactions.
 - Resolve models only through configured providers and known model IDs, including opted-in discovery results; reject ambiguous/unknown routes before startup rather than guessing `provider-one`. Check-only startup no longer updates Telegram’s command list.
+
+### Maintenance
+
+- Separate settings, voice, Data Bank, group, persona, provider, media and generation workflows into canonical owners; retain panel routing and delivery behavior without compatibility re-export modules. Response-variant writes now preserve caller-owned transactions.
 
 ## [0.2.029] - 2026-09-25
 
