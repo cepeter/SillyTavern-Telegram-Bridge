@@ -1,7 +1,7 @@
 # Light Novel Conversation Mode Design
 
 Date: 2026-09-26
-Status: Approved conversational design; awaiting written-spec review
+Status: Written spec approved; implementation authorized on 2026-09-26
 
 ## Summary
 
