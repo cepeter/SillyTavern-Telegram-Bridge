@@ -279,6 +279,9 @@ def test_optimizer_preview_exposes_manual_refinement_callback(card_context, monk
     )
     callbacks = [button["callback_data"] for row in delivered[-1][1]["inline_keyboard"] for button in row]
     assert "characteroptimizerefine:" + "a" * 24 in callbacks
+    labels = [button["text"] for row in delivered[-1][1]["inline_keyboard"] for button in row]
+    assert "Revise" in labels
+    assert "Manual Suggestion" not in labels
 
 
 def test_optimizer_menus_show_character_names_without_rank_badges(card_context, monkeypatch):
@@ -332,7 +335,8 @@ def test_manual_suggestion_prompt_shows_current_base_with_readable_sections(card
     prompt = sent[-1]
     assert prompt.startswith("Manual revision base — Alice")
     assert "DESCRIPTION\n────────────\nOriginal description.\nSecond paragraph." in prompt
-    assert "Send your optimizer suggestion" in prompt
+    assert "Please input your revision prompt now." in prompt
+    assert "Example:" in prompt
 
 
 def test_optimizer_revision_uses_previous_temporary_values_and_keeps_cumulative_diff(card_context, monkeypatch):

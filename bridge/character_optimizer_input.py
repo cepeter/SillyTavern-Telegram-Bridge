@@ -78,9 +78,9 @@ def start_character_optimizer_suggestion_input(
     close_panel_message(db, token, chat_id, callback)
     prompt = (
         format_character_optimizer_base(str(installed.get("name", "") or filename), display_fields)
-        + "\n\nSend your optimizer suggestion (up to 2,000 characters). "
-        "Example: make her more sarcastic, preserve the backstory, and shorten the first message."
-        "\n\nSend /cancel to cancel."
+        + "\n\n────────────────\nPlease input your revision prompt now."
+        "\n\nExample: make her more sarcastic, preserve the backstory, and shorten the first message."
+        "\n\nMaximum 2,000 characters. Send /cancel to cancel."
     )
     state["prompt_message_ids"] = send_text(token, chat_id, prompt)
     set_meta(db, meta_key, json.dumps(state, ensure_ascii=False))

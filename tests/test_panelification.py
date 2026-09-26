@@ -163,7 +163,7 @@ class PanelificationTests(SettingsTestCase):
         rows = self.calls[0][0][3]["inline_keyboard"]
         item_rows = rows[:2]
         self.assertTrue(all(len(row) == 3 for row in item_rows))
-        self.assertEqual(item_rows[0][0]["text"], "S")
+        self.assertEqual(item_rows[0][0]["text"], "⭐")
         self.assertEqual(item_rows[0][0]["callback_data"], "character:rank:S")
         self.assertEqual(item_rows[0][0]["icon_custom_emoji_id"], "6176891226302718197")
         self.assertEqual(item_rows[1][0], {"text": "—", "callback_data": "character:rank:unranked"})
@@ -190,7 +190,7 @@ class PanelificationTests(SettingsTestCase):
             self.assertEqual(
                 _m_cards.character_rank_button(tier),
                 {
-                    "text": tier,
+                    "text": "⭐",
                     "callback_data": f"character:rank:{tier}",
                     "icon_custom_emoji_id": custom_emoji_id,
                 },
@@ -332,14 +332,11 @@ def test_character_menu_prefers_rich_message_with_disabled_animated_rank(tmp_pat
     button_rows = [block["buttons"] for block in blocks if block.get("type") == "buttons"]
     rank, character, action = button_rows[0]
     assert rank == {
-        "text": [
-            {
-                "type": "custom_emoji",
-                "custom_emoji_id": "6176891226302718197",
-                "alternative_text": "⭐",
-            },
-            " S",
-        ],
+        "text": {
+            "type": "custom_emoji",
+            "custom_emoji_id": "6176891226302718197",
+            "alternative_text": "⭐",
+        },
         "disabled": {},
     }
     assert character["callback_data"] == "character:cb-active.png"

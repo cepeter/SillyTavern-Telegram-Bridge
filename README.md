@@ -849,8 +849,8 @@ you can't accidentally delete a card that's in use.
 Character rows use three columns: **rank | character | action**. The main
 Character Menu prefers Telegram Bot API 10.3 RichMessage buttons: the rank column
 uses a disabled `RichTextCustomEmoji` from the built-in animated set
-`sttb_ranks_by_SillyTavernPunzmeBot`, followed by S/A/B/C/D fallback text (or `—`
-when unranked). If Telegram rejects RichMessage sending or editing, the bridge
+`sttb_ranks_by_SillyTavernPunzmeBot`; if the custom emoji cannot render, Telegram
+falls back to the registered `⭐` alternative text (or `—` when unranked). If Telegram rejects RichMessage sending or editing, the bridge
 falls back to the classic inline-keyboard panel; that compatibility path uses the
 same hardcoded custom-emoji IDs but clients may render the button icon statically.
 The checked-in [rank asset manifest](assets/character-ranks/README.md) contains
@@ -871,14 +871,12 @@ a new preview rather than overwriting the changed file.
 The **Optimizer** entry in `/character` first opens **Auto Optimize** and
 **Manual Suggestion**. Auto uses the configured utility-model route directly.
 Manual Suggestion first shows the current editable card values in readable
-Telegram sections, then waits for one instruction (up to 2,000 characters), such
-as “make her more sarcastic, preserve the backstory, and shorten the first
-message”. The guidance goes to the same utility model without overriding the
+Telegram sections and ends with an explicit **Please input your revision prompt now.** instruction. The first preview uses **Revise** instead of Manual Suggestion; each Revise action reopens the prompt against the current temporary values. Prompts are limited to 2,000 characters, for example “make her more sarcastic, preserve the backstory, and shorten the first message”. The guidance goes to the same utility model without overriding the
 optimizer field whitelist or character-identity rules. Suggestions are bound to
 the initiating user, session, character file and original file digest, expire
 after 10 minutes, and are not written into the installed card until Apply. Users
 in the same Telegram chat keep independent pending Manual Suggestions. Choosing
-Manual Suggestion again from a preview is a true revision: the displayed base and
+**Revise** from a preview is a true revision: the displayed base and
 the next LLM request use that temporary preview's values, while the final staged
 proposal keeps the cumulative effective diff relative to the unchanged installed
 card. This preserves the existing checksum and exact-byte Apply verification.
