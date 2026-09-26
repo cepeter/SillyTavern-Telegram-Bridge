@@ -403,6 +403,7 @@ def resolve_recovered_job_submission(
                 job.chat_id,
                 payload["document"],
                 job.telegram_message_id,
+                job.session_id,
                 model_override,
             ),
         )

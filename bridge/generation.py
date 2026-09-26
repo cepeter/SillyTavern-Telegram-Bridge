@@ -11,6 +11,8 @@ from bridge.config import GENERATION_DEFAULTS
 from bridge.context_compaction import compact_chat_messages
 from bridge.delivery_port import DeliveryPort
 from bridge.generation_settings import get_generation_settings
+from bridge.humanize import render_humanized_response
+from bridge.humanizer_settings import humanizer_enabled
 from bridge.language import normalize_response_language, response_language_instruction, response_language_label
 from bridge.limits import HINDSIGHT_CONTEXT_MAX_CHARS, RAG_MAX_CONTEXT_CHARS, SUMMARY_MAX_CHARS
 from bridge.persona_service import PersonaService
@@ -69,7 +71,7 @@ def render_session_response(
     provider_port: ProviderPort,
 ) -> str:
     session_id = str(session["session_id"])
-    return render_response_language(
+    rendered = render_response_language(
         api_key,
         session["model_id"],
         text,
@@ -78,6 +80,16 @@ def render_session_response(
         settings,
         provider_port=provider_port,
     )
+    if humanizer_enabled(session.get("humanizer")):
+        rendered = render_humanized_response(
+            api_key,
+            session["model_id"],
+            rendered,
+            f"telegram:{chat_id}:{session_id}",
+            settings,
+            provider_port=provider_port,
+        )
+    return rendered
 
 
 def format_user_dialogue_action(text: str) -> str:

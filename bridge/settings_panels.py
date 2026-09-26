@@ -7,6 +7,7 @@ import sqlite3
 from bridge.cards import send_panel_message
 from bridge.config import REASONING_LEVELS
 from bridge.generation_settings import get_generation_settings
+from bridge.humanizer_settings import humanizer_enabled, session_humanizer
 from bridge.metadata import get_meta
 
 
@@ -17,6 +18,7 @@ def send_settings_menu(
     levels = list(REASONING_LEVELS.items())
     current = int(settings.get("reasoning_budget", 0))
     current_label = next((label.title() for label, budget in levels if budget == current), "Custom")
+    humanizer_on = humanizer_enabled(session_humanizer(db, chat_id, session_id))
     rows = [
         [
             {
@@ -47,6 +49,18 @@ def send_settings_menu(
     )
     rows.append(
         [
+            {
+                "text": ("✅ " if humanizer_on else "") + "Humanizer: On",
+                "callback_data": "enum:humanizer:on",
+            },
+            {
+                "text": ("" if humanizer_on else "✅ ") + "Humanizer: Off",
+                "callback_data": "enum:humanizer:off",
+            },
+        ]
+    )
+    rows.append(
+        [
             {"text": "↩️ Reset all settings", "callback_data": "enum:settings:reset"},
             {"text": "❌ Close", "callback_data": "enum:close"},
         ]
@@ -59,7 +73,8 @@ def send_settings_menu(
     current_values = (
         f"temperature={settings['temperature']}, max_tokens={settings['max_tokens']}, "
         f"top_p={settings['top_p']}, frequency_penalty={settings['frequency_penalty']}, "
-        f"presence_penalty={settings['presence_penalty']}, stop_sequences={stop_label}"
+        f"presence_penalty={settings['presence_penalty']}, stop_sequences={stop_label}, "
+        f"humanizer={'on' if humanizer_on else 'off'}"
     )
     send_panel_message(
         token,
@@ -74,7 +89,8 @@ def send_settings_menu(
             "\n\nTap a reasoning level below to apply it.\nTap a field to enter its "
             "value in the next message. Send /cancel to leave it unchanged.\nFields: "
             "temperature, max_tokens, top_p, frequency_penalty, presence_penalty, "
-            "stop_sequences."
+            "stop_sequences.\n\nHumanizer rewrites replies to remove AI-sounding "
+            "patterns. It runs after generation and is off by default."
         ),
         {"inline_keyboard": rows},
         message_id,

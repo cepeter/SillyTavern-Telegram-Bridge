@@ -9,6 +9,7 @@ import re
 import struct
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import bridge.limits as _limits
 from bridge.native_cache import cached_json, cached_png_metadata, cached_text
@@ -44,7 +45,8 @@ def _default_character_name(*, app_settings: AppSettings) -> str:
 
 
 def card_fields(card: dict, *, app_settings: AppSettings) -> dict[str, str]:
-    data = card.get("data") if isinstance(card.get("data"), dict) else card
+    nested = card.get("data")
+    data = nested if isinstance(nested, dict) else card
     fields = {}
     for key in (
         "name",
@@ -85,7 +87,9 @@ def card_fields(card: dict, *, app_settings: AppSettings) -> dict[str, str]:
 def character_card_paths(*, app_settings: AppSettings) -> list[Path]:
     if not app_settings.character_dir.exists():
         return []
-    return sorted(p for p in app_settings.character_dir.glob("*.png") if p.is_file())[: _limits.CATALOG_MAX_ITEMS]
+    return sorted(p for p in app_settings.character_dir.glob("*.png") if p.is_file() and not p.name.startswith("."))[
+        : _limits.CATALOG_MAX_ITEMS
+    ]
 
 
 def safe_character_path(name: str, *, app_settings: AppSettings) -> Path | None:
@@ -152,13 +156,13 @@ def build_world_info(
     """Activate basic SillyTavern World Info entries by key and secondary key."""
     if user_name is None:
         user_name = app_settings.default_user_name
-    sections = []
+    sections: list[str] = []
     for world_name in active_world_files(world_names, app_settings=app_settings):
         path = safe_world_path(world_name, app_settings=app_settings)
         if path is None:
             continue
         try:
-            data = cached_json(path)
+            data = cast(dict[str, Any], cached_json(path))
             raw_entries = data.get("entries", {})
             entries = list(raw_entries.values()) if isinstance(raw_entries, dict) else list(raw_entries or [])
             lowered = context.casefold()
@@ -248,7 +252,7 @@ def _merge_system_prompt_text(result: dict[str, dict[str, str]], path: Path) -> 
 
 
 def load_system_prompts(*, app_settings: AppSettings) -> dict[str, dict[str, str]]:
-    result = {}
+    result: dict[str, dict[str, str]] = {}
     if app_settings.system_prompts_dir.exists():
         for path in sorted(
             list(app_settings.system_prompts_dir.glob("*.json")) + list(app_settings.system_prompts_dir.glob("*.txt"))
@@ -299,7 +303,7 @@ def replace_macros(
         .replace("<BOT>", fields["name"])
     )
 
-    def pick_macro(match):
+    def pick_macro(match: re.Match[str]) -> str:
         choices = [item for item in match.group(1).split("::") if item]
         return random.choice(choices) if choices else ""  # noqa: S311 -- character text selection, not a security token
 

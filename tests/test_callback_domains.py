@@ -9,6 +9,7 @@ import inspect
 from pathlib import Path
 from types import SimpleNamespace
 
+import application_test_setup as application_setup
 import pytest
 
 ROOT = Path(__file__).parents[1]
@@ -95,6 +96,7 @@ def test_expired_character_selection_cannot_read_or_upload_a_card(monkeypatch):
         None,
         group_service=object(),
         request_context=SimpleNamespace(app_settings=None),
+        provider_port=application_setup.make_test_provider_port(),
     )
     assert handled is True
     assert answers == ["Character choice expired"]

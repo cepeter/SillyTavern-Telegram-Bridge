@@ -1,3 +1,4 @@
+import application_test_setup as application_setup
 from application_test_setup import (
     ensure_application_extensions,
     make_test_group_service,
@@ -93,28 +94,55 @@ class ItemPanelLayoutTests(SettingsTestCase):
         self.assertTrue(any(value.startswith("enum:ragversions:") for value in callbacks))
         self.assertTrue(any(value.startswith("enum:ragremove:") for value in callbacks))
 
-    def test_character_upload_reports_duplicate_and_new_version(self):
+    def test_character_upload_asks_confirmation_on_existing_name(self):
         root = Path(self.tmp.name)
         old_character_dir = self.app_settings_builder.character_dir
         old_backup_dir = self.app_settings_builder.character_backup_dir
         old_parse = _m_telegram.parse_png_chara_bytes
         old_fields = _m_telegram.card_fields
         old_send = _m_telegram.send_text
+        old_panel_send = _m_telegram.send_panel_request
         sent = []
+        panels = []
         self.app_settings_builder.character_dir = root / "characters"
         self.app_settings_builder.character_backup_dir = root / "backups"
         _m_telegram.parse_png_chara_bytes = lambda _raw: {"name": "Test Character"}
         _m_telegram.card_fields = lambda _card, *, app_settings=None: {"name": "Test Character"}
         _m_telegram.send_text = lambda _token, _chat, text: sent.append(text) or []
+        _m_telegram.send_panel_request = lambda _token, _method, payload, **kwargs: panels.append(payload)
         try:
             _m_telegram.import_character_card(
-                self.db, "bot", "chat", "one.png", b"one", app_settings=self.app_settings_builder.build()
+                self.db,
+                "bot",
+                "chat",
+                "one.png",
+                b"one",
+                app_settings=self.app_settings_builder.build(),
+                request_context=application_setup.make_test_request_context(
+                    self.db, app_settings=self.app_settings_builder.build()
+                ),
             )
             _m_telegram.import_character_card(
-                self.db, "bot", "chat", "one.png", b"one", app_settings=self.app_settings_builder.build()
+                self.db,
+                "bot",
+                "chat",
+                "one.png",
+                b"one",
+                app_settings=self.app_settings_builder.build(),
+                request_context=application_setup.make_test_request_context(
+                    self.db, app_settings=self.app_settings_builder.build()
+                ),
             )
             _m_telegram.import_character_card(
-                self.db, "bot", "chat", "one.png", b"two", app_settings=self.app_settings_builder.build()
+                self.db,
+                "bot",
+                "chat",
+                "one.png",
+                b"two",
+                app_settings=self.app_settings_builder.build(),
+                request_context=application_setup.make_test_request_context(
+                    self.db, app_settings=self.app_settings_builder.build()
+                ),
             )
         finally:
             self.app_settings_builder.character_dir = old_character_dir
@@ -122,9 +150,11 @@ class ItemPanelLayoutTests(SettingsTestCase):
             _m_telegram.parse_png_chara_bytes = old_parse
             _m_telegram.card_fields = old_fields
             _m_telegram.send_text = old_send
-        self.assertIn("Duplicate character card:", sent[1])
-        self.assertIn("New character-card version installed:", sent[2])
-        self.assertIn("Previous version retained as Test_Character.png", sent[2])
+            _m_telegram.send_panel_request = old_panel_send
+        self.assertIn("imported", sent[0])
+        self.assertEqual(len(panels), 2)
+        self.assertIn("already exists", panels[0]["text"])
+        self.assertIn("already exists", panels[1]["text"])
 
     def test_group_rows_remove_members_without_card_delete_callback(self):
         session = _owner_session_core.ensure_session(

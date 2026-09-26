@@ -26,13 +26,21 @@ from bridge.card_content import system_prompt_callback_token as system_prompt_ca
 from bridge.card_content import system_prompt_choices as system_prompt_choices
 from bridge.card_content import system_prompt_label as system_prompt_label
 from bridge.card_content import world_file_paths as world_file_paths
+from bridge.character_quality import character_rank, rank_badge
 from bridge.panel_utils import panel_label, panel_message_request, panel_navigation, panel_page
 from bridge.persona_service import PersonaService
+from bridge.request_types import RequestContext
 from bridge.telegram import send_panel_request
 
 
 def send_panel_message(
-    token: str, chat_id: str, text: str, reply_markup: dict, message_id: int | None = None, *, request_context
+    token: str,
+    chat_id: str,
+    text: str,
+    reply_markup: dict,
+    message_id: int | None = None,
+    *,
+    request_context: RequestContext,
 ) -> None:
     """Send a panel message, or edit the existing one in place."""
     method, payload = panel_message_request(
@@ -57,7 +65,7 @@ def send_persona_menu(
     page: int = 0,
     *,
     persona_service: PersonaService,
-    request_context,
+    request_context: RequestContext,
 ) -> None:
     personas = persona_service.list()
     options = [
@@ -94,7 +102,13 @@ def send_persona_menu(
 
 
 def send_character_menu(
-    token: str, chat_id: str, current_character: str, message_id: int | None = None, page: int = 0, *, request_context
+    token: str,
+    chat_id: str,
+    current_character: str,
+    message_id: int | None = None,
+    page: int = 0,
+    *,
+    request_context: RequestContext,
 ) -> None:
     options = [
         (path.name, character_display_name(path, app_settings=request_context.app_settings))
@@ -118,7 +132,14 @@ def send_character_menu(
         )
         rows.append(
             [
-                {"text": mark + panel_label(label), "callback_data": "character:" + callback_token},
+                {
+                    "text": mark
+                    + rank_badge(
+                        character_rank(request_context.db, filename, app_settings=request_context.app_settings)
+                    )
+                    + panel_label(label),
+                    "callback_data": "character:" + callback_token,
+                },
                 action,
             ]
         )
@@ -131,6 +152,7 @@ def send_character_menu(
             {"text": "🔄 Refresh", "callback_data": "character:menu"},
         ]
     )
+    rows.append([{"text": "⚡ Optimizer", "callback_data": "character:optimize"}])
     rows.append([{"text": "📤 Upload character card", "callback_data": "character:upload"}])
     rows.append([{"text": "❌ Cancel", "callback_data": "character:cancel"}])
     current_label = current_character
@@ -147,7 +169,7 @@ def send_character_menu(
 
 
 def send_character_info_menu(
-    token: str, chat_id: str, message_id: int | None = None, page: int = 0, *, request_context
+    token: str, chat_id: str, message_id: int | None = None, page: int = 0, *, request_context: RequestContext
 ) -> None:
     options = [
         (path.name, character_display_name(path, app_settings=request_context.app_settings))
@@ -157,7 +179,10 @@ def send_character_info_menu(
     rows = [
         [
             {
-                "text": label,
+                "text": rank_badge(
+                    character_rank(request_context.db, filename, app_settings=request_context.app_settings)
+                )
+                + label,
                 "callback_data": "characterinfo:"
                 + dynamic_callback_token("character", filename, chat_id, db=request_context.db),
             }
@@ -178,7 +203,13 @@ def send_character_info_menu(
 
 
 def send_character_delete_menu(
-    token: str, chat_id: str, active_character: str, message_id: int | None = None, page: int = 0, *, request_context
+    token: str,
+    chat_id: str,
+    active_character: str,
+    message_id: int | None = None,
+    page: int = 0,
+    *,
+    request_context: RequestContext,
 ) -> None:
     options = [
         (path.name, character_display_name(path, app_settings=request_context.app_settings))
@@ -210,10 +241,10 @@ def send_character_delete_menu(
 
 
 def send_character_delete_confirm(
-    token: str, chat_id: str, filename: str, message_id: int | None = None, *, request_context
+    token: str, chat_id: str, filename: str, message_id: int | None = None, *, request_context: RequestContext
 ) -> None:
     token_value = dynamic_callback_token("character", filename, chat_id, db=request_context.db)
-    payload = {
+    payload: dict = {
         "chat_id": chat_id,
         "text": f"Delete {Path(filename).stem}? The card file will be removed; verified backups are kept.",
         "reply_markup": {
@@ -238,7 +269,7 @@ def send_session_menu(
     message_id: int | None = None,
     page: int = 0,
     *,
-    request_context,
+    request_context: RequestContext,
 ) -> None:
     options = [(session["session_id"], session["title"] or session["session_id"]) for session in sessions]
     page_options, current_page, total_pages = panel_page(options, page)

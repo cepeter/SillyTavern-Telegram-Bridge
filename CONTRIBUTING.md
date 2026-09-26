@@ -287,3 +287,40 @@ and composition-root-only service construction. The selected mypy surface
 includes every RAG core owner plus its SQLite/scheduler dependency path. Dynamic
 DB-API parameter containers and user row factories remain explicitly dynamic;
 there is no blanket type-check suppression for the old low-level implementation.
+
+### Optional response style and native card proposals
+
+`humanizer_settings` owns validated, session-scoped preference reads; the
+existing `session_core` use case writes that preference through the canonical
+metadata repository and operation transaction. No session-table column or
+baseline-schema rewrite is needed. `humanize` owns the bounded optional rewrite
+through its required `ProviderPort`, and never instantiates a transport.
+`generation` and `message_commands` invoke it only after language rendering.
+A failed structural preservation check keeps the source; do not describe this
+as a semantic correctness guarantee or as a total wall-clock deadline.
+
+`character_quality` owns utility-model ranking/optimization and pure metadata
+rewrites. It receives a required `ProviderPort`, bounds task inputs/outputs,
+refuses network work inside caller transactions, and associates rank state with
+a specific native file revision. `character_optimizer_panels` owns complete,
+paginated previews; `character_callbacks` validates callback actions and delegates.
+
+`character_proposals` owns private staging and nonce-bound proposal state using
+canonical metadata operations. Bind proposals to chat, user, session, expiry,
+original digest and staged digest; reject stale or replayed confirmations.
+`native_imports` remains the native installation/verified-backup owner. Its
+compare-and-replace writes use unique temporary files and atomic replacement.
+Optimizer application must re-derive the exact staged bytes from the approved
+whitelisted fields and the unchanged original. Staging files are not cards.
+
+Filesystem replacement and SQLite are not a distributed transaction. Consume a
+proposal before replacement to prevent replay; on interruption require a new
+proposal rather than pretending to roll both resources back atomically. File
+hashes are rechecked immediately before replacement, but uncooperative external
+processes do not participate in the bridge's in-process mutation lock.
+Document jobs and recovery preserve the queued session and initiating actor.
+Do not re-resolve the active session after a queued upload has begun.
+
+Humanizer reference refresh is specification-only. Any implementation requires
+its own bounded, pinned, tested administrative path and must not become a
+runtime dependency or automatically replace the shipped prompt.

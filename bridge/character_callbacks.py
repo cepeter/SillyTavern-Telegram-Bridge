@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import sqlite3
 import time
 from pathlib import Path
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
 from bridge.callbacks import close_panel_message, discard_panel_binding
-from bridge.card_content import card_fields_from_file, safe_character_path
+from bridge.card_content import card_fields, card_fields_from_file, parse_png_chara_bytes, safe_character_path
 from bridge.cards import (
     send_character_delete_confirm,
     send_character_delete_menu,
@@ -17,20 +19,35 @@ from bridge.cards import (
     send_character_menu,
     send_session_menu,
 )
+from bridge.character_optimizer_panels import send_character_optimize_menu, send_character_optimize_result
+from bridge.character_proposals import load_character_proposal, stage_character_proposal
+from bridge.character_quality import (
+    character_rank,
+    merge_optimized_fields,
+    optimize_character,
+    rank_badge,
+    rank_character,
+    write_png_chara_bytes,
+)
 from bridge.group_service import GroupService
 from bridge.group_setup import apply_group_setup_character
 from bridge.limits import PENDING_SETTINGS_TTL_SECONDS
 from bridge.metadata import get_meta, set_meta
-from bridge.native_imports import character_delete_references, verify_character_card_backup
+from bridge.native_imports import (
+    apply_character_proposal,
+    character_delete_references,
+    verify_character_card_backup,
+)
 from bridge.operations import begin_operation, record_operation
+from bridge.provider_port import ProviderPort
 from bridge.session_core import list_sessions
 from bridge.telegram import send_panel_photo, send_panel_request
 
 
-def _character_info_text(info: dict, filename: str) -> str:
+def _character_info_text(info: dict, filename: str, rank: str = "") -> str:
     return (
         "Character: "
-        f"{info['name']}"
+        f"{rank_badge(rank)}{info['name']}"
         "\nFile: "
         f"{filename}"
         "\nDescription: "
@@ -58,6 +75,7 @@ def handle_character_callback(
     operation_id,
     *,
     group_service: GroupService,
+    provider_port: ProviderPort,
     request_context,
 ):
     """Handle character selection, info, upload, and deletion callbacks."""
@@ -106,6 +124,140 @@ def handle_character_callback(
             request_context=request_context,
         )
         return True
+    if data == "character:optimize":
+        answer_callback(token, str(callback.get("id", "")), "Optimizer")
+        send_character_optimize_menu(token, chat_id, message.get("message_id"), request_context=request_context)
+        return True
+    if data.startswith(
+        ("characterupload:", "characteroptimizeapply:", "characteroptimizecancel:", "characteroptimizepreview:")
+    ):
+        try:
+            parts = data.split(":")
+            if parts[0] == "characteroptimizepreview" and len(parts) == 3:
+                pending = load_character_proposal(db, chat_id, parts[1], request_context=request_context)
+                if pending.kind != "optimize":
+                    raise ValueError("invalid optimizer preview")
+                send_character_optimize_result(
+                    token,
+                    chat_id,
+                    pending.filename,
+                    pending.fields,
+                    pending.nonce,
+                    message.get("message_id"),
+                    int(parts[2]),
+                    request_context=request_context,
+                )
+                return True
+            if parts[0] == "characterupload" and len(parts) == 3:
+                action, nonce = parts[1], parts[2]
+            elif parts[0] in {"characteroptimizeapply", "characteroptimizecancel"} and len(parts) == 2:
+                action = "apply" if parts[0] == "characteroptimizeapply" else "cancel"
+                nonce = parts[1]
+            else:
+                raise ValueError("invalid or expired character confirmation")
+            message_text, applied_filename = apply_character_proposal(
+                db,
+                chat_id,
+                nonce,
+                action,
+                request_context=request_context,
+            )
+            if applied_filename:
+                try:
+                    rank_character(
+                        db,
+                        chat_id,
+                        session,
+                        card_fields_from_file(applied_filename, app_settings=request_context.app_settings),
+                        applied_filename,
+                        provider_port=provider_port,
+                        app_settings=request_context.app_settings,
+                    )
+                except (OSError, ValueError, sqlite3.Error):
+                    logging.warning("Character applied; optional ranking was unavailable")
+        except (ValueError, OSError) as exc:
+            message_text = str(exc) if isinstance(exc, ValueError) else "Character update failed; reopen the preview."
+            logging.warning("Character proposal was not applied or could not be completed")
+        answer_callback(token, str(callback.get("id", "")), "Character proposal processed")
+        send_panel_request(
+            token,
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": message.get("message_id"),
+                "text": message_text,
+                "reply_markup": {"inline_keyboard": [[{"text": "Character menu", "callback_data": "character:menu"}]]},
+            },
+            request_context=request_context,
+        )
+        return True
+    if data.startswith("characteroptimize:"):
+        value = data.split(":", 1)[1]
+        if value.startswith("page:"):
+            try:
+                page = int(value.split(":", 1)[1])
+            except ValueError:
+                page = 0
+            send_character_optimize_menu(
+                token, chat_id, message.get("message_id"), page, request_context=request_context
+            )
+            return True
+        filename = resolve_dynamic_callback_token(value, "character", chat_id, db=db) or ""
+        path = safe_character_path(filename, app_settings=request_context.app_settings)
+        if not path or (request_context.app_settings.character_dir / filename).is_symlink():
+            answer_callback(token, str(callback.get("id", "")), "Character choice expired")
+            return True
+        try:
+            original = path.read_bytes()
+            card = parse_png_chara_bytes(original)
+            info = card_fields(card, app_settings=request_context.app_settings)
+            answer_callback(token, str(callback.get("id", "")), "Optimizing")
+            optimized = optimize_character(
+                db,
+                chat_id,
+                session,
+                info,
+                provider_port=provider_port,
+                app_settings=request_context.app_settings,
+            )
+            if not optimized:
+                raise ValueError("Optimization unavailable. Check the utility-model configuration and retry.")
+            digest = hashlib.sha256(original).hexdigest()
+            if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                raise ValueError("Character changed during optimization; reopen the preview.")
+            candidate = write_png_chara_bytes(original, merge_optimized_fields(card, optimized))
+            nonce = stage_character_proposal(
+                db,
+                chat_id,
+                "optimize",
+                filename,
+                candidate,
+                digest,
+                request_context=request_context,
+                fields=optimized,
+            )
+            send_character_optimize_result(
+                token,
+                chat_id,
+                filename,
+                optimized,
+                nonce,
+                message.get("message_id"),
+                request_context=request_context,
+            )
+        except (ValueError, OSError):
+            send_panel_request(
+                token,
+                "editMessageText",
+                {
+                    "chat_id": chat_id,
+                    "message_id": message.get("message_id"),
+                    "text": "Optimization could not produce a safe preview. The installed card is unchanged.",
+                    "reply_markup": {"inline_keyboard": [[{"text": "Back", "callback_data": "character:optimize"}]]},
+                },
+                request_context=request_context,
+            )
+        return True
     if data.startswith("characterinfo:"):
         value = data.split(":", 1)[1]
         if value == "back":
@@ -125,7 +277,9 @@ def handle_character_callback(
             return True
         info = card_fields_from_file(filename, app_settings=request_context.app_settings)
         answer_callback(token, str(callback.get("id", "")), "Info")
-        text = _character_info_text(info, filename)
+        text = _character_info_text(
+            info, filename, character_rank(db, filename, app_settings=request_context.app_settings)
+        )
         reply_markup = {
             "inline_keyboard": [
                 [

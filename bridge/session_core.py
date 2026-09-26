@@ -10,6 +10,7 @@ import time
 from bridge.card_content import active_world_files, encode_world_files, safe_world_path
 from bridge.expressions import expression_last_key, expression_mode_key
 from bridge.generation_settings import get_generation_settings
+from bridge.humanizer_settings import humanizer_key, normalize_humanizer, session_humanizer
 from bridge.memory_backend import hindsight_session_lock
 from bridge.memory_service import MemoryService
 from bridge.meta_repository import store_meta_value
@@ -78,6 +79,7 @@ def _normalize_session_defaults(
         with write_transaction(db):
             update_session_row(db, session["chat_id"], session["session_id"], changes, time.time())
         session.update(changes)
+    session["humanizer"] = session_humanizer(db, session["chat_id"], session["session_id"])
     return session
 
 
@@ -138,14 +140,20 @@ def update_session(
     operation_kind: str = "session_update",
     **values: object,
 ) -> None:
+    humanizer = normalize_humanizer(str(values.pop("humanizer"))) if "humanizer" in values else None
     allowed = set(SESSION_COLUMNS) - {"chat_id", "session_id"}
     values = {key: value for key, value in values.items() if key in allowed}
-    if not values:
+    if not values and humanizer is None:
         return
     with write_transaction(db):
         if not claim_operation(db, operation_id, operation_kind, time.time()):
             return
-        update_session_row(db, chat_id, session_id, values, time.time())
+        if values:
+            update_session_row(db, chat_id, session_id, values, time.time())
+        if humanizer is not None:
+            if load_session_row(db, chat_id, session_id) is None:
+                raise ValueError("session not found")
+            store_meta_value(db, humanizer_key(chat_id, session_id), humanizer)
         mark_operation_applied(db, operation_id, operation_kind, time.time())
 
 
@@ -165,7 +173,9 @@ def create_session(
     with write_transaction(db):
         insert_session_row(db, values, time.time())
         store_meta_value(db, f"active_session:{chat_id}", session_id)
-    return load_session_row(db, chat_id, session_id) or values
+    return _normalize_session_defaults(
+        db, load_session_row(db, chat_id, session_id) or values, app_settings=app_settings
+    )
 
 
 def list_sessions(db: sqlite3.Connection, chat_id: str) -> list[dict[str, str]]:
@@ -204,6 +214,7 @@ def delete_session_data(
                 chat_id,
                 target_session_id,
                 (
+                    humanizer_key(chat_id, target_session_id),
                     swipe_state_key(chat_id, target_session_id),
                     f"swipe_message:{chat_id}:{target_session_id}",
                     expression_mode_key(chat_id, target_session_id),

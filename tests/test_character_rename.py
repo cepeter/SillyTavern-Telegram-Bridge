@@ -1,3 +1,4 @@
+import application_test_setup as application_setup
 from application_test_setup import ensure_application_extensions, make_test_group_service, make_test_request_context
 from settings_test_support import SettingsTestCase
 
@@ -168,6 +169,7 @@ class CharacterRenameTests(SettingsTestCase):
                 request_context=make_test_request_context(
                     self.db, "active", app_settings=self.app_settings_builder.build()
                 ),
+                provider_port=application_setup.make_test_provider_port(),
             )
         finally:
             _m_cards.send_panel_request = original

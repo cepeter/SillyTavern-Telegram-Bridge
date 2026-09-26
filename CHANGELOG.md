@@ -4,6 +4,17 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add an opt-in, per-session Humanizer pass after language rendering, with bounded provider requests, conservative text-preservation checks and default-off metadata persistence. Include upstream attribution and a pinned-reference refresh specification; no scheduler or automatic prompt promotion is installed.
+- Rank uploaded character cards S–D with the utility model and show the tier badge beside each character name in the selection, info, and optimizer menus. A new ⚡ Optimizer menu rewrites a card's text fields with the utility model and shows a preview before applying (with a verified backup) or discarding.
+
+### Fixed
+
+- Preserve original character-card backups and use atomic, checksum-checked replacement for confirmed uploads and optimizer results. Bind approval to a unique user/session/content proposal; refuse stale/replayed previews and keep staged files outside the card catalog.
+- Validate utility-model rank syntax, bind cached ranks to file revisions, whitelist optimized fields and provide complete paginated previews. Preserve the original queued session and actor for document import and recovery.
+- Re-uploading a character card whose name already exists no longer silently skips it or auto-creates a versioned copy. It now stages the upload and asks for confirmation to overwrite, keep the existing card, or save as a new version.
+
 ### Architecture
 
 - Add an explicitly composed RAG service and embedding port; separate bounded document extraction, embedding transport, indexing/query use cases and SQL-only Data Bank repositories. Retire the old RAG aggregation/re-export modules and extend dependency/type guards across the new boundaries.

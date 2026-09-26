@@ -17,6 +17,8 @@ from bridge.failed_turns import clear_failed_turn
 from bridge.generation import build_chat_messages, render_response_language
 from bridge.generation_settings import get_generation_settings
 from bridge.group_service import GroupService
+from bridge.humanize import render_humanized_response
+from bridge.humanizer_settings import humanizer_enabled
 from bridge.language import normalize_response_language
 from bridge.memory import clear_session_summary
 from bridge.memory_curator import clear_curated_memory_state
@@ -171,8 +173,9 @@ def generate_and_store_reply(
     send_typing(token, chat_id)
     language = session.get("response_language") or "auto"
     fixed_language = normalize_response_language(language) != "auto"
+    humanizer_on = humanizer_enabled(session.get("humanizer"))
     stream_message_id = None
-    if not fixed_language and get_meta(db, f"stream_mode:{chat_id}", "on") == "on":
+    if not fixed_language and not humanizer_on and get_meta(db, f"stream_mode:{chat_id}", "on") == "on":
         try:
             placeholder = telegram_request(token, "sendMessage", {"chat_id": chat_id, "text": "⌛ Generating…"})
             stream_message_id = int(placeholder.get("message_id")) if placeholder.get("message_id") else None
@@ -206,6 +209,15 @@ def generate_and_store_reply(
     reply = render_response_language(
         api_key, current_model, reply, language, generation_session_id, generation_settings, provider_port=provider_port
     )
+    if humanizer_on:
+        reply = render_humanized_response(
+            api_key,
+            current_model,
+            reply,
+            generation_session_id,
+            generation_settings,
+            provider_port=provider_port,
+        )
     stored_reply = (
         reply
         if group_turn and group_turn[1].get("mode") == "autonomous"

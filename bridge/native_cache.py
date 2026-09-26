@@ -5,7 +5,9 @@ from __future__ import annotations
 import copy
 import json
 import threading
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 _NATIVE_CACHE_LOCK = threading.RLock()
 _NATIVE_CACHE: dict[tuple[str, int, int], object] = {}
@@ -33,7 +35,7 @@ def cached_json(path: Path) -> object:
     return copy.deepcopy(value)
 
 
-def cached_png_metadata(path: Path, loader) -> dict:
+def cached_png_metadata(path: Path, loader: Callable[[Path], dict[str, Any]]) -> dict[str, Any]:
     key = _key(path)
     if key is None:
         raise OSError(f"native file is unavailable: {path}")
@@ -43,10 +45,10 @@ def cached_png_metadata(path: Path, loader) -> dict:
         value = loader(path)
         with _NATIVE_CACHE_LOCK:
             _NATIVE_CACHE[key] = value
-    return copy.deepcopy(value)
+    return copy.deepcopy(cast(dict[str, Any], value))
 
 
-def cached_text(key: str, builder) -> str:
+def cached_text(key: str, builder: Callable[[], object]) -> str:
     with _NATIVE_CACHE_LOCK:
         value = _TEXT_CACHE.get(str(key))
     if value is None:

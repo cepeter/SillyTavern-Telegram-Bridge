@@ -742,7 +742,7 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
             ),
             patch.object(
                 _m_telegram,
-                "ensure_session",
+                "load_session",
                 return_value=self.session,
             ),
             patch.object(
@@ -766,6 +766,10 @@ class MemoryServiceMessageIntegrationTests(SettingsTestCase):
                 ).group_director,
                 app_settings=self.app_settings_builder.build(),
                 rag_service=make_test_rag_service(),
+                provider_port=make_test_provider_port(),
+                request_context=make_test_request_context(
+                    self.db, self.session["session_id"], app_settings=self.app_settings_builder.build()
+                ),
             )
 
         self.assertIs(captured["memory_service"], memory)

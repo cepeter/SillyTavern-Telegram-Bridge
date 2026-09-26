@@ -421,6 +421,7 @@ class WorkerInjectionTests(SettingsTestCase):
                 "chat_id",
                 "document",
                 "message_id",
+                "queued_session_id",
                 "model_override",
                 "job_id",
             ),

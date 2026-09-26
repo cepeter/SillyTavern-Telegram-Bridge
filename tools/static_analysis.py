@@ -47,6 +47,11 @@ REPOSITORY_TARGETS: tuple[str, ...] = (
 TYPE_TARGETS: tuple[str, ...] = (
     *STATIC_TARGETS,
     *REPOSITORY_TARGETS,
+    "bridge/humanize.py",
+    "bridge/humanizer_settings.py",
+    "bridge/character_quality.py",
+    "bridge/character_proposals.py",
+    "bridge/character_optimizer_panels.py",
     "bridge/rag_contracts.py",
     "bridge/rag_indexing.py",
     "bridge/rag_query.py",
@@ -85,6 +90,31 @@ SERVICE_CONTRACT_IMPORTS = frozenset({"bridge.port_contracts", "bridge.request_t
 
 
 LOW_LEVEL_IMPORTS = {
+    "bridge.humanize": frozenset(["bridge.config", "bridge.provider_port"]),
+    "bridge.humanizer_settings": frozenset(["bridge.metadata"]),
+    "bridge.character_quality": frozenset(
+        [
+            "bridge.limits",
+            "bridge.metadata",
+            "bridge.model_selection",
+            "bridge.provider_port",
+            "bridge.settings",
+            "bridge.sqlite_store",
+        ]
+    ),
+    "bridge.character_proposals": frozenset(
+        ["bridge.limits", "bridge.meta_repository", "bridge.metadata", "bridge.request_types", "bridge.sqlite_store"]
+    ),
+    "bridge.character_optimizer_panels": frozenset(
+        [
+            "bridge.callback_tokens",
+            "bridge.card_content",
+            "bridge.cards",
+            "bridge.character_quality",
+            "bridge.panel_utils",
+            "bridge.request_types",
+        ]
+    ),
     "bridge.rag_indexing": frozenset(
         (
             "bridge.rag_repository",

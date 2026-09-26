@@ -18,6 +18,7 @@ from bridge.card_content import (
 from bridge.config import GENERATION_DEFAULTS
 from bridge.generation_settings import get_generation_settings, update_generation_settings
 from bridge.generation_settings_values import parse_generation_setting
+from bridge.humanizer_settings import normalize_humanizer
 from bridge.language import normalize_response_language
 from bridge.limits import SYNC_MAX_BYTES
 from bridge.memory import get_session_summary
@@ -109,6 +110,7 @@ def build_sync_records(
             "character_file": session["character_file"],
             "model": session["model_id"],
             "response_language": session.get("response_language") or "auto",
+            "humanizer": session.get("humanizer") or "off",
             "persona": session["persona_id"],
             "world_info": active_world_files(session["world_file"], app_settings=app_settings),
             "author_note": session["author_note"],
@@ -179,6 +181,10 @@ def _apply_sync_snapshot_backend(
     values["system_prompt"] = str(metadata.get("system_prompt") or "")[:8000]
     try:
         values["response_language"] = normalize_response_language(str(metadata.get("response_language") or "auto"))
+    except ValueError:
+        pass
+    try:
+        values["humanizer"] = normalize_humanizer(str(metadata.get("humanizer") or "off"))
     except ValueError:
         pass
     update_session(db, chat_id, session["session_id"], **values)

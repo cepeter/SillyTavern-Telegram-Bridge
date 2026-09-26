@@ -752,9 +752,9 @@ Response-language instruction
 Provider-specific generation settings
 ```
 
-Your original text and the model's replies are stored as-is. The single-star
-action formatting is only added to the prompt representation — it never
-rewrites what's stored.
+Your original user text is stored as entered. Single-star action formatting
+is added only to its prompt representation. Assistant replies are stored after
+any selected response-language rendering and optional Humanizer pass.
 
 ### Streaming and long responses
 
@@ -778,6 +778,33 @@ during continuation requests, and makes at most three automatic continuation
 requests after the initial visible segment. Reasoning-only length stops can
 retry with a larger output budget. `/continue` is always available for a
 deliberate additional segment.
+
+### Optional Humanizer response style
+
+Open `/settings` and choose **Humanizer: On** to request an additional prose
+rewrite after response-language rendering. It is **off by default**, scoped to
+the selected session, and reset by **Reset all** in the generation settings
+panel. It uses the response's selected provider/model, so enabling it can add
+latency and token charges. Native transcript sync preserves the setting.
+
+With Humanizer enabled, normal replies do not expose an intermediate raw
+streaming preview. The rewrite receives at most 24,000 source characters, has
+an output-token request capped at 4,096, and uses a 30-second **per-request**
+provider timeout. Existing bounded provider recovery/continuation may involve
+additional requests; this is not a 30-second whole-turn deadline. Longer source
+texts bypass the rewrite rather than sending a truncated source.
+
+Provider failure, an empty rewrite, excessive shortening, or changes to protected
+code, numbers, quoted dialogue, action spans, links, or citations keep the
+original rendered reply. These conservative structural checks are not a proof
+of semantic equivalence: review important prose as with any model-generated text.
+The setting applies to normal replies, regeneration, continuation, edited-message
+regeneration, and image replies through their shared rendering paths.
+
+The [reference-refresh document](docs/humanizer-weekly-sync.md) is a future
+implementation specification only. No weekly sync, timer, or automatic prompt
+promotion is installed. Prompt attribution is retained in
+[third-party notices](THIRD_PARTY_NOTICES.md).
 
 ### Variants and recovery
 
@@ -807,6 +834,35 @@ before any replacement or deletion.
 
 The active card and any cards referenced by sessions or groups are protected —
 you can't accidentally delete a card that's in use.
+
+#### Re-uploading and optimizing a card
+
+A first upload installs a validated card with a verified backup. Re-uploading
+an existing name opens **Overwrite / New version / Keep existing** instead of
+silently replacing it. The pending file stays outside the visible character
+catalog. Confirmations belong to the initiating user and session, expire after
+10 minutes, and are single-use. A newer proposal supersedes that user's prior
+proposal of the same type. Changes to the installed card after preview require
+a new preview rather than overwriting the changed file.
+
+The **Optimizer** entry in `/character` requests improved text fields through the
+configured utility-model route. It is a model-assisted editing tool, not a
+character-quality guarantee. Review all pages of the proposed fields before
+applying; the preview includes system prompt and post-history instructions when
+changed. Application verifies that the exact approved fields produce the staged
+card bytes, preserves name/avatar/other metadata, backs up the original bytes,
+and atomically replaces the file. Unsupported dual `chara`/`ccv3` payloads are
+refused rather than partially rewritten. A failed or interrupted application
+may require generating a new preview; it never replays an already consumed
+confirmation automatically.
+
+New installations and applied card changes also request an optional S–D quality
+tier from the utility-model route. Badges are model-generated assessments, not
+objective scores. Unavailable ranking leaves the card usable without a new badge.
+Stored badges are invalidated when the card's file revision changes. Ranking
+and optimization do not enter the roleplay transcript, but they send card text
+to the selected utility provider and can incur token charges. Utility tasks use
+bounded inputs and per-request timeouts.
 
 ### Personas
 
