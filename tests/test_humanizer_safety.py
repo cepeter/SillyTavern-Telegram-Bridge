@@ -177,3 +177,48 @@ def test_normal_generation_stores_and_delivers_humanized_reply_without_raw_previ
     assert len(calls) == 2
     assert calls[0]["stream_callback"] is None
     assert calls[1]["request_timeout"] == 30.0
+
+
+def test_normal_generation_stores_and_delivers_telegram_safe_html(context, monkeypatch):
+    from application_test_setup import make_test_application_services
+
+    from bridge import message_commands
+
+    db, session, ctx = context
+    deliveries = []
+    raw = 'Intro<div style="color:red"><div>Scene Title</div><div>Line A<br>Line B</div></div>Outro'
+    port = ProviderPort(lambda *a, **k: raw)
+    services = make_test_application_services(app_settings=ctx.app_settings, provider=port)
+    from bridge.metadata import set_meta
+
+    set_meta(db, "stream_mode:chat", "off")
+    monkeypatch.setattr(message_commands, "build_chat_messages", lambda *a, **k: [])
+    monkeypatch.setattr(message_commands, "send_typing", lambda *a, **k: None)
+    monkeypatch.setattr(message_commands, "queue_user_quote_tts", lambda *a, **k: None)
+    monkeypatch.setattr(message_commands, "send_reply", lambda _token, _chat, text, *a, **k: deliveries.append(text))
+    message_commands.generate_and_store_reply(
+        db,
+        "token",
+        "key",
+        {"name": "Alice"},
+        "chat",
+        "Hello",
+        session,
+        session["session_id"],
+        "fixture::model",
+        None,
+        "",
+        None,
+        None,
+        group_service=services.group,
+        provider_port=port,
+        memory_service=services.memory,
+        persona_service=services.persona,
+        app_settings=ctx.app_settings,
+        rag_service=services.rag,
+    )
+    assert deliveries
+    assert "<div" not in deliveries[-1]
+    assert "Scene Title" in deliveries[-1]
+    stored = db.execute("SELECT content FROM messages WHERE role='assistant' ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+    assert stored == deliveries[-1]

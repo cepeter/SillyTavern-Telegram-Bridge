@@ -217,3 +217,15 @@ class CharacterQualityModelTests(SettingsTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OptimizerSuggestionPromptTests(unittest.TestCase):
+    def test_optimizer_prompt_includes_manual_suggestion_as_bounded_guidance(self):
+        prompt = quality.optimize_prompt(
+            {"name": "Alice", "description": "old"},
+            suggestion="Make her more sarcastic, preserve the backstory.",
+        )
+        joined = "\n".join(str(message["content"]) for message in prompt)
+        self.assertIn("<user_suggestion>", joined)
+        self.assertIn("Make her more sarcastic, preserve the backstory.", joined)
+        self.assertIn("does not override", joined)

@@ -806,6 +806,15 @@ implementation specification only. No weekly sync, timer, or automatic prompt
 promotion is installed. Prompt attribution is retained in
 [third-party notices](THIRD_PARTY_NOTICES.md).
 
+### Telegram-safe model output
+
+Completed model replies are normalized for Telegram before they are stored and
+delivered. Presentation HTML such as `<div>`, `<span>`, headings, lists and
+`<br>` is converted to readable plain text; HTML entities are decoded. Fenced
+and inline code are protected so literal HTML examples remain copyable. This is
+a final-output compatibility step rather than Telegram `parse_mode=HTML`, whose
+limited tag set cannot safely render arbitrary model-generated web markup.
+
 ### Variants and recovery
 
 | Command | Action |
@@ -845,16 +854,26 @@ catalog. Confirmations belong to the initiating user and session, expire after
 proposal of the same type. Changes to the installed card after preview require
 a new preview rather than overwriting the changed file.
 
-The **Optimizer** entry in `/character` requests improved text fields through the
-configured utility-model route. It is a model-assisted editing tool, not a
-character-quality guarantee. Review all pages of the proposed fields before
-applying; the preview includes system prompt and post-history instructions when
-changed. Application verifies that the exact approved fields produce the staged
-card bytes, preserves name/avatar/other metadata, backs up the original bytes,
-and atomically replaces the file. Unsupported dual `chara`/`ccv3` payloads are
-refused rather than partially rewritten. A failed or interrupted application
-may require generating a new preview; it never replays an already consumed
-confirmation automatically.
+The **Optimizer** entry in `/character` first opens **Auto Optimize** and
+**Manual Suggestion**. Auto uses the configured utility-model route directly.
+Manual Suggestion waits for one user instruction (up to 2,000 characters), such
+as “make her more sarcastic, preserve the backstory, and shorten the first
+message”, and sends that guidance to the same utility model without letting it
+override the optimizer field whitelist or character-identity rules. Suggestions
+are bound to the initiating user, session, character file and original file
+digest, expire after 10 minutes, and are not written into the card itself. The
+preview also offers Manual Suggestion again for another draft; each refinement
+starts from the currently installed/original card rather than chaining edits on
+top of the previous model draft.
+
+The Optimizer is a model-assisted editing tool, not a character-quality
+guarantee. Review all pages of the proposed fields before applying; the preview
+includes system prompt and post-history instructions when changed. Application
+verifies that the exact approved fields produce the staged card bytes, preserves
+name/avatar/other metadata, backs up the original bytes, and atomically replaces
+the file. Unsupported dual `chara`/`ccv3` payloads are refused rather than
+partially rewritten. A failed or interrupted application may require generating
+a new preview; it never replays an already consumed confirmation automatically.
 
 New installations and applied card changes also request an optional S–D quality
 tier from the utility-model route. Badges are model-generated assessments, not

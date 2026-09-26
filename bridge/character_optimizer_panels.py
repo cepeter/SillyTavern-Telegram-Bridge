@@ -44,6 +44,37 @@ def send_character_optimize_menu(
     send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id, request_context=request_context)
 
 
+def send_character_optimize_options(
+    token: str,
+    chat_id: str,
+    filename: str,
+    message_id: int | None = None,
+    *,
+    request_context: RequestContext,
+) -> None:
+    token_value = dynamic_callback_token("character", filename, chat_id, db=request_context.db)
+    rows = [
+        [{"text": "Auto Optimize", "callback_data": "characteroptimizeauto:" + token_value}],
+        [{"text": "Manual Suggestion", "callback_data": "characteroptimizemanual:" + token_value}],
+        [
+            {"text": "Back", "callback_data": "character:optimize"},
+            {"text": "Close", "callback_data": "character:cancel"},
+        ],
+    ]
+    send_panel_message(
+        token,
+        chat_id,
+        (
+            f"Optimizer options: {filename}\n\n"
+            "Auto Optimize uses the utility model directly. "
+            "Manual Suggestion lets you give it editing guidance first."
+        ),
+        {"inline_keyboard": rows},
+        message_id,
+        request_context=request_context,
+    )
+
+
 def send_character_optimize_result(
     token: str,
     chat_id: str,
@@ -71,8 +102,9 @@ def send_character_optimize_result(
     rows.append(
         [
             {"text": "Apply", "callback_data": f"characteroptimizeapply:{nonce}"},
-            {"text": "Cancel", "callback_data": f"characteroptimizecancel:{nonce}"},
+            {"text": "Manual Suggestion", "callback_data": f"characteroptimizerefine:{nonce}"},
         ]
     )
+    rows.append([{"text": "Cancel", "callback_data": f"characteroptimizecancel:{nonce}"}])
     text = f"Optimization preview: {filename}\nPage {current + 1}/{len(pages)}\n\n" + pages[current]
     send_panel_message(token, chat_id, text, {"inline_keyboard": rows}, message_id, request_context=request_context)
