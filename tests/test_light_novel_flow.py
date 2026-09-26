@@ -71,23 +71,37 @@ def test_story_and_choice_job_roll_back_together(novel_db):
     assert load_choice_set(db, record.nonce).assistant_rowid is None
 
 
-def test_choice_panels_use_durable_nonce_and_store_message_id(novel_db, monkeypatch):
+def test_choice_panels_show_full_text_in_body_with_numbered_selector_buttons(novel_db, monkeypatch):
     from bridge import light_novel_panels as panels
 
-    record = attached_choice(novel_db)
+    choices = [
+        "Walk toward the abandoned station & investigate the sound coming from inside.",
+        "Stay hidden behind the wall & watch the strangers before deciding.",
+    ]
+    record = attached_choice(novel_db, choices=choices)
     db, _, settings = novel_db
     sent = []
     monkeypatch.setattr(
         panels, "send_panel_request", lambda token, method, payload, **kw: sent.append(payload) or {"message_id": 81}
     )
     panels.render_choices(db, "token", record, app_settings=settings)
-    callbacks = [button["callback_data"] for row in sent[-1]["reply_markup"]["inline_keyboard"] for button in row]
-    assert callbacks == [
-        f"lnchoice:{record.nonce}:0",
-        f"lnchoice:{record.nonce}:1",
-        f"lnnext:{record.nonce}",
+    payload = sent[-1]
+    assert payload["parse_mode"] == "HTML"
+    assert payload["text"] == (
+        "What will you do?\n\n"
+        "<b>1.</b> Walk toward the abandoned station &amp; investigate the sound coming from inside.\n\n"
+        "<b>2.</b> Stay hidden behind the wall &amp; watch the strangers before deciding.\n\n"
+        "You may also type your own reply."
+    )
+    rows = payload["reply_markup"]["inline_keyboard"]
+    assert rows == [
+        [
+            {"text": "1", "callback_data": f"lnchoice:{record.nonce}:0"},
+            {"text": "2", "callback_data": f"lnchoice:{record.nonce}:1"},
+        ],
+        [{"text": "⏭ Next Scene", "callback_data": f"lnnext:{record.nonce}"}],
     ]
-    assert sent[-1]["reply_markup"]["inline_keyboard"][-1][0]["text"] == "⏭ Next Scene"
+    assert all(choice not in button["text"] for row in rows for button in row for choice in choices)
     assert load_choice_set(db, record.nonce).panel_message_id == 81
 
 

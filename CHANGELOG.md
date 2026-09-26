@@ -4,6 +4,10 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Show each Light Novel action in full inside the choice-panel message and replace long inline-button labels with compact numbered `1`–`4` selectors, keeping the existing durable callbacks and **⏭ Next Scene** action.
+
 ## [0.2.031] - 2026-09-26
 
 ### Added
