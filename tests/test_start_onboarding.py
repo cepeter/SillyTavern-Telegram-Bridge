@@ -86,134 +86,50 @@ class StartOnboardingTests(SettingsTestCase):
             provider_port=services.provider,
         )
 
-    def test_slash_start_rejects_installation_placeholder_before_probe(self):
-        sent = []
-        generate = Mock(return_value="OK")
-        with patch.object(
-            _m_command_routes,
-            "send_text",
-            side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
-        ):
-            handled = self._handle_start(
-                "/start",
-                PLACEHOLDER_MODEL,
-                generate_backend=generate,
-            )
-        self.assertTrue(handled)
+    def test_slash_start_opens_card_greeting_without_provider_probe(self):
+        generate = Mock(side_effect=AssertionError("/start must not call a story model"))
+        with patch.object(_m_command_routes, "send_greeting_menu", return_value=True) as chooser:
+            self.assertTrue(self._handle_start("/start", generate_backend=generate))
         generate.assert_not_called()
-        self.assertEqual(sent, ["please set your model first in /providers command"])
-
-    def test_slash_start_reports_model_probe_error_and_stops(self):
-        sent = []
-        generate = Mock(side_effect=RuntimeError("Missing provider credential: PROVIDER_ONE_API_KEY"))
-        with (
-            patch.object(
-                _m_command_routes,
-                "send_text",
-                side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
-            ),
-            patch.object(_m_command_routes, "send_greeting_menu") as greeting,
-        ):
-            handled = self._handle_start("/start", generate_backend=generate)
-
-        self.assertTrue(handled)
-        generate.assert_called_once()
-        greeting.assert_not_called()
-        self.assertEqual(
-            sent,
-            ["Model check failed: Missing provider credential: PROVIDER_ONE_API_KEY"],
-        )
-
-    def test_slash_start_limits_probe_timeout_and_reports_timeout(self):
-        sent = []
-        generate = Mock(side_effect=TimeoutError("timed out"))
-        with (
-            patch.object(
-                _m_command_routes,
-                "send_text",
-                side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
-            ),
-            patch.object(_m_command_routes, "send_greeting_menu") as greeting,
-        ):
-            handled = self._handle_start("/start", generate_backend=generate)
-
-        self.assertTrue(handled)
-        generate.assert_called_once()
-        self.assertEqual(generate.call_args.kwargs["request_timeout"], 30)
-        greeting.assert_not_called()
-        self.assertEqual(sent, ["Model check failed: timed out"])
-
-    def test_slash_start_probes_model_then_explains_optional_setup(self):
-        sent = []
-        generate = Mock(return_value="OK")
-        with patch.object(
-            _m_command_routes,
-            "send_text",
-            side_effect=lambda _token, _chat_id, text: sent.append(text) or [],
-        ):
-            handled = self._handle_start("/start", generate_backend=generate)
-
-        self.assertTrue(handled)
-        generate.assert_called_once()
-        self.assertEqual(generate.call_args.args[1], REAL_MODEL)
-        self.assertEqual(len(sent), 1)
-        self.assertIn("Persona, World Info, and System Prompt are optional", sent[0])
-        self.assertIn("Type", sent[0])
+        chooser.assert_called_once()
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 0)
 
-    def test_plain_start_probes_model_then_opens_greeting_choice(self):
-        opened = []
-        generate = Mock(return_value="OK")
-        with patch.object(
-            _m_command_routes,
-            "send_greeting_menu",
-            side_effect=lambda _token, chat_id, fields, user_name, **_kwargs: (
-                opened.append((chat_id, fields["first_mes"], user_name)) or True
-            ),
-        ):
-            handled = self._handle_start("start", generate_backend=generate)
+    def test_slash_start_does_not_require_provider_credentials_for_card_greeting(self):
+        generate = Mock(side_effect=RuntimeError("Missing provider credential"))
+        with patch.object(_m_command_routes, "send_greeting_menu", return_value=True) as chooser:
+            self.assertTrue(self._handle_start("/start", PLACEHOLDER_MODEL, generate_backend=generate))
+        generate.assert_not_called()
+        chooser.assert_called_once()
 
-        self.assertTrue(handled)
-        generate.assert_called_once()
-        self.assertEqual(opened, [("chat", "Hello from the character.", "User")])
-        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 0)
+    def test_slash_start_with_optional_setup_off_still_opens_chooser(self):
+        with patch.object(_m_command_routes, "send_greeting_menu", return_value=True) as chooser:
+            self.assertTrue(self._handle_start("/start", current_persona=""))
+        chooser.assert_called_once()
 
-    def test_slash_start_probes_model_then_opens_greeting_when_setup_ready(self):
-        opened = []
-        generate = Mock(return_value="OK")
-        ready_session = dict(self.session)
-        ready_session.update(
-            {
-                "persona_id": "punto.png",
-                "world_file": "world.json",
-                "system_prompt": "Prompt",
-            }
-        )
+    def test_plain_start_is_not_a_command_alias(self):
+        generate = Mock()
+        with patch.object(_m_command_routes, "send_greeting_menu") as chooser:
+            self.assertFalse(self._handle_start("start", generate_backend=generate))
+        generate.assert_not_called()
+        chooser.assert_not_called()
+
+    def test_started_session_cannot_reopen_start_chooser(self):
+        from bridge.conversation_lifecycle import mark_started
+
+        mark_started(self.db, "chat", self.session["session_id"], 0)
+        sent = []
         with (
-            patch.object(_m_command_routes, "active_world_files", return_value=["world.json"]),
-            patch.object(
-                _m_command_routes,
-                "send_text",
-                side_effect=AssertionError("ready /start should open the greeting chooser"),
-            ),
-            patch.object(
-                _m_command_routes,
-                "send_greeting_menu",
-                side_effect=lambda _token, chat_id, fields, user_name, **_kwargs: (
-                    opened.append((chat_id, fields["first_mes"], user_name)) or True
-                ),
-            ),
+            patch.object(_m_command_routes, "send_greeting_menu") as chooser,
+            patch.object(_m_command_routes, "send_text", side_effect=lambda *a: sent.append(a[2]) or []),
         ):
-            handled = self._handle_start(
-                "/start",
-                session=ready_session,
-                current_persona="punto.png",
-                generate_backend=generate,
-            )
+            self.assertTrue(self._handle_start("/start"))
+        chooser.assert_not_called()
+        self.assertEqual(sent, ["This session has already started."])
 
-        self.assertTrue(handled)
-        generate.assert_called_once()
-        self.assertEqual(opened, [("chat", "Hello from the character.", "User")])
+    def test_light_novel_has_a_dedicated_command(self):
+        with patch.object(_m_command_routes, "send_light_novel_menu") as menu:
+            self.assertTrue(self._handle_start("/lightnovel"))
+        menu.assert_called_once()
 
 
 if __name__ == "__main__":

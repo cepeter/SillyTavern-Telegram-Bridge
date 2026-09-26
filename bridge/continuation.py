@@ -7,6 +7,7 @@ import sqlite3
 from bridge.delivery_port import DeliveryPort
 from bridge.generation import _generation_generate_rendered_reply, build_chat_messages
 from bridge.generation_recovery import _generation_operation_recovery
+from bridge.light_novel_turn import begin_novel_turn
 from bridge.memory_service import MemoryService
 from bridge.operations import set_operation_phase
 from bridge.persona_service import PersonaService
@@ -112,6 +113,7 @@ def continue_last(
         rag_context=rag_service.context_for_prompt(db, chat_id, instruction, rag_bundle),
         app_settings=app_settings,
     )
+    novel_turn = begin_novel_turn(db, chat_id, session, "continue", operation_id)
     reply = _generation_generate_rendered_reply(
         db,
         token,
@@ -125,6 +127,7 @@ def continue_last(
         delivery_port=delivery_port,
         app_settings=app_settings,
         rag_service=rag_service,
+        novel_turn=novel_turn,
     )
     combined = assistant_row[2].rstrip() + " " + reply.lstrip()
     old_message_ids = recovery.message_ids_from_rows(
@@ -143,6 +146,8 @@ def continue_last(
     )
 
     def persist_continuation():
+        if novel_turn:
+            novel_turn.commit(db, int(assistant_row[0]), combined)
         db.execute(
             "UPDATE messages SET content=? WHERE rowid=?",
             (combined, assistant_row[0]),

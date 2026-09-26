@@ -7,8 +7,13 @@ import logging
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
+from typing import ParamSpec, TypeVar
 
 import bridge.limits as _limits
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 _GENERATION_SLOTS = threading.BoundedSemaphore(6)
 
@@ -77,7 +82,9 @@ def background_jobs_accepting() -> bool:
         return bool(_BACKGROUND_ACCEPTING)
 
 
-def _submit_tracked_future(label: str, function, *args, **kwargs):
+def _submit_tracked_future(
+    label: str, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+) -> concurrent.futures.Future[T] | None:
     with _BACKGROUND_STATE_LOCK:
         if not _BACKGROUND_ACCEPTING:
             return None
@@ -88,7 +95,7 @@ def _submit_tracked_future(label: str, function, *args, **kwargs):
             return None
         _BACKGROUND_FUTURES.add(future)
 
-    def forget(done):
+    def forget(done: concurrent.futures.Future[T]) -> None:
         with _BACKGROUND_STATE_LOCK:
             _BACKGROUND_FUTURES.discard(done)
 
@@ -110,7 +117,7 @@ def drain_background_jobs(timeout: float = 20.0) -> bool:
         concurrent.futures.wait(futures, timeout=remaining)
 
 
-def submit_background(label: str, function, *args, **kwargs) -> bool:
+def submit_background(label: str, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> bool:
     if not background_jobs_accepting():
         logging.info("Background shutdown in progress; rejected %s job", label)
         return False
@@ -123,7 +130,7 @@ def submit_background(label: str, function, *args, **kwargs) -> bool:
         slot.release()
         return False
 
-    def complete(done):
+    def complete(done: concurrent.futures.Future) -> None:
         slot.release()
         error = done.exception()
         if error:
@@ -136,10 +143,10 @@ def submit_background(label: str, function, *args, **kwargs) -> bool:
     return True
 
 
-_DURABLE_BACKLOG_DISPATCHER = None
+_DURABLE_BACKLOG_DISPATCHER: Callable[[], None] | None = None
 
 
-def register_durable_backlog_dispatcher(callback) -> None:
+def register_durable_backlog_dispatcher(callback: Callable[[], None] | None) -> None:
     global _DURABLE_BACKLOG_DISPATCHER
     _DURABLE_BACKLOG_DISPATCHER = callback
 
@@ -171,7 +178,7 @@ def shutdown_background_executors(timeout: float = 20.0) -> bool:
     return drained
 
 
-_CHAT_QUEUES: dict[str, deque[tuple[str, object, tuple, dict]]] = {}
+_CHAT_QUEUES: dict[str, deque[tuple[str, Callable, tuple, dict]]] = {}
 
 
 _CHAT_ACTIVE: set[str] = set()
@@ -219,7 +226,7 @@ def _start_next_chat_job(chat_id: str) -> None:
         slot.release()
         return
 
-    def complete(done):
+    def complete(done: concurrent.futures.Future) -> None:
         slot.release()
         with _CHAT_LOCKS_GUARD:
             _CHAT_IN_FLIGHT.discard(chat_id)
@@ -234,7 +241,9 @@ def _start_next_chat_job(chat_id: str) -> None:
     future.add_done_callback(complete)
 
 
-def submit_chat_background(label: str, chat_id: str, function, *args, **kwargs) -> bool:
+def submit_chat_background(
+    label: str, chat_id: str, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+) -> bool:
     if not background_jobs_accepting():
         logging.info("Background shutdown in progress; durable %s job remains in SQLite", label)
         return False

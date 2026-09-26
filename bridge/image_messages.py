@@ -7,10 +7,12 @@ import sqlite3
 import time
 
 from bridge.card_content import card_fields_from_file
+from bridge.conversation_lifecycle import START_REQUIRED, require_started
 from bridge.generation import build_chat_messages, render_session_response
 from bridge.generation_settings import get_generation_settings
 from bridge.group_director_service import GroupDirectorService
 from bridge.group_service import GroupService
+from bridge.light_novel_turn import begin_novel_turn
 from bridge.limits import MAX_HISTORY_MESSAGES
 from bridge.memory_service import MemoryService
 from bridge.persona_service import PersonaService
@@ -20,7 +22,7 @@ from bridge.response_delivery import send_reply
 from bridge.response_variants import save_response_variant
 from bridge.settings import AppSettings
 from bridge.sqlite_store import write_transaction
-from bridge.telegram import send_typing
+from bridge.telegram import send_text, send_typing
 
 
 def process_image_message(
@@ -43,6 +45,9 @@ def process_image_message(
     app_settings: AppSettings,
     rag_service: RagService,
 ) -> None:
+    if not require_started(db, chat_id, session["session_id"]):
+        send_text(token, chat_id, START_REQUIRED)
+        return
     caption = caption.strip()[:12000] or "Please analyze this image in the context of the conversation."
     group_turn = group_service.current_speaker(db, chat_id, session, caption)
     group_context = ""
@@ -83,6 +88,9 @@ def process_image_message(
         persona_service=persona_service,
         app_settings=app_settings,
     )
+    novel_turn = begin_novel_turn(db, chat_id, session, "image", telegram_message_id)
+    if novel_turn:
+        messages = novel_turn.messages(messages, session.get("response_language") or "auto")
     send_typing(token, chat_id)
     reply = provider_port.generate(
         api_key,
@@ -91,6 +99,8 @@ def process_image_message(
         session_id=f"telegram:{chat_id}:{session['session_id']}",
         settings=get_generation_settings(db, chat_id, session["session_id"]),
     )
+    if novel_turn:
+        reply = novel_turn.extract(reply)
     reply += rag_service.citation_footer(db, chat_id, caption, rag_bundle)
     reply = render_session_response(
         api_key,
@@ -123,6 +133,8 @@ def process_image_message(
             (chat_id, session["session_id"], "assistant", stored_reply, time.time()),
         )
         assistant_rowid = assistant_cursor.lastrowid
+        if novel_turn:
+            novel_turn.commit(db, int(assistant_rowid), stored_reply)
         save_response_variant(db, chat_id, session["session_id"], stored_text, stored_reply)
         if group_turn:
             group_service.advance_turn(db, chat_id, session["session_id"])

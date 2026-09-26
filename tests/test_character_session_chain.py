@@ -43,22 +43,23 @@ class CharacterSessionChainTests(SettingsTestCase):
             "message": {"message_id": message_id, "chat": {"id": "chat"}},
         }
 
-    def test_character_selection_opens_session_panel(self):
-        session = _owner_session_core.ensure_session(
-            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
-        )
+    def test_character_selection_opens_mode_panel_without_mutating_session(self):
+        from unittest.mock import patch
+
+        from settings_test_support import make_test_settings
+        from test_character_mutation_safety import _card_png
+
+        settings = make_test_settings(home=Path(self.tmp.name))
+        settings.character_dir.mkdir(parents=True, exist_ok=True)
+        (settings.character_dir / "chosen.png").write_bytes(_card_png("Chosen", "Story"))
+        session = _owner_session_core.ensure_session(self.db, "chat", settings.default_model, app_settings=settings)
         opened = []
-        original_resolve = _owner_character_callbacks.resolve_dynamic_callback_token
-        original_safe = _owner_character_callbacks.safe_character_path
-        original_fields = _owner_character_callbacks.card_fields_from_file
-        original_close = _owner_character_callbacks.close_panel_message
-        original_menu = _owner_character_callbacks.send_session_menu
-        _owner_character_callbacks.resolve_dynamic_callback_token = lambda *_args, **_kwargs: "chosen.png"
-        _owner_character_callbacks.safe_character_path = lambda _name, *, app_settings=None: Path("/tmp/chosen.png")
-        _owner_character_callbacks.card_fields_from_file = lambda _name, *, app_settings=None: {"name": "Chosen"}
-        _owner_character_callbacks.close_panel_message = lambda *_args, **_kwargs: None
-        _owner_character_callbacks.send_session_menu = lambda *_args, **_kwargs: opened.append(True)
-        try:
+        with (
+            patch.object(_owner_character_callbacks, "resolve_dynamic_callback_token", return_value="chosen.png"),
+            patch.object(
+                _owner_character_callbacks, "send_setup_panel", side_effect=lambda *a, **k: opened.append(a[2])
+            ),
+        ):
             callback = self._callback("character:token")
             handled = _owner_character_callbacks.handle_character_callback(
                 self.db,
@@ -73,31 +74,20 @@ class CharacterSessionChainTests(SettingsTestCase):
                 None,
                 group_service=self.group,
                 request_context=make_test_request_context(
-                    self.db, session["session_id"], app_settings=self.app_settings_builder.build()
+                    self.db, session["session_id"], "user", app_settings=settings
                 ),
                 provider_port=application_setup.make_test_provider_port(),
             )
-        finally:
-            _owner_character_callbacks.resolve_dynamic_callback_token = original_resolve
-            _owner_character_callbacks.safe_character_path = original_safe
-            _owner_character_callbacks.card_fields_from_file = original_fields
-            _owner_character_callbacks.close_panel_message = original_close
-            _owner_character_callbacks.send_session_menu = original_menu
         self.assertTrue(handled)
-        self.assertEqual(opened, [True])
+        self.assertEqual(opened[-1]["stage"], "mode")
+        self.assertEqual(opened[-1]["character_file"], "chosen.png")
         self.assertEqual(
-            _m_memory_curator.load_session(
-                self.db,
-                "chat",
-                session["session_id"],
-                self.app_settings_builder.default_model,
-                app_settings=self.app_settings_builder.build(),
-            )["character_file"],
-            self.app_settings_builder.default_character_file,
+            self.db.execute(
+                "SELECT character_file FROM sessions WHERE session_id=?", (session["session_id"],)
+            ).fetchone()[0],
+            session["character_file"],
         )
-        pending = json.loads(_m_session_naming.get_meta(self.db, "character_session_input:chat", "{}"))
-        self.assertEqual(pending["character_file"], "chosen.png")
-        self.assertEqual(pending["character_name"], "Chosen")
+        self.assertFalse(_m_session_naming.get_meta(self.db, "character_session_input:chat", ""))
 
     def test_session_selection_applies_pending_character(self):
         current = _owner_session_core.ensure_session(

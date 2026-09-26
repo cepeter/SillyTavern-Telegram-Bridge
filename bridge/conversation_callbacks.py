@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from bridge.callbacks import close_panel_message, discard_panel_binding, remove_inline_keyboard
 from bridge.card_content import card_fields_from_file
+from bridge.conversation_lifecycle import ALREADY_STARTED, conversation_state, is_group_conversation
 from bridge.delivery_port import DeliveryPort
 from bridge.greetings import greeting_choice_label, greeting_options, send_character_greeting, send_greeting_menu
 from bridge.message_commands import reset_session
@@ -146,6 +148,40 @@ def handle_greeting_callback(
         close_panel_message(db, token, chat_id, callback)
         return True
 
+    if not is_group_conversation(db, chat_id, session_id):
+        state = conversation_state(db, chat_id, session_id)
+        try:
+            supplied_epoch = int(parts[-1]) if len(parts) >= (5 if action == "page" else 4) else -1
+        except ValueError:
+            supplied_epoch = -1
+        if get_meta(db, f"active_session:{chat_id}", "default") != session_id or supplied_epoch != state.epoch:
+            send_text(token, chat_id, "Opening choice expired; use /start again.")
+            return True
+        if state.started:
+            from_opening = get_meta(db, f"conversation_opening:{chat_id}:{session_id}", "")
+            try:
+                opening = json.loads(from_opening or "{}")
+                opening_operation = opening.get("operation_id")
+                pending = db.execute(
+                    "SELECT rowid,telegram_message_ids FROM messages WHERE chat_id=? "
+                    "AND session_id=? ORDER BY rowid DESC LIMIT 1",
+                    (chat_id, session_id),
+                ).fetchone()
+                undelivered = bool(
+                    pending and pending[0] == opening.get("rowid") and not json.loads(pending[1] or "[]")
+                )
+            except (ValueError, TypeError, AttributeError):
+                opening_operation, undelivered = None, False
+            if action != "use" or operation_id is None or opening_operation is None:
+                send_text(token, chat_id, ALREADY_STARTED)
+                return True
+            if str(opening_operation) != str(operation_id):
+                if not undelivered:
+                    send_text(token, chat_id, ALREADY_STARTED)
+                    return True
+                # Re-deliver the durable original, even if the card has since changed.
+                operation_id = opening_operation
+
     if not options:
         answer_callback(token, str(callback.get("id", "")), "Greeting unavailable")
         discard_panel_binding(db, chat_id, message_id)
@@ -209,6 +245,8 @@ def handle_greeting_callback(
             operation_id,
             "start_greeting",
             app_settings=request_context.app_settings,
+            expected_epoch=conversation_state(db, chat_id, session_id).epoch,
+            actor_id=request_context.actor_id,
         )
         answer_callback(
             token,

@@ -12,8 +12,10 @@ from bridge.callbacks import (
     remove_inline_keyboard,
 )
 from bridge.composition import BridgeServices
+from bridge.conversation_setup_callbacks import handle_setup_callback
 from bridge.enum_callbacks import handle_enum_callback
 from bridge.group_callbacks import handle_group_panel_callback
+from bridge.light_novel_commands import handle_light_novel_mode_callback
 from bridge.panel_bindings import panel_owner_for_message, panel_session_for_message
 from bridge.panel_callback_routes import handle_entity_panel_callback, handle_primary_panel_callback
 from bridge.provider_callbacks import handle_provider_model_callback
@@ -76,6 +78,25 @@ def process_callback(
     memory_service = services.memory
     persona_service = services.persona
     sync_service = services.sync
+
+    if handle_setup_callback(
+        db,
+        token,
+        callback,
+        callback_answer,
+        data,
+        chat_id,
+        message,
+        session,
+        persona_service=persona_service,
+        request_context=request_context,
+    ):
+        return
+
+    if handle_light_novel_mode_callback(
+        db, token, callback, callback_answer, data, chat_id, session, request_context=request_context
+    ):
+        return
 
     if handle_primary_panel_callback(
         db,

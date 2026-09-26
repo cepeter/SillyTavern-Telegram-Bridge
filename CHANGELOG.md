@@ -4,6 +4,18 @@ All notable changes to **SillyTavern Telegram Bridge** are documented here.
 
 ## [Unreleased]
 
+
+### Added
+
+- Add a staged standard-session conversation wizard: Character → Normal/Light Novel → optional A/B/C strategy → Persona → World → System Prompt → Session → Apply, with no partial session mutation.
+- Add dedicated `/lightnovel` controls and durable random 2–4-choice panels after the opening greeting and subsequent story turns. A embeds choices with the story; B uses the Utility model; C makes a second Story-model call.
+- Consume choices and enqueue the corresponding user turn atomically. Persist ready choices/counts across restart, reject stale/replayed/foreign callbacks, and retry choice generation without regenerating committed narrative.
+
+### Changed
+
+- Standard sessions now require `/start` after `/new` or `/reset`; `/start` only selects the opening greeting once, and plain `start` is no longer an alias. Management commands/input remain usable before starting. Existing non-empty sessions are backfilled as started once.
+- Reset keeps conversation configuration while invalidating choices and queued narrative work from the prior reset epoch. Character/group management, Normal generation, RAG, memory and Humanizer keep their canonical execution paths.
+
 ### Fixed
 
 - Close the Session panel reliably when Cancel is pressed, and remove temporary `⏳ Command queued.` notices after command execution, including jobs recovered after restart.

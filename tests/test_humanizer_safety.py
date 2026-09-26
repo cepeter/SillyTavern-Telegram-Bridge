@@ -7,6 +7,7 @@ from application_test_setup import make_test_input_flow_service, make_test_rag_s
 
 from bridge import humanize
 from bridge.callbacks import is_session_scoped_panel_callback
+from bridge.conversation_lifecycle import mark_started
 from bridge.provider_port import ProviderPort
 from bridge.request_types import RequestContext
 from bridge.session_core import create_session, ensure_session, load_session, update_session
@@ -19,6 +20,7 @@ def context(tmp_path):
     settings = load_app_settings({}, home=tmp_path)
     db = db_connect(app_settings=settings)
     session = ensure_session(db, "chat", "fixture::model", app_settings=settings)
+    mark_started(db, "chat", session["session_id"], 0)
     try:
         yield db, session, RequestContext(db, session["session_id"], "actor", app_settings=settings)
     finally:

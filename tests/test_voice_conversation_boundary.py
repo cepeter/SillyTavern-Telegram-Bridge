@@ -22,6 +22,7 @@ def test_transcript_uses_injected_service_and_preserves_request_identity(monkeyp
     )
     db = object()
     fields = {"name": "character"}
+    monkeypatch.setattr(_owner_voice_jobs, "require_started", lambda *a: True)
     monkeypatch.setattr(_owner_voice_jobs, "get_meta", lambda _db, _key, default: default)
     monkeypatch.setattr(_owner_voice_jobs, "download_telegram_file", lambda *_args: b"audio")
     monkeypatch.setattr(_owner_voice_jobs, "transcribe_audio_bytes", lambda *_args, app_settings=None: "spoken message")

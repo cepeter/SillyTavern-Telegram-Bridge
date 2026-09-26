@@ -7,10 +7,20 @@ import sqlite3
 from pathlib import Path
 
 from bridge.composition import BridgeServices
+from bridge.conversation_lifecycle import (
+    START_REQUIRED,
+    conversation_state,
+    has_pending_management_input,
+    is_command_text,
+    require_started,
+)
 from bridge.document_jobs import process_document_job
 from bridge.help_details import send_help_command
 from bridge.job_service import JobSubmission
+from bridge.light_novel_panels import hide_choice_panels
+from bridge.light_novel_repository import invalidate_choice_sets
 from bridge.request_types import RequestContext
+from bridge.sqlite_store import write_transaction
 from bridge.topic_scope import topic_scope_from_message
 from bridge.transcript_repository import native_edit_target
 from bridge.voice_jobs import process_voice_job
@@ -160,23 +170,50 @@ def route_message_update(
         )
         return True
 
+    conversational_media = bool(
+        voice
+        or photos
+        or (
+            document
+            and Path(str(document.get("file_name") or "")).suffix.casefold() != ".png"
+            and str(document.get("mime_type") or "").startswith("image/")
+        )
+    )
+    conversational_text = bool(text and not is_command_text(str(text)))
+    if conversational_media or conversational_text:
+        gate_session = services.session.ensure(db, chat_id, model)
+        pending_input = conversational_text and has_pending_management_input(
+            db, chat_id, gate_session["session_id"], sender
+        )
+        if not pending_input and not require_started(db, chat_id, gate_session["session_id"]):
+            services.telegram.send_text(token, chat_id, START_REQUIRED)
+            return True
+
     if voice:
         message_id = int(message.get("message_id"))
         queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
-        job_id = services.jobs.enqueue(
-            db,
-            update_id,
-            chat_id,
-            queued_session_id,
-            message_id,
-            "voice",
-            {
-                "voice": voice,
-                "model": model,
-                "resolve_active": True,
-                "actor_id": sender,
-            },
-        )
+        with write_transaction(db):
+            old_panels = (
+                invalidate_choice_sets(db, chat_id, queued_session_id)
+                if conversation_state(db, chat_id, queued_session_id).mode == "lightnovel"
+                else []
+            )
+            job_id = services.jobs.enqueue(
+                db,
+                update_id,
+                chat_id,
+                queued_session_id,
+                message_id,
+                "voice",
+                {
+                    "voice": voice,
+                    "model": model,
+                    "resolve_active": False,
+                    "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
+                    "actor_id": sender,
+                },
+            )
+        hide_choice_panels(token, chat_id, old_panels)
         queued = services.jobs.submit(
             db,
             job_id,
@@ -190,7 +227,7 @@ def route_message_update(
                     chat_id,
                     voice,
                     message_id,
-                    None,
+                    queued_session_id,
                     None,
                 ),
             ),
@@ -206,22 +243,30 @@ def route_message_update(
         largest = photos[-1]
         message_id = int(message.get("message_id"))
         queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
-        job_id = services.jobs.enqueue(
-            db,
-            update_id,
-            chat_id,
-            queued_session_id,
-            message_id,
-            "image",
-            {
-                "file_id": str(largest.get("file_id", "")),
-                "caption": caption,
-                "file_size": int(largest.get("file_size") or 0),
-                "model": model,
-                "resolve_active": True,
-                "actor_id": sender,
-            },
-        )
+        with write_transaction(db):
+            old_panels = (
+                invalidate_choice_sets(db, chat_id, queued_session_id)
+                if conversation_state(db, chat_id, queued_session_id).mode == "lightnovel"
+                else []
+            )
+            job_id = services.jobs.enqueue(
+                db,
+                update_id,
+                chat_id,
+                queued_session_id,
+                message_id,
+                "image",
+                {
+                    "file_id": str(largest.get("file_id", "")),
+                    "caption": caption,
+                    "file_size": int(largest.get("file_size") or 0),
+                    "model": model,
+                    "resolve_active": False,
+                    "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
+                    "actor_id": sender,
+                },
+            )
+        hide_choice_panels(token, chat_id, old_panels)
         queued = services.jobs.submit(
             db,
             job_id,
@@ -236,7 +281,7 @@ def route_message_update(
                     caption,
                     int(largest.get("file_size") or 0),
                     message_id,
-                    None,
+                    queued_session_id,
                     None,
                 ),
             ),
@@ -255,22 +300,30 @@ def route_message_update(
     ):
         message_id = int(message.get("message_id"))
         queued_session_id = services.session.ensure(db, chat_id, model)["session_id"]
-        job_id = services.jobs.enqueue(
-            db,
-            update_id,
-            chat_id,
-            queued_session_id,
-            message_id,
-            "image",
-            {
-                "file_id": str(document.get("file_id", "")),
-                "caption": caption,
-                "file_size": int(document.get("file_size") or 0),
-                "model": model,
-                "resolve_active": True,
-                "actor_id": sender,
-            },
-        )
+        with write_transaction(db):
+            old_panels = (
+                invalidate_choice_sets(db, chat_id, queued_session_id)
+                if conversation_state(db, chat_id, queued_session_id).mode == "lightnovel"
+                else []
+            )
+            job_id = services.jobs.enqueue(
+                db,
+                update_id,
+                chat_id,
+                queued_session_id,
+                message_id,
+                "image",
+                {
+                    "file_id": str(document.get("file_id", "")),
+                    "caption": caption,
+                    "file_size": int(document.get("file_size") or 0),
+                    "model": model,
+                    "resolve_active": False,
+                    "epoch": conversation_state(db, chat_id, queued_session_id).epoch,
+                    "actor_id": sender,
+                },
+            )
+        hide_choice_panels(token, chat_id, old_panels)
         queued = services.jobs.submit(
             db,
             job_id,
@@ -285,7 +338,7 @@ def route_message_update(
                     caption,
                     int(document.get("file_size") or 0),
                     message_id,
-                    None,
+                    queued_session_id,
                     None,
                 ),
             ),
@@ -357,18 +410,11 @@ def route_message_update(
     ):
         return True
 
-    normalized_text = str(text).strip().casefold()
-    is_plain_start = normalized_text == "start"
-
-    if (
-        not str(text).lstrip().startswith("/")
-        and not is_plain_start
-        and not services.group.user_turn_allowed(
-            db,
-            chat_id,
-            queued_session_id,
-            sender,
-        )
+    if not str(text).lstrip().startswith("/") and not services.group.user_turn_allowed(
+        db,
+        chat_id,
+        queued_session_id,
+        sender,
     ):
         services.telegram.send_text(
             token,
@@ -377,7 +423,7 @@ def route_message_update(
         )
         return True
 
-    if is_plain_start or is_long_running_command(str(text)):
+    if is_long_running_command(str(text)):
         payload = {
             "text": str(text),
             "model": model,
@@ -495,20 +541,31 @@ def route_message_update(
                 _delete_queue_notice_messages(services, token, chat_id, deferred_notice_message_ids)
         return True
 
-    job_id = services.jobs.enqueue(
-        db,
-        update_id,
-        chat_id,
-        queued_session_id,
-        message_id,
-        "generation",
-        {
-            "text": str(text),
-            "model": model,
-            "resolve_active": True,
-            "actor_id": sender,
-        },
-    )
+    queued_session = services.session.load(db, chat_id, queued_session_id, model)
+    mode_state = conversation_state(db, chat_id, queued_session_id)
+    pending_input = has_pending_management_input(db, chat_id, queued_session_id, sender)
+    with write_transaction(db):
+        old_panels = (
+            invalidate_choice_sets(db, chat_id, queued_session_id)
+            if mode_state.mode == "lightnovel" and not pending_input
+            else []
+        )
+        job_id = services.jobs.enqueue(
+            db,
+            update_id,
+            chat_id,
+            queued_session_id,
+            message_id,
+            "generation",
+            {
+                "text": str(text),
+                "model": queued_session["model_id"] or model,
+                "resolve_active": False,
+                "actor_id": sender,
+                "epoch": mode_state.epoch,
+            },
+        )
+    hide_choice_panels(token, chat_id, old_panels)
     queued = services.jobs.submit(
         db,
         job_id,
@@ -523,7 +580,8 @@ def route_message_update(
                 str(text),
                 message_id,
                 None,
-                None,
+                queued_session_id,
+                queued_session["model_id"] or model,
             ),
         ),
     )

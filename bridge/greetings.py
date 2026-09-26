@@ -9,11 +9,24 @@ import sqlite3
 import time
 
 from bridge.card_content import replace_macros
+from bridge.conversation_lifecycle import (
+    ALREADY_STARTED,
+    conversation_state,
+    is_group_conversation,
+    lifecycle_key,
+    mark_started,
+)
+from bridge.light_novel_service import attach_turn, prepare_turn
 from bridge.limits import CARD_FIELD_MAX_CHARS
-from bridge.operations import begin_operation, operation_was_applied, record_operation
+from bridge.metadata import get_meta, set_meta
+from bridge.operations import operation_was_applied, record_operation
 from bridge.panel_utils import PANEL_PAGE_SIZE, panel_page
+from bridge.response_delivery import persist_assistant_delivery_ids
+from bridge.session_repository import load_session_row
 from bridge.settings import AppSettings
+from bridge.sqlite_store import write_transaction
 from bridge.telegram import send_panel_request, send_text
+from bridge.telegram_output import telegram_safe_output
 
 _GREETING_PREVIEW_MAX_CHARS = 3200
 
@@ -55,6 +68,11 @@ def send_greeting_menu(
     request_context,
 ) -> bool:
     """Show the opening-message chooser and preview the selected greeting."""
+    state = conversation_state(request_context.db, chat_id, request_context.session_id)
+    if state.started and not is_group_conversation(request_context.db, chat_id, request_context.session_id):
+        send_text(token, chat_id, ALREADY_STARTED)
+        return False
+    epoch = state.epoch
     options = greeting_options(fields)
     if not options:
         send_text(token, chat_id, "This character has no opening greeting.")
@@ -75,7 +93,7 @@ def send_greeting_menu(
             [
                 {
                     "text": mark + label,
-                    "callback_data": f"greeting:preview:{index}",
+                    "callback_data": f"greeting:preview:{index}:{epoch}",
                 }
             ]
         )
@@ -85,14 +103,14 @@ def send_greeting_menu(
         navigation.append(
             {
                 "text": "⬅️ Previous",
-                "callback_data": f"greeting:page:{current_page - 1}:{selected_index}",
+                "callback_data": f"greeting:page:{current_page - 1}:{selected_index}:{epoch}",
             }
         )
     if current_page < total_pages - 1:
         navigation.append(
             {
                 "text": "Next ➡️",
-                "callback_data": f"greeting:page:{current_page + 1}:{selected_index}",
+                "callback_data": f"greeting:page:{current_page + 1}:{selected_index}:{epoch}",
             }
         )
     if navigation:
@@ -102,7 +120,7 @@ def send_greeting_menu(
         [
             {
                 "text": "▶️ Start with this greeting",
-                "callback_data": f"greeting:use:{selected_index}",
+                "callback_data": f"greeting:use:{selected_index}:{epoch}",
             }
         ]
     )
@@ -154,24 +172,69 @@ def send_character_greeting(
     operation_kind: str = "greeting",
     *,
     app_settings: AppSettings,
+    expected_epoch: int | None = None,
+    actor_id: str = "",
 ) -> bool:
-    if operation_id is not None and (
-        operation_was_applied(db, operation_id) or not begin_operation(db, operation_id, operation_kind)
-    ):
+    """Commit opening plus started state together, then deliver the committed text."""
+    if db.in_transaction:
+        raise ValueError("Greeting delivery requires no enclosing write transaction")
+    group = is_group_conversation(db, chat_id, session_id)
+    state = conversation_state(db, chat_id, session_id)
+    if expected_epoch is not None and state.epoch != expected_epoch:
         return False
-    options = greeting_options(fields)
-    if not options:
-        return False
-    selected_index = random.randrange(len(options)) if index is None else int(index)  # noqa: S311 -- character text selection, not a security token
-    greeting = render_greeting(fields, user_name, selected_index, app_settings=app_settings)
-    if not greeting:
-        return False
+    opening_key = lifecycle_key("opening", chat_id, session_id)
+    with write_transaction(db):
+        state = conversation_state(db, chat_id, session_id)
+        if expected_epoch is not None and state.epoch != expected_epoch:
+            return False
+        if operation_id is not None and operation_was_applied(db, operation_id):
+            return False
+        rowid = None
+        if state.started and not group:
+            opening = json.loads(get_meta(db, opening_key, "") or "{}")
+            if operation_id is None or str(opening.get("operation_id")) != str(operation_id):
+                return False
+            row = db.execute(
+                "SELECT content,telegram_message_ids FROM messages WHERE rowid=? AND chat_id=? "
+                "AND session_id=? AND role='assistant'",
+                (opening.get("rowid"), chat_id, session_id),
+            ).fetchone()
+            if row is None:
+                return False
+            if json.loads(row[1] or "[]"):
+                record_operation(db, operation_id, operation_kind)
+                return False
+            rowid, greeting = int(opening["rowid"]), str(row[0])
+        else:
+            options = greeting_options(fields)
+            if not options:
+                return False
+            selected_index = random.randrange(len(options)) if index is None else int(index)  # noqa: S311 -- greeting selection
+            greeting = telegram_safe_output(
+                render_greeting(fields, user_name, selected_index, app_settings=app_settings)
+            )
+            if not greeting:
+                return False
+            cursor = db.execute(
+                "INSERT INTO messages(chat_id,session_id,role,content,created_at) VALUES(?,?,?,?,?)",
+                (chat_id, session_id, "assistant", greeting, time.time()),
+            )
+            rowid = int(cursor.lastrowid)
+            if not group:
+                if not mark_started(db, chat_id, session_id, state.epoch):
+                    raise ValueError("Opening state changed")
+                set_meta(
+                    db, opening_key, json.dumps({"rowid": rowid, "operation_id": operation_id, "epoch": state.epoch})
+                )
+        # A stored opening has no inline generated choices. Every strategy
+        # gets a durable choice-only first pass after this transaction commits.
+        if not group:
+            opening_session = load_session_row(db, chat_id, session_id)
+            if opening_session is None:
+                raise ValueError("Session no longer exists")
+            record = prepare_turn(db, chat_id, opening_session, f"opening:{state.epoch}", actor_id)
+            attach_turn(db, record, rowid, greeting)
     message_ids = send_text(token, chat_id, greeting)
-    db.execute(
-        "INSERT INTO messages(chat_id,session_id,role,content,telegram_message_ids,created_at) VALUES(?,?,?,?,?,?)",
-        (chat_id, session_id, "assistant", greeting, json.dumps(message_ids), time.time()),
-    )
-    if operation_id is not None:
-        record_operation(db, operation_id, operation_kind)
-    db.commit()
+    persist_assistant_delivery_ids(db, rowid, message_ids)
+    record_operation(db, operation_id, operation_kind)
     return True
