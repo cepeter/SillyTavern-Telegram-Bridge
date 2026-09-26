@@ -26,7 +26,7 @@ from bridge.card_content import system_prompt_callback_token as system_prompt_ca
 from bridge.card_content import system_prompt_choices as system_prompt_choices
 from bridge.card_content import system_prompt_label as system_prompt_label
 from bridge.card_content import world_file_paths as world_file_paths
-from bridge.character_quality import RANK_TIERS, character_rank, rank_badge
+from bridge.character_quality import RANK_TIERS, character_rank
 from bridge.panel_utils import panel_label, panel_message_request, panel_navigation, panel_page
 from bridge.persona_service import PersonaService
 from bridge.request_types import RequestContext
@@ -199,10 +199,7 @@ def send_character_info_menu(
     rows = [
         [
             {
-                "text": rank_badge(
-                    character_rank(request_context.db, filename, app_settings=request_context.app_settings)
-                )
-                + label,
+                "text": label,
                 "callback_data": "characterinfo:"
                 + dynamic_callback_token("character", filename, chat_id, db=request_context.db),
             }

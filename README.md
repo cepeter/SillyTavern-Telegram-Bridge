@@ -849,10 +849,12 @@ you can't accidentally delete a card that's in use.
 Character rows use three columns: **rank | character | action**. The rank column
 shows S/A/B/C/D (or `—` when unranked) and is a silent no-op button. Ranked
 buttons use the bridge's built-in animated custom emoji set
-`sttb_ranks_by_SillyTavernPunzmeBot`, created from the project rank GIFs. The
-registered custom-emoji IDs are intentionally hardcoded so no private `.env`
-configuration is needed; the visible S/A/B/C/D button text remains the fallback
-when a Telegram client cannot render the custom emoji.
+`sttb_ranks_by_SillyTavernPunzmeBot`. The checked-in [rank asset manifest](assets/character-ranks/README.md)
+contains public GIF/WEBM references, SHA-256 provenance, and the exact hardcoded
+custom-emoji mapping. No private `.env` configuration is needed; the visible
+S/A/B/C/D button text remains the fallback when a Telegram client cannot render
+the custom emoji. Rank decoration is intentionally limited to this main Character
+Menu; Character Info and Optimizer pickers show names only.
 
 #### Re-uploading and optimizing a card
 
@@ -866,16 +868,18 @@ a new preview rather than overwriting the changed file.
 
 The **Optimizer** entry in `/character` first opens **Auto Optimize** and
 **Manual Suggestion**. Auto uses the configured utility-model route directly.
-Manual Suggestion waits for one user instruction (up to 2,000 characters), such
+Manual Suggestion first shows the current editable card values in readable
+Telegram sections, then waits for one instruction (up to 2,000 characters), such
 as “make her more sarcastic, preserve the backstory, and shorten the first
-message”, and sends that guidance to the same utility model without letting it
-override the optimizer field whitelist or character-identity rules. Suggestions
-are bound to the initiating user, session, character file and original file
-digest, expire after 10 minutes, and are not written into the card itself. Users
-in the same Telegram chat keep independent pending Manual Suggestions. The
-preview also offers Manual Suggestion again for another draft; each refinement
-starts from the currently installed/original card rather than chaining edits on
-top of the previous model draft.
+message”. The guidance goes to the same utility model without overriding the
+optimizer field whitelist or character-identity rules. Suggestions are bound to
+the initiating user, session, character file and original file digest, expire
+after 10 minutes, and are not written into the installed card until Apply. Users
+in the same Telegram chat keep independent pending Manual Suggestions. Choosing
+Manual Suggestion again from a preview is a true revision: the displayed base and
+the next LLM request use that temporary preview's values, while the final staged
+proposal keeps the cumulative effective diff relative to the unchanged installed
+card. This preserves the existing checksum and exact-byte Apply verification.
 
 The Optimizer is a model-assisted editing tool, not a character-quality
 guarantee. Review all pages of the proposed fields before applying; the preview
