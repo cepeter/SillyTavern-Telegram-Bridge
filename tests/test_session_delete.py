@@ -1,4 +1,9 @@
-from application_test_setup import ensure_application_extensions, make_test_memory_service, make_test_request_context
+from application_test_setup import (
+    ensure_application_extensions,
+    make_test_group_service,
+    make_test_memory_service,
+    make_test_request_context,
+)
 from settings_test_support import SettingsTestCase
 
 import bridge.cards as _owner_cards
@@ -16,6 +21,7 @@ import bridge.cards as _m_cards
 import bridge.memory as _m_memory
 import bridge.memory_curator as _m_memory_curator
 import bridge.message_commands as _m_message_commands
+import bridge.session_callbacks as _owner_session_callbacks
 import bridge.session_naming as _m_session_naming
 
 
@@ -162,6 +168,54 @@ class SessionDeletionTests(SettingsTestCase):
         )
         self.assertFalse(denied)
         self.assertEqual(reason, "session has active jobs")
+
+    def test_successful_delete_sends_fresh_session_menu(self):
+        active = _owner_session_core.ensure_session(
+            self.db, "chat", self.app_settings_builder.default_model, app_settings=self.app_settings_builder.build()
+        )
+        inactive = _m_session_naming.create_session(
+            self.db,
+            "chat",
+            self.app_settings_builder.default_model,
+            session_id="inactive",
+            app_settings=self.app_settings_builder.build(),
+        )
+        menu_calls = []
+        original_resolve = _owner_session_callbacks.resolve_dynamic_callback_token
+        original_delete = _owner_session_callbacks.delete_session_data
+        original_remove = _owner_session_callbacks.remove_inline_keyboard
+        original_menu = _owner_session_callbacks.send_session_menu
+        _owner_session_callbacks.resolve_dynamic_callback_token = lambda *_args, **_kwargs: inactive["session_id"]
+        _owner_session_callbacks.delete_session_data = lambda *_args, **_kwargs: (True, "")
+        _owner_session_callbacks.remove_inline_keyboard = lambda *_args, **_kwargs: None
+        _owner_session_callbacks.send_session_menu = lambda *args, **kwargs: menu_calls.append((args, kwargs))
+        try:
+            handled = _owner_session_callbacks.handle_session_callback(
+                self.db,
+                "token",
+                {"id": "callback", "message": {"message_id": 55}},
+                lambda *_args, **_kwargs: None,
+                "sessiondeleteconfirm:token",
+                "chat",
+                {"message_id": 55},
+                active,
+                active["session_id"],
+                None,
+                group_service=make_test_group_service(app_settings=self.app_settings_builder.build()),
+                memory_service=make_test_memory_service(),
+                request_context=make_test_request_context(
+                    self.db, active["session_id"], app_settings=self.app_settings_builder.build()
+                ),
+            )
+        finally:
+            _owner_session_callbacks.resolve_dynamic_callback_token = original_resolve
+            _owner_session_callbacks.delete_session_data = original_delete
+            _owner_session_callbacks.remove_inline_keyboard = original_remove
+            _owner_session_callbacks.send_session_menu = original_menu
+
+        self.assertTrue(handled)
+        self.assertEqual(len(menu_calls), 1)
+        self.assertIsNone(menu_calls[0][0][4])
 
     def test_session_panel_has_inline_delete_actions_and_protects_active_selection(self):
         active = _owner_session_core.ensure_session(
