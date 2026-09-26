@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from bridge.callback_tokens import resolve_dynamic_callback_token
-from bridge.callbacks import remove_inline_keyboard
+from bridge.callbacks import close_panel_message, remove_inline_keyboard
 from bridge.cards import send_session_menu
 from bridge.group_service import GroupService
 from bridge.metadata import set_meta
@@ -135,7 +135,7 @@ def handle_session_callback(
         if value == "cancel":
             answer_callback(token, str(callback.get("id", "")), "Cancelled")
             set_meta(db, f"character_session_input:{chat_id}", "")
-            remove_inline_keyboard(db, token, callback)
+            close_panel_message(db, token, chat_id, {"message": message})
         elif value == "new":
             answer_callback(token, str(callback.get("id", "")), "Enter session name")
             start_session_name_input(

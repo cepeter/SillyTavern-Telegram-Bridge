@@ -30,6 +30,7 @@ class JobSubmission:
 @dataclass(frozen=True)
 class JobService:
     enqueue_backend: Callable[..., int]
+    payload_backend: Callable[..., bool]
     actor_backend: Callable[..., str]
     schedule_backend: Callable[..., bool]
     start_backend: Callable[..., bool]
@@ -85,6 +86,9 @@ class JobService:
         if accepted:
             self.schedule_backend(db, int(job_id))
         return accepted
+
+    def replace_payload(self, db: sqlite3.Connection, job_id: int, payload: dict[str, object]) -> bool:
+        return bool(self.payload_backend(db, int(job_id), payload))
 
     def start(self, db: sqlite3.Connection, job_id: int) -> bool:
         return bool(self.start_backend(db, int(job_id)))

@@ -15,7 +15,8 @@ from bridge.metadata import get_meta
 from bridge.settings import AppSettings
 from bridge.speech import send_tts
 from bridge.sqlite_store import write_transaction
-from bridge.telegram import send_text, telegram_request
+from bridge.telegram import send_text, split_telegram_text, telegram_request
+from bridge.telegram_output import telegram_safe_output
 
 
 def delete_outgoing_messages(
@@ -123,11 +124,42 @@ def send_reply(
     session_id: str | None = None,
     assistant_rowid: int | None = None,
     *,
+    replace_message_id: int | None = None,
     app_settings: AppSettings,
 ) -> None:
+    text = telegram_safe_output(text)
     if db is not None and session_id:
         deliver_expression(token, chat_id, text, db, session_id, app_settings=app_settings)
-    message_ids = send_text(token, chat_id, text)
+    if replace_message_id is None:
+        message_ids = send_text(token, chat_id, text)
+    else:
+        chunks = split_telegram_text(text)
+        reused_preview = True
+        try:
+            telegram_request(
+                token,
+                "editMessageText",
+                {
+                    "chat_id": chat_id,
+                    "message_id": replace_message_id,
+                    "text": chunks[0],
+                    "disable_web_page_preview": True,
+                },
+            )
+        except RuntimeError as exc:
+            detail = str(exc).casefold()
+            if "message to edit not found" in detail:
+                reused_preview = False
+                message_ids = send_text(token, chat_id, text)
+            elif "message is not modified" in detail:
+                message_ids = [replace_message_id]
+            else:
+                raise
+        else:
+            message_ids = [replace_message_id]
+        if reused_preview:
+            for chunk in chunks[1:]:
+                message_ids.extend(send_text(token, chat_id, chunk))
     if db is not None and assistant_rowid is not None:
         persist_assistant_delivery_ids(db, assistant_rowid, message_ids)
     if db is not None and session_id and get_meta(db, f"voice_mode:{chat_id}", "off") == "tts":

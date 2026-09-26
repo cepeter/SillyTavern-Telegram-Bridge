@@ -12,6 +12,7 @@ from bridge.job_repository import (
     insert_job,
     load_job_payload,
     queued_job_rows,
+    replace_job_payload,
     reset_running_jobs,
     schedule_job,
     start_job,
@@ -41,6 +42,12 @@ def job_actor_id(db: sqlite3.Connection, job_id: int | None) -> str:
     except (TypeError, json.JSONDecodeError):
         return ""
     return str(payload.get("actor_id") or "") if isinstance(payload, dict) else ""
+
+
+def store_job_payload(db: sqlite3.Connection, job_id: int, payload: dict) -> bool:
+    encoded = json.dumps(payload, ensure_ascii=False)
+    with write_transaction(db):
+        return replace_job_payload(db, job_id, encoded, time.time())
 
 
 def mark_job_scheduled(db: sqlite3.Connection, job_id: int) -> bool:

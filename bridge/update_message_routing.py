@@ -30,6 +30,36 @@ def is_long_running_command(text: str) -> bool:
     return any(normalized == name or normalized.startswith(name + " ") for name in LONG_RUNNING_COMMANDS)
 
 
+def _delete_queue_notice_messages(
+    services: BridgeServices,
+    token: str,
+    chat_id: str,
+    message_ids: list[int],
+) -> None:
+    for message_id in message_ids:
+        try:
+            services.telegram.request(
+                token,
+                "deleteMessage",
+                {"chat_id": chat_id, "message_id": int(message_id)},
+            )
+        except Exception:
+            logging.info("Could not delete command queue notice", exc_info=True)
+
+
+def _send_queue_notice_message(
+    services: BridgeServices,
+    token: str,
+    chat_id: str,
+    text: str,
+) -> list[int]:
+    try:
+        return list(services.telegram.send_text(token, chat_id, text) or [])
+    except Exception:
+        logging.info("Could not send command queue notice", exc_info=True)
+        return []
+
+
 def route_edited_message_update(
     services: BridgeServices,
     db: sqlite3.Connection,
@@ -348,6 +378,12 @@ def route_message_update(
         return True
 
     if is_plain_start or is_long_running_command(str(text)):
+        payload = {
+            "text": str(text),
+            "model": model,
+            "resolve_active": True,
+            "actor_id": sender,
+        }
         job_id = services.jobs.enqueue(
             db,
             update_id,
@@ -355,13 +391,19 @@ def route_message_update(
             queued_session_id,
             message_id,
             "command",
-            {
-                "text": str(text),
-                "model": model,
-                "resolve_active": True,
-                "actor_id": sender,
-            },
+            payload,
         )
+        queue_notice_message_ids = _send_queue_notice_message(
+            services,
+            token,
+            chat_id,
+            "⏳ Command queued.",
+        )
+        payload["queue_notice_message_ids"] = queue_notice_message_ids
+        if not services.jobs.replace_payload(db, job_id, payload):
+            _delete_queue_notice_messages(services, token, chat_id, queue_notice_message_ids)
+            queue_notice_message_ids = []
+            payload["queue_notice_message_ids"] = []
         queued = services.jobs.submit(
             db,
             job_id,
@@ -375,19 +417,32 @@ def route_message_update(
                     chat_id,
                     str(text),
                     message_id,
+                    queue_notice_message_ids,
                     None,
                     None,
                 ),
             ),
         )
-        services.telegram.send_text(
-            token,
-            chat_id,
-            ("⏳ Command queued." if queued else "⏳ Command saved for execution after restart."),
-        )
+        if not queued:
+            _delete_queue_notice_messages(services, token, chat_id, queue_notice_message_ids)
+            deferred_notice_message_ids = _send_queue_notice_message(
+                services,
+                token,
+                chat_id,
+                "⏳ Command saved for execution after restart.",
+            )
+            deferred_payload = {**payload, "queue_notice_message_ids": deferred_notice_message_ids}
+            if not services.jobs.replace_payload(db, job_id, deferred_payload):
+                _delete_queue_notice_messages(services, token, chat_id, deferred_notice_message_ids)
         return True
 
     if str(text).lstrip().startswith("/"):
+        payload = {
+            "text": str(text),
+            "model": model,
+            "resolve_active": True,
+            "actor_id": sender,
+        }
         job_id = services.jobs.enqueue(
             db,
             update_id,
@@ -395,14 +450,20 @@ def route_message_update(
             queued_session_id,
             message_id,
             "command",
-            {
-                "text": str(text),
-                "model": model,
-                "resolve_active": True,
-                "actor_id": sender,
-            },
+            payload,
         )
-        services.jobs.submit(
+        queue_notice_message_ids = _send_queue_notice_message(
+            services,
+            token,
+            chat_id,
+            "⏳ Command queued.",
+        )
+        payload["queue_notice_message_ids"] = queue_notice_message_ids
+        if not services.jobs.replace_payload(db, job_id, payload):
+            _delete_queue_notice_messages(services, token, chat_id, queue_notice_message_ids)
+            queue_notice_message_ids = []
+            payload["queue_notice_message_ids"] = []
+        queued = services.jobs.submit(
             db,
             job_id,
             JobSubmission(
@@ -415,16 +476,23 @@ def route_message_update(
                     chat_id,
                     str(text),
                     message_id,
+                    queue_notice_message_ids,
                     None,
                     None,
                 ),
             ),
         )
-        services.telegram.send_text(
-            token,
-            chat_id,
-            "⏳ Command queued.",
-        )
+        if not queued:
+            _delete_queue_notice_messages(services, token, chat_id, queue_notice_message_ids)
+            deferred_notice_message_ids = _send_queue_notice_message(
+                services,
+                token,
+                chat_id,
+                "⏳ Command saved for execution after restart.",
+            )
+            deferred_payload = {**payload, "queue_notice_message_ids": deferred_notice_message_ids}
+            if not services.jobs.replace_payload(db, job_id, deferred_payload):
+                _delete_queue_notice_messages(services, token, chat_id, deferred_notice_message_ids)
         return True
 
     job_id = services.jobs.enqueue(
