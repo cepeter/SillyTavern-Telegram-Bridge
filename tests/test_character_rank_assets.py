@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from bridge.cards import _CHARACTER_RANK_CUSTOM_EMOJI_IDS
+from bridge.cards import _CHARACTER_RANK_CUSTOM_EMOJI_IDS, character_rank_button, character_rich_rank_button
 
 ROOT = Path(__file__).resolve().parents[1] / "assets" / "character-ranks"
 EXPECTED_IDS = {
@@ -13,6 +13,7 @@ EXPECTED_IDS = {
     "C": "6177219258724917819",
     "D": "6176733025477337215",
 }
+EXPECTED_STATIC_BADGES = {"S": "🏆", "A": "🥇", "B": "🥈", "C": "🥉", "D": "⚪"}
 EXPECTED_SHA256 = {
     "source/rank_A_transparent.gif": "8e38b025cd2b9f42130a0af849fcf83b27272be0d7fdfc59b88da1df9c2d3a7c",
     "source/rank_B_transparent.gif": "dfd710e678c7fcde1b7f8ef845d0e993ed89c53b417b817e41d8eb6f99def2bb",
@@ -38,3 +39,16 @@ def test_public_rank_assets_match_hardcoded_custom_emoji_mapping():
         assert path.is_file(), relative
         assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
         assert digest in manifest
+
+
+def test_rank_buttons_use_clear_tier_specific_static_fallbacks():
+    for tier, badge in EXPECTED_STATIC_BADGES.items():
+        assert character_rank_button(tier) == {
+            "text": f"{badge} {tier}",
+            "callback_data": f"character:rank:{tier}",
+        }
+        assert character_rich_rank_button(tier)["text"] == {
+            "type": "custom_emoji",
+            "custom_emoji_id": EXPECTED_IDS[tier],
+            "alternative_text": f"{badge} {tier}",
+        }

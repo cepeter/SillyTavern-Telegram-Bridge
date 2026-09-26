@@ -850,9 +850,10 @@ Character rows use three columns: **rank | character | action**. The main
 Character Menu prefers Telegram Bot API 10.3 RichMessage buttons: the rank column
 uses a disabled `RichTextCustomEmoji` from the built-in animated set
 `sttb_ranks_by_SillyTavernPunzmeBot`; if the custom emoji cannot render, Telegram
-falls back to the registered `⭐` alternative text (or `—` when unranked). If Telegram rejects RichMessage sending or editing, the bridge
-falls back to the classic inline-keyboard panel; that compatibility path uses the
-same hardcoded custom-emoji IDs but clients may render the button icon statically.
+falls back to a tier-specific badge and letter (`🏆 S`, `🥇 A`, `🥈 B`, `🥉 C`, or
+`⚪ D`; `—` when unranked). If Telegram rejects RichMessage sending or editing,
+the bridge falls back to the classic inline-keyboard panel; that compatibility
+path deliberately uses the same static badge-and-letter labels without custom emoji.
 The checked-in [rank asset manifest](assets/character-ranks/README.md) contains
 public GIF/WEBM references, SHA-256 provenance, and the exact hardcoded mapping.
 Rank decoration is intentionally limited to this main Character Menu; Character
