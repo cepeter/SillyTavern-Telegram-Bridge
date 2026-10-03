@@ -455,6 +455,13 @@ def _memory_hindsight_conversation_snapshot(
         ],
         ensure_ascii=False,
     )
+    # Byte-safe cap: trim oldest turns from the assembled conversation so newest
+    # turns survive (fixes PR #352 rejection: trimming from start keeps newest).
+    max_bytes = int(os.getenv("STT_MEMORY_CONTENT_MAX", "51200"))
+    conversation_bytes = conversation.encode("utf-8")
+    if len(conversation_bytes) > max_bytes:
+        trimmed_bytes = conversation_bytes[-max_bytes:]  # newest at end preserved
+        conversation = trimmed_bytes.decode("utf-8", errors="replace")
     fingerprint = hashlib.sha256(
         json.dumps(
             [[str(role), str(content)] for role, content, _created_at in rows],

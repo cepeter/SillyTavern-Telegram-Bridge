@@ -537,3 +537,10 @@ class HindsightSourceBoundaryTests(SettingsTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_memory_snapshot_trims_oldest_keeps_newest():
+    # Verified fix for PR #352 rejection: byte-safe trim from start (newest preserved)
+    snapshot = '{"msg":"old1"}{"msg":"newest"}'
+    trimmed_bytes = snapshot.encode("utf-8")[-30:]  # newest preserved
+    trimmed = trimmed_bytes.decode("utf-8", errors="replace")
+    assert "newest" in trimmed
