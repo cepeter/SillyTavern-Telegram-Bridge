@@ -60,6 +60,7 @@ from bridge.response_delivery import (
     send_reply,
 )
 from bridge.response_variants import save_response_variant, swipe_state_key
+from bridge.roleplay_format import normalize_roleplay_transport
 from bridge.session_core import ensure_session, list_sessions, load_session
 from bridge.settings import AppSettings
 from bridge.sqlite_store import optimize_database, write_transaction
@@ -302,6 +303,7 @@ def generate_and_store_reply(
     reply = telegram_safe_output(reply)
     if novel_turn:
         reply = telegram_safe_output(novel_turn.finalize(reply))
+    reply = normalize_roleplay_transport(reply)
     stored_reply = (
         reply
         if group_turn and group_turn[1].get("mode") == "autonomous"

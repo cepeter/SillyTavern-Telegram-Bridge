@@ -292,8 +292,8 @@ def test_normal_generation_stores_and_delivers_humanized_reply_without_raw_previ
         app_settings=ctx.app_settings,
         rag_service=services.rag,
     )
-    assert deliveries == ["Plain prose."]
-    assert db.execute("SELECT content FROM messages WHERE role='assistant'").fetchall() == [("Plain prose.",)]
+    assert deliveries == ["*Plain prose.*"]
+    assert db.execute("SELECT content FROM messages WHERE role='assistant'").fetchall() == [("*Plain prose.*",)]
     assert len(calls) == 2
     assert calls[0]["stream_callback"] is None
     assert calls[1]["request_timeout"] == 30.0

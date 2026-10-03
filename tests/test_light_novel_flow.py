@@ -317,7 +317,9 @@ def test_opening_light_novel_commit_creates_first_choice_job(novel_db, monkeypat
     db, _session, settings = novel_db
     configure_conversation(db, "chat", "story", "lightnovel", "a")
     monkeypatch.setattr(
-        greeting_delivery, "send_text", lambda *a, acknowledged_chunk=None: acknowledged_chunk(71) or [71]
+        greeting_delivery,
+        "send_text",
+        lambda *a, acknowledged_chunk=None, entities=None: acknowledged_chunk(71) or [71],
     )
     assert greetings.send_character_greeting(
         db,
@@ -386,7 +388,7 @@ def test_generation_attaches_choices_without_leaking_protocol(novel_db, monkeypa
         rag_service=services.rag,
     )
     stored = db.execute("SELECT content FROM messages WHERE role='assistant'").fetchone()[0]
-    assert stored == "The scene moves."
+    assert stored == "*The scene moves.*"
     assert len(provider_calls) == 1
     if strategy == "a":
         assert provider_calls[0][1]["stream_callback"] is None
@@ -450,7 +452,7 @@ def test_generation_strips_envelope_reintroduced_by_language_renderer(novel_db, 
     )
 
     stored = db.execute("SELECT content FROM messages WHERE role='assistant'").fetchone()[0]
-    assert stored == "[ 🕰️ Time 8:05 PM ]\n\nCanonical rendered scene."
+    assert stored == "*[ 🕰️ Time 8:05 PM ]\n\nCanonical rendered scene.*"
     record = db.execute("SELECT choices_json FROM light_novel_choice_sets").fetchone()
     assert json.loads(record[0]) == original_choices
 

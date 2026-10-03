@@ -209,7 +209,7 @@ def test_regen_uses_state_through_last_user_and_rolls_back_old_assistant(monkeyp
             "SELECT content FROM messages WHERE chat_id='chat' AND session_id='s1' "
             "AND role='assistant' ORDER BY rowid DESC LIMIT 1"
         ).fetchone()
-        assert latest == ("replacement reply",)
+        assert latest == ("*replacement reply*",)
         assert last_user < old_assistant
     finally:
         db.close()

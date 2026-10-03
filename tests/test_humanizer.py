@@ -146,7 +146,7 @@ class HumanizerGenerationWiringTests(unittest.TestCase):
         from bridge.generation import render_session_response
 
         result = render_session_response("key", session, "raw", "chat", {}, provider_port=port)
-        self.assertEqual(result, "humanized")
+        self.assertEqual(result, "*humanized*")
         self.assertEqual(calls, ["telegram:chat:s:humanize"])
 
     def test_render_session_response_skips_humanizer_when_off(self):
@@ -166,8 +166,47 @@ class HumanizerGenerationWiringTests(unittest.TestCase):
         from bridge.generation import render_session_response
 
         result = render_session_response("key", session, "raw", "chat", {}, provider_port=port)
-        self.assertEqual(result, "raw")
+        self.assertEqual(result, "*raw*")
         self.assertEqual(calls, [])
+
+    def test_render_session_response_preserves_valid_action_and_unquoted_dialogue(self):
+        from bridge.generation import render_session_response
+
+        session = {
+            "session_id": "s",
+            "model_id": "model",
+            "response_language": "auto",
+            "humanizer": "off",
+        }
+        result = render_session_response(
+            "key",
+            session,
+            "*She waves.* Hello there!",
+            "chat",
+            {},
+            provider_port=make_test_provider_port(),
+        )
+        self.assertEqual(result, "*She waves.* Hello there!")
+
+    def test_render_session_response_normalizes_narration_and_dialogue_transport(self):
+        from bridge.generation import render_session_response
+
+        session = {
+            "session_id": "s",
+            "model_id": "model",
+            "response_language": "auto",
+            "humanizer": "off",
+        }
+        source = 'She looks away. "Hello." She smiles.'
+        result = render_session_response(
+            "key",
+            session,
+            source,
+            "chat",
+            {},
+            provider_port=make_test_provider_port(),
+        )
+        self.assertEqual(result, '*She looks away.* "Hello." *She smiles.*')
 
 
 if __name__ == "__main__":
@@ -195,8 +234,8 @@ class TelegramSafeOutputTests(unittest.TestCase):
         self.assertIn("The Walk Home", result)
         self.assertIn("11:48 PM • Cool, clear night", result)
         self.assertIn("Quiet street\nSidewalk empty.", result)
-        self.assertTrue(result.startswith("Before"))
-        self.assertTrue(result.endswith("After"))
+        self.assertTrue(result.startswith("*Before"))
+        self.assertTrue(result.endswith("After*"))
 
     def test_render_session_response_preserves_html_inside_code(self):
         from bridge.generation import render_session_response

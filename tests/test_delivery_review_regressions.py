@@ -890,7 +890,8 @@ def test_callback_worker_recovers_original_delivery_before_view_checks(case, mon
             1,
         )
         assert len(sends) == 3
-        assert "".join(item["text"] for item in sends) == original_payload
+        expected_visible = "".join(chunk[0] for chunk in response_delivery._roleplay_reply_chunks(original_payload))
+        assert "".join(item["text"] for item in sends) == expected_visible
         assert c.db.execute("SELECT session_id FROM messages WHERE rowid=?", (rowid,)).fetchone() == ("s1",)
     else:
         assert sends == before_sends

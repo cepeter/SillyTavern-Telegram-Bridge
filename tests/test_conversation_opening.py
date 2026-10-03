@@ -184,7 +184,9 @@ def test_start_opens_only_chooser_without_readiness_call(novel_db, monkeypatch):
 def test_greeting_commit_marks_started_and_blocks_second_start(novel_db, monkeypatch):
     db, session, settings = novel_db
     monkeypatch.setattr(
-        greeting_delivery, "send_text", lambda *a, acknowledged_chunk=None: acknowledged_chunk(71) or [71]
+        greeting_delivery,
+        "send_text",
+        lambda *a, acknowledged_chunk=None, entities=None: acknowledged_chunk(71) or [71],
     )
     assert greetings.send_character_greeting(
         db,
@@ -253,7 +255,7 @@ def test_failed_greeting_delivery_reuses_committed_row(novel_db, monkeypatch):
     monkeypatch.setattr(
         greeting_delivery,
         "send_text",
-        lambda *a, acknowledged_chunk=None: sent.append(a[2]) or acknowledged_chunk(73) or [73],
+        lambda *a, acknowledged_chunk=None, entities=None: sent.append(a[2]) or acknowledged_chunk(73) or [73],
     )
     assert greetings.send_character_greeting(
         db,

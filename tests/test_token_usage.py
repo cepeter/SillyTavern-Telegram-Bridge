@@ -274,7 +274,7 @@ def test_usage_tracks_scoped_story_and_humanizer_separately(tmp_path, monkeypatc
     port = ProviderPort(generate, usage_recorder=partial(record_usage, db_factory=services.db_factory))
     assert (
         render_session_response("", session, "A useful sentence.", who.chat_id, {}, provider_port=port)
-        == "A plain sentence."
+        == "*A plain sentence.*"
     )
     result = usage_summary(services, who, {})
     assert result["totals"]["total_tokens"] == 16

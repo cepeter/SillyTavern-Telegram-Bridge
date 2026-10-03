@@ -26,6 +26,7 @@ from bridge.limits import (
 from bridge.persona_service import PersonaService
 from bridge.provider_port import ProviderPort
 from bridge.rag_service import RagService
+from bridge.roleplay_format import normalize_roleplay_transport
 from bridge.settings import AppSettings
 from bridge.telegram_output import telegram_safe_output
 
@@ -108,7 +109,7 @@ def render_session_response(
             settings,
             provider_port=provider_port,
         )
-    return telegram_safe_output(rendered)
+    return normalize_roleplay_transport(telegram_safe_output(rendered))
 
 
 def format_user_dialogue_action(text: str) -> str:
@@ -351,4 +352,5 @@ def _generation_generate_rendered_reply(
     )
     if novel_turn:
         reply = telegram_safe_output(novel_turn.finalize(reply))
+        reply = normalize_roleplay_transport(reply)
     return reply

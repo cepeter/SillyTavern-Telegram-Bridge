@@ -238,7 +238,7 @@ def test_choice_recovery_executes_the_normal_conversation_pipeline_exactly_once(
     ]
     assert db.execute("SELECT content FROM messages WHERE role='assistant' ORDER BY rowid").fetchall() == [
         ("The door opens.",),
-        ("You enter the hallway.",),
+        ("*You enter the hallway.*",),
     ]
     current = latest_choice_set(db, "chat", "story")
     assert current.nonce != record.nonce and current.actor_id == "owner"
