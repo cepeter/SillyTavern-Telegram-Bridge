@@ -22,24 +22,53 @@ def write(path, *items):
     path.write_text("".join(json.dumps(item) + "\n" for item in items), encoding="utf-8")
 
 
-def test_reader_filters_ownership_before_trace_and_usage_aggregation(tmp_path):
+def test_reader_filters_ownership_before_trace_and_usage_aggregation(tmp_path, monkeypatch):
+    import bridge.diagnostic_events as diagnostics
     from bridge.diagnostic_reader import read_events
 
+    # This synthetic key yields a valid session HMAC containing the digits 777.
+    monkeypatch.setattr(diagnostics, "_IDENTITY_KEY", b"synthetic-reader-key-208")
     path = tmp_path / "runtime.log"
+    accepted = record(input_tokens=10, output_tokens=2, usage_reported=True, usage_complete=True, purpose="story")
     write(
         path,
-        record(input_tokens=10, output_tokens=2, usage_reported=True, usage_complete=True, purpose="story"),
+        accepted,
         record(chat="22", input_tokens=999, purpose="private-other-model"),
         record(session="b", input_tokens=777),
         record("runtime.log", message="private transcript", traceback=[{"private": "value"}]),
     )
     result = read_events(path, chat_id="11", session_id="a")
-    assert len(result["events"]) == 1
-    assert result["usage"]["input_tokens"] == 10
-    assert result["usage"]["complete"] is True
+    assert result["events"] == [{key: value for key, value in accepted.items() if key != "schema"}]
+    assert result["scope"] == {"chat_ref": "8834c5a9818a893d6ddc6d47", "session_ref": "807773b625eb82d2361acdea"}
+    expected_usage = {
+        "attempts": 1,
+        "completed_attempts": 1,
+        "unfinished_attempts": 0,
+        "reported_attempts": 1,
+        "complete": True,
+        "input_tokens": 10,
+        "output_tokens": 2,
+        "total_tokens": None,
+        "cached_tokens": None,
+        "reasoning_tokens": None,
+    }
+    assert result["usage"] == expected_usage
+    assert result["usage_by_purpose"] == [{"purpose": "story", **expected_usage}]
+    assert result["traces"] == [
+        {
+            "request_id": "tg-1",
+            "events": 1,
+            "failures": 0,
+            "fallbacks": 0,
+            "last_event": "provider.finish",
+            "last_status": "",
+            "timestamp": "2026-10-08T06:00:00.000Z",
+            "unfinished_attempts": 0,
+            "outcome": "",
+        }
+    ]
+    assert result["skipped_records"] == 3
     assert "private" not in json.dumps(result)
-    assert "999" not in json.dumps(result)
-    assert "777" not in json.dumps(result)
 
 
 def test_reader_revalidates_fields_and_does_not_export_legacy_content(tmp_path):

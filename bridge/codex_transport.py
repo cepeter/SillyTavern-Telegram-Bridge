@@ -14,6 +14,7 @@ from bridge.codex_models import codex_wire_model
 from bridge.config import GENERATION_DEFAULTS
 from bridge.context_attempt_budget import check_attempt_budget
 from bridge.network_security import strict_urlopen
+from bridge.provider_completion import report_response_completion
 from bridge.provider_errors import ProviderTransportError, parse_retry_after, provider_category_for_status
 from bridge.request_observation_context import observed_request, observed_usage_callback
 from bridge.settings import AppSettings
@@ -159,6 +160,7 @@ def _stream_response_text(
             if not isinstance(event, dict):
                 continue
             usage.observe(event)
+            report_response_completion(event)
             event_type = str(event.get("type") or "")
             if event_type in {
                 "response.output_text.delta",

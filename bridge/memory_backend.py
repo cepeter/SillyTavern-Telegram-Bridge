@@ -18,7 +18,11 @@ from typing import Any
 
 from bridge.hindsight_client_runtime import close_hindsight_client as close_hindsight_client
 from bridge.hindsight_client_runtime import hindsight_client as hindsight_client
-from bridge.hindsight_diagnostics import handle_hindsight_retain_failure
+from bridge.hindsight_diagnostics import (
+    handle_hindsight_retain_failure,
+    hindsight_retain_scope,
+    report_hindsight_completion,
+)
 from bridge.hindsight_endpoint import (
     _ensure_hindsight_loopback_proxy_bypass as _ensure_hindsight_loopback_proxy_bypass,
 )
@@ -471,26 +475,22 @@ def _retain_with_client(
     """Retain an accepted native summary; mapping acceptance belongs to its fenced worker."""
     if kind != "native_fact":
         raise ValueError("Only native facts may be retained in Hindsight")
-    try:
-        # Synchronous retention must outlive the server's 60-second extraction
-        # deadline; recall and metadata operations keep the 30-second default.
-        with hindsight_client_scope(app_settings=app_settings, request_timeout=90.0) as client:
-            client.retain(
-                bank_id=hindsight_bank_id(chat_id),
-                content=content,
-                context=context,
-                document_id=document_id,
-                metadata={
-                    "source": "sillytavern_telegram_bridge",
-                    "session_id": session_id,
-                    "character": character_name,
-                },
-                tags=[*hindsight_tags(chat_id, session_id, character_name), "native-fact", *generation_tags],
-                retain_async=False,
-            )
-            return True
-    except Exception as error:
-        return handle_hindsight_retain_failure(error, chat_id, session_id)
+    with hindsight_retain_scope(document_id, session_id, character_name) as metadata:
+        try:
+            with hindsight_client_scope(app_settings=app_settings, request_timeout=90.0) as client:
+                response = client.retain(
+                    bank_id=hindsight_bank_id(chat_id),
+                    content=content,
+                    context=context,
+                    document_id=document_id,
+                    metadata=metadata,
+                    tags=[*hindsight_tags(chat_id, session_id, character_name), "native-fact", *generation_tags],
+                    retain_async=False,
+                )
+                report_hindsight_completion(response)
+                return True
+        except Exception as error:
+            return handle_hindsight_retain_failure(error, chat_id, session_id)
 
 
 def _memory_hindsight_epoch_key(

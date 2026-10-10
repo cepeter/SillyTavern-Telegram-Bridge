@@ -16,6 +16,7 @@ from bridge.context_attempt_budget import check_attempt_budget
 from bridge.limits import DEFAULT_MAX_TOKENS
 from bridge.model_router import ModelRouter
 from bridge.network_security import strict_urlopen, validate_provider_endpoint
+from bridge.provider_completion import report_finish_reason, report_response_completion, warn_missing_assistant_content
 from bridge.provider_response import openai_response_choices as _openai_response_choices
 from bridge.provider_response import provider_response_lines, read_provider_response
 from bridge.provider_streaming import read_openai_stream_segment as _read_openai_stream_segment
@@ -168,6 +169,7 @@ def anthropic_generate(
     ):
         usage.final = False
         parts = []
+        stop_reason = None
         for raw_line in provider_response_lines(response):
             line = raw_line.decode("utf-8", "replace").strip()
             if not line.startswith("data:"):
@@ -182,8 +184,11 @@ def anthropic_generate(
             if event.get("type") == "message_stop":
                 break
             delta = event.get("delta") or {}
+            if "stop_reason" in delta:
+                stop_reason = delta["stop_reason"]
             if delta.get("type") == "text_delta" and delta.get("text"):
                 parts.append(str(delta["text"]))
+        report_finish_reason(stop_reason)
         content = "".join(parts).strip()
         if not content:
             raise RuntimeError("Anthropic Messages returned no visible content")
@@ -268,6 +273,7 @@ def _opencode_responses_text(raw: str, *, usage_callback: UsageCallback | None =
             payload = None
         if isinstance(payload, dict):
             usage.observe(payload)
+            report_response_completion(payload)
             return _opencode_json_text(payload)
 
         usage.final = False
@@ -284,6 +290,7 @@ def _opencode_responses_text(raw: str, *, usage_callback: UsageCallback | None =
             except json.JSONDecodeError:
                 continue
             usage.observe(event)
+            report_response_completion(event)
             if event.get("type") == "response.completed":
                 usage.final = True
             delta = event.get("delta")
@@ -534,6 +541,7 @@ def generate_provider_text(
                 usage.observe(result)
             choices = _openai_response_choices(result)
             finish_reason = choices[0].get("finish_reason") if choices else None
+            report_finish_reason(finish_reason)
             content = choices[0].get("message", {}).get("content") if choices else None
             if not content:
                 if finish_reason == "length" and generation.get("json_once") is not True and _recovery_attempt < 2:
@@ -554,21 +562,7 @@ def generate_provider_text(
                             context_observer=context_observer,
                             context_model=selected_model,
                         )
-                http_status = getattr(response, "status", None)
-                if http_status is None:
-                    getcode = getattr(response, "getcode", None)
-                    http_status = getcode() if callable(getcode) else None
-                logging.getLogger(__name__).warning(
-                    "Provider response missing assistant content: "
-                    "provider=%s model=%s http_status=%s choice_count=%s "
-                    "finish_reason=%s response_keys=%s",
-                    provider_id,
-                    actual_model,
-                    http_status,
-                    len(choices),
-                    finish_reason,
-                    sorted(result.keys()),
-                )
+                warn_missing_assistant_content(provider_id, actual_model, response, choices, finish_reason, result)
                 raise RuntimeError("backend returned no assistant content")
             content = str(content).strip()
             if finish_reason != "length" or generation.get("json_once") is True:
@@ -631,6 +625,7 @@ def generate_provider_text(
                         continuation_choices[0].get("message", {}).get("content") if continuation_choices else None
                     )
                     continuation_reason = continuation_choices[0].get("finish_reason") if continuation_choices else None
+                    report_finish_reason(continuation_reason)
                 except Exception:
                     if usage_callback is not None and not reading_started:
                         usage_callback(TokenUsage(final=False))

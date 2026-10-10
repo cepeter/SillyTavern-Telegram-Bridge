@@ -16,7 +16,7 @@
     "bridge/native_imports.py": 545,
     "bridge/npc_service.py": 572,
     "bridge/provider_callbacks.py": 698,
-    "bridge/provider_transport.py": 777,
+    "bridge/provider_transport.py": 772,
     "bridge/schema.py": 523,
     "bridge/self_update.py": 512,
     "bridge/update_message_routing.py": 611,

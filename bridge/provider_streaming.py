@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 
+from bridge.provider_completion import report_finish_reason
 from bridge.provider_response import openai_response_choices as _openai_response_choices
 from bridge.provider_response import provider_response_lines
 from bridge.request_observation_context import observed_usage_callback
@@ -68,5 +69,6 @@ def read_openai_stream_segment(
             stream_callback(_join_visible_stream(prefix, content))
         if cancel_event is not None and cancel_event.is_set():
             cancelled = True
+        report_finish_reason(finish_reason)
         usage.final = not cancelled and finish_reason is not None
         return content, finish_reason, cancelled

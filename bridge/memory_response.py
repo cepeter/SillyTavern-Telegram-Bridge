@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from bridge.diagnostic_events import diagnostic_context, diagnostic_scope, event, new_request_id
+from bridge.extraction_contracts import parser_rejection_code
 from bridge.json_fences import unfence_json
 from bridge.memory_fact_store import classified_audience
 from bridge.memory_retry import MEMORY_RESPONSE_ERRORS
@@ -82,7 +83,8 @@ def generate_memory_response(
                 return result
             except ValueError as error:
                 reason = memory_failure_code(error)
-                event("memory.response_rejected", accepted=False, reason=reason)
+                rejection = parser_rejection_code(error)
+                event("memory.response_rejected", accepted=False, reason=reason, rejection_code=rejection)
                 if reason not in _REPAIRABLE:
                     raise
                 _reject_supplied_audience_conflicts(raw)
@@ -93,7 +95,10 @@ def generate_memory_response(
         repair_messages = [dict(message) for message in messages]
         repair_messages.insert(
             0,
-            {"role": "system", "content": _REPAIR_INSTRUCTION + (" " + repair_contract if repair_contract else "")},
+            {
+                "role": "system",
+                "content": _REPAIR_INSTRUCTION + " Contract rejection: " + rejection + ". " + repair_contract,
+            },
         )
         with diagnostic_scope(phase="json_repair"):
             event("memory.response_repair_start")

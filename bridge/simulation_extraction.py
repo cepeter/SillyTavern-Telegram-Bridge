@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from bridge.extraction_contracts import record_tracker_contract
 from bridge.json_fences import unfence_json
 from bridge.simulation_repository import MAX_RECORD_BYTES
 from bridge.simulation_values import MAX_ITEMS, MAX_NAME, boolean, integer, key, modifier_entry, text
@@ -187,16 +188,26 @@ def normalize_simulation_payload(value: Any, *, limit: int = MAX_ITEMS) -> dict[
     return result
 
 
-def parse_simulation_payload(raw: str) -> tuple[dict[str, Any], bool]:
+def parse_simulation_payload(raw: str, *, diagnostics: dict[str, Any] | None = None) -> tuple[dict[str, Any], bool]:
+    valid, code = False, "malformed_json"
     try:
         decoded = json.loads(unfence_json(raw))
+        code = "simulation_root_type"
         if not isinstance(decoded, dict):
             return {}, False
         if "simulation" not in decoded:
+            code = "simulation_root_missing"
             return {}, False
-        return normalize_simulation_payload(decoded["simulation"], limit=32), True
+        if not isinstance(decoded["simulation"], dict):
+            return {}, False
+        code = "simulation_invalid"
+        result = normalize_simulation_payload(decoded["simulation"], limit=32)
+        valid, code = True, "accepted"
+        return result, True
     except (TypeError, ValueError, OverflowError):
         return {}, False
+    finally:
+        record_tracker_contract(raw, "simulation", valid, code, diagnostics)
 
 
 def merge_simulation_payload(previous: Any, current: Any) -> dict[str, Any]:

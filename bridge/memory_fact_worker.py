@@ -3,6 +3,7 @@
 import time
 
 from bridge import memory_backend
+from bridge.hindsight_diagnostics import hindsight_fact_attempt
 from bridge.memory_fact_store import index_fact_is_current
 from bridge.memory_retirement_store import reopen_retirement
 from bridge.memory_store import (
@@ -51,21 +52,22 @@ def run_fact_index(db, claim, fields, *, app_settings):
                 kind="native_fact",
             )
         calls += 1
-        retained = memory_backend._retain_with_client(
-            claim.chat_id,
-            claim.session_id,
-            document_id,
-            fields.get("name", "Story"),
-            fact.fact.summary,
-            "Locally accepted native story fact; audience is enforced by SQLite",
-            "native_fact",
-            app_settings=app_settings,
-            generation_tags=tuple(
-                memory_backend.hindsight_generation_tags(
-                    claim.chat_id, claim.session_id, claim.session_created_at, claim.purge_epoch
-                )
-            ),
-        )
+        with hindsight_fact_attempt(token, document_id):
+            retained = memory_backend._retain_with_client(
+                claim.chat_id,
+                claim.session_id,
+                document_id,
+                fields.get("name", "Story"),
+                fact.fact.summary,
+                "Locally accepted native story fact; audience is enforced by SQLite",
+                "native_fact",
+                app_settings=app_settings,
+                generation_tags=tuple(
+                    memory_backend.hindsight_generation_tags(
+                        claim.chat_id, claim.session_id, claim.session_created_at, claim.purge_epoch
+                    )
+                ),
+            )
         if retained:
             finish_archival_attempt(db, token)
         with memory_backend.hindsight_session_lock(claim.chat_id, claim.session_id), write_transaction(db):

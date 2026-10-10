@@ -22,6 +22,12 @@ from bridge.extension_registry import extension_registry_snapshot as _extension_
 from bridge.extension_registry import register_command_route as _register_command_route
 from bridge.extension_registry import register_post_retain_hook as _register_post_retain_hook
 from bridge.extension_registry import register_summary_clear_hook as _register_summary_clear_hook
+from bridge.extraction_contracts import (
+    SCENE_REPAIR_CONTRACT,
+    SceneContractError,
+    extraction_root_fields,
+    parser_rejection_code,
+)
 from bridge.generation_settings import get_generation_settings
 from bridge.memory_artifact_store import (
     CLASSIFIED_AUDIENCE_PROMPT,
@@ -172,14 +178,29 @@ def extract_scene_segment(
     model = task_model_for_session(db, chat_id, session, "scene_state", app_settings=app_settings)
 
     def parse(raw: str) -> dict[str, object]:
-        payload = parse_classified_response(raw)
-        raw_state = payload.get("state")
-        if not isinstance(raw_state, dict):
-            raise ValueError("Scene extraction requires an explicit state object")
-        state = {} if not raw_state else parse_scene_state(json.dumps(raw_state, ensure_ascii=False))
-        blocks = parse_classified_blocks(payload)
-        if state is None:
-            raise ValueError("Scene extraction requires valid state")
+        diagnostics = extraction_root_fields(raw, "scene")
+        try:
+            payload = parse_classified_response(raw)
+            raw_state = payload.get("state")
+            if not isinstance(raw_state, dict):
+                code = "scene_state_type" if "state" in payload else "scene_state_missing"
+                raise SceneContractError("Scene extraction requires an explicit state object", code)
+            state = {} if not raw_state else parse_scene_state(json.dumps(raw_state, ensure_ascii=False))
+            blocks = parse_classified_blocks(payload)
+            if state is None:
+                raise ValueError("Scene extraction requires valid state")
+        except ValueError as error:
+            code = parser_rejection_code(error)
+            if code == "scene_blocks_invalid":
+                if not diagnostics.get("blocks_present"):
+                    code = "scene_blocks_missing"
+                elif diagnostics.get("blocks_type") != "array":
+                    code = "scene_blocks_type"
+            event("scene.contract_parsed", accepted=False, rejection_code=code, **diagnostics)
+            if code in {"scene_blocks_missing", "scene_blocks_type"}:
+                raise SceneContractError(str(error), code) from error
+            raise
+        event("scene.contract_parsed", accepted=True, rejection_code="accepted", **diagnostics)
         return {"state": state, "blocks": blocks}
 
     return generate_memory_response(
@@ -188,6 +209,7 @@ def extract_scene_segment(
         model,
         messages,
         parser=parse,
+        repair_contract=SCENE_REPAIR_CONTRACT,
         session_id=f"scene-state:{chat_id}:{session['session_id']}",
         settings=settings,
     )
@@ -240,7 +262,7 @@ def refresh_scene_state_now(
             status="failed",
             error_type=type(exc).__name__,
         )
-        logging.warning("Scene-state extraction failed for %s/%s", chat_id, session_id, exc_info=True)
+        logging.warning("Scene-state extraction failed")
     state, _through = get_scene_state(db, chat_id, session_id)
     return state or None
 

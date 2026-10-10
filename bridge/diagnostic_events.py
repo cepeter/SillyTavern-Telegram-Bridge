@@ -56,6 +56,18 @@ _TEXT_FIELDS = frozenset(
         "transport",
         "prefix_scope",
         "section_attribution",
+        "rejection_code",
+        "npc_rejection_code",
+        "simulation_rejection_code",
+        "root_type",
+        "state_type",
+        "blocks_type",
+        "npcs_type",
+        "simulation_type",
+        "finish_reason",
+        "attempt_ref",
+        "document_ref",
+        "server_operation_ref",
     }
 )
 _NUMBER_FIELDS = frozenset(
@@ -106,6 +118,13 @@ _BOOL_FIELDS = frozenset(
         "prefix_observed",
         "non_text_payload_present",
         "full_prompt_token_count_known",
+        "state_present",
+        "blocks_present",
+        "npcs_present",
+        "simulation_present",
+        "npc_valid",
+        "simulation_valid",
+        "output_cap_reached",
     }
 )
 
